@@ -1,0 +1,89 @@
+name: Terraform Infra
+
+on:
+  pull_request:
+    paths:
+      - 'terraform/**'
+  push:
+    branches: [ 'main' ]
+    paths:
+      - 'terraform/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+# Repository-level variables expected (Settings → Variables):
+# - GCP_PROJECT_ID, GCP_REGION
+# - Optional for remote state: TF_BACKEND_BUCKET, TF_BACKEND_PREFIX
+# Secrets expected:
+# - WORKLOAD_IDP, WORKLOAD_SA
+
+env:
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  REGION: ${{ vars.GCP_REGION }}
+  TF_BACKEND_BUCKET: ${{ vars.TF_BACKEND_BUCKET }}
+  TF_BACKEND_PREFIX: ${{ vars.TF_BACKEND_PREFIX }}
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: terraform
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WORKLOAD_IDP }}
+          service_account: ${{ secrets.WORKLOAD_SA }}
+
+      - name: Setup gcloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.7.5
+
+      - name: Show backend configuration intent
+        run: |
+          if [[ -n "$TF_BACKEND_BUCKET" && -n "$TF_BACKEND_PREFIX" ]]; then
+            echo "Using GCS backend bucket=$TF_BACKEND_BUCKET prefix=$TF_BACKEND_PREFIX"
+          else
+            echo "WARNING: No TF_BACKEND_BUCKET/TF_BACKEND_PREFIX set. State will be local/ephemeral in CI. Apply will be skipped."
+          fi
+
+      - name: Terraform Init
+        run: |
+          if [[ -n "$TF_BACKEND_BUCKET" && -n "$TF_BACKEND_PREFIX" ]]; then
+            terraform init -backend-config="bucket=$TF_BACKEND_BUCKET" -backend-config="prefix=$TF_BACKEND_PREFIX"
+          else
+            terraform init
+          fi
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan -input=false -var "project_id=${{ env.PROJECT_ID }}" -var "region=${{ env.REGION }}"
+
+      - name: Terraform Apply (requires GCS backend)
+        if: github.event_name != 'pull_request' && env.TF_BACKEND_BUCKET != '' && env.TF_BACKEND_PREFIX != ''
+        run: terraform apply -auto-approve -input=false -var "project_id=${{ env.PROJECT_ID }}" -var "region=${{ env.REGION }}"
+
+      - name: Skip Apply Notice (no backend)
+        if: github.event_name != 'pull_request' && (env.TF_BACKEND_BUCKET == '' || env.TF_BACKEND_PREFIX == '')
+        run: |
+          echo "Apply skipped because TF_BACKEND_BUCKET/TF_BACKEND_PREFIX not set."
+          echo "Set repo variables TF_BACKEND_BUCKET and TF_BACKEND_PREFIX to enable auto-apply in CI."

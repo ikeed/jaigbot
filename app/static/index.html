@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gemini Flash Hello</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem; }
+    textarea { width: 100%; max-width: 720px; }
+    button { margin-top: 0.5rem; padding: 0.5rem 1rem; }
+    pre { white-space: pre-wrap; background: #f7f7f7; padding: 1rem; border-radius: 6px; max-width: 720px; }
+    #status { color: #666; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <h1>Gemini Flash Hello</h1>
+  <p>Type a message and click Send. This calls the backend /chat, which proxies to Vertex AI Gemini Flash.</p>
+  <textarea id="msg" rows="6" placeholder="Say hello to Gemini..."></textarea><br>
+  <button id="send">Send</button>
+  <span id="status"></span>
+  <h3>Reply</h3>
+  <pre id="out"></pre>
+
+  <script>
+    const sendBtn = document.getElementById('send');
+    const msgEl = document.getElementById('msg');
+    const out = document.getElementById('out');
+    const statusEl = document.getElementById('status');
+
+    async function send() {
+      const message = msgEl.value.trim();
+      if (!message) {
+        out.textContent = 'Please enter a message.';
+        return;
+      }
+      sendBtn.disabled = true;
+      statusEl.textContent = 'Sending...';
+      out.textContent = '';
+      try {
+        const res = await fetch('/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const err = (data && data.error && data.error.message) || `HTTP ${res.status}`;
+          out.textContent = `Error: ${err}`;
+        } else {
+          out.textContent = data.reply || '';
+        }
+      } catch (e) {
+        out.textContent = 'Network error: ' + (e && e.message ? e.message : e);
+      } finally {
+        sendBtn.disabled = false;
+        statusEl.textContent = '';
+      }
+    }
+
+    sendBtn.addEventListener('click', send);
+    msgEl.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') send();
+    });
+  </script>
+</body>
+</html>
