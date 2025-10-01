@@ -64,6 +64,28 @@ jobs:
         with:
           project_id: ${{ env.PROJECT_ID }}
 
+      - name: Verify gcloud installation and authentication
+        run: |
+          set -e
+          echo "which gcloud: $(which gcloud)"
+          gcloud --version
+          echo "GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-<unset>}"
+          if [[ -n "${GOOGLE_APPLICATION_CREDENTIALS}" && -f "${GOOGLE_APPLICATION_CREDENTIALS}" ]]; then
+            echo "Credentials file present at $GOOGLE_APPLICATION_CREDENTIALS"
+          else
+            echo "Note: GOOGLE_APPLICATION_CREDENTIALS not set or file missing (this can be OK if using WIF without a file)."
+          fi
+          gcloud config set project "$PROJECT_ID"
+          echo "gcloud config:"
+          gcloud config list
+          echo "gcloud accounts:"
+          gcloud auth list
+          ACTIVE=$(gcloud auth list --format='value(account)' --filter='status:ACTIVE' || true)
+          if [[ -z "$ACTIVE" ]]; then
+            echo "ERROR: gcloud has no active account. Ensure the previous 'google-github-actions/auth' step ran and secrets/ID token permissions are configured." >&2
+            exit 2
+          fi
+
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker $REGION-docker.pkg.dev -q
 
