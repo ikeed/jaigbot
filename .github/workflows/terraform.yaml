@@ -62,14 +62,15 @@ jobs:
           echo "actor=${{ github.actor }}"
 
       - name: Dump OIDC claims
-        env:
-          GH_OIDC_AUD: "https://iam.googleapis.com/${{ secrets.WORKLOAD_IDP }}"
         run: |
           set -e
           command -v jq >/dev/null 2>&1 || { sudo apt-get update -y && sudo apt-get install -y jq; }
           TOKEN_URL="${ACTIONS_ID_TOKEN_REQUEST_URL}"
-          if [[ -n "${GH_OIDC_AUD}" ]]; then
-            TOKEN_URL="${TOKEN_URL}&audience=${GH_OIDC_AUD}"
+          # Only append an audience if WORKLOAD_IDP is set; URL-encode the audience value
+          if [[ -n "${WORKLOAD_IDP:-}" ]]; then
+            AUDIENCE="https://iam.googleapis.com/${WORKLOAD_IDP}"
+            AUD_ENC=$(printf '%s' "$AUDIENCE" | jq -sRr @uri)
+            TOKEN_URL="${TOKEN_URL}&audience=${AUD_ENC}"
           fi
           ID_TOKEN=$(curl -sS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "$TOKEN_URL" | jq -r '.value')
           echo "OIDC header:" && cut -d'.' -f1 <<<"$ID_TOKEN" | base64 -d 2>/dev/null | jq . || true
