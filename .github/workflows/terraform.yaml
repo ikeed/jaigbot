@@ -41,6 +41,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate required variables
+        run: |
+          MISSING=()
+          [[ -z "$PROJECT_ID" ]] && MISSING+=(PROJECT_ID)
+          [[ -z "$REGION" ]] && MISSING+=(REGION)
+          if (( ${#MISSING[@]} )); then
+            echo "Error: Missing required repository variables: ${MISSING[*]}" >&2
+            echo "Set these in Settings → Secrets and variables → Actions → Variables." >&2
+            exit 1
+          fi
+
       - name: Authenticate to Google Cloud (WIF)
         if: env.WORKLOAD_IDP != '' && env.WORKLOAD_SA != ''
         uses: google-github-actions/auth@v2
