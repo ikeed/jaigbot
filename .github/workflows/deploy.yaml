@@ -21,15 +21,26 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      WORKLOAD_IDP: ${{ secrets.WORKLOAD_IDP }}
+      WORKLOAD_SA: ${{ secrets.WORKLOAD_SA }}
+      GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Authenticate to Google Cloud (WIF)
+        if: env.WORKLOAD_IDP != '' && env.WORKLOAD_SA != ''
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.WORKLOAD_IDP }}
           service_account: ${{ secrets.WORKLOAD_SA }}
+
+      - name: Authenticate to Google Cloud (Service Account JSON)
+        if: env.GCP_SA_KEY != ''
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Set up gcloud SDK
         uses: google-github-actions/setup-gcloud@v2
