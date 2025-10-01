@@ -17,11 +17,11 @@ from .vertex import VertexClient, VertexAIError
 # Environment configuration with sensible defaults
 PROJECT_ID = os.getenv("PROJECT_ID")
 REGION = os.getenv("REGION", "us-central1")
-MODEL_ID = os.getenv("MODEL_ID", "gemini-1.5-flash")
+MODEL_ID = os.getenv("MODEL_ID", "gemini-2.5-flash")
 TEMPERATURE = float(os.getenv("TEMPERATURE", "0.2"))
 MAX_TOKENS = int(os.getenv("MAX_TOKENS", "256"))
 ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
-model_fallbacks = os.getenv("MODEL_FALLBACKS", "gemini-1.5-flash,gemini-1.5-flash-8b").split(",")
+model_fallbacks = os.getenv("MODEL_FALLBACKS", "gemini-2.5-flash,	gemini-2.5-flash-preview-09-2025").split(",")
 MODEL_FALLBACKS = [m.strip() for m in model_fallbacks if m.strip()]
 LOG_LEVEL = os.getenv("LOG_LEVEL", "info").upper()
 LOG_REQUEST_BODY_MAX = int(os.getenv("LOG_REQUEST_BODY_MAX", "1024"))
