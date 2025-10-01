@@ -29,6 +29,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate required variables
+        run: |
+          MISSING=()
+          [[ -z "$PROJECT_ID" ]] && MISSING+=(PROJECT_ID)
+          [[ -z "$REGION" ]] && MISSING+=(REGION)
+          [[ -z "$GAR_REPO" ]] && MISSING+=(GAR_REPO)
+          [[ -z "$SERVICE_NAME" ]] && MISSING+=(SERVICE_NAME)
+          if (( ${#MISSING[@]} )); then
+            echo "Error: Missing required repository variables: ${MISSING[*]}" >&2
+            echo "Set these in Settings → Secrets and variables → Actions → Variables." >&2
+            exit 1
+          fi
+
       - name: Validate auth configuration
         env:
           WORKLOAD_IDP: ${{ secrets.WORKLOAD_IDP }}
@@ -105,7 +118,7 @@ jobs:
             --allow-unauthenticated \
             --service-account "cr-vertex-runtime@${PROJECT_ID}.iam.gserviceaccount.com" \
             --set-env-vars "PROJECT_ID=${PROJECT_ID},REGION=${REGION},MODEL_ID=${MODEL_ID:-gemini-1.5-flash-002},TEMPERATURE=${TEMPERATURE:-0.2},MAX_TOKENS=${MAX_TOKENS:-256}" \
-            --memory=512Mi --cpu=0.5 --concurrency=20 --max-instances=2 --timeout=60
+            --memory=512Mi --cpu=1 --concurrency=20 --max-instances=2 --timeout=60
 
       - name: Show service URL and health check
         run: |

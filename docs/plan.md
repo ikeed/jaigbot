@@ -57,7 +57,7 @@ Inputs confirmed:
 - Required environment variables (Cloud Run service):
   - PROJECT_ID=warm-actor-253703
   - REGION=us-central1 (configurable)
-  - MODEL_ID=gemini-1.5-flash (configurable)
+    - MODEL_ID=gemini-1.5-flash (configurable)
   - PORT=8080 (Cloud Run sets this; app must bind to it)
   - Optional: MAX_TOKENS=256, TEMPERATURE=0.2, ALLOWED_ORIGINS (comma-separated), LOG_LEVEL=info
 - Credentials model:
