@@ -240,3 +240,21 @@ Troubleshooting
 - If using GitHub Enterprise, replace host=github.com with your enterprise host, e.g., host=github.mycompany.com
 - If you have multiple accounts, you can store separate entries by host (or use different HTTPS remotes like https://USERNAME@github.com/ORG/REPO.git)
 - If Keychain Access shows multiple entries, remove stale ones and try again.
+
+
+## 11) CI: Where gcloud is installed and how to verify auth
+- In CI, gcloud is installed on the GitHub-hosted runner by the action google-github-actions/setup-gcloud, not inside your application container image.
+- Our workflows authenticate using google-github-actions/auth before running any gcloud commands.
+- We added a “Verify gcloud installation and authentication” step that prints:
+  - which gcloud and gcloud --version (to show where it’s installed)
+  - gcloud config list and gcloud auth list (to show the active project and account)
+  - the GOOGLE_APPLICATION_CREDENTIALS path if a credentials file was created
+- If no active account is shown, the step fails fast with an actionable error (usually means missing/empty secrets or missing id-token: write permissions).
+
+Quick checks in CI logs
+- Look for the step “Set up gcloud SDK” to confirm installation.
+- Look for the step “Verify gcloud installation and authentication” to confirm the active account and project.
+- Common misconfigurations:
+  - WORKLOAD_IDP/WORKLOAD_SA or GCP_SA_KEY secrets missing/empty
+  - Repo/Environment permissions not allowing id-token: write (required for WIF)
+  - PROJECT_ID/REGION variables not set in repository variables
