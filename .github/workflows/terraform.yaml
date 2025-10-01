@@ -52,6 +52,29 @@ jobs:
             exit 1
           fi
 
+      - name: Echo GitHub context
+        run: |
+          echo "repository=${{ github.repository }}"
+          echo "ref=${{ github.ref }}"
+          echo "event_name=${{ github.event_name }}"
+          echo "workflow_ref=${{ github.workflow_ref }}"
+          echo "job_workflow_ref=${{ github.job_workflow_ref }}"
+          echo "actor=${{ github.actor }}"
+
+      - name: Dump OIDC claims
+        env:
+          GH_OIDC_AUD: "https://iam.googleapis.com/${{ secrets.WORKLOAD_IDP }}"
+        run: |
+          set -e
+          command -v jq >/dev/null 2>&1 || { sudo apt-get update -y && sudo apt-get install -y jq; }
+          TOKEN_URL="${ACTIONS_ID_TOKEN_REQUEST_URL}"
+          if [[ -n "${GH_OIDC_AUD}" ]]; then
+            TOKEN_URL="${TOKEN_URL}&audience=${GH_OIDC_AUD}"
+          fi
+          ID_TOKEN=$(curl -sS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "$TOKEN_URL" | jq -r '.value')
+          echo "OIDC header:" && cut -d'.' -f1 <<<"$ID_TOKEN" | base64 -d 2>/dev/null | jq . || true
+          echo "OIDC payload:" && cut -d'.' -f2 <<<"$ID_TOKEN" | base64 -d 2>/dev/null | jq . || true
+
       - name: Authenticate to Google Cloud (WIF)
         if: env.WORKLOAD_IDP != '' && env.WORKLOAD_SA != ''
         uses: google-github-actions/auth@v2
