@@ -41,7 +41,6 @@ jobs:
             echo "Set these in Settings → Secrets and variables → Actions → Variables." >&2
             exit 1
           fi
-
       - name: Validate auth configuration
         env:
           WORKLOAD_IDP: ${{ secrets.WORKLOAD_IDP }}
