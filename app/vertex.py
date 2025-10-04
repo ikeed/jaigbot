@@ -29,7 +29,7 @@ class VertexClient:
         self,
         prompt: str,
         temperature: float = 0.2,
-        max_tokens: int = 256,
+        max_tokens: int = 1024,
         system_instruction: Optional[str] = None,
     ) -> str:
         try:
