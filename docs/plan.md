@@ -57,7 +57,7 @@ Inputs confirmed:
 - Required environment variables (Cloud Run service):
   - PROJECT_ID=warm-actor-253703
   - REGION=us-central1 (configurable)
-  - MODEL_ID=gemini-1.5-flash-002 (configurable)
+    - MODEL_ID=gemini-1.5-flash (configurable)
   - PORT=8080 (Cloud Run sets this; app must bind to it)
   - Optional: MAX_TOKENS=256, TEMPERATURE=0.2, ALLOWED_ORIGINS (comma-separated), LOG_LEVEL=info
 - Credentials model:
@@ -141,7 +141,7 @@ Inputs confirmed:
   - SERVICE_NAME=gemini-flash-demo (variable)
   - WORKLOAD_IDP=projects/.../locations/global/workloadIdentityPools/.../providers/... (secret)
   - WORKLOAD_SA=cr-deployer@warm-actor-253703.iam.gserviceaccount.com (secret)
-  - MODEL_ID=gemini-1.5-flash-002 (variable)
+  - MODEL_ID=gemini-1.5-flash (variable)
   - TEMPERATURE=0.2 (variable)
   - MAX_TOKENS=256 (variable)
 - IAM and trust:
@@ -174,7 +174,7 @@ Inputs confirmed:
 ## 9) Assumptions, risks, and open questions
 
 - Assumptions:
-  - us-central1 supports gemini-1.5-flash-002 for text generation.
+  - us-central1 supports the public alias gemini-1.5-flash for text generation.
   - google-cloud-aiplatform version pinned above supports GenerativeModel.generate_content.
 - Risks:
   - Quotas or 429s; set Cloud Run max instances to contain costs; consider budgets/alerts.

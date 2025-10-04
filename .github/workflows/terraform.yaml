@@ -33,20 +33,90 @@ jobs:
       run:
         shell: bash
         working-directory: terraform
+    env:
+      WORKLOAD_IDP: ${{ secrets.WORKLOAD_IDP }}
+      WORKLOAD_SA: ${{ secrets.WORKLOAD_SA }}
+      GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate required variables
+        run: |
+          MISSING=()
+          [[ -z "$PROJECT_ID" ]] && MISSING+=(PROJECT_ID)
+          [[ -z "$REGION" ]] && MISSING+=(REGION)
+          if (( ${#MISSING[@]} )); then
+            echo "Error: Missing required repository variables: ${MISSING[*]}" >&2
+            echo "Set these in Settings → Secrets and variables → Actions → Variables." >&2
+            exit 1
+          fi
+
+      - name: Echo GitHub context
+        run: |
+          echo "repository=${{ github.repository }}"
+          echo "ref=${{ github.ref }}"
+          echo "event_name=${{ github.event_name }}"
+          echo "workflow_ref=${{ github.workflow_ref }}"
+          echo "job_workflow_ref=${{ github.job_workflow_ref }}"
+          echo "actor=${{ github.actor }}"
+
+      - name: Dump OIDC claims
+        run: |
+          set -e
+          command -v jq >/dev/null 2>&1 || { sudo apt-get update -y && sudo apt-get install -y jq; }
+          TOKEN_URL="${ACTIONS_ID_TOKEN_REQUEST_URL}"
+          # Only append an audience if WORKLOAD_IDP is set; URL-encode the audience value
+          if [[ -n "${WORKLOAD_IDP:-}" ]]; then
+            AUDIENCE="https://iam.googleapis.com/${WORKLOAD_IDP}"
+            AUD_ENC=$(printf '%s' "$AUDIENCE" | jq -sRr @uri)
+            TOKEN_URL="${TOKEN_URL}&audience=${AUD_ENC}"
+          fi
+          ID_TOKEN=$(curl -sS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "$TOKEN_URL" | jq -r '.value')
+          echo "OIDC header:" && cut -d'.' -f1 <<<"$ID_TOKEN" | base64 -d 2>/dev/null | jq . || true
+          echo "OIDC payload:" && cut -d'.' -f2 <<<"$ID_TOKEN" | base64 -d 2>/dev/null | jq . || true
+
       - name: Authenticate to Google Cloud (WIF)
+        if: github.event_name != 'pull_request' && env.WORKLOAD_IDP != '' && env.WORKLOAD_SA != ''
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.WORKLOAD_IDP }}
           service_account: ${{ secrets.WORKLOAD_SA }}
 
+      - name: Authenticate to Google Cloud (Service Account JSON)
+        if: github.event_name != 'pull_request' && env.GCP_SA_KEY != ''
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
       - name: Setup gcloud SDK
+        if: github.event_name != 'pull_request'
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ env.PROJECT_ID }}
+
+      - name: Verify gcloud installation and authentication
+        if: github.event_name != 'pull_request'
+        run: |
+          set -e
+          echo "which gcloud: $(which gcloud)"
+          gcloud --version
+          echo "GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-<unset>}"
+          if [[ -n "${GOOGLE_APPLICATION_CREDENTIALS}" && -f "${GOOGLE_APPLICATION_CREDENTIALS}" ]]; then
+            echo "Credentials file present at $GOOGLE_APPLICATION_CREDENTIALS"
+          else
+            echo "Note: GOOGLE_APPLICATION_CREDENTIALS not set or file missing (this can be OK if using WIF without a file)."
+          fi
+          gcloud config set project "$PROJECT_ID"
+          echo "gcloud config:"
+          gcloud config list
+          echo "gcloud accounts:"
+          gcloud auth list
+          ACTIVE=$(gcloud auth list --format='value(account)' --filter='status:ACTIVE' || true)
+          if [[ -z "$ACTIVE" ]]; then
+            echo "ERROR: gcloud has no active account. Ensure the previous 'google-github-actions/auth' step ran and secrets/ID token permissions are configured." >&2
+            exit 2
+          fi
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -63,10 +133,15 @@ jobs:
 
       - name: Terraform Init
         run: |
-          if [[ -n "$TF_BACKEND_BUCKET" && -n "$TF_BACKEND_PREFIX" ]]; then
-            terraform init -backend-config="bucket=$TF_BACKEND_BUCKET" -backend-config="prefix=$TF_BACKEND_PREFIX"
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            echo "PR event detected: running 'terraform init -backend=false' to avoid remote backend auth."
+            terraform init -backend=false
           else
-            terraform init
+            if [[ -n "$TF_BACKEND_BUCKET" && -n "$TF_BACKEND_PREFIX" ]]; then
+              terraform init -backend-config="bucket=$TF_BACKEND_BUCKET" -backend-config="prefix=$TF_BACKEND_PREFIX"
+            else
+              terraform init
+            fi
           fi
 
       - name: Terraform Format Check
@@ -76,7 +151,14 @@ jobs:
         run: terraform validate
 
       - name: Terraform Plan
+        if: github.event_name != 'pull_request'
         run: terraform plan -input=false -var "project_id=${{ env.PROJECT_ID }}" -var "region=${{ env.REGION }}"
+
+      - name: Skip Plan Notice (pull_request)
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "Plan skipped on pull_request to avoid failing WIF attribute conditions and remote access."
+          echo "This workflow still runs 'terraform fmt' and 'terraform validate'."
 
       - name: Terraform Apply (requires GCS backend)
         if: github.event_name != 'pull_request' && env.TF_BACKEND_BUCKET != '' && env.TF_BACKEND_PREFIX != ''
