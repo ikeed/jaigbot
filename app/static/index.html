@@ -6,7 +6,7 @@
   <title>Gemini Flash Hello</title>
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem; }
-    textarea { width: 100%; max-width: 720px; resize: none; overflow: hidden; }
+    textarea { width: 100%; max-width: 720px; resize: none; overflow: hidden; box-sizing: border-box; line-height: 1.4; min-height: 3em; }
     button { margin-top: 0.5rem; padding: 0.5rem 1rem; }
     /* Output box should autosize to content and wrap long lines */
     pre#out {
@@ -40,13 +40,18 @@
     const out = document.getElementById('out');
     const statusEl = document.getElementById('status');
 
-    // Auto-size the input textarea to fit its content
+    // Auto-size the input textarea to fit its content (robust across events)
     function autosize(el) {
-      el.style.height = 'auto';
-      el.style.height = (el.scrollHeight) + 'px';
+      // Defer to next frame to ensure scrollHeight is updated after event
+      requestAnimationFrame(() => {
+        el.style.height = 'auto';
+        el.style.height = el.scrollHeight + 'px';
+      });
     }
-    msgEl.addEventListener('input', () => autosize(msgEl));
-    // Initialize sizing on load
+    const autosizeEvents = ['input', 'change', 'cut', 'paste', 'drop', 'keydown'];
+    autosizeEvents.forEach(ev => msgEl.addEventListener(ev, () => autosize(msgEl)));
+    window.addEventListener('resize', () => autosize(msgEl));
+    // Initialize sizing on load (handles autofill/remembered text)
     window.addEventListener('load', () => autosize(msgEl));
 
     async function send() {
