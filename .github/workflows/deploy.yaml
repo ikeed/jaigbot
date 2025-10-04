@@ -21,20 +21,106 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      WORKLOAD_IDP: ${{ secrets.WORKLOAD_IDP }}
+      WORKLOAD_SA: ${{ secrets.WORKLOAD_SA }}
+      GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate required variables
+        run: |
+          MISSING=()
+          [[ -z "$PROJECT_ID" ]] && MISSING+=(PROJECT_ID)
+          [[ -z "$REGION" ]] && MISSING+=(REGION)
+          [[ -z "$GAR_REPO" ]] && MISSING+=(GAR_REPO)
+          [[ -z "$SERVICE_NAME" ]] && MISSING+=(SERVICE_NAME)
+          if (( ${#MISSING[@]} )); then
+            echo "Error: Missing required repository variables: ${MISSING[*]}" >&2
+            echo "Set these in Settings → Secrets and variables → Actions → Variables." >&2
+            exit 1
+          fi
+      - name: Validate auth configuration
+        env:
+          WORKLOAD_IDP: ${{ secrets.WORKLOAD_IDP }}
+          WORKLOAD_SA: ${{ secrets.WORKLOAD_SA }}
+          CREDENTIALS_JSON: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          if [[ -n "$CREDENTIALS_JSON" ]]; then
+            echo "Using credentials_json authentication via GCP_SA_KEY"
+            exit 0
+          fi
+          if [[ -n "$WORKLOAD_IDP" && -n "$WORKLOAD_SA" ]]; then
+            echo "Using Workload Identity Federation authentication"
+            exit 0
+          fi
+          echo "Error: Missing auth configuration. Set WORKLOAD_IDP and WORKLOAD_SA secrets for WIF, or GCP_SA_KEY for JSON key auth." >&2
+          exit 1
+
+      - name: Echo GitHub context
+        run: |
+          echo "repository=${{ github.repository }}"
+          echo "ref=${{ github.ref }}"
+          echo "event_name=${{ github.event_name }}"
+          echo "workflow_ref=${{ github.workflow_ref }}"
+          echo "job_workflow_ref=${{ github.job_workflow_ref }}"
+          echo "actor=${{ github.actor }}"
+
+      - name: Dump OIDC claims
+        run: |
+          set -e
+          command -v jq >/dev/null 2>&1 || { sudo apt-get update -y && sudo apt-get install -y jq; }
+          TOKEN_URL="${ACTIONS_ID_TOKEN_REQUEST_URL}"
+          # Only append an audience if WORKLOAD_IDP is set; URL-encode the audience value
+          if [[ -n "${WORKLOAD_IDP:-}" ]]; then
+            AUDIENCE="https://iam.googleapis.com/${WORKLOAD_IDP}"
+            AUD_ENC=$(printf '%s' "$AUDIENCE" | jq -sRr @uri)
+            TOKEN_URL="${TOKEN_URL}&audience=${AUD_ENC}"
+          fi
+          ID_TOKEN=$(curl -sS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "$TOKEN_URL" | jq -r '.value')
+          echo "OIDC header:" && cut -d'.' -f1 <<<"$ID_TOKEN" | base64 -d 2>/dev/null | jq . || true
+          echo "OIDC payload:" && cut -d'.' -f2 <<<"$ID_TOKEN" | base64 -d 2>/dev/null | jq . || true
+
       - name: Authenticate to Google Cloud (WIF)
+        if: env.WORKLOAD_IDP != '' && env.WORKLOAD_SA != ''
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.WORKLOAD_IDP }}
           service_account: ${{ secrets.WORKLOAD_SA }}
 
+      - name: Authenticate to Google Cloud (Service Account JSON)
+        if: env.GCP_SA_KEY != ''
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
       - name: Set up gcloud SDK
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ env.PROJECT_ID }}
+
+      - name: Verify gcloud installation and authentication
+        run: |
+          set -e
+          echo "which gcloud: $(which gcloud)"
+          gcloud --version
+          echo "GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-<unset>}"
+          if [[ -n "${GOOGLE_APPLICATION_CREDENTIALS}" && -f "${GOOGLE_APPLICATION_CREDENTIALS}" ]]; then
+            echo "Credentials file present at $GOOGLE_APPLICATION_CREDENTIALS"
+          else
+            echo "Note: GOOGLE_APPLICATION_CREDENTIALS not set or file missing (this can be OK if using WIF without a file)."
+          fi
+          gcloud config set project "$PROJECT_ID"
+          echo "gcloud config:"
+          gcloud config list
+          echo "gcloud accounts:"
+          gcloud auth list
+          ACTIVE=$(gcloud auth list --format='value(account)' --filter='status:ACTIVE' || true)
+          if [[ -z "$ACTIVE" ]]; then
+            echo "ERROR: gcloud has no active account. Ensure the previous 'google-github-actions/auth' step ran and secrets/ID token permissions are configured." >&2
+            exit 2
+          fi
 
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker $REGION-docker.pkg.dev -q
@@ -54,8 +140,8 @@ jobs:
             --region "$REGION" \
             --allow-unauthenticated \
             --service-account "cr-vertex-runtime@${PROJECT_ID}.iam.gserviceaccount.com" \
-            --set-env-vars "PROJECT_ID=${PROJECT_ID},REGION=${REGION},MODEL_ID=${MODEL_ID:-gemini-1.5-flash-002},TEMPERATURE=${TEMPERATURE:-0.2},MAX_TOKENS=${MAX_TOKENS:-256}" \
-            --memory=512Mi --cpu=0.5 --concurrency=20 --max-instances=2 --timeout=60
+            --set-env-vars "PROJECT_ID=${PROJECT_ID},REGION=${REGION},MODEL_ID=${MODEL_ID:-gemini-2.5-flash},TEMPERATURE=${TEMPERATURE:-0.2},MAX_TOKENS=${MAX_TOKENS:-256}" \
+            --memory=512Mi --cpu=1 --concurrency=20 --max-instances=2 --timeout=60
 
       - name: Show service URL and health check
         run: |
