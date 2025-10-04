@@ -77,24 +77,26 @@ jobs:
           echo "OIDC payload:" && cut -d'.' -f2 <<<"$ID_TOKEN" | base64 -d 2>/dev/null | jq . || true
 
       - name: Authenticate to Google Cloud (WIF)
-        if: env.WORKLOAD_IDP != '' && env.WORKLOAD_SA != ''
+        if: github.event_name != 'pull_request' && env.WORKLOAD_IDP != '' && env.WORKLOAD_SA != ''
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.WORKLOAD_IDP }}
           service_account: ${{ secrets.WORKLOAD_SA }}
 
       - name: Authenticate to Google Cloud (Service Account JSON)
-        if: env.GCP_SA_KEY != ''
+        if: github.event_name != 'pull_request' && env.GCP_SA_KEY != ''
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Setup gcloud SDK
+        if: github.event_name != 'pull_request'
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ env.PROJECT_ID }}
 
       - name: Verify gcloud installation and authentication
+        if: github.event_name != 'pull_request'
         run: |
           set -e
           echo "which gcloud: $(which gcloud)"
@@ -131,10 +133,15 @@ jobs:
 
       - name: Terraform Init
         run: |
-          if [[ -n "$TF_BACKEND_BUCKET" && -n "$TF_BACKEND_PREFIX" ]]; then
-            terraform init -backend-config="bucket=$TF_BACKEND_BUCKET" -backend-config="prefix=$TF_BACKEND_PREFIX"
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            echo "PR event detected: running 'terraform init -backend=false' to avoid remote backend auth."
+            terraform init -backend=false
           else
-            terraform init
+            if [[ -n "$TF_BACKEND_BUCKET" && -n "$TF_BACKEND_PREFIX" ]]; then
+              terraform init -backend-config="bucket=$TF_BACKEND_BUCKET" -backend-config="prefix=$TF_BACKEND_PREFIX"
+            else
+              terraform init
+            fi
           fi
 
       - name: Terraform Format Check
@@ -144,7 +151,14 @@ jobs:
         run: terraform validate
 
       - name: Terraform Plan
+        if: github.event_name != 'pull_request'
         run: terraform plan -input=false -var "project_id=${{ env.PROJECT_ID }}" -var "region=${{ env.REGION }}"
+
+      - name: Skip Plan Notice (pull_request)
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "Plan skipped on pull_request to avoid failing WIF attribute conditions and remote access."
+          echo "This workflow still runs 'terraform fmt' and 'terraform validate'."
 
       - name: Terraform Apply (requires GCS backend)
         if: github.event_name != 'pull_request' && env.TF_BACKEND_BUCKET != '' && env.TF_BACKEND_PREFIX != ''
