@@ -6,16 +6,29 @@
   <title>Gemini Flash Hello</title>
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem; }
-    textarea { width: 100%; max-width: 720px; }
+    textarea { width: 100%; max-width: 720px; resize: none; overflow: hidden; }
     button { margin-top: 0.5rem; padding: 0.5rem 1rem; }
-    pre { white-space: pre-wrap; background: #f7f7f7; padding: 1rem; border-radius: 6px; max-width: 720px; }
-    #status { color: #666; font-size: 0.9rem; }
+    /* Output box should autosize to content and wrap long lines */
+    pre#out {
+      display: block;
+      white-space: pre-wrap; /* keep newlines, allow wrapping */
+      overflow-wrap: anywhere; /* wrap long tokens */
+      word-break: break-word;
+      background: #f7f7f7;
+      padding: 1rem;
+      border-radius: 6px;
+      border: 1px solid #e3e3e3;
+      max-width: 720px;
+      min-height: 3.5rem; /* looks like a box even when empty */
+      margin-top: 0.5rem;
+    }
+    #status { color: #666; font-size: 0.9rem; margin-left: 0.5rem; }
   </style>
 </head>
 <body>
   <h1>Gemini Flash Hello</h1>
   <p>Type a message and click Send. This calls the backend /chat, which proxies to Vertex AI Gemini Flash.</p>
-  <textarea id="msg" rows="6" placeholder="Say hello to Gemini..."></textarea><br>
+  <textarea id="msg" rows="3" placeholder="Say hello to Gemini..."></textarea><br>
   <button id="send">Send</button>
   <span id="status"></span>
   <h3>Reply</h3>
@@ -26,6 +39,15 @@
     const msgEl = document.getElementById('msg');
     const out = document.getElementById('out');
     const statusEl = document.getElementById('status');
+
+    // Auto-size the input textarea to fit its content
+    function autosize(el) {
+      el.style.height = 'auto';
+      el.style.height = (el.scrollHeight) + 'px';
+    }
+    msgEl.addEventListener('input', () => autosize(msgEl));
+    // Initialize sizing on load
+    window.addEventListener('load', () => autosize(msgEl));
 
     async function send() {
       const message = msgEl.value.trim();
