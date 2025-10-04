@@ -17,7 +17,7 @@ PROJECT_ID = os.getenv("PROJECT_ID")
 REGION = os.getenv("REGION", "us-central1")
 MODEL_ID = os.getenv("MODEL_ID", "gemini-1.5-flash-002")
 TEMPERATURE = float(os.getenv("TEMPERATURE", "0.2"))
-MAX_TOKENS = int(os.getenv("MAX_TOKENS", "256"))
+MAX_TOKENS = int(os.getenv("MAX_TOKENS", "1024"))
 ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
 LOG_LEVEL = os.getenv("LOG_LEVEL", "info").upper()
 
