@@ -95,14 +95,21 @@ After deploying a new revision, the public URL can briefly return 404/503 while 
 - Script: `scripts/wait_for_health.sh`
 - Requires: `gcloud` and `curl`
 - Env vars:
-  - `SERVICE` (Cloud Run service name)
+  - `SERVICE` or `SERVICE_NAME` (Cloud Run service name)
   - `REGION` (Cloud Run region)
   - `HEALTH_PATH` (default `/healthz`)
+  - `PROBE_URL` (optional: full URL to probe; overrides derived URL)
   - `MAX_WAIT` (overall timeout in seconds, default `300`)
 
 Example (local/GitHub Actions):
 ```bash
-SERVICE=my-service REGION=us-central1 HEALTH_PATH=/healthz MAX_WAIT=300 \
+SERVICE_NAME=my-service REGION=us-central1 HEALTH_PATH=/healthz MAX_WAIT=300 \
+  bash scripts/wait_for_health.sh
+```
+
+If you need to probe a custom domain or a non-/healthz path, provide PROBE_URL directly:
+```bash
+PROBE_URL=https://your.domain.tld/healthz MAX_WAIT=300 \
   bash scripts/wait_for_health.sh
 ```
 
@@ -122,7 +129,7 @@ Cloud Build step example:
       bash scripts/wait_for_health.sh
 ```
 
-This avoids flaky deploy checks that fail on the first transient 404.
+This avoids flaky deploy checks that fail on the first transient 404. Replace any one-shot curl like `curl "$URL/healthz"` with this script.
 
 ## Conversation memory (session) and persona with Chainlit
 

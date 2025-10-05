@@ -6,34 +6,43 @@ set -euo pipefail
 # until it receives a 2xx/3xx or a maximum timeout elapses.
 #
 # Environment variables:
-#   SERVICE     - Cloud Run service name (required)
-#   REGION      - Cloud Run region (required)
-#   HEALTH_PATH - Health path to probe (default: /healthz)
-#   MAX_WAIT    - Overall timeout in seconds (default: 300)
-#   SLEEP       - Initial backoff sleep in seconds (default: 2)
-#   MAX_SLEEP   - Maximum backoff sleep in seconds (default: 10)
+#   SERVICE / SERVICE_NAME - Cloud Run service name (required)
+#   REGION                 - Cloud Run region (required)
+#   HEALTH_PATH            - Health path to probe (default: /healthz)
+#   PROBE_URL / URL        - Optional full URL to probe instead of deriving from service URL
+#   MAX_WAIT               - Overall timeout in seconds (default: 300)
+#   SLEEP                  - Initial backoff sleep in seconds (default: 2)
+#   MAX_SLEEP              - Maximum backoff sleep in seconds (default: 10)
 #
 # Requirements:
 #   - gcloud CLI authenticated with permissions to describe the service
 #   - curl available in the environment
 
-: "${SERVICE:?SERVICE is required}"
+# Back-compat: allow SERVICE_NAME as alias
+SERVICE=${SERVICE:-${SERVICE_NAME:-}}
+: "${SERVICE:?SERVICE or SERVICE_NAME is required}"
 : "${REGION:?REGION is required}"
 HEALTH_PATH=${HEALTH_PATH:-/healthz}
 MAX_WAIT=${MAX_WAIT:-300}
 SLEEP=${SLEEP:-2}
 MAX_SLEEP=${MAX_SLEEP:-10}
+PROBE_URL=${PROBE_URL:-${URL:-}}
 
 say() { echo "[wait_for_health] $*"; }
 
-say "Fetching Cloud Run URL for ${SERVICE} in ${REGION}…"
-SERVICE_URL=$(gcloud run services describe "$SERVICE" \
-  --region "$REGION" --format='value(status.url)')
-if [[ -z "$SERVICE_URL" ]]; then
-  say "Could not determine service URL" >&2
-  exit 1
+if [[ -z "$PROBE_URL" ]]; then
+  say "Fetching Cloud Run URL for ${SERVICE} in ${REGION}…"
+  SERVICE_URL=$(gcloud run services describe "$SERVICE" \
+    --region "$REGION" --format='value(status.url)')
+  if [[ -z "$SERVICE_URL" ]]; then
+    say "Could not determine service URL" >&2
+    exit 1
+  fi
+  say "Service URL: ${SERVICE_URL}"
+  PROBE_URL="${SERVICE_URL%/}${HEALTH_PATH}"
+else
+  say "Using provided PROBE_URL: ${PROBE_URL}"
 fi
-say "Service URL: ${SERVICE_URL}"
 
 # Optional: wait for Ready condition before HTTP polling (best-effort)
 say "Waiting for service Ready condition…"
@@ -54,8 +63,7 @@ while :; do
 done
 
 # HTTP health polling with backoff
-HEALTH_URL="${SERVICE_URL%/}${HEALTH_PATH}"
-say "Probing health: ${HEALTH_URL} (timeout ${MAX_WAIT}s)…"
+say "Probing health: ${PROBE_URL} (timeout ${MAX_WAIT}s)…"
 START=$(date +%s)
 ATTEMPT=0
 while :; do
@@ -63,7 +71,7 @@ while :; do
   HTTP_CODE=$(curl -sS -o /dev/null -w '%{http_code}' \
     --connect-timeout 5 --max-time 10 \
     -H 'Cache-Control: no-cache' \
-    "$HEALTH_URL" || echo "000")
+    "$PROBE_URL" || echo "000")
 
   if [[ "$HTTP_CODE" =~ ^2[0-9][0-9]$ || "$HTTP_CODE" =~ ^3[0-9][0-9]$ ]]; then
     say "Health check OK (HTTP ${HTTP_CODE}) on attempt ${ATTEMPT}."
@@ -89,4 +97,4 @@ while :; do
 
 done
 
-say "Service is healthy: ${HEALTH_URL}"
+say "Service is healthy: ${PROBE_URL}"
