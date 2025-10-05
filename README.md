@@ -90,6 +90,27 @@ When deployed, you can run Chainlit as a separate Cloud Run service by setting `
 
 ## Deploy health check helper (Cloud Run)
 
+### Why you might see two different Cloud Run URLs
+
+During deploys you can legitimately see two different hostnames for the same Cloud Run service:
+
+- New canonical URL format (shown by `gcloud run deploy`):
+  - https://<service>-<project-number>.<region>.run.app
+  - Example: https://aimsbot-911779552073.us-central1.run.app
+- Legacy URL format (often shown by `gcloud run services describe` and in some UIs/tools):
+  - https://<service>-<hash>-<region-short>.a.run.app
+  - Example: https://aimsbot-chur7bpwsq-uc.a.run.app
+
+Both hostnames are valid and route to the same Cloud Run service and revision once traffic is ready. The difference is only the hostname pattern (new vs. legacy). DNS and certificates are managed by Google for both.
+
+Why you saw a 404 when probing right after deploy:
+- Curling the bare service root ("/") can return 404 if your app doesn’t serve that path. This backend serves GET /healthz, /config, /diagnostics, etc., but not "/".
+- Immediately after a deploy, you can also briefly see 404/503 while the new revision warms up and traffic shifts.
+
+Best practice:
+- Probe an explicit health endpoint like /healthz and use a bounded retry with backoff. This repo includes scripts/wait_for_health.sh that does exactly that, and it derives the service URL via `gcloud run services describe`.
+- If you use a custom domain or want to probe a specific URL, set PROBE_URL to the full URL, e.g. PROBE_URL=https://your.domain.tld/healthz.
+
 After deploying a new revision, the public URL can briefly return 404/503 while traffic shifts and instances warm up. Use the helper script to wait for health with exponential backoff and an overall timeout instead of failing immediately.
 
 - Script: `scripts/wait_for_health.sh`

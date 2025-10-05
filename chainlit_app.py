@@ -12,6 +12,28 @@ BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8080/chat")
 DEBUG_MODE = os.getenv("DEBUG_MODE", "false").lower() == "true"
 
 
+def _author_from_role(role: str) -> str:
+    """
+    Map our simple role string to a display author label for Chainlit.
+    """
+    if role == "user":
+        return "User"
+    if role == "assistant":
+        return "Assistant"
+    return role or "Assistant"
+
+
+async def _replay_history(history: list[dict]):
+    """
+    Replay all prior messages to the UI without making any backend calls.
+    Each history item is a dict like {"role": "user"|"assistant", "content": str}.
+    """
+    for item in history or []:
+        content = item.get("content", "")
+        role = item.get("role", "assistant")
+        await cl.Message(content=content, author=_author_from_role(role)).send()
+
+
 def _get_persistent_session_id() -> str:
     """
     Return a stable session id for Chainlit to use when calling the backend.
@@ -51,8 +73,8 @@ async def start_chat():
     per-user session state is initialized, including a stable sessionId and
     optional persona/scene pulled from environment variables.
     """
-    # Use a persistent session id across browser refreshes
-    session_id = _get_persistent_session_id()
+    # Generate a fresh session id for each new chat
+    session_id = str(uuid.uuid4())
     cl.user_session.set("session_id", session_id)
 
     # Optional persona/scene from environment, with hard-coded fallbacks
@@ -61,20 +83,21 @@ async def start_chat():
     cl.user_session.set("character", character)
     cl.user_session.set("scene", scene)
 
-    # Initialize local history (not required by backend but useful client-side)
+    # Initialize fresh local history for a new chat
     cl.user_session.set("history", [])
+    history = []
 
-    intro_lines = [
-        "Hello! I'm connected to the Gemini backend.",
-        "I'll get us started...",
-    ]
-    if DEBUG_MODE:
-        if character:
-            intro_lines.append(f"Persona active: {character}")
-        if scene:
-            intro_lines.append(f"Scene: {scene}")
-
-    await cl.Message("\n".join(intro_lines)).send()
+    # intro_lines = [
+    #     "Hello! I'm connected to the Gemini backend.",
+    #     "I'll get us started...",
+    # ]
+    # if DEBUG_MODE:
+    #     if character:
+    #         intro_lines.append(f"Persona active: {character}")
+    #     if scene:
+    #         intro_lines.append(f"Scene: {scene}")
+    #
+    # await cl.Message("\n".join(intro_lines)).send()
 
     # Have the bot make the first comment to introduce itself to the doctor
     try:
@@ -84,7 +107,7 @@ async def start_chat():
             payload = {
                 "message": (
                     "Please introduce yourself to the doctor clearly and concisely based on your persona and scene. "
-                    "Open with a warm one- to two-sentence introduction of who you are, then ask one brief question to begin."
+                    "Open with a warm one- to two-sentence introduction of who you are, then ask one brief question, which gives the doctor something to ask about, to begin."
                 )
             }
             if session_id:
@@ -184,3 +207,23 @@ async def handle_message(message: cl.Message):
     cl.user_session.set("history", history)
 
     await cl.Message(reply).send()
+
+
+@cl.on_chat_resume
+async def resume_chat():
+    """
+    When an existing session is resumed, display the entire prior conversation
+    from local history and wait for the next user input. No backend calls.
+    """
+    # Do not modify the session_id here. Each chat keeps its own unique id
+    # assigned at start_chat(). If Chainlit resumes a specific thread, the
+    # associated user_session (including session_id) should be restored.
+
+    # Do not overwrite existing persona/scene; just ensure keys exist for consistency.
+    if cl.user_session.get("character") is None:
+        cl.user_session.set("character", os.getenv("CHARACTER_SYSTEM") or (DEFAULT_CHARACTER or None))
+    if cl.user_session.get("scene") is None:
+        cl.user_session.set("scene", os.getenv("SCENE_OBJECTIVES") or (DEFAULT_SCENE or None))
+
+    history = cl.user_session.get("history") or []
+    await _replay_history(history)
