@@ -40,6 +40,14 @@ SUPPRESS_VERTEXAI_DEPRECATION = os.getenv("SUPPRESS_VERTEXAI_DEPRECATION", "true
 MEMORY_ENABLED = os.getenv("MEMORY_ENABLED", "true").lower() == "true"
 MEMORY_MAX_TURNS = int(os.getenv("MEMORY_MAX_TURNS", "8"))  # number of user/assistant turns to keep
 MEMORY_TTL_SECONDS = int(os.getenv("MEMORY_TTL_SECONDS", "3600"))  # 1 hour
+# Memory backend: "memory" (default) or "redis"
+MEMORY_BACKEND = os.getenv("MEMORY_BACKEND", "memory").lower()
+REDIS_URL = os.getenv("REDIS_URL")
+REDIS_HOST = os.getenv("REDIS_HOST")
+REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+REDIS_DB = int(os.getenv("REDIS_DB", "0"))
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
+REDIS_PREFIX = os.getenv("REDIS_PREFIX", "jaig:session:")
 
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
@@ -49,9 +57,116 @@ logger = logging.getLogger("app")
 
 app = FastAPI(title="Gemini Flash Demo", version="0.1.0")
 
-# Simple in-memory conversation store
-# Structure: { sessionId: { "history": [ {role, content}, ...], "character": str|None, "scene": str|None, "updated": float } }
-_MEMORY_STORE: dict[str, dict] = {}
+# Memory store abstraction
+class InMemoryStore:
+    def __init__(self):
+        self._store: dict[str, dict] = {}
+
+    def get(self, key: str):
+        return self._store.get(key)
+
+    def __setitem__(self, key: str, value: dict):
+        self._store[key] = value
+
+    def items(self):
+        return list(self._store.items())
+
+    def pop(self, key: str, default=None):
+        return self._store.pop(key, default)
+
+    def __len__(self):
+        return len(self._store)
+
+class RedisStore:
+    def __init__(self):
+        try:
+            import redis  # type: ignore
+        except Exception as e:
+            logger.warning("Redis not available (%s); falling back to in-memory store", e)
+            raise
+        # Create client
+        if REDIS_URL:
+            self.r = redis.from_url(REDIS_URL, decode_responses=True)
+        else:
+            self.r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB, password=REDIS_PASSWORD, decode_responses=True)
+        # Test connection
+        try:
+            self.r.ping()
+        except Exception as e:
+            logger.warning("Cannot connect to Redis; falling back to in-memory store: %s", e)
+            raise
+
+    def _k(self, key: str) -> str:
+        return f"{REDIS_PREFIX}{key}"
+
+    def get(self, key: str):
+        raw = self.r.get(self._k(key))
+        if not raw:
+            return None
+        try:
+            return json.loads(raw)
+        except Exception:
+            return None
+
+    def __setitem__(self, key: str, value: dict):
+        try:
+            raw = json.dumps(value)
+        except Exception:
+            raw = "{}"
+        pipe = self.r.pipeline()
+        pipe.set(self._k(key), raw)
+        if MEMORY_TTL_SECONDS > 0:
+            pipe.expire(self._k(key), MEMORY_TTL_SECONDS)
+        pipe.execute()
+
+    def items(self):
+        # Caution: SCAN to iterate keys; may be used rarely (prune/diagnostics)
+        cursor = 0
+        out = []
+        pattern = f"{REDIS_PREFIX}*"
+        while True:
+            cursor, keys = self.r.scan(cursor=cursor, match=pattern, count=200)
+            if keys:
+                vals = self.r.mget(keys)
+                for k, v in zip(keys, vals):
+                    if v:
+                        try:
+                            data = json.loads(v)
+                        except Exception:
+                            data = None
+                        if data is not None:
+                            sid = k[len(REDIS_PREFIX):]
+                            out.append((sid, data))
+            if cursor == 0:
+                break
+        return out
+
+    def pop(self, key: str, default=None):
+        val = self.get(key)
+        self.r.delete(self._k(key))
+        return val if val is not None else default
+
+    def __len__(self):
+        # Approximate size via SCAN cardinality
+        count = 0
+        cursor = 0
+        pattern = f"{REDIS_PREFIX}*"
+        while True:
+            cursor, keys = self.r.scan(cursor=cursor, match=pattern, count=500)
+            count += len(keys)
+            if cursor == 0:
+                break
+        return count
+
+# Instantiate store with fallback
+try:
+    if MEMORY_ENABLED and MEMORY_BACKEND == "redis":
+        _MEMORY_STORE = RedisStore()
+    else:
+        _MEMORY_STORE = InMemoryStore()
+except Exception:
+    _MEMORY_STORE = InMemoryStore()
+    MEMORY_BACKEND = "memory"
 
 # Optional CORS
 if ALLOWED_ORIGINS:
@@ -616,6 +731,7 @@ async def config():
         "minContinueGrowth": int(os.getenv("MIN_CONTINUE_GROWTH", "10")),
         # Memory settings
         "memoryEnabled": MEMORY_ENABLED,
+        "memoryBackend": MEMORY_BACKEND,
         "memoryMaxTurns": MEMORY_MAX_TURNS,
         "memoryTtlSeconds": MEMORY_TTL_SECONDS,
         "memoryStoreSize": len(_MEMORY_STORE),
@@ -645,6 +761,7 @@ async def diagnostics():
         "minContinueGrowth": int(os.getenv("MIN_CONTINUE_GROWTH", "10")),
         "memory": {
             "enabled": MEMORY_ENABLED,
+            "backend": MEMORY_BACKEND,
             "maxTurns": MEMORY_MAX_TURNS,
             "ttlSeconds": MEMORY_TTL_SECONDS,
             "storeSize": len(_MEMORY_STORE),
