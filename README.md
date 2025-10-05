@@ -1,16 +1,18 @@
 # JaigBot — Hello World: Cloud Run ↔ Vertex AI (Gemini Flash)
 
-This repository contains a tiny FastAPI app that serves a minimal web UI and proxies a single message to Vertex AI (Gemini Flash), then displays the single reply.  No auth, no storage, no streaming.
+This repository contains a tiny FastAPI backend that exposes a simple /chat endpoint which proxies a single message to Vertex AI (Gemini Flash). The chat UI is provided by Chainlit (see `chainlit_app.py`).  No auth, no storage, no streaming.
 
 **TL;DR — Where things are:**
 
-- UI in the browser: **GET /** – served from `app/static/index.html`.
-- API endpoints:
+- UI: Chainlit (see `chainlit_app.py`).
+- API endpoints (FastAPI backend):
   - **POST /chat** → calls Vertex AI and returns `{ reply, model, latencyMs }`.
   - **GET  /healthz** → simple health check.
+  - **GET  /config**, **/diagnostics**, **/models** for configuration/diagnostics.
 - Backend code: `app/main.py` and `app/vertex.py`.
 - Run/setup docs: `docs/developer-setup.md` (step‑by‑step).
 - Architecture/plan: `docs/plan.md`.
+- Note: `app/static/index.html` is deprecated and no longer served; the backend does not mount a static UI.
 
 ## Running locally
 
@@ -28,7 +30,7 @@ This repository contains a tiny FastAPI app that serves a minimal web UI and pro
    ```bash
    uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
    ```
-4. Open http://localhost:8080/ to access the default UI, or see below for the Chainlit UI.
+4. There is no default UI served by the backend. Use the Chainlit UI described below.
 
 ## Chainlit UI (New)
 
@@ -46,6 +48,16 @@ To run the Chainlit UI locally:
    BACKEND_URL=http://localhost:8080/chat chainlit run chainlit_app.py
    ```
 4. Open the URL shown in the terminal (usually http://localhost:8000/) to use the chat interface.
+
+Session persistence with Chainlit (browser refresh safe):
+- Chainlit runs server-side and calls the backend with httpx. Browser cookies set by the backend are not used in this path.
+- To keep your conversation across browser refreshes, the Chainlit app now persists a session id in a local file `.chainlit/session_id` and sends it with every `/chat` call. This makes the session stable across refreshes and Cloud Run instance restarts (when paired with Redis memory on the backend).
+- You can override the persisted id by setting an env var before starting Chainlit:
+  ```bash
+  export FIXED_SESSION_ID=my-stable-id   # or SESSION_ID
+  ```
+Caveats:
+- In multi-user deployments of Chainlit, this simple approach makes all users share the same backend session. For per-user isolation, enable authentication in Chainlit so a persistent user identifier is available, or implement a custom mechanism to derive a unique session id per user and persist it (e.g., via a login flow or signed token).
 
 Notes and tips:
 - If responses seem truncated, first check /diagnostics and logs. If finishReason=MAX_TOKENS with very small visible text but high thoughts tokens, the provider may be spending the budget on hidden reasoning tokens. Our REST path disables thinking by default and requests plain text output.
@@ -77,6 +89,25 @@ When deployed, you can run Chainlit as a separate Cloud Run service by setting `
 
 
 ## Conversation memory (session) and persona with Chainlit
+
+### Stable session ids via cookie (browser refresh safe)
+
+When the browser calls the FastAPI backend directly (e.g., using a simple HTML page or your own frontend), the backend now issues and remembers a session id in a cookie to keep conversation state across refreshes and across Cloud Run instances (when paired with Redis memory).
+
+Behavior:
+- If the request body includes `sessionId`, the backend uses it (and also mirrors it to the cookie).
+- Otherwise, the backend looks for a cookie named `sessionId` and uses it if present.
+- If neither is present, the backend generates a new UUID and sets it as a cookie on the response.
+
+Cookie settings (env configurable):
+- `SESSION_COOKIE_NAME` (default `sessionId`)
+- `SESSION_COOKIE_SECURE` (default `true`; set to `false` for local HTTP)
+- `SESSION_COOKIE_SAMESITE` (default `lax`; use `none` for cross-site iframes + ensure `secure`)
+- `SESSION_COOKIE_MAX_AGE` (default aligns with `MEMORY_TTL_SECONDS`, else 30 days)
+
+Notes:
+- If you use Chainlit as a separate service (different origin), cookies for the backend domain are not automatically shared with the Chainlit origin. Chainlit sends requests from the server via httpx, so cookies are not applicable there. For a browser-based frontend hosted on the same origin as the backend, cookies will work out of the box.
+- For cross-origin browser calls, configure CORS appropriately and send credentials on the client side. Set CORS `allow_credentials=True` on the backend and `credentials: 'include'` in fetch. You may also need `SESSION_COOKIE_SAMESITE=none` and `SESSION_COOKIE_SECURE=true` to allow third-party cookies.
 
 ### Shared memory across Cloud Run instances (Redis / Google Memorystore)
 
