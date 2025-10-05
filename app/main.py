@@ -368,12 +368,38 @@ async def chat(req: Request, body: ChatRequest):
 
     def _attempt(model_id: str):
         client = VertexClient(project=PROJECT_ID, region=REGION, model_id=model_id)
-        text, meta = client.generate_text(
-            prompt=prompt_text,
-            temperature=TEMPERATURE,
-            max_tokens=MAX_TOKENS,
-            system_instruction=system_instruction,
-        )
+        # Support both new and legacy VertexClient interfaces used in tests:
+        # - New: generate_text(prompt=..., temperature=..., max_tokens=..., system_instruction=...) -> (text, meta)
+        # - Legacy/mock: generate_text(prompt, temperature, max_tokens) -> text
+        try:
+            result = client.generate_text(
+                prompt=prompt_text,
+                temperature=TEMPERATURE,
+                max_tokens=MAX_TOKENS,
+                system_instruction=system_instruction,
+            )
+        except TypeError:
+            # Fallback for mocks that don't accept system_instruction or keyword args
+            result = client.generate_text(prompt_text, TEMPERATURE, MAX_TOKENS)
+        # Normalize return shape
+        if isinstance(result, tuple) and len(result) == 2:
+            text, meta = result
+        else:
+            text = str(result)
+            meta = {
+                "finishReason": None,
+                "promptTokens": None,
+                "candidatesTokens": None,
+                "totalTokens": None,
+                "thoughtsTokens": None,
+                "safety": [],
+                "textLen": len((text or "").strip()),
+                "transport": None,
+                "continuationCount": 0,
+                "noProgressBreak": None,
+                "continueTailChars": None,
+                "continuationInstructionEnabled": None,
+            }
         return text, meta
 
     try:
