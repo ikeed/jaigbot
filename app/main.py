@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from .vertex import VertexClient, VertexAIError
+from .persona import DEFAULT_CHARACTER, DEFAULT_SCENE
 
 # Environment configuration with sensible defaults
 PROJECT_ID = os.getenv("PROJECT_ID")
@@ -19,14 +20,26 @@ REGION = os.getenv("REGION", "us-central1")
 # Use widely available defaults; override via env as needed
 MODEL_ID = os.getenv("MODEL_ID", "gemini-2.5-flash")
 TEMPERATURE = float(os.getenv("TEMPERATURE", "0.2"))
-MAX_TOKENS = int(os.getenv("MAX_TOKENS", "1024"))
+# Increase default to allow longer responses; still configurable via env
+MAX_TOKENS = int(os.getenv("MAX_TOKENS", "2048"))
 ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
 model_fallbacks = os.getenv("MODEL_FALLBACKS", "gemini-2.5-flash-001").split(",")
 MODEL_FALLBACKS = [m.strip() for m in model_fallbacks if m.strip()]
 LOG_LEVEL = os.getenv("LOG_LEVEL", "info").upper()
 LOG_REQUEST_BODY_MAX = int(os.getenv("LOG_REQUEST_BODY_MAX", "1024"))
 LOG_HEADERS = os.getenv("LOG_HEADERS", "false").lower() == "true"
+LOG_RESPONSE_PREVIEW_MAX = int(os.getenv("LOG_RESPONSE_PREVIEW_MAX", "512"))
 EXPOSE_UPSTREAM_ERROR = os.getenv("EXPOSE_UPSTREAM_ERROR", "false").lower() == "true"
+# Debug flag to control verbosity and revealing persona/scene in logs and UI
+DEBUG_MODE = os.getenv("DEBUG_MODE", "false").lower() == "true"
+# Additional behavior flags
+AUTO_CONTINUE_ON_MAX_TOKENS = os.getenv("AUTO_CONTINUE_ON_MAX_TOKENS", "true").lower() == "true"
+MAX_CONTINUATIONS = int(os.getenv("MAX_CONTINUATIONS", "2"))
+SUPPRESS_VERTEXAI_DEPRECATION = os.getenv("SUPPRESS_VERTEXAI_DEPRECATION", "true").lower() == "true"
+# Memory configuration
+MEMORY_ENABLED = os.getenv("MEMORY_ENABLED", "true").lower() == "true"
+MEMORY_MAX_TURNS = int(os.getenv("MEMORY_MAX_TURNS", "8"))  # number of user/assistant turns to keep
+MEMORY_TTL_SECONDS = int(os.getenv("MEMORY_TTL_SECONDS", "3600"))  # 1 hour
 
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
@@ -35,6 +48,10 @@ logging.basicConfig(
 logger = logging.getLogger("app")
 
 app = FastAPI(title="Gemini Flash Demo", version="0.1.0")
+
+# Simple in-memory conversation store
+# Structure: { sessionId: { "history": [ {role, content}, ...], "character": str|None, "scene": str|None, "updated": float } }
+_MEMORY_STORE: dict[str, dict] = {}
 
 # Optional CORS
 if ALLOWED_ORIGINS:
@@ -156,6 +173,12 @@ async def log_requests(request: Request, call_next):
     if body_preview:
         try:
             body_logged = json.loads(body_preview.decode("utf-8"))
+            # Redact persona/scene fields unless in debug mode
+            if not DEBUG_MODE and isinstance(body_logged, dict):
+                if "character" in body_logged:
+                    body_logged["character"] = "<hidden>"
+                if "scene" in body_logged:
+                    body_logged["scene"] = "<hidden>"
         except Exception:
             # fallback to string preview
             try:
@@ -243,6 +266,11 @@ async def healthz():
 
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, description="User input message")
+    # Optional session support for server-side memory
+    sessionId: Optional[str] = Field(default=None, description="Stable session identifier for conversation memory")
+    # Optional persona/scene fields
+    character: Optional[str] = Field(default=None, description="Persona/system prompt for the assistant (roleplay character)")
+    scene: Optional[str] = Field(default=None, description="Scene objectives or context for this conversation")
 
 
 def _get_request_id(request: Request) -> Optional[str]:
@@ -272,21 +300,117 @@ async def chat(req: Request, body: ChatRequest):
         raise HTTPException(status_code=400,
                             detail={"error": {"message": "Message too large (max 2 KiB)", "code": 400}})
 
+    # Memory: prune expired sessions occasionally
+    now = time.time()
+    if MEMORY_ENABLED and _MEMORY_STORE and int(now) % 29 == 0:  # lightweight periodic prune
+        try:
+            expired = [sid for sid, v in _MEMORY_STORE.items() if (now - v.get("updated", now)) > MEMORY_TTL_SECONDS]
+            for sid in expired:
+                _MEMORY_STORE.pop(sid, None)
+        except Exception:
+            pass
+
+    # Resolve session and persona/scene
+    session_id = body.sessionId
+    character = body.character
+    scene = body.scene
+
+    # Initialize or update memory record
+    mem = None
+    if MEMORY_ENABLED and session_id:
+        mem = _MEMORY_STORE.get(session_id)
+        if not mem:
+            mem = {"history": [], "character": None, "scene": None, "updated": now}
+            _MEMORY_STORE[session_id] = mem
+        # Update persona/scene if provided
+        if character:
+            mem["character"] = character.strip()
+        if scene:
+            mem["scene"] = scene.strip()
+        mem["updated"] = now
+
+    # Build system instruction
+    system_instruction = None
+    # Resolve effective persona/scene with fallback to hard-coded defaults
+    effective_character = ((mem.get("character") if mem else None) or (character or None) or (DEFAULT_CHARACTER or None))
+    effective_scene = ((mem.get("scene") if mem else None) or (scene or None) or (DEFAULT_SCENE or None))
+    sys_parts = []
+    if effective_character:
+        sys_parts.append(f"You are roleplaying as: {effective_character}")
+    if effective_scene:
+        sys_parts.append(f"Scene objectives/context: {effective_scene}")
+    if sys_parts:
+        sys_parts.append("Stay consistent with the persona and scene throughout the conversation.")
+        system_instruction = "\n".join(sys_parts)
+
+    # Build prompt with recent history tail
+    def _format_history(turns: list[dict]) -> str:
+        lines = []
+        for t in turns[-(MEMORY_MAX_TURNS*2):]:  # user+assistant pairs
+            role = t.get("role")
+            content = t.get("content") or ""
+            if role == "user":
+                lines.append(f"User: {content}")
+            elif role == "assistant":
+                lines.append(f"Assistant: {content}")
+        return "\n".join(lines)
+
+    if mem and mem.get("history"):
+        history_text = _format_history(mem["history"]).strip()
+        prompt_text = (
+            ("Conversation so far:\n" + history_text + "\n\n") if history_text else ""
+        ) + f"User: {body.message}\nAssistant:"
+    else:
+        prompt_text = body.message
+
     # Call Vertex AI
     started = time.time()
 
     def _attempt(model_id: str):
         client = VertexClient(project=PROJECT_ID, region=REGION, model_id=model_id)
-        return client.generate_text(
-            prompt=body.message,
-            temperature=TEMPERATURE,
-            max_tokens=MAX_TOKENS,
-        )
+        # Support both new and legacy VertexClient interfaces used in tests:
+        # - New: generate_text(prompt=..., temperature=..., max_tokens=..., system_instruction=...) -> (text, meta)
+        # - Legacy/mock: generate_text(prompt, temperature, max_tokens) -> text
+        try:
+            result = client.generate_text(
+                prompt=prompt_text,
+                temperature=TEMPERATURE,
+                max_tokens=MAX_TOKENS,
+                system_instruction=system_instruction,
+            )
+        except TypeError:
+            # Fallback for mocks that don't accept system_instruction or keyword args
+            result = client.generate_text(prompt_text, TEMPERATURE, MAX_TOKENS)
+        # Normalize return shape
+        if isinstance(result, tuple) and len(result) == 2:
+            text, meta = result
+        else:
+            text = str(result)
+            meta = {
+                "finishReason": None,
+                "promptTokens": None,
+                "candidatesTokens": None,
+                "totalTokens": None,
+                "thoughtsTokens": None,
+                "safety": [],
+                "textLen": len((text or "").strip()),
+                "transport": None,
+                "continuationCount": 0,
+                "noProgressBreak": None,
+                "continueTailChars": None,
+                "continuationInstructionEnabled": None,
+            }
+        return text, meta
 
     try:
         # First attempt with configured MODEL_ID
-        reply = _attempt(MODEL_ID)
+        reply, meta = _attempt(MODEL_ID)
         latency_ms = int((time.time() - started) * 1000)
+        preview = None
+        try:
+            preview = (reply or "")[:LOG_RESPONSE_PREVIEW_MAX]
+        except Exception:
+            preview = None
         logger.info(
             json.dumps(
                 {
@@ -295,9 +419,40 @@ async def chat(req: Request, body: ChatRequest):
                     "latencyMs": latency_ms,
                     "modelId": MODEL_ID,
                     "requestId": _get_request_id(req),
+                    "sessionId": session_id,
+                    "finishReason": meta.get("finishReason"),
+                    "textLen": meta.get("textLen"),
+                    "tokens": {
+                        "prompt": meta.get("promptTokens"),
+                        "candidates": meta.get("candidatesTokens"),
+                        "total": meta.get("totalTokens"),
+                        "thoughts": meta.get("thoughtsTokens"),
+                    },
+                    "reply": reply,
+                    "replyPreview": preview,
+                    "continuationCount": meta.get("continuationCount"),
+                    "transport": meta.get("transport"),
+                    "noProgressBreak": meta.get("noProgressBreak"),
+                    "continueTailChars": meta.get("continueTailChars"),
+                    "continuationInstructionEnabled": meta.get("continuationInstructionEnabled"),
                 }
             )
         )
+        # Persist to memory after success
+        if MEMORY_ENABLED and session_id:
+            try:
+                mem = _MEMORY_STORE.get(session_id) or {"history": [], "character": None, "scene": None, "updated": time.time()}
+                # Append user and assistant turns
+                mem.setdefault("history", []).append({"role": "user", "content": body.message})
+                mem["history"].append({"role": "assistant", "content": reply})
+                # Trim to last N turns (user+assistant pairs)
+                max_items = MEMORY_MAX_TURNS * 2
+                if len(mem["history"]) > max_items:
+                    mem["history"] = mem["history"][-max_items:]
+                mem["updated"] = time.time()
+                _MEMORY_STORE[session_id] = mem
+            except Exception:
+                logger.debug("Memory persistence failed for session %s", session_id)
         return {"reply": reply, "model": MODEL_ID, "latencyMs": latency_ms}
     except VertexAIError as e:
         # If model not found and fallbacks configured, try them sequentially
@@ -305,8 +460,13 @@ async def chat(req: Request, body: ChatRequest):
             fallback_errors = []
             for fb in MODEL_FALLBACKS:
                 try:
-                    reply = _attempt(fb)
+                    reply, meta = _attempt(fb)
                     latency_ms = int((time.time() - started) * 1000)
+                    preview = None
+                    try:
+                        preview = (reply or "")[:LOG_RESPONSE_PREVIEW_MAX]
+                    except Exception:
+                        preview = None
                     logger.warning(
                         json.dumps(
                             {
@@ -316,9 +476,38 @@ async def chat(req: Request, body: ChatRequest):
                                 "modelId": fb,
                                 "originalModelId": MODEL_ID,
                                 "requestId": _get_request_id(req),
+                                "sessionId": session_id,
+                                "finishReason": meta.get("finishReason"),
+                                "textLen": meta.get("textLen"),
+                                "tokens": {
+                                    "prompt": meta.get("promptTokens"),
+                                    "candidates": meta.get("candidatesTokens"),
+                                    "total": meta.get("totalTokens"),
+                                    "thoughts": meta.get("thoughtsTokens"),
+                                },
+                                "reply": reply,
+                                "replyPreview": preview,
+                                "continuationCount": meta.get("continuationCount"),
+                                "transport": meta.get("transport"),
+                                "noProgressBreak": meta.get("noProgressBreak"),
+                                "continueTailChars": meta.get("continueTailChars"),
+                                "continuationInstructionEnabled": meta.get("continuationInstructionEnabled"),
                             }
                         )
                     )
+                    # Persist to memory after fallback success
+                    if MEMORY_ENABLED and session_id:
+                        try:
+                            mem = _MEMORY_STORE.get(session_id) or {"history": [], "character": None, "scene": None, "updated": time.time()}
+                            mem.setdefault("history", []).append({"role": "user", "content": body.message})
+                            mem["history"].append({"role": "assistant", "content": reply})
+                            max_items = MEMORY_MAX_TURNS * 2
+                            if len(mem["history"]) > max_items:
+                                mem["history"] = mem["history"][-max_items:]
+                            mem["updated"] = time.time()
+                            _MEMORY_STORE[session_id] = mem
+                        except Exception:
+                            logger.debug("Memory persistence failed for session %s", session_id)
                     return {"reply": reply, "model": fb, "latencyMs": latency_ms}
                 except VertexAIError as fe:
                     fallback_errors.append(str(fe))
@@ -412,10 +601,56 @@ async def config():
         "logLevel": LOG_LEVEL,
         "logHeaders": LOG_HEADERS,
         "logRequestBodyMax": LOG_REQUEST_BODY_MAX,
+        "logResponsePreviewMax": LOG_RESPONSE_PREVIEW_MAX,
         "allowedOrigins": ALLOWED_ORIGINS,
         "exposeUpstreamError": EXPOSE_UPSTREAM_ERROR,
+        "debugMode": DEBUG_MODE,
         "modelFallbacks": MODEL_FALLBACKS,
+        "autoContinueOnMaxTokens": AUTO_CONTINUE_ON_MAX_TOKENS,
+        "maxContinuations": MAX_CONTINUATIONS,
+        "suppressVertexAIDeprecation": SUPPRESS_VERTEXAI_DEPRECATION,
+        # Reflect effective default here (Vertex client defaults to true now)
+        "useVertexRest": os.getenv("USE_VERTEX_REST", "true").lower() == "true",
+        "continueTailChars": int(os.getenv("CONTINUE_TAIL_CHARS", "500")),
+        "continuationInstructionEnabled": os.getenv("CONTINUE_INSTRUCTION_ENABLED", "true").lower() == "true",
+        "minContinueGrowth": int(os.getenv("MIN_CONTINUE_GROWTH", "10")),
+        # Memory settings
+        "memoryEnabled": MEMORY_ENABLED,
+        "memoryMaxTurns": MEMORY_MAX_TURNS,
+        "memoryTtlSeconds": MEMORY_TTL_SECONDS,
+        "memoryStoreSize": len(_MEMORY_STORE),
+        # Hard-coded defaults visibility
+        "defaultCharacter": (DEFAULT_CHARACTER if DEBUG_MODE and DEFAULT_CHARACTER else None),
+        "defaultScene": (DEFAULT_SCENE if DEBUG_MODE and DEFAULT_SCENE else None),
     }
+
+
+@app.get("/diagnostics")
+async def diagnostics():
+    """Expose effective generation settings to help root-cause truncation issues."""
+    use_rest = os.getenv("USE_VERTEX_REST", "true").lower() == "true"
+    diag = {
+        "transport": "rest" if use_rest else "sdk",
+        "generationConfig": {
+            "temperature": TEMPERATURE,
+            "maxOutputTokens": MAX_TOKENS,
+            "responseMimeType": "text/plain",
+            # Note: We do not set "thinking" control in REST requests to maintain compatibility.
+            "thinkingDisabled": None,
+        },
+        "autoContinueOnMaxTokens": AUTO_CONTINUE_ON_MAX_TOKENS,
+        "maxContinuations": MAX_CONTINUATIONS,
+        "continueTailChars": int(os.getenv("CONTINUE_TAIL_CHARS", "500")),
+        "continuationInstructionEnabled": os.getenv("CONTINUE_INSTRUCTION_ENABLED", "true").lower() == "true",
+        "minContinueGrowth": int(os.getenv("MIN_CONTINUE_GROWTH", "10")),
+        "memory": {
+            "enabled": MEMORY_ENABLED,
+            "maxTurns": MEMORY_MAX_TURNS,
+            "ttlSeconds": MEMORY_TTL_SECONDS,
+            "storeSize": len(_MEMORY_STORE),
+        },
+    }
+    return diag
 
 
 @app.get("/models")
