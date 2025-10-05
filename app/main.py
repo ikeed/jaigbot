@@ -222,6 +222,8 @@ async def healthz():
 
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, description="User input message")
+        session_id: Optional[str] = Field(None, description="Conversation session identifier")
+
 
 
 def _get_request_id(request: Request) -> Optional[str]:
