@@ -28,7 +28,7 @@ def main():
     print(f"[sanity] Initializing Vertex AI: project={project}, region={region}")
     aiplatform.init(project=project, location=region)
 
-    model_id = os.getenv("MODEL_ID", "gemini-1.5-flash")
+    model_id = os.getenv("MODEL_ID", "gemini-2.5-flash")
     print(f"[sanity] Creating GenerativeModel: {model_id}")
     model = GenerativeModel(model_id)
 
