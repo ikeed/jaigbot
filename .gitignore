@@ -1,2 +1,3 @@
 /.chainlit/translations/
 /.coverage
+/.chainlit/session_id

@@ -23,11 +23,31 @@
       margin-top: 0.5rem;
     }
     #status { color: #666; font-size: 0.9rem; margin-left: 0.5rem; }
+    .cfg-bar {
+      margin: 0.5rem 0 1rem 0; padding: 0.5rem 0.75rem; border: 1px dashed #bdbdbd; border-radius: 6px; max-width: 720px;
+      color: #333; background: #fafafa; font-size: 0.9rem;
+    }
+    .cfg-bar code { background: #fff; padding: 0.1rem 0.25rem; border: 1px solid #eee; border-radius: 4px; }
+    .cfg-links { margin-top: 0.25rem; }
+    .cfg-links a { color: #0b5ed7; text-decoration: none; }
+    .cfg-links a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
   <h1>Gemini Flash Hello</h1>
   <p>Type a message and click Send. This calls the backend /chat, which proxies to Vertex AI Gemini Flash.</p>
+
+  <div id="cfg" class="cfg-bar">
+    <span id="cfgText">Loading configuration…</span>
+    <div class="cfg-links">
+      <a href="/config" target="_blank" rel="noreferrer">View /config</a>
+      •
+      <a href="/diagnostics" target="_blank" rel="noreferrer">View /diagnostics</a>
+      •
+      <a href="/healthz" target="_blank" rel="noreferrer">/healthz</a>
+    </div>
+  </div>
+
   <textarea id="msg" rows="3" placeholder="Say hello to Gemini..."></textarea><br>
   <button id="send">Send</button>
   <span id="status"></span>
@@ -39,6 +59,7 @@
     const msgEl = document.getElementById('msg');
     const out = document.getElementById('out');
     const statusEl = document.getElementById('status');
+    const cfgText = document.getElementById('cfgText');
 
     // Auto-size the input textarea to fit its content (robust across events)
     function autosize(el) {
@@ -52,7 +73,26 @@
     autosizeEvents.forEach(ev => msgEl.addEventListener(ev, () => autosize(msgEl)));
     window.addEventListener('resize', () => autosize(msgEl));
     // Initialize sizing on load (handles autofill/remembered text)
-    window.addEventListener('load', () => autosize(msgEl));
+    window.addEventListener('load', () => {
+      autosize(msgEl);
+      loadConfig();
+    });
+
+    async function loadConfig() {
+      try {
+        const res = await fetch('/config');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const cfg = await res.json();
+        const parts = [];
+        if (cfg.modelId) parts.push(`model: ${cfg.modelId}`);
+        if (cfg.region) parts.push(`region: ${cfg.region}`);
+        if (typeof cfg.memoryBackend !== 'undefined') parts.push(`memory: ${cfg.memoryBackend} (size=${cfg.memoryStoreSize})`);
+        if (typeof cfg.maxTokens !== 'undefined') parts.push(`maxTokens: ${cfg.maxTokens}`);
+        cfgText.textContent = parts.join(' • ');
+      } catch (e) {
+        cfgText.textContent = `Config unavailable (${e && e.message ? e.message : e})`;
+      }
+    }
 
     async function send() {
       const message = msgEl.value.trim();
