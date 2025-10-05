@@ -78,6 +78,29 @@ When deployed, you can run Chainlit as a separate Cloud Run service by setting `
 
 ## Conversation memory (session) and persona with Chainlit
 
+### Shared memory across Cloud Run instances (Redis / Google Memorystore)
+
+By default, conversation memory is process-local (in-memory). On Cloud Run, instances can be pruned or scaled to zero, which resets memory. To persist memory across instances, enable the Redis backend (compatible with Google Memorystore for Redis).
+
+1. Provision Memorystore (Redis) in the same VPC/region as your Cloud Run service.
+2. Grant your Cloud Run service access to the VPC connector (if using Serverless VPC Access).
+3. Set the following environment variables for the FastAPI service:
+   - `MEMORY_ENABLED=true` (default)
+   - `MEMORY_BACKEND=redis`
+   - Either `REDIS_URL=redis://:<password>@<host>:<port>/<db>` or provide the fields separately:
+     - `REDIS_HOST=<memorystore-ip-or-hostname>`
+     - `REDIS_PORT=6379`
+     - `REDIS_DB=0`
+     - `REDIS_PASSWORD=` (if applicable; Memorystore standard tier commonly uses no auth and private IP)
+   - Optional: `REDIS_PREFIX=jaig:session:` to namespace keys
+   - Optional: `MEMORY_TTL_SECONDS=3600` to control session expiration
+
+Notes:
+- If Redis is unavailable at startup, the app falls back to in-memory storage and logs a warning.
+- Redis keys are JSON blobs under the prefix; TTL is applied on write.
+- Diagnostics endpoints `/config` and `/diagnostics` show `memoryBackend`/`backend` and `storeSize`.
+- The code path still works locally without Redis; tests use the default in-memory backend.
+
 The backend now supports lightweight, server-side memory keyed by a `sessionId`, plus optional persona and scene context. The Chainlit client has been updated to:
 
 - Generate a stable `sessionId` per chat and send it in every POST /chat call.
