@@ -88,6 +88,42 @@ Notes and tips:
 When deployed, you can run Chainlit as a separate Cloud Run service by setting `BACKEND_URL` to the public URL of the FastAPI service. See `chainlit_app.py` for implementation details.
 
 
+## Deploy health check helper (Cloud Run)
+
+After deploying a new revision, the public URL can briefly return 404/503 while traffic shifts and instances warm up. Use the helper script to wait for health with exponential backoff and an overall timeout instead of failing immediately.
+
+- Script: `scripts/wait_for_health.sh`
+- Requires: `gcloud` and `curl`
+- Env vars:
+  - `SERVICE` (Cloud Run service name)
+  - `REGION` (Cloud Run region)
+  - `HEALTH_PATH` (default `/healthz`)
+  - `MAX_WAIT` (overall timeout in seconds, default `300`)
+
+Example (local/GitHub Actions):
+```bash
+SERVICE=my-service REGION=us-central1 HEALTH_PATH=/healthz MAX_WAIT=300 \
+  bash scripts/wait_for_health.sh
+```
+
+Cloud Build step example:
+```yaml
+- id: wait-for-health
+  name: gcr.io/google.com/cloudsdktool/cloud-sdk
+  entrypoint: bash
+  env:
+    - SERVICE=${_SERVICE}
+    - REGION=${_REGION}
+    - HEALTH_PATH=/healthz
+    - MAX_WAIT=300
+  args:
+    - -ceu
+    - |
+      bash scripts/wait_for_health.sh
+```
+
+This avoids flaky deploy checks that fail on the first transient 404.
+
 ## Conversation memory (session) and persona with Chainlit
 
 ### Stable session ids via cookie (browser refresh safe)
