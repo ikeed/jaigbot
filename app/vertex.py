@@ -49,18 +49,24 @@ class VertexClient:
     def _merge_with_overlap(base: str, addition: str, max_overlap: int = 200) -> str:
         """
         Merge addition onto base by trimming any overlapping prefix of `addition`
-        that already appears as a suffix of `base`. Helps reduce repeated
-        sentences when we concatenate auto-continue chunks.
+        that already appears as a suffix of `base`. Additionally, normalize the
+        boundary so words don't smash together when the model continues mid-word
+        or mid-sentence. We only touch the join boundary; we do not alter inner
+        whitespace.
         """
         if not base:
             return (addition or "").strip()
         if not addition:
             return base.strip()
-        base_s = base.rstrip()
-        add_s = addition.lstrip()
+
+        # Normalize ends, but keep one side's spacing so we can reason about the boundary.
+        base_s = base.rstrip()  # keep left without trailing spaces
+        add_s = addition.lstrip()  # keep right without leading spaces
+
         # Strip a leading wrapper like <<<...>>> if the model echoed our continuation hint
         if add_s.startswith("<<<") and ">>>" in add_s:
             add_s = add_s.split(">>>", 1)[-1].lstrip()
+
         # Only search overlap up to max_overlap or length of strings
         max_k = min(len(base_s), len(add_s), max_overlap)
         overlap = 0
@@ -68,7 +74,42 @@ class VertexClient:
             if base_s.endswith(add_s[:k]):
                 overlap = k
                 break
-        return (base_s + add_s[overlap:]).strip()
+
+        right_tail = add_s[overlap:]
+        if not right_tail:
+            return base_s.strip()
+
+        # Decide if we need to insert a single space at the join boundary.
+        left_ch = base_s[-1] if base_s else ""
+        right_ch = right_tail[0] if right_tail else ""
+
+        def is_word(c: str) -> bool:
+            return c.isalnum()
+
+        # Characters that should NOT have a space before them (closing or punctuation)
+        no_space_before = set(",.;:!?)]}\u2019\u201d")  # include curly quotes
+        # Characters that typically do NOT get a space after them (opening brackets/quotes)
+        no_space_after = set("([\{\u2018\u201c\"")
+
+        need_space = False
+        if left_ch and right_ch and (not left_ch.isspace()) and (not right_ch.isspace()):
+            if left_ch in no_space_after:
+                need_space = False
+            elif right_ch in no_space_before:
+                need_space = False
+            elif is_word(left_ch) and is_word(right_ch):
+                # word-to-word boundary → insert a single space
+                need_space = True
+            elif left_ch in ".!?;:" and is_word(right_ch):
+                # sentence boundary without a space
+                need_space = True
+
+        if need_space:
+            joined = base_s + " " + right_tail
+        else:
+            joined = base_s + right_tail
+
+        return joined.strip()
 
     def _init(self):
         # Initialize only when needed (each request) to be safe in serverless envs
