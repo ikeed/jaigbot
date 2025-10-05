@@ -25,11 +25,13 @@ fi
 # 3) Export defaults only if not already set in the environment
 export PROJECT_ID="${PROJECT_ID:-warm-actor-253703}"
 export REGION="${REGION:-us-central1}"
-export MODEL_ID="${MODEL_ID:-gemini-1.5-flash}"
+export MODEL_ID="${MODEL_ID:-gemini-2.5-flash}"
 export TEMPERATURE="${TEMPERATURE:-0.2}"
 export MAX_TOKENS="${MAX_TOKENS:-256}"
-export MODEL_FALLBACKS="${MODEL_FALLBACKS:-gemini-1.5-flash,gemini-1.5-flash-8b}"
+export MODEL_FALLBACKS="${MODEL_FALLBACKS:-gemini-2.5-flash-001}"
 export LOG_LEVEL="${LOG_LEVEL:-info}"
+# Force Chainlit UI language to English by default (can be overridden)
+export CHAINLIT_LOCALE="${CHAINLIT_LOCALE:-en}"
 PORT="${PORT:-8080}"
 
 # 4) Light sanity info
