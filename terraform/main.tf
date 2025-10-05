@@ -109,7 +109,7 @@ resource "google_iam_workload_identity_pool_provider" "github" {
   workload_identity_pool_provider_id = var.wif_provider_id
   display_name                       = "GitHub OIDC Provider"
   attribute_mapping = {
-    "google.subject"     = "assertion.sub"
+    "google.subject"       = "assertion.sub"
     "attribute.repository" = "assertion.repository"
     "attribute.ref"        = "assertion.ref"
   }
