@@ -97,8 +97,8 @@ Send a single message; the server calls Vertex AI (Gemini Flash) and returns a s
 - Headers:
   - x-request-id is set on the response for correlation.
 - Notes:
-  - Environment variables used: PROJECT_ID, REGION (default us-central1), MODEL_ID (default gemini-1.5-flash), TEMPERATURE (default 0.2), MAX_TOKENS (default 256).
-  - Optional: MODEL_FALLBACKS (comma-separated) to try alternative models if the primary returns 404 (e.g., "gemini-1.5-flash,gemini-1.5-flash-8b").
+  - Environment variables used: PROJECT_ID, REGION (default us-central1), MODEL_ID (default gemini-2.5-flash), TEMPERATURE (default 0.2), MAX_TOKENS (default 256).
+  - Optional: MODEL_FALLBACKS (comma-separated) to try alternative models if the primary returns 404 (e.g., "gemini-2.5-flash-001").
   - To include upstream error details in 502/404 JSON, set EXPOSE_UPSTREAM_ERROR=true.
   - See /config to inspect runtime configuration.
 
@@ -151,7 +151,7 @@ Example:
 
 - PROJECT_ID (required for /chat): Google Cloud project ID. If unset, /chat returns a 500 error.
 - REGION: Vertex AI region (default: us-central1).
-- MODEL_ID: Model ID (default: gemini-1.5-flash).
+- MODEL_ID: Model ID (default: gemini-2.5-flash).
 - TEMPERATURE: Generation temperature (default: 0.2).
 - MAX_TOKENS: Max output tokens (default: 256).
 - LOG_LEVEL: Logging level (default: info).
@@ -176,7 +176,7 @@ List available publisher models from google in your project+region using the ser
 - Response Body:
   {
     "models": [
-      { "id": "gemini-1.5-flash", "displayName": "Gemini 1.5 Flash", "supportedActions": { ... } },
+      { "id": "gemini-2.5-flash", "displayName": "Gemini 2.5 Flash", "supportedActions": { ... } },
       ...
     ],
     "count": number,
@@ -187,7 +187,7 @@ List available publisher models from google in your project+region using the ser
   - 502 if the list call failed upstream
   - 500 on unexpected server errors
 - Notes:
-  - Useful for diagnosing 404 model errors. If the model you configured is not in this list, pick one that is (e.g., gemini-1.5-flash) or resolve IAM/access in Google Cloud Console.
+  - Useful for diagnosing 404 model errors. If the model you configured is not in this list, pick one that is (e.g., gemini-2.5-flash) or resolve IAM/access in Google Cloud Console.
 
 Example:
 - curl -sS http://localhost:8080/models | jq '.'
