@@ -52,7 +52,7 @@ if ALLOWED_ORIGINS:
 # Exception handlers to surface better errors with request correlation
 @app.exception_handler(HTTPException)
 async def on_http_exception(request: Request, exc: HTTPException):
-    # Let FastAPI build the default response content, but add requestId and log
+    # Normalize all HTTP exceptions into a consistent error envelope
     req_id = _get_request_id(request)
     logger.warning(json.dumps({
         "event": "http_exception",
@@ -62,19 +62,47 @@ async def on_http_exception(request: Request, exc: HTTPException):
         "path": request.url.path,
         "method": request.method,
     }))
-    # Ensure detail is JSON-like
-    detail = exc.detail if isinstance(exc.detail, (dict, list)) else {"message": str(exc.detail)}
-    detail.setdefault("requestId", req_id)
-    return JSONResponse(status_code=exc.status_code, content={"error": detail})
+
+    # Build a flat error object: { message, code, requestId, ... }
+    if isinstance(exc.detail, dict):
+        base = exc.detail.get("error", exc.detail).copy()
+    elif isinstance(exc.detail, list):
+        base = {"errors": exc.detail}
+    else:
+        base = {"message": str(exc.detail)}
+
+    # Ensure required fields
+    base.setdefault("message", "")
+    base.setdefault("code", exc.status_code)
+    base.setdefault("requestId", req_id)
+
+    return JSONResponse(status_code=exc.status_code, content={"error": base})
 
 
 @app.exception_handler(RequestValidationError)
 async def on_validation_error(request: Request, exc: RequestValidationError):
     req_id = _get_request_id(request)
+
+    # Safely log the request body in a JSON-serializable way
+    body_logged = None
+    if request.method in ("POST", "PUT", "PATCH"):
+        try:
+            raw = await request.body()
+        except Exception:
+            raw = b""
+        if raw:
+            try:
+                body_logged = json.loads(raw.decode("utf-8"))
+            except Exception:
+                try:
+                    body_logged = raw.decode("utf-8", errors="replace")
+                except Exception:
+                    body_logged = "<binary>"
+
     logger.warning(json.dumps({
         "event": "request_validation_error",
         "errors": exc.errors(),
-        "body": await request.body() if request.method in ("POST", "PUT", "PATCH") else None,
+        "body": body_logged,
         "requestId": req_id,
         "path": request.url.path,
         "method": request.method,
