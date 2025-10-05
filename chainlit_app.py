@@ -1,5 +1,6 @@
 import os
 import uuid
+from pathlib import Path
 import httpx
 import chainlit as cl
 from app.persona import DEFAULT_CHARACTER, DEFAULT_SCENE
@@ -10,6 +11,39 @@ from app.persona import DEFAULT_CHARACTER, DEFAULT_SCENE
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8080/chat")
 DEBUG_MODE = os.getenv("DEBUG_MODE", "false").lower() == "true"
 
+
+def _get_persistent_session_id() -> str:
+    """
+    Return a stable session id for Chainlit to use when calling the backend.
+    Precedence:
+    1) FIXED_SESSION_ID or SESSION_ID env vars
+    2) Value stored in .chainlit/session_id (created if missing)
+    3) Fresh UUID4 (as last resort)
+
+    Note: This persists across browser refreshes because it is stored on the
+    server filesystem. In multi-user deployments, all users will share this id
+    unless you enable auth or implement per-user ids.
+    """
+    sid = os.getenv("FIXED_SESSION_ID") or os.getenv("SESSION_ID")
+    if sid:
+        return sid
+    try:
+        # Use the project-local .chainlit folder
+        root = Path(os.getcwd())
+        store_dir = root / ".chainlit"
+        store_dir.mkdir(parents=True, exist_ok=True)
+        f = store_dir / "session_id"
+        if f.exists():
+            sid = f.read_text(encoding="utf-8").strip()
+            if sid:
+                return sid
+        sid = str(uuid.uuid4())
+        f.write_text(sid, encoding="utf-8")
+        return sid
+    except Exception:
+        return str(uuid.uuid4())
+
+
 @cl.on_chat_start
 async def start_chat():
     """
@@ -17,8 +51,8 @@ async def start_chat():
     per-user session state is initialized, including a stable sessionId and
     optional persona/scene pulled from environment variables.
     """
-    # Stable session id for backend memory
-    session_id = str(uuid.uuid4())
+    # Use a persistent session id across browser refreshes
+    session_id = _get_persistent_session_id()
     cl.user_session.set("session_id", session_id)
 
     # Optional persona/scene from environment, with hard-coded fallbacks

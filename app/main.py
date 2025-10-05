@@ -49,6 +49,14 @@ REDIS_DB = int(os.getenv("REDIS_DB", "0"))
 REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
 REDIS_PREFIX = os.getenv("REDIS_PREFIX", "jaig:session:")
 
+# Session cookie configuration
+SESSION_COOKIE_NAME = os.getenv("SESSION_COOKIE_NAME", "sessionId")
+# Default secure true for production; allow override via env. In local dev over http, set to false.
+SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "true").lower() == "true"
+SESSION_COOKIE_SAMESITE = os.getenv("SESSION_COOKIE_SAMESITE", "lax")  # lax|strict|none
+# Default max-age aligns with memory TTL if set, else 30 days
+SESSION_COOKIE_MAX_AGE = int(os.getenv("SESSION_COOKIE_MAX_AGE", str(MEMORY_TTL_SECONDS if MEMORY_TTL_SECONDS > 0 else 30*24*60*60)))
+
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
@@ -426,7 +434,12 @@ async def chat(req: Request, body: ChatRequest):
             pass
 
     # Resolve session and persona/scene
-    session_id = body.sessionId
+    # Prefer body.sessionId, else cookie, else generate a new one and set cookie on response
+    session_id = body.sessionId or req.cookies.get(SESSION_COOKIE_NAME)
+    generated_session = False
+    if not session_id:
+        session_id = str(uuid.uuid4())
+        generated_session = True
     character = body.character
     scene = body.scene
 
@@ -568,7 +581,20 @@ async def chat(req: Request, body: ChatRequest):
                 _MEMORY_STORE[session_id] = mem
             except Exception:
                 logger.debug("Memory persistence failed for session %s", session_id)
-        return {"reply": reply, "model": MODEL_ID, "latencyMs": latency_ms}
+        resp = JSONResponse(status_code=200, content={"reply": reply, "model": MODEL_ID, "latencyMs": latency_ms})
+        try:
+            resp.set_cookie(
+                key=SESSION_COOKIE_NAME,
+                value=session_id,
+                max_age=SESSION_COOKIE_MAX_AGE,
+                httponly=True,
+                secure=SESSION_COOKIE_SECURE,
+                samesite=SESSION_COOKIE_SAMESITE,
+                path="/",
+            )
+        except Exception:
+            pass
+        return resp
     except VertexAIError as e:
         # If model not found and fallbacks configured, try them sequentially
         if getattr(e, "status_code", None) == 404 and MODEL_FALLBACKS:
@@ -623,7 +649,20 @@ async def chat(req: Request, body: ChatRequest):
                             _MEMORY_STORE[session_id] = mem
                         except Exception:
                             logger.debug("Memory persistence failed for session %s", session_id)
-                    return {"reply": reply, "model": fb, "latencyMs": latency_ms}
+                    resp = JSONResponse(status_code=200, content={"reply": reply, "model": fb, "latencyMs": latency_ms})
+                    try:
+                        resp.set_cookie(
+                            key=SESSION_COOKIE_NAME,
+                            value=session_id,
+                            max_age=SESSION_COOKIE_MAX_AGE,
+                            httponly=True,
+                            secure=SESSION_COOKIE_SECURE,
+                            samesite=SESSION_COOKIE_SAMESITE,
+                            path="/",
+                        )
+                    except Exception:
+                        pass
+                    return resp
                 except VertexAIError as fe:
                     fallback_errors.append(str(fe))
                     logger.warning(
@@ -664,7 +703,20 @@ async def chat(req: Request, body: ChatRequest):
             payload = {"error": {"message": guidance, "code": 404, "requestId": req_id}}
             if EXPOSE_UPSTREAM_ERROR:
                 payload["error"]["upstream"] = str(e)
-            return JSONResponse(status_code=404, content=payload)
+            resp = JSONResponse(status_code=404, content=payload)
+            try:
+                resp.set_cookie(
+                    key=SESSION_COOKIE_NAME,
+                    value=session_id,
+                    max_age=SESSION_COOKIE_MAX_AGE,
+                    httponly=True,
+                    secure=SESSION_COOKIE_SECURE,
+                    samesite=SESSION_COOKIE_SAMESITE,
+                    path="/",
+                )
+            except Exception:
+                pass
+            return resp
 
         # Default: treat as upstream 502
         logger.error(
@@ -683,7 +735,20 @@ async def chat(req: Request, body: ChatRequest):
         payload = {"error": {"message": "Upstream error calling Vertex AI", "code": 502, "requestId": req_id}}
         if EXPOSE_UPSTREAM_ERROR:
             payload["error"]["upstream"] = str(e)
-        return JSONResponse(status_code=502, content=payload)
+        resp = JSONResponse(status_code=502, content=payload)
+        try:
+            resp.set_cookie(
+                key=SESSION_COOKIE_NAME,
+                value=session_id,
+                max_age=SESSION_COOKIE_MAX_AGE,
+                httponly=True,
+                secure=SESSION_COOKIE_SECURE,
+                samesite=SESSION_COOKIE_SAMESITE,
+                path="/",
+            )
+        except Exception:
+            pass
+        return resp
     except Exception as e:
         latency_ms = int((time.time() - started) * 1000)
         logger.exception("Unexpected error: %s", e)
@@ -699,10 +764,23 @@ async def chat(req: Request, body: ChatRequest):
                 }
             )
         )
-        return JSONResponse(
+        resp = JSONResponse(
             status_code=500,
             content={"error": {"message": "Internal server error", "code": 500, "requestId": _get_request_id(req)}},
         )
+        try:
+            resp.set_cookie(
+                key=SESSION_COOKIE_NAME,
+                value=session_id,
+                max_age=SESSION_COOKIE_MAX_AGE,
+                httponly=True,
+                secure=SESSION_COOKIE_SECURE,
+                samesite=SESSION_COOKIE_SAMESITE,
+                path="/",
+            )
+        except Exception:
+            pass
+        return resp
 
 
 @app.get("/config")
@@ -738,6 +816,13 @@ async def config():
         # Hard-coded defaults visibility
         "defaultCharacter": (DEFAULT_CHARACTER if DEBUG_MODE and DEFAULT_CHARACTER else None),
         "defaultScene": (DEFAULT_SCENE if DEBUG_MODE and DEFAULT_SCENE else None),
+        # Session cookie diagnostics
+        "sessionCookie": {
+            "name": SESSION_COOKIE_NAME,
+            "secure": SESSION_COOKIE_SECURE,
+            "sameSite": SESSION_COOKIE_SAMESITE,
+            "maxAge": SESSION_COOKIE_MAX_AGE,
+        },
     }
 
 
