@@ -18,6 +18,6 @@ COPY . .
 # Back-end URL Chainlit uses to reach the FastAPI service
 ENV BACKEND_URL=http://localhost:8000/chat
 
-# Run Uvicorn on port 8000 and Chainlit on $PORT (Cloud Run port)
 # Chainlit stays in the foreground so the container remains healthy.
-CMD ["bash","-c","uvicorn app.main:app --host 0.0.0.0 --port 8000 & chainlit run chainlit_app.py --host 0.0.0.0 --port $PORT --no-browser"]
+# Run Uvicorn on port 8000 and Chainlit on the Cloud Run port.
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port 8000 & chainlit run chainlit_app.py --host 0.0.0.0 --port ${PORT} --no-browser"]
