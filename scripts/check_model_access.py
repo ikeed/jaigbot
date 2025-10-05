@@ -12,8 +12,8 @@ Usage:
   export PROJECT_ID=warm-actor-253703
   export REGION=us-central1
   # optional overrides
-  export MODEL_ID=gemini-1.5-flash
-  export MODEL_FALLBACKS="gemini-1.5-flash,gemini-1.5-flash-8b"
+  export MODEL_ID=gemini-2.5-flash
+  export MODEL_FALLBACKS="gemini-2.5-flash-001"
   python scripts/check_model_access.py
 
 Exit codes:
@@ -110,7 +110,7 @@ def main() -> int:
         print(f"[check] ERROR listing models: {e}", file=sys.stderr)
 
     # Attempt generation with configured models
-    primary = os.getenv("MODEL_ID", "gemini-1.5-flash")
+    primary = os.getenv("MODEL_ID", "gemini-2.5-flash")
     fallbacks = [m.strip() for m in os.getenv("MODEL_FALLBACKS", "").split(",") if m.strip()]
     candidates = [primary] + [m for m in fallbacks if m != primary]
 
@@ -126,7 +126,7 @@ def main() -> int:
             print(f"[check] FAILED model={mid}: {e}")
     if not any_success:
         print("[check] No candidate model generated successfully.")
-        print("[check] Next steps:\n - Ensure your ADC principal has roles/aiplatform.user on the project\n - Keep REGION=us-central1\n - Try alternate MODEL_ID values that appear in the list above (e.g., gemini-1.5-flash-8b)\n - In Cloud Console → Vertex AI → Generative AI Studio, open a Gemini chat to prompt acceptance of terms if required")
+        print("[check] Next steps:\n - Ensure your ADC principal has roles/aiplatform.user on the project\n - Keep REGION=us-central1\n - Try alternate MODEL_ID values that appear in the list above (e.g., gemini-2.5-flash-001)\n - In Cloud Console → Vertex AI → Generative AI Studio, open a Gemini chat to prompt acceptance of terms if required")
         return 1
     return 0
 

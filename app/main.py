@@ -8,8 +8,7 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from .vertex import VertexClient, VertexAIError
@@ -17,11 +16,12 @@ from .vertex import VertexClient, VertexAIError
 # Environment configuration with sensible defaults
 PROJECT_ID = os.getenv("PROJECT_ID")
 REGION = os.getenv("REGION", "us-central1")
+# Use widely available defaults; override via env as needed
 MODEL_ID = os.getenv("MODEL_ID", "gemini-2.5-flash")
 TEMPERATURE = float(os.getenv("TEMPERATURE", "0.2"))
 MAX_TOKENS = int(os.getenv("MAX_TOKENS", "1024"))
 ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
-model_fallbacks = os.getenv("MODEL_FALLBACKS", "gemini-2.5-flash,	gemini-2.5-flash-preview-09-2025").split(",")
+model_fallbacks = os.getenv("MODEL_FALLBACKS", "gemini-2.5-flash-001").split(",")
 MODEL_FALLBACKS = [m.strip() for m in model_fallbacks if m.strip()]
 LOG_LEVEL = os.getenv("LOG_LEVEL", "info").upper()
 LOG_REQUEST_BODY_MAX = int(os.getenv("LOG_REQUEST_BODY_MAX", "1024"))
@@ -47,15 +47,12 @@ if ALLOWED_ORIGINS:
         max_age=3600,
     )
 
-# Static files and root route
-static_dir = os.path.join(os.path.dirname(__file__), "static")
-app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 
 # Exception handlers to surface better errors with request correlation
 @app.exception_handler(HTTPException)
 async def on_http_exception(request: Request, exc: HTTPException):
-    # Let FastAPI build the default response content, but add requestId and log
+    # Normalize all HTTP exceptions into a consistent error envelope
     req_id = _get_request_id(request)
     logger.warning(json.dumps({
         "event": "http_exception",
@@ -65,19 +62,47 @@ async def on_http_exception(request: Request, exc: HTTPException):
         "path": request.url.path,
         "method": request.method,
     }))
-    # Ensure detail is JSON-like
-    detail = exc.detail if isinstance(exc.detail, (dict, list)) else {"message": str(exc.detail)}
-    detail.setdefault("requestId", req_id)
-    return JSONResponse(status_code=exc.status_code, content={"error": detail})
+
+    # Build a flat error object: { message, code, requestId, ... }
+    if isinstance(exc.detail, dict):
+        base = exc.detail.get("error", exc.detail).copy()
+    elif isinstance(exc.detail, list):
+        base = {"errors": exc.detail}
+    else:
+        base = {"message": str(exc.detail)}
+
+    # Ensure required fields
+    base.setdefault("message", "")
+    base.setdefault("code", exc.status_code)
+    base.setdefault("requestId", req_id)
+
+    return JSONResponse(status_code=exc.status_code, content={"error": base})
 
 
 @app.exception_handler(RequestValidationError)
 async def on_validation_error(request: Request, exc: RequestValidationError):
     req_id = _get_request_id(request)
+
+    # Safely log the request body in a JSON-serializable way
+    body_logged = None
+    if request.method in ("POST", "PUT", "PATCH"):
+        try:
+            raw = await request.body()
+        except Exception:
+            raw = b""
+        if raw:
+            try:
+                body_logged = json.loads(raw.decode("utf-8"))
+            except Exception:
+                try:
+                    body_logged = raw.decode("utf-8", errors="replace")
+                except Exception:
+                    body_logged = "<binary>"
+
     logger.warning(json.dumps({
         "event": "request_validation_error",
         "errors": exc.errors(),
-        "body": await request.body() if request.method in ("POST", "PUT", "PATCH") else None,
+        "body": body_logged,
         "requestId": req_id,
         "path": request.url.path,
         "method": request.method,
@@ -209,10 +234,6 @@ async def log_requests(request: Request, call_next):
     return response
 
 
-@app.get("/")
-async def index():
-    index_path = os.path.join(static_dir, "index.html")
-    return FileResponse(index_path)
 
 
 @app.get("/healthz")
@@ -334,7 +355,7 @@ async def chat(req: Request, body: ChatRequest):
             guidance = (
                 "Publisher model not found or access denied. Verify MODEL_ID and REGION; ensure Vertex AI API is enabled, "
                 "billing is active, and your ADC principal has roles/aiplatform.user in the project. You may set MODEL_FALLBACKS "
-                "(comma-separated) to try alternative model IDs like 'gemini-1.5-flash' or 'gemini-1.5-flash-8b'."
+                "(comma-separated) to try alternative model IDs like 'gemini-2.5-flash' or 'gemini-2.5-flash-001'."
             )
             payload = {"error": {"message": guidance, "code": 404, "requestId": req_id}}
             if EXPOSE_UPSTREAM_ERROR:
