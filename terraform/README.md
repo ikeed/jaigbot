@@ -41,7 +41,7 @@ github_org        = "ikeed"
 github_repo       = "jaigbot"
 github_branch_ref = "refs/heads/main"
 
-## Usage
+## Quickstart
 
 Initialize and apply:
 - cd terraform
@@ -102,3 +102,9 @@ terraform {
 - Ensure Artifact Registry region matches Cloud Run region for efficiency.
 - WIF attribute_condition restricts deployments to the main branch of ikeed/jaigbot by default. Override `github_branch_ref` if needed.
 - The deploy workflow expects the runtime service account to exist and will set env vars during `gcloud run deploy`.
+
+
+## See also
+- Root README for app overview: ../README.md
+- Developer setup and CI/CD workflows: ../docs/developer-setup.md
+- Cloud Run health checks helper: ../docs/health-checks.md
