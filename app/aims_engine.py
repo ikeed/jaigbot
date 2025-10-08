@@ -77,6 +77,26 @@ def _starts_with_any(text: str, starters: List[str]) -> bool:
     return any(t.startswith(s.strip().lower()) for s in starters if s.strip())
 
 
+def _is_small_talk(text: str) -> bool:
+    """Detect pleasantries/rapport/openers that are not an AIMS step.
+
+    Heuristics: greetings, compliments, social niceties (no clinical content),
+    e.g., hello/hi/good to see you/wow [child] is getting so big/"eating all vegetables".
+    We keep this conservative: only return True when such phrases are present;
+    caller should also ensure no AIMS markers matched.
+    """
+    lt = (text or "").strip().lower()
+    if not lt:
+        return False
+    cues = [
+        "hello", "hi ", "hi,", "hey", "good to see", "nice to see", "so good to see",
+        "great to see", "welcome", "how are you", "how’s it going", "how's it going",
+        "wow", "getting so big", "so big", "big boy", "big girl", "eating all of",
+        "vegetable", "thanks for coming", "good to see both of you", "so good to see both",
+    ]
+    return any(c in lt for c in cues)
+
+
 def classify_step(parent_last: str, clinician_last: str, mapping: Dict[str, Any]) -> ClassificationResult:
     """Classify the clinician's last message into one AIMS step.
 
@@ -126,13 +146,18 @@ def classify_step(parent_last: str, clinician_last: str, mapping: Dict[str, Any]
         step = "Inquire"
         reasons.append("Detected open-ended question; inviting elaboration")
     else:
-        # Default: if parent expressed emotion, prefer Inquire to explore; else Announce
-        if parent_expressed_emotion:
-            step = "Inquire"
-            reasons.append("Defaulted to Inquire due to parent emotion/concern cues")
+        # No explicit markers matched — detect small talk/pleasantries first
+        if _is_small_talk(lt):
+            step = ""  # represent no AIMS step
+            reasons.append("Rapport/pleasantries detected — no AIMS step attempted (allowed).")
         else:
-            step = "Announce"
-            reasons.append("Defaulted to Announce as safe baseline")
+            # Default: if parent expressed emotion, prefer Inquire to explore; else Announce
+            if parent_expressed_emotion:
+                step = "Inquire"
+                reasons.append("Defaulted to Inquire due to parent emotion/concern cues")
+            else:
+                step = "Announce"
+                reasons.append("Defaulted to Announce as safe baseline")
 
     # Tie-breaker: reflection then a question → Mirror if reflection is primary
     if mirror_match and inquire_match:
@@ -239,14 +264,70 @@ def score_step(step: str, parent_last: str, clinician_last: str, mapping: Dict[s
 
 def evaluate_turn(parent_last: str, clinician_last: str, mapping: Dict[str, Any]) -> Dict[str, Any]:
     cls = classify_step(parent_last, clinician_last, mapping)
+
+    # Handle rapport/pleasantries (no AIMS step attempted)
+    if cls.step not in AIMS_STEPS:
+        # Provide neutral feedback and a gentle forward suggestion; keep score integer for type consistency
+        tips: List[str] = [
+            "When you're ready, lead with a brief Announce specific to the vaccine and timing."
+        ]
+        return {
+            "step": None,  # omit in UI; treated as non-step by callers
+            "score": 0,
+            "reasons": [
+                "Rapport/pleasantries — no AIMS step attempted (allowed at the start)."
+            ],
+            "tips": tips,
+        }
+
     scr = score_step(cls.step, parent_last, clinician_last, mapping)
-    # Simple coaching tip: if score < 3, surface the first hint template for that step
+
+    # Context-sensitive coaching tips: only include when an actionable improvement is evident.
     tips: List[str] = []
+    lt = (clinician_last or "").strip().lower()
     if scr.score < 3:
-        step_entry = (mapping or {}).get(cls.step, {})
-        hints = step_entry.get("coaching_tips") or (mapping.get("meta", {}).get("hint_templates", {}).get(cls.step) or [])
-        if hints:
-            tips.append(hints[0])
+        if cls.step == "Inquire":
+            # Determine openness/why/leading to select a relevant tip
+            open_q = lt.endswith("?") or lt.startswith("what ") or lt.startswith("how ")
+            used_why = lt.startswith("why ") or " why " in lt
+            leading = bool(re.search(r"\b(don't|isn't it|right\?)\b", lt)) or ("myth" in lt)
+            if used_why or not open_q:
+                tips.append("Prefer what and how questions; avoid why when it can feel accusatory.")
+            elif leading:
+                tips.append("Avoid leading or judgmental phrasing; use neutral, open framing.")
+            else:
+                # They asked a decent open question but weren't perfect — suggest a next-level skill
+                tips.append("Ask, then pause. Silence helps.")
+        elif cls.step == "Mirror":
+            if _introduces_new_info(lt):
+                tips.append("Reflect without adding new information or rebuttal; keep it brief and nonjudgmental.")
+            elif not re.search(r"did i get that right|is that right|did i capture", lt):
+                tips.append("End with a quick check for accuracy: 'Did I get that right?'")
+        elif cls.step == "Announce":
+            has_reco = _stem_match(lt, ["i recommend", "it's time for", "due for", "today we will", "my recommendation is"])
+            invite = bool(re.search(r"how does that sound|what do you think|questions\??", lt))
+            rationale = bool(re.search(r"protect|outbreak|safety|safe|helps prevent|risk", lt))
+            if not has_reco:
+                tips.append("Lead with a clear, brief recommendation specific to the vaccine and timing.")
+            elif not rationale:
+                tips.append("Add a short, parent-relevant reason (safety/benefit) in plain language.")
+            elif not invite:
+                tips.append("Invite dialogue with a brief opener, e.g., 'How does that sound?'")
+        elif cls.step == "Secure":
+            autonomy = _stem_match(lt, ["it's your decision", "i'm here to support"])
+            options = bool(re.search(r"\b(we can|options include|prefer|today|later|handout|follow-?up)\b", lt))
+            safety = bool(re.search(r"what to expect|watch for|reach me|call if|how to reach", lt))
+            if not autonomy:
+                tips.append("Affirm autonomy explicitly: 'It's your decision; I'm here to support you.'")
+            if not options:
+                tips.append("Offer a concrete next step (e.g., do it today or review a handout and check in next week).")
+            if not safety:
+                tips.append("Add a quick safety-net about what to expect and how to reach you.")
+
+    # Keep tips concise: at most one highly relevant suggestion
+    if len(tips) > 1:
+        tips = tips[:1]
+
     return {
         "step": cls.step,
         "score": scr.score,

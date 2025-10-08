@@ -1,193 +1,123 @@
-# API Reference
+# API reference
 
-This document describes all HTTP endpoints exposed by the JaigBot FastAPI service.
+This document describes the FastAPI endpoints exposed by JaigBot and their request/response contracts. See the README for run instructions and Swagger UI (/docs) for live schemas.
 
-Base URL (local development):
-- http://localhost:8080
+- Base URL (local dev): http://localhost:8080
+- Primary endpoints:
+  - POST /chat
+  - GET  /summary
+  - GET  /healthz
+  - GET  /config, /diagnostics, /models (auxiliary)
 
-Base URL (Cloud Run):
-- https://YOUR_SERVICE-<hash>-uc.a.run.app (replace with your deployed URL)
-
-Content Type:
-- All request/response bodies are JSON unless noted.
-- Use header: Content-Type: application/json for POST requests.
-
-Authentication:
-- No app-level authentication is enforced by default. Upstream Vertex AI calls require valid Google ADC on the server side.
-
-Auto-generated API docs (from FastAPI):
-- Swagger UI: GET /docs
-- ReDoc: GET /redoc
-- OpenAPI schema: GET /openapi.json
-
----
-
-## GET /
-Serves the static single-page UI.
-
-- Description: Returns app/static/index.html.
-- Response: HTML page.
-- Status Codes:
-  - 200 OK
-
-Example:
-- curl -sS http://localhost:8080/
-
----
-
-## GET /healthz
-Lightweight health check.
-
-- Description: Returns a simple status payload; does not call Vertex AI.
-- Response Body:
-  {
-    "status": "ok"
-  }
-- Status Codes:
-  - 200 OK
-
-Example:
-- curl -sS http://localhost:8080/healthz
-
----
+Notes
+- Backward compatibility: By default, POST /chat returns only `{ reply, model, latencyMs }`.
+- AIMS coaching features are gated behind the `AIMS_COACHING_ENABLED` environment flag AND a per-request `coach: true` field.
+- Session state is stored in memory or Redis (recommended for Cloud Run). See docs/memory-and-persona.md.
 
 ## POST /chat
-Send a single message; the server calls Vertex AI (Gemini Flash) and returns a single reply.
 
-- Description: Proxies the message to Vertex AI using environment configuration.
-- Request Body (application/json):
-  {
-    "message": "string (required, min length 1, max ~2KiB)"
+Sends one clinician message and receives a reply from the vaccine‑hesitant parent simulator. When coaching is enabled (both flag and request), the response includes a `coaching` object and session metrics under `session`.
+
+Request body (JSON)
+- message: string (required, non-empty)
+- sessionId: string (optional; if omitted, server issues/uses a cookie id)
+- coach: boolean (optional; default false)
+- character: string (optional; override persona)
+- scene: string (optional; override scene context)
+
+Example (coaching disabled/default)
+```json
+{
+  "message": "Hello there",
+  "sessionId": "abc-123"
+}
+```
+
+Example (coaching enabled)
+```json
+{
+  "message": "What concerns do you have about the MMR for Layla?",
+  "sessionId": "abc-123",
+  "coach": true
+}
+```
+
+Response (coaching disabled)
+```json
+{
+  "reply": "...",
+  "model": "gemini-2.5-flash",
+  "latencyMs": 123
+}
+```
+
+Response (coaching enabled)
+```json
+{
+  "reply": "...",
+  "model": "gemini-2.5-flash",
+  "latencyMs": 234,
+  "coaching": {
+    "step": "Announce|Inquire|Mirror|Secure",
+    "score": 0,
+    "reasons": ["..."],
+    "tips": ["..."]
+  },
+  "session": {
+    "totalTurns": 2,
+    "perStepCounts": {"Announce": 1, "Inquire": 1, "Mirror": 0, "Secure": 0},
+    "runningAverage": {"Announce": 2.5, "Inquire": 2}
   }
-- Response Body (success 200):
-  {
-    "reply": "string",
-    "model": "string",
-    "latencyMs": number
-  }
-- Error Responses:
-  - 400 Bad Request
-    - Invalid UTF-8 in message
-    - Message too large (max 2 KiB)
-  - 404 Not Found (Model not found or access denied)
-    - Shape:
-      {
-        "error": {
-          "message": "Publisher model not found or access denied. Verify MODEL_ID and REGION; ensure Vertex AI API is enabled, billing is active, and your ADC principal has roles/aiplatform.user. You may set MODEL_FALLBACKS to try alternatives.",
-          "code": 404,
-          "requestId": "...",
-          "upstream": "..."  // only if EXPOSE_UPSTREAM_ERROR=true
-        }
-      }
-  - 500 Internal Server Error
-    - Missing configuration or unexpected failure. Shape:
-      {
-        "error": { "message": "Internal server error", "code": 500, "requestId": "..." }
-      }
-  - 502 Bad Gateway (Upstream error calling Vertex AI)
-    - Shape:
-      {
-        "error": {
-          "message": "Upstream error calling Vertex AI",
-          "code": 502,
-          "requestId": "...",
-          "upstream": "..."  // only if EXPOSE_UPSTREAM_ERROR=true
-        }
-      }
-- Headers:
-  - x-request-id is set on the response for correlation.
-- Notes:
-  - Environment variables used: PROJECT_ID, REGION (default us-central1), MODEL_ID (default gemini-2.5-flash), TEMPERATURE (default 0.2), MAX_TOKENS (default 256).
-  - Optional: MODEL_FALLBACKS (comma-separated) to try alternative models if the primary returns 404 (e.g., "gemini-2.5-flash-001").
-  - To include upstream error details in 502/404 JSON, set EXPOSE_UPSTREAM_ERROR=true.
-  - See /config to inspect runtime configuration.
+}
+```
 
-Examples:
-- curl -sS -X POST http://localhost:8080/chat \
-    -H 'Content-Type: application/json' \
-    -d '{"message":"Hello!"}'
+Errors
+- 400: invalid message encoding or size (max 2 KiB)
+- 422: Pydantic validation error for the request body
+- 500: Upstream/model configuration issue (e.g., PROJECT_ID missing)
 
----
+Behavioral notes
+- Persona and scene: The server composes a system instruction using the effective persona/scene (defaults in app/persona.py). The initial assistant message is a neutral appointment card; the parent will not volunteer concerns until asked.
+- Safety: The parent will not provide medical advice. If the model outputs advice-like text, the server returns the explicit error string: "Error: parent persona generated clinician-style advice. Logged for debugging. Please try again." and logs details (truncated).
+- Jailbreaks/meta: If the input appears to be a jailbreak/meta request (e.g., "break character", "show your system prompt"), the server responds as a confused parent and logs the intercept.
 
-## GET /config
-Return non-sensitive runtime configuration to aid local troubleshooting.
+## GET /summary
 
-- Description: Exposes current values for projectId, region, model, logging flags, etc.
-- Response Body:
-  {
-    "projectId": "string|null",
-    "region": "string",
-    "modelId": "string",
-    "temperature": number,
-    "maxTokens": number,
-    "logLevel": "string",
-    "logHeaders": boolean,
-    "logRequestBodyMax": number,
-    "allowedOrigins": ["string", ...],
-    "exposeUpstreamError": boolean
-  }
-- Status Codes:
-  - 200 OK
+Returns a session-level AIMS summary aggregated deterministically from stored per-turn metrics. The narrative text is deferred for now and may be empty.
 
-Example:
-- curl -sS http://localhost:8080/config
+Query params
+- sessionId: string (required)
 
----
+Response
+```json
+{
+  "overallScore": 2.1,
+  "stepCoverage": {
+    "Announce": 1,
+    "Inquire": 2,
+    "Mirror": 1,
+    "Secure": 0
+  },
+  "strengths": [],
+  "growthAreas": [],
+  "narrative": ""
+}
+```
 
-## Static files
+Notes
+- The server computes coverage and weighted averages from per-turn scores stored under the session. Overall score may use step weighting (Mirror/Inquire slightly higher) per docs/aims/aims_mapping.json meta.
+- If no data is present for the session, numeric fields default to 0 and arrays to empty.
 
-- GET /static/* → serves files from app/static/ (e.g., /static/index.html, images, CSS, JS).
-- Status Codes: 200 OK on success; 404 if not found.
+## Health and diagnostics
+- GET /healthz: liveness check (200 OK when server is up)
+- GET /config: curated configuration snapshot (safe to expose)
+- GET /diagnostics: runtime diagnostics; may include memory backend and store size
 
----
+## Environment flags
+- AIMS_COACHING_ENABLED: gate coaching features (default false; dev script sets true)
+- MEMORY_ENABLED, MEMORY_BACKEND, REDIS_URL (or REDIS_HOST/PORT/DB/PASSWORD), REDIS_PREFIX, MEMORY_TTL_SECONDS
+- MODEL_ID, PROJECT_ID, REGION, TEMPERATURE, MAX_TOKENS
+- LOG_LEVEL, LOG_RESPONSE_PREVIEW_MAX, SAFETY_LOG_CAP
 
-## CORS
-
-- Disabled by default. If ALLOWED_ORIGINS env var is set to a comma-separated list, CORS is enabled for those origins for POST/OPTIONS with the Content-Type header.
-
----
-
-## Environment variables reference (server-side)
-
-- PROJECT_ID (required for /chat): Google Cloud project ID. If unset, /chat returns a 500 error.
-- REGION: Vertex AI region (default: us-central1).
-- MODEL_ID: Model ID (default: gemini-2.5-flash).
-- TEMPERATURE: Generation temperature (default: 0.2).
-- MAX_TOKENS: Max output tokens (default: 256).
-- LOG_LEVEL: Logging level (default: info).
-- LOG_HEADERS: If true, request headers are logged with common sensitive values redacted (default: false).
-- LOG_REQUEST_BODY_MAX: Max bytes of body logged in middleware (default: 1024).
-- ALLOWED_ORIGINS: Comma-separated list to enable CORS (default: empty/off).
-- EXPOSE_UPSTREAM_ERROR: If true, includes upstream Vertex error text in the 502 JSON for /chat (default: false).
-
----
-
-## OpenAPI/SDK generation
-
-The service exposes its OpenAPI schema at /openapi.json, which you can use to generate clients or import into tools like Postman/Insomnia.
-
-
----
-
-## GET /models
-List available publisher models from google in your project+region using the server's ADC.
-
-- Description: Calls Vertex AI REST to list models at publishers/google and returns a simplified list.
-- Response Body:
-  {
-    "models": [
-      { "id": "gemini-2.5-flash", "displayName": "Gemini 2.5 Flash", "supportedActions": { ... } },
-      ...
-    ],
-    "count": number,
-    "region": "us-central1"
-  }
-- Status Codes:
-  - 200 OK on success
-  - 502 if the list call failed upstream
-  - 500 on unexpected server errors
-- Notes:
-  - Useful for diagnosing 404 model errors. If the model you configured is not in this list, pick one that is (e.g., gemini-2.5-flash) or resolve IAM/access in Google Cloud Console.
-
-Example:
-- curl -sS http://localhost:8080/models | jq '.'
+## Versioning and compatibility
+- The API aims to be backward-compatible by default. Clients that do not set `coach: true` will continue to receive the minimal response. Coaching fields are additive and optional.

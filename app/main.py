@@ -508,10 +508,12 @@ async def chat(req: Request, body: ChatRequest):
             try:
                 mem = _MEMORY_STORE.get(session_id) or {"history": [], "character": None, "scene": None, "updated": time.time()}
                 aims = mem.setdefault("aims", {"perStepCounts": {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0}, "scores": {"Announce": [], "Inquire": [], "Mirror": [], "Secure": []}, "totalTurns": 0})
-                step = cls_payload.get("step") or "Announce"
-                aims["perStepCounts"][step] = aims["perStepCounts"].get(step, 0) + 1
-                aims["scores"].setdefault(step, []).append(int(cls_payload.get("score", 2)))
+                step = cls_payload.get("step")
+                # Always count the turn; only score/count recognized AIMS steps
                 aims["totalTurns"] = int(aims.get("totalTurns", 0)) + 1
+                if step in {"Announce", "Inquire", "Mirror", "Secure"}:
+                    aims["perStepCounts"][step] = aims["perStepCounts"].get(step, 0) + 1
+                    aims["scores"].setdefault(step, []).append(int(cls_payload.get("score", 2)))
                 mem["aims"] = aims
                 mem["updated"] = time.time()
                 _MEMORY_STORE[session_id] = mem

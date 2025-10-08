@@ -10,6 +10,8 @@ from app.persona import DEFAULT_CHARACTER, DEFAULT_SCENE
 # development, the FastAPI app typically runs on http://localhost:8080.
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8080/chat")
 DEBUG_MODE = os.getenv("DEBUG_MODE", "false").lower() == "true"
+# Whether Chainlit should request coaching; default to env CHAINLIT_COACH_DEFAULT, else AIMS_COACHING_ENABLED, else false
+CHAINLIT_COACH_DEFAULT = (os.getenv("CHAINLIT_COACH_DEFAULT") or os.getenv("AIMS_COACHING_ENABLED") or "false").lower() == "true"
 
 
 def _author_from_role(role: str) -> str:
@@ -99,49 +101,20 @@ async def start_chat():
     #
     # await cl.Message("\n".join(intro_lines)).send()
 
-    # Have the bot make the first comment to introduce itself to the doctor
-    try:
-        timeout = float(os.getenv("CHAINLIT_HTTP_TIMEOUT", "120"))
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            session_id = cl.user_session.get("session_id")
-            payload = {
-                "message": (
-                    "Please introduce yourself to the doctor clearly and concisely based on your persona and scene. "
-                    "Open with a warm one- to two-sentence introduction of who you are, then ask one brief question, which gives the doctor something to ask about, to begin."
-                )
-            }
-            if session_id:
-                payload["sessionId"] = session_id
-            if character:
-                payload["character"] = character
-            if scene:
-                payload["scene"] = scene
-            response = await client.post(
-                BACKEND_URL,
-                json=payload,
-                headers={"Content-Type": "application/json"},
-            )
-            reply = None
-            if response.status_code == 200:
-                try:
-                    data = response.json()
-                    reply = data.get("reply")
-                except Exception:
-                    reply = None
-            if not reply:
-                try:
-                    data = response.json()
-                    error_msg = data.get("error", {}).get("message")
-                except Exception:
-                    error_msg = None
-                reply = f"Error starting conversation: {error_msg or f'HTTP {response.status_code}'}"
-            # Save to client-side history and display
-            history = cl.user_session.get("history")
-            history.append({"role": "assistant", "content": reply})
-            cl.user_session.set("history", history)
-            await cl.Message(reply).send()
-    except Exception as e:
-        await cl.Message(f"Startup error: {e}").send()
+    # At chat start, show a neutral appointment entry and wait for the clinician's first message.
+    # Do NOT call the backend here to avoid startup delays and to let the clinician lead (Announce/Inquire).
+    scenario_lines = [
+        "Parent: Sarah Jenkins",
+        "Patient: Liam Jenkins",
+        "Purpose: Two-year checkup",
+        "Notes: Due for MMR inoculation",
+    ]
+    card = "\n".join(scenario_lines)
+    # Save to client-side history (for UI replay only)
+    history = cl.user_session.get("history")
+    history.append({"role": "assistant", "content": card})
+    cl.user_session.set("history", history)
+    await cl.Message(card).send()
 
 @cl.on_message
 async def handle_message(message: cl.Message):
@@ -175,6 +148,8 @@ async def handle_message(message: cl.Message):
                 payload["character"] = character
             if scene:
                 payload["scene"] = scene
+            if CHAINLIT_COACH_DEFAULT:
+                payload["coach"] = True
             response = await client.post(
                 BACKEND_URL,
                 json=payload,
@@ -186,6 +161,7 @@ async def handle_message(message: cl.Message):
 
     # Parse the response.  The backend returns { reply, model, latencyMs }
     reply = None
+    data = {}
     if response.status_code == 200:
         try:
             data = response.json()
@@ -202,7 +178,24 @@ async def handle_message(message: cl.Message):
             error_msg = None
         reply = f"Error: {error_msg or f'HTTP {response.status_code}'}"
 
-    # Append assistant reply to history.
+    # If coaching info is present, render it immediately after the user's message (before assistant reply)
+    coaching = data.get("coaching") if isinstance(data, dict) else None
+    if coaching:
+        step = coaching.get("step")
+        reasons = coaching.get("reasons") or []
+        tips = coaching.get("tips") or []
+        # Only textual feedback; omit numeric score
+        parts = []
+        if step:
+            parts.append(f"Detected step: {step}")
+        if reasons:
+            parts.append(f"Feedback: {reasons[0]}")
+        if tips:
+            parts.append(f"Tip: {tips[0]}")
+        if parts:
+            await cl.Message("\n".join(parts), author="Coach").send()
+
+    # Append assistant reply to history and send to UI after coaching
     history.append({"role": "assistant", "content": reply})
     cl.user_session.set("history", history)
 
