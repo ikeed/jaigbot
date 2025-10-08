@@ -7,6 +7,7 @@ set -euo pipefail
 # - Optionally checks ADC
 # - Starts uvicorn on port 8080
 
+
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
@@ -47,6 +48,9 @@ else
     echo "[dev_run] No Application Default Credentials detected. To avoid 502 on /chat, run: gcloud auth application-default login" >&2
   fi
 fi
+
+# Enable AIMS coaching by default in local dev (can be overridden)
+export AIMS_COACHING_ENABLED="${AIMS_COACHING_ENABLED:-true}"
 
 # 6) Start the server
 exec python -m uvicorn app.main:app --host 0.0.0.0 --port "$PORT" --reload --log-level "$LOG_LEVEL"
