@@ -36,6 +36,8 @@ DEBUG_MODE = os.getenv("DEBUG_MODE", "false").lower() == "true"
 AUTO_CONTINUE_ON_MAX_TOKENS = os.getenv("AUTO_CONTINUE_ON_MAX_TOKENS", "true").lower() == "true"
 MAX_CONTINUATIONS = int(os.getenv("MAX_CONTINUATIONS", "2"))
 SUPPRESS_VERTEXAI_DEPRECATION = os.getenv("SUPPRESS_VERTEXAI_DEPRECATION", "true").lower() == "true"
+# Feature flag for AIMS coaching (backward-compatible default: disabled)
+AIMS_COACHING_ENABLED = os.getenv("AIMS_COACHING_ENABLED", "false").lower() == "true"
 # Memory configuration
 MEMORY_ENABLED = os.getenv("MEMORY_ENABLED", "true").lower() == "true"
 MEMORY_MAX_TURNS = int(os.getenv("MEMORY_MAX_TURNS", "8"))  # number of user/assistant turns to keep
