@@ -6,7 +6,8 @@ This repository contains a tiny FastAPI backend that exposes a simple /chat endp
 
 - UI: Chainlit (see `chainlit_app.py`).
 - API endpoints (FastAPI backend):
-  - **POST /chat** → calls Vertex AI and returns `{ reply, model, latencyMs }`.
+  - **POST /chat** → calls Vertex AI and returns `{ reply, model, latencyMs }`. When `AIMS_COACHING_ENABLED=true` and the request includes `coach=true`, the response may also include optional `coaching` and `session` fields (see AIMS coaching docs).
+  - **GET  /summary?sessionId=...** → returns an aggregated AIMS summary for a session (overallScore, stepCoverage, strengths, growthAreas, narrative). Present even if coaching is disabled; contents may be minimal.
   - **GET  /healthz** → simple health check.
   - **GET  /config**, **/diagnostics**, **/models** for configuration/diagnostics.
 - Backend code: `app/main.py` and `app/vertex.py`.

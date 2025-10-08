@@ -389,6 +389,49 @@ async def healthz():
     return {"status": "ok"}
 
 
+@app.get("/summary")
+async def summary(sessionId: Optional[str] = None):
+    """Return an aggregated AIMS summary for a session. Structure is stable; contents may be minimal if coaching not used."""
+    if not sessionId or not MEMORY_ENABLED:
+        return {"overallScore": 0.0, "stepCoverage": {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0}, "strengths": [], "growthAreas": [], "narrative": ""}
+    mem = _MEMORY_STORE.get(sessionId)
+    if not mem:
+        return {"overallScore": 0.0, "stepCoverage": {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0}, "strengths": [], "growthAreas": [], "narrative": ""}
+    aims = mem.get("aims") or {}
+    per_counts = {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0}
+    per_counts.update(aims.get("perStepCounts", {}))
+    # compute simple averages
+    running_avg = {}
+    for k, arr in (aims.get("scores", {}) or {}).items():
+        if arr:
+            running_avg[k] = sum(arr)/len(arr)
+    # overall: mean of available averages
+    if running_avg:
+        overall = sum(running_avg.values())/len(running_avg)
+    else:
+        overall = 0.0
+    return {
+        "overallScore": overall,
+        "stepCoverage": per_counts,
+        "strengths": [],
+        "growthAreas": [],
+        "narrative": ""
+    }
+
+
+class Coaching(BaseModel):
+    step: Optional[str] = Field(default=None, description="Detected AIMS step: Announce|Inquire|Mirror|Secure")
+    score: Optional[int] = Field(default=None, description="0–3 per-step score")
+    reasons: list[str] = Field(default_factory=list, description="Brief reasons supporting the score")
+    tips: list[str] = Field(default_factory=list, description="Coaching tips")
+
+
+class SessionMetrics(BaseModel):
+    totalTurns: int = 0
+    perStepCounts: dict[str, int] = Field(default_factory=lambda: {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0})
+    runningAverage: dict[str, float] = Field(default_factory=dict)
+
+
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, description="User input message")
     # Optional session support for server-side memory
@@ -396,6 +439,8 @@ class ChatRequest(BaseModel):
     # Optional persona/scene fields
     character: Optional[str] = Field(default=None, description="Persona/system prompt for the assistant (roleplay character)")
     scene: Optional[str] = Field(default=None, description="Scene objectives or context for this conversation")
+    # Coaching toggle
+    coach: Optional[bool] = Field(default=False, description="Enable AIMS coaching fields in response when supported")
 
 
 def _get_request_id(request: Request) -> Optional[str]:
@@ -583,7 +628,61 @@ async def chat(req: Request, body: ChatRequest):
                 _MEMORY_STORE[session_id] = mem
             except Exception:
                 logger.debug("Memory persistence failed for session %s", session_id)
-        resp = JSONResponse(status_code=200, content={"reply": reply, "model": MODEL_ID, "latencyMs": latency_ms})
+        # Prepare base response
+        response_payload = {"reply": reply, "model": MODEL_ID, "latencyMs": latency_ms}
+
+        # Optionally include coaching/session if enabled and requested
+        if AIMS_COACHING_ENABLED and getattr(body, "coach", False):
+            # Minimal placeholder classifier based on simple markers (deterministic)
+            clinician_txt = (body.message or "").strip()
+            lower = clinician_txt.lower()
+            step = "Announce"
+            # Mirror markers
+            if any(lower.startswith(s) for s in ["it sounds like", "you're worried", "you are worried", "i'm hearing", "you feel", "you want"]):
+                step = "Mirror"
+            # Inquire if ends with question or starts with what/how
+            elif clinician_txt.endswith("?") or lower.startswith("what ") or lower.startswith("how "):
+                step = "Inquire"
+            # Secure markers
+            elif any(p in lower for p in ["it's your decision", "i'm here to support", "we can ", "options include", "if you'd prefer", "here's what to expect"]):
+                step = "Secure"
+            score = 2
+            reasons = [f"Detected {step} via simple markers"]
+            tips = []
+
+            # Update AIMS metrics in memory
+            if MEMORY_ENABLED and session_id:
+                try:
+                    mem = _MEMORY_STORE.get(session_id) or {"history": [], "character": None, "scene": None, "updated": time.time()}
+                    aims = mem.setdefault("aims", {"perStepCounts": {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0}, "scores": {"Announce": [], "Inquire": [], "Mirror": [], "Secure": []}, "totalTurns": 0})
+                    aims["perStepCounts"][step] = aims["perStepCounts"].get(step, 0) + 1
+                    aims["scores"].setdefault(step, []).append(score)
+                    aims["totalTurns"] = int(aims.get("totalTurns", 0)) + 1
+                    mem["aims"] = aims
+                    _MEMORY_STORE[session_id] = mem
+                except Exception:
+                    logger.debug("AIMS metrics persistence failed for session %s", session_id)
+
+            # Build session metrics snapshot
+            per_counts = {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0}
+            running_avg: dict[str, float] = {}
+            total_turns = 0
+            try:
+                mem_snapshot = _MEMORY_STORE.get(session_id) if (MEMORY_ENABLED and session_id) else None
+                aims_snap = (mem_snapshot or {}).get("aims") if mem_snapshot else None
+                if aims_snap:
+                    per_counts.update(aims_snap.get("perStepCounts", {}))
+                    total_turns = int(aims_snap.get("totalTurns", 0))
+                    for k, arr in aims_snap.get("scores", {}).items():
+                        if arr:
+                            running_avg[k] = sum(arr)/len(arr)
+            except Exception:
+                pass
+
+            response_payload["coaching"] = Coaching(step=step, score=score, reasons=reasons, tips=tips).model_dump(exclude_none=True)
+            response_payload["session"] = SessionMetrics(totalTurns=total_turns, perStepCounts=per_counts, runningAverage=running_avg).model_dump()
+
+        resp = JSONResponse(status_code=200, content=response_payload)
         try:
             resp.set_cookie(
                 key=SESSION_COOKIE_NAME,
