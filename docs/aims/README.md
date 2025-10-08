@@ -18,5 +18,6 @@ Intended uses of aims_mapping.json
 5. Overall scoring: aggregate per-turn scores at the end of a conversation.
 
 Notes
-- This file is currently a documentation/reference artifact; no runtime imports use it yet. Future code can load it from docs/aims/aims_mapping.json or embed its content in code/constants.
+- This directory is currently documentation/reference; no runtime imports use it yet. Future code can load it from docs/aims/aims_mapping.json or embed its content in code/constants.
 - See docs/memory-and-persona.md and docs/plan.md for broader context on conversation flow and upcoming implementation steps.
+- Roadmap: see implementation tasks in docs/aims/implementation-plan.md (kept up to date as work progresses).

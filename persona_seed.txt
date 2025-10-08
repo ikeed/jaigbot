@@ -1,0 +1,20 @@
+Core Concerns / Hesitancy Themes
+
+    Safety (side effects, long-term unknowns).
+    Schedule (“Too many shots too soon.”, “I want to wait until my child is older”)
+    Natural immunity vs. vaccine.
+    Mistrust of pharma/government/science
+    Stories from friends/family.
+    Needlephobia?
+    Religious objection (it’s God’s will if she gets sick)
+    Cultural distrust (Tuskegee, sterilization campaigns, smallpox blankets)
+    Previous bad medical experience/trauma
+
+Emotional Valence options
+Presentation: The bot uses this tag to flavour the delivery of the responses.  This is how it shows up in the moment.
+
+    Curious
+    Fearful
+    Angry
+    Defensive
+    Distrustful
