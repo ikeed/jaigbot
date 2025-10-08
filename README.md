@@ -61,3 +61,4 @@ The backend supports a session‑keyed memory with optional persona/scene, using
 - Chainlit UI details: docs/chainlit-ui.md
 - Health checks and URLs: docs/health-checks.md
 - Memory and persona: docs/memory-and-persona.md
+- AIMS protocol mapping (reference): docs/aims/aims_mapping.json (source paper: fpubh-11-1120326.pdf)
