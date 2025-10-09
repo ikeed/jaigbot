@@ -1,12 +1,13 @@
-# JaigBot — Hello World: Cloud Run ↔ Vertex AI (Gemini Flash)
+# JaigBot — Hello World: Cloud Run ↔ Vertex AI (Gemini Pro)
 
-This repository contains a tiny FastAPI backend that exposes a simple /chat endpoint which proxies a single message to Vertex AI (Gemini Flash). The chat UI is provided by Chainlit (see `chainlit_app.py`).  No auth, no storage, no streaming.
+This repository contains a tiny FastAPI backend that exposes a simple /chat endpoint which proxies a single message to Vertex AI (Gemini Pro). The chat UI is provided by Chainlit (see `chainlit_app.py`).  No auth, no storage, no streaming.
 
 **TL;DR — Where things are:**
 
 - UI: Chainlit (see `chainlit_app.py`).
 - API endpoints (FastAPI backend):
-  - **POST /chat** → calls Vertex AI and returns `{ reply, model, latencyMs }`.
+  - **POST /chat** → calls Vertex AI and returns `{ reply, model, latencyMs }`. When `AIMS_COACHING_ENABLED=true` and the request includes `coach=true`, the response may also include optional `coaching` and `session` fields (see AIMS coaching docs).
+  - **GET  /summary?sessionId=...** → returns an aggregated AIMS summary for a session (overallScore, stepCoverage, strengths, growthAreas, narrative). Present even if coaching is disabled; contents may be minimal.
   - **GET  /healthz** → simple health check.
   - **GET  /config**, **/diagnostics**, **/models** for configuration/diagnostics.
 - Backend code: `app/main.py` and `app/vertex.py`.
@@ -23,8 +24,10 @@ This repository contains a tiny FastAPI backend that exposes a simple /chat endp
 2. Set up environment variables:
    ```bash
    export PROJECT_ID=your-gcp-project-id
-   export REGION=us-central1
-   export MODEL_ID=gemini-2.5-flash
+   export REGION=us-west4
+   # Optional: use global Vertex AI location for publisher models (recommended for Gemini 2.x)
+   export VERTEX_LOCATION=global
+   export MODEL_ID=gemini-2.5-pro
    ```
 3. Start the FastAPI app:
    ```bash

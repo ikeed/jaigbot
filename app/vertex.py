@@ -2,6 +2,7 @@ from typing import Optional, Tuple, List, Dict, Any
 import logging
 import os
 import warnings
+import json
 
 from google.api_core import exceptions as gax_exceptions
 from google.cloud import aiplatform
@@ -44,6 +45,30 @@ class VertexClient:
         self.project = project
         self.region = region
         self.model_id = model_id
+
+    @staticmethod
+    def _sanitize_response_schema(schema: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """Return a copy of the schema with any $-prefixed meta-keys removed.
+        Vertex AI responseSchema does not accept "$schema" or other $-draft keys.
+        """
+        if not schema:
+            return None
+
+        def _clean(obj):
+            if isinstance(obj, dict):
+                out: Dict[str, Any] = {}
+                for k, v in obj.items():
+                    if isinstance(k, str) and k.startswith("$"):
+                        continue
+                    out[k] = _clean(v)
+                return out
+            if isinstance(obj, list):
+                return [_clean(x) for x in obj]
+            return obj
+
+        cleaned = _clean(schema)
+        # If cleaning removed everything, treat as absent
+        return cleaned if isinstance(cleaned, dict) and len(cleaned) > 0 else None
 
     @staticmethod
     def _merge_with_overlap(base: str, addition: str, max_overlap: int = 200) -> str:
@@ -122,6 +147,8 @@ class VertexClient:
         temperature: float = 0.2,
         max_tokens: int = 1024,
         system_instruction: Optional[str] = None,
+        response_mime_type: Optional[str] = None,
+        response_schema: Optional[Dict[str, Any]] = None,
     ) -> tuple[str, dict]:
         """
         Generate text and return both the text and useful metadata for logging.
@@ -131,8 +158,8 @@ class VertexClient:
         The return shape is (text, meta_dict).
         """
         if USE_VERTEX_REST:
-            return self._generate_text_rest(prompt, temperature, max_tokens, system_instruction)
-        return self._generate_text_sdk(prompt, temperature, max_tokens, system_instruction)
+            return self._generate_text_rest(prompt, temperature, max_tokens, system_instruction, response_mime_type, response_schema)
+        return self._generate_text_sdk(prompt, temperature, max_tokens, system_instruction, response_mime_type, response_schema)
 
     def _generate_text_sdk(
         self,
@@ -140,16 +167,30 @@ class VertexClient:
         temperature: float,
         max_tokens: int,
         system_instruction: Optional[str],
+        response_mime_type: Optional[str],
+        response_schema: Optional[Dict[str, Any]],
     ) -> tuple[str, dict]:
         try:
             self._init()
             self.logger.debug("Creating GenerativeModel(model_id=%s)", self.model_id)
             model = GenerativeModel(self.model_id, system_instruction=system_instruction)
-            config = GenerationConfig(
-                temperature=temperature,
-                max_output_tokens=max_tokens,
-                response_mime_type="text/plain",
-            )
+            # Build GenerationConfig with optional JSON mode/schema
+            _resp_mime = response_mime_type or "text/plain"
+            try:
+                _san_schema = self._sanitize_response_schema(response_schema) if _resp_mime == "application/json" else None
+                config = GenerationConfig(
+                    temperature=temperature,
+                    max_output_tokens=max_tokens,
+                    response_mime_type=_resp_mime,
+                    response_schema=_san_schema,
+                )
+            except TypeError:
+                # Older SDK may not support response_schema; retry without it
+                config = GenerationConfig(
+                    temperature=temperature,
+                    max_output_tokens=max_tokens,
+                    response_mime_type=_resp_mime,
+                )
 
             # Use a chat session so we can preserve context across continuations
             # Disable SDK response validation so we can handle finish reasons/safety ourselves
@@ -293,29 +334,75 @@ class VertexClient:
         temperature: float,
         max_tokens: int,
         system_instruction: Optional[str],
+        response_mime_type: Optional[str],
+        response_schema: Optional[Dict[str, Any]],
     ) -> tuple[str, dict]:
         """Generate using REST generateContent to avoid deprecated SDK surface."""
         try:
             creds, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
             session = AuthorizedSession(creds)
-            base_url = f"https://{self.region}-aiplatform.googleapis.com/v1/projects/{self.project}/locations/{self.region}/publishers/google/models/{self.model_id}:generateContent"
+            # Choose API version: Gemini 2.x models are currently exposed under v1beta; others can use v1
+            api_version = "v1beta" if str(self.model_id).startswith("gemini-2") else "v1"
+            loc = self.region
+            host = "aiplatform.googleapis.com" if str(loc).lower() == "global" else f"{loc}-aiplatform.googleapis.com"
+            base_url = f"https://{host}/{api_version}/projects/{self.project}/locations/{loc}/publishers/google/models/{self.model_id}:generateContent"
+            try:
+                self.logger.info(json.dumps({
+                    "event": "vertex_rest_generate",
+                    "apiVersion": api_version,
+                    "baseUrl": base_url,
+                    "location": loc,
+                    "project": self.project,
+                    "modelId": self.model_id,
+                }))
+            except Exception:
+                self.logger.info("vertex_rest_generate %s", base_url)
 
             def call(contents: List[Dict[str, Any]]):
+                _resp_mime = response_mime_type or "text/plain"
                 body: Dict[str, Any] = {
                     "contents": contents,
                     "generationConfig": {
                         "temperature": temperature,
                         "maxOutputTokens": max_tokens,
-                        "responseMimeType": "text/plain"
+                        "responseMimeType": _resp_mime
                     },
                 }
+                if response_schema and _resp_mime == "application/json":
+                    _san_schema = self._sanitize_response_schema(response_schema)
+                    if _san_schema:
+                        body["generationConfig"]["responseSchema"] = _san_schema
                 if system_instruction:
                     body["systemInstruction"] = {"role": "system", "parts": [{"text": system_instruction}]}
                 r = session.post(base_url, json=body)
                 if r.status_code == 404:
-                    raise VertexAIError(f"Model not found: HTTP 404", status_code=404)
+                    # Fallback across API versions on 404 (both directions)
+                    alt_url = None
+                    if "/v1/" in base_url:
+                        alt_url = base_url.replace("/v1/", "/v1beta/", 1)
+                    elif "/v1beta/" in base_url:
+                        alt_url = base_url.replace("/v1beta/", "/v1/", 1)
+                    if alt_url:
+                        r2 = session.post(alt_url, json=body)
+                        try:
+                            self.logger.info(json.dumps({
+                                "event": "vertex_rest_generate_fallback",
+                                "from": base_url,
+                                "to": alt_url,
+                                "status": r2.status_code,
+                            }))
+                        except Exception:
+                            pass
+                        if r2.status_code < 400:
+                            return r2.json()
+                        # If the alt call also failed, propagate its status (only keep 404 if both are 404)
+                        if r2.status_code == 404:
+                            raise VertexAIError("Model not found: HTTP 404", status_code=404)
+                        raise VertexAIError(f"Vertex REST error HTTP {r2.status_code}: {r2.text}", status_code=r2.status_code)
+                    # No alt URL derivable; keep 404
+                    raise VertexAIError("Model not found: HTTP 404", status_code=404)
                 if r.status_code >= 400:
-                    raise VertexAIError(f"Vertex REST error HTTP {r.status_code}: {r.text}")
+                    raise VertexAIError(f"Vertex REST error HTTP {r.status_code}: {r.text}", status_code=r.status_code)
                 return r.json()
 
             # Initial request

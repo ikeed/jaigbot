@@ -10,10 +10,10 @@ What it does:
 Usage:
   source .venv/bin/activate
   export PROJECT_ID=warm-actor-253703
-  export REGION=us-central1
+  export REGION=us-west4
   # optional overrides
-  export MODEL_ID=gemini-2.5-flash
-  export MODEL_FALLBACKS="gemini-2.5-flash-001"
+  export MODEL_ID=gemini-2.5-pro
+  export MODEL_FALLBACKS="gemini-2.5-pro-001"
   python scripts/check_model_access.py
 
 Exit codes:
@@ -66,7 +66,7 @@ def try_generate(model_id: str) -> str:
 
 def main() -> int:
     project = os.getenv("PROJECT_ID")
-    region = os.getenv("REGION", "us-central1")
+    region = os.getenv("REGION", "us-west4")
     if not project:
         print("[check] PROJECT_ID is not set. export PROJECT_ID and retry.", file=sys.stderr)
         return 2
@@ -110,7 +110,7 @@ def main() -> int:
         print(f"[check] ERROR listing models: {e}", file=sys.stderr)
 
     # Attempt generation with configured models
-    primary = os.getenv("MODEL_ID", "gemini-2.5-flash")
+    primary = os.getenv("MODEL_ID", "gemini-2.5-pro")
     fallbacks = [m.strip() for m in os.getenv("MODEL_FALLBACKS", "").split(",") if m.strip()]
     candidates = [primary] + [m for m in fallbacks if m != primary]
 
@@ -126,7 +126,7 @@ def main() -> int:
             print(f"[check] FAILED model={mid}: {e}")
     if not any_success:
         print("[check] No candidate model generated successfully.")
-        print("[check] Next steps:\n - Ensure your ADC principal has roles/aiplatform.user on the project\n - Keep REGION=us-central1\n - Try alternate MODEL_ID values that appear in the list above (e.g., gemini-2.5-flash-001)\n - In Cloud Console → Vertex AI → Generative AI Studio, open a Gemini chat to prompt acceptance of terms if required")
+        print("[check] Next steps:\n - Ensure your ADC principal has roles/aiplatform.user on the project\n - Keep REGION=us-west4\n - Try alternate MODEL_ID values that appear in the list above (e.g., gemini-2.5-pro-001)\n - In Cloud Console → Vertex AI → Generative AI Studio, open a Gemini chat to prompt acceptance of terms if required")
         return 1
     return 0
 

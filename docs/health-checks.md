@@ -5,7 +5,7 @@ You may see two different hostnames for the same Cloud Run service during or aft
 ## Cloud Run URL patterns
 - New canonical URL (shown by `gcloud run deploy`):
   - https://<service>-<project-number>.<region>.run.app
-  - Example: https://aimsbot-911779552073.us-central1.run.app
+  - Example: https://aimsbot-911779552073.us-west4.run.app
 - Legacy URL (often shown by `gcloud run services describe` and in various UIs):
   - https://<service>-<hash>-<region-short>.a.run.app
   - Example: https://aimsbot-chur7bpwsq-uc.a.run.app
@@ -30,7 +30,7 @@ Use a bounded retry with backoff to probe an explicit endpoint. This repo includ
 
 Example (local or GitHub Actions):
 ```bash
-SERVICE_NAME=my-service REGION=us-central1 HEALTH_PATH=/healthz MAX_WAIT=300 \
+SERVICE_NAME=my-service REGION=us-west4 HEALTH_PATH=/healthz MAX_WAIT=300 \
   bash scripts/wait_for_health.sh
 ```
 

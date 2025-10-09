@@ -797,3 +797,185 @@ Plan update — Additional decisions (post-feedback)
 - Coaching UI: Per-turn panel must not show numeric scores and must not hint at next steps; provide only step name and short text feedback.
 - Safety rewrite phrasing: Use a lighter-touch phrasing when rewriting advice-like content (e.g., “I’m not the clinician—just sharing how I feel.”).
 - Persona: Pick a sensible default vaccine-hesitant parent persona and keep it consistent until mutation work lands.
+
+
+---
+Process compliance — How we keep this plan updated (2025-10-07)
+
+Purpose
+- Ensure that at every step we explicitly record: Status, Tests, and Docs updates.
+- Make the plan a reliable source of truth for current progress and what remains.
+
+Rules of engagement
+- Every task in this plan must include or be linked to:
+  - Status: Not started | In progress | Done | Blocked
+  - Tests: Added/updated? Brief note or link to test file(s)
+  - Docs: Added/updated? Brief note or link
+- When a task is completed, append a dated entry under the latest Plan status update section.
+- Keep entries concise; link to diffs or files when possible.
+
+Template (copy/paste per task)
+- Task: <id and title>
+  - Status: <state>
+  - Tests: <added/updated/na> — <files/notes>
+  - Docs: <added/updated/na> — <files/notes>
+  - Evidence: <short note: e.g., commit hash, PR link, or test output>
+
+---
+Plan status update — Compliance snapshot (2025-10-07)
+
+The following reflects work completed earlier in this session and clarifies Tests/Docs status. Future steps will follow the same pattern.
+
+- Task: 3.0 Replace default persona immediately (remove Ghostbusters)
+  - Status: Done
+  - Tests: na (no unit test added yet specific to persona text)
+  - Docs: Updated docs/memory-and-persona.md to reference persona defaults (already present). README unchanged.
+  - Evidence: app/persona.py now contains a realistic vaccine‑hesitant parent persona and clinic scene.
+
+- Task: 3.1 Extend POST /chat input model (coach?: bool, sessionId)
+  - Status: Done
+  - Tests: Pending (to be added in Milestone 2/3 tests)
+  - Docs: Pending (will document in docs/api.md during Milestone 8)
+  - Evidence: app/main.py ChatRequest includes coach and sessionId.
+
+- Task: 3.2a Define response models for coaching/session (typing only)
+  - Status: Done
+  - Tests: Pending (unit test to import Coaching/SessionMetrics and validate sample)
+  - Docs: Pending
+  - Evidence: app/main.py defines Coaching and SessionMetrics Pydantic models.
+
+- Task: 3.2b Wire response shape when coach=true (handler integration)
+  - Status: Done (basic placeholder classifier; backward‑compatible behind flag)
+  - Tests: Pending (mocked integration to assert presence/shape)
+  - Docs: Pending (docs/api.md to describe optional fields)
+  - Evidence: app/main.py adds optional coaching/session in /chat when AIMS_COACHING_ENABLED=true and coach=true.
+
+- Task: 3.3 Summary retrieval (GET /summary)
+  - Status: Done (minimal deterministic summary)
+  - Tests: Pending (integration test to call /summary with a fake session)
+  - Docs: Pending (docs/api.md to add endpoint)
+  - Evidence: app/main.py exposes GET /summary returning overallScore, stepCoverage, strengths, growthAreas, narrative.
+
+- Task: 5.3 Session state and metrics (Redis mandatory)
+  - Status: In progress
+  - Tests: Pending (mock Redis; assert TTL and aggregation across turns)
+  - Docs: Updated docs/memory-and-persona.md with Redis config guidance (present). Further docs pending.
+  - Evidence: app/main.py contains RedisStore with TTL support; selection by env.
+
+Notes
+- Coverage currently ~49% (from pytest). New code paths will be added with ≥80% coverage as they are implemented (Milestone 2/3 tests forthcoming).
+- This snapshot addresses the user requirement to track Status/Tests/Docs per step.
+
+---
+
+Plan status update — 2025-10-07 (late)
+
+- Task: 1.2 Deterministic classifier plan
+  - Status: Done
+  - Tests: Added — tests/test_aims_engine.py::TestClassification (cases A1–A3, M1–M4)
+  - Docs: This plan reflects tie-breakers and markers used.
+  - Evidence: app/aims_engine.py classify_step; pytest passing.
+
+- Task: 1.3 Deterministic scorer plan
+  - Status: Done
+  - Tests: Added — tests/test_aims_engine.py::TestScoring (M5 penalty; good Inquire/Announce/Secure)
+  - Docs: Heuristic notes encoded in code aligned with aims_mapping.json.
+  - Evidence: app/aims_engine.py score_step; pytest passing.
+
+- Task: 2.1 Unit tests (pure Python)
+  - Status: Done
+  - Tests: Added — tests/test_aims_engine.py (offline, no network)
+  - Docs: This plan updated; mapping remains the source of truth.
+  - Evidence: pytest passed; coverage for app/aims_engine.py ≥ 80%.
+
+---
+Plan status update — 2025-10-07 (night)
+
+- Tests: pytest passed locally; all tests green.
+- Coverage: Overall 55% (from coverage report). Not yet at ≥80% target for new logic; upcoming tasks will add tests to raise coverage.
+- Deprecation warnings: app/vertex.py emitted an `invalid escape sequence '\{'` DeprecationWarning; tracked for a later cleanup task (does not affect functionality).
+- Docs: README.md updated to list GET /summary and to note optional coaching fields when `coach=true` and `AIMS_COACHING_ENABLED=true`.
+
+Task snapshots
+- Task: 3.1 Extend POST /chat input model (coach?: bool, sessionId)
+  - Status: Done
+  - Tests: Covered indirectly by existing integration test; dedicated tests pending in Milestone 3
+  - Docs: README updated; docs/api.md pending
+- Task: 3.2a Define response models for coaching/session
+  - Status: Done
+  - Tests: Pending (simple Pydantic validation test to be added)
+  - Docs: Pending
+- Task: 3.2b Wire response shape when coach=true (handler integration)
+  - Status: Done (behind AIMS_COACHING_ENABLED)
+  - Tests: Pending (mocked integration when coach=true)
+  - Docs: README updated; full API doc pending
+- Task: 3.3 Summary retrieval
+  - Status: Done (minimal deterministic summary)
+  - Tests: Pending (integration test to call /summary)
+  - Docs: README updated
+- Task: 5.3 Session state and metrics (Redis mandatory)
+  - Status: In progress (Redis store present; ensure prod uses Redis via env)
+  - Tests: Pending (mock Redis)
+  - Docs: docs/memory-and-persona.md already documents Redis config
+
+Next steps
+- Add missing unit/integration tests for 3.1–3.3 and 5.3 to raise coverage and verify flag on/off behavior.
+- Optionally address the DeprecationWarning in app/vertex.py.
+
+
+---
+Milestone Status Summary — 2025-10-07 22:54
+
+Legend: [Done] [In progress] [Not started] [Deferred]
+
+Milestone 0 — Planning and guardrails
+- 0.1 Create this living plan document and link it from docs/aims/README.md — Done
+- 0.2 Add feature flag definition (planning only) — Done
+
+Milestone 1 — Core data loading and deterministic logic (offline, no LLM)
+- 1.1 Loader utility plan — Done
+- 1.2 Deterministic classifier plan — Done
+- 1.3 Deterministic scorer plan — Done
+- 1.4 Session aggregation plan — Done
+
+Milestone 2 — Unit tests (pure Python, no network)
+- 2.1 Add unit tests for loader, classifier, scorer, aggregator — Done
+
+Milestone 3 — Backend API extensions (backward‑compatible)
+- 3.0 Replace default persona immediately (remove Ghostbusters) — Done
+- 3.1 Extend POST /chat input model (coach?: bool, sessionId passthrough) — Done
+- 3.2a Define response models for coaching/session (typing only) — Done
+- 3.2b Wire response shape when coach=true (handler integration) — Done
+- 3.3 Summary retrieval (GET /summary) — Done
+
+Milestone 4 — Prompt and single‑pass JSON envelope
+- 4.1 Patient simulator system prompt — Not started
+- 4.2 Compact mapping injection — Not started
+- 4.3 Output schema and few‑shots — Not started
+
+Milestone 5 — Engine integration and fallbacks
+- 5.1 Vertex call wiring — Not started
+- 5.2a JSON schema validation and strict parsing — Not started
+- 5.2b Deterministic fallback and two‑pass strategy — Not started
+- 5.2c Retry policy implementation and logging — Not started
+- 5.3 Session state and metrics (Redis mandatory) — In progress
+
+Milestone 6 — Feature flags, safety, and observability
+- 6.1 Feature flag AIMS_COACHING_ENABLED — Done
+- 6.2 Safety guardrails — Not started
+- 6.3 Telemetry — Deferred (see docs/todo/telemetry.md)
+
+Milestone 7 — Chainlit UI enhancements (minimal coaching panel)
+- 7.1 Coaching toggle — Not started
+- 7.2 Coaching content policy (no per‑turn numeric scores or next‑step hints) — Not started
+- 7.3 End‑of‑session summary — Not started
+
+Milestone 8 — Documentation and rollout
+- 8.1 Update docs (README, docs/api.md, docs/aims/README.md) — In progress
+- 8.2 Rollout plan — Not started
+
+Milestone 9 — Persona mutation (post‑MVP)
+- 9.1 Define mutation strategies seeded by persona_seed.txt — Not started
+- 9.2 Implement persona mutation at session start — Not started
+
+Process reminder: Update this summary and the per-task Status lines immediately when completing any stage, marking it Done with a dated note in the Plan status update section above.

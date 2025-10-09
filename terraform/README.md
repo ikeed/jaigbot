@@ -21,7 +21,7 @@ What it does NOT create:
 
 ## Variables (with defaults)
 - project_id (default: warm-actor-253703)
-- region (default: us-central1)
+- region (default: us-west4)
 - service_name (default: gemini-flash-demo)
 - gar_repo (default: cr-demo)
 - github_org (default: ikeed)
@@ -34,7 +34,7 @@ Override via `-var` flags or a tfvars file.
 
 Example terraform.tfvars:
 project_id        = "warm-actor-253703"
-region            = "us-central1"
+region            = "us-west4"
 service_name      = "gemini-flash-demo"
 gar_repo          = "cr-demo"
 github_org        = "ikeed"
@@ -49,8 +49,8 @@ Initialize and apply:
 - terraform apply -auto-approve
 
 Outputs include:
-- artifact_registry_repo: e.g., us-central1-docker.pkg.dev/PROJECT/cr-demo
-- image_repo: e.g., us-central1-docker.pkg.dev/PROJECT/cr-demo/gemini-flash-demo
+- artifact_registry_repo: e.g., us-west4-docker.pkg.dev/PROJECT/cr-demo
+- image_repo: e.g., us-west4-docker.pkg.dev/PROJECT/cr-demo/gemini-flash-demo
 - runtime_service_account_email: cr-vertex-runtime@PROJECT.iam.gserviceaccount.com
 - deployer_service_account_email: cr-deployer@PROJECT.iam.gserviceaccount.com
 - wif_provider_name: projects/…/locations/global/workloadIdentityPools/…/providers/…
@@ -100,6 +100,7 @@ terraform {
 
 ## Notes
 - Ensure Artifact Registry region matches Cloud Run region for efficiency.
+- The deploy workflow maps Terraform var.region to the GitHub variable GCP_REGION and sets Cloud Run env REGION accordingly. The backend uses VERTEX_LOCATION (if set) or REGION for Vertex AI calls. Ensure your chosen MODEL_ID is available in that location (e.g., gemini-2.5-pro in global or us-west4).
 - WIF attribute_condition restricts deployments to the main branch of ikeed/jaigbot by default. Override `github_branch_ref` if needed.
 - The deploy workflow expects the runtime service account to exist and will set env vars during `gcloud run deploy`.
 

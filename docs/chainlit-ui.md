@@ -46,7 +46,7 @@ Caveats for multi‑user deployments:
   ```
 
 ## Model and transport options
-- Switch models using `MODEL_ID` (e.g., `gemini-2.5-flash`, `gemini-2.5-flash-001`).
+- Switch models using `MODEL_ID` (e.g., `gemini-2.5-pro`, `gemini-2.5-pro-001`).
 - Transport defaults: REST path is the default (recommended). To switch back to SDK path:
   ```bash
   export USE_VERTEX_REST=false   # default true
