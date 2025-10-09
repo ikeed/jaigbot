@@ -42,7 +42,7 @@ Repository Settings → Secrets and variables:
   - GCP_PROJECT_ID = Terraform var project_id (e.g., warm-actor-253703)
   - GCP_REGION     = terraform var region (e.g., us-west4)
   - GAR_REPO       = terraform var gar_repo (e.g., cr-demo)
-  - SERVICE_NAME   = terraform var service_name (e.g., gemini-flash-demo)
+  - SERVICE_NAME   = terraform var service_name (e.g., aimsbot)
   - MODEL_ID       = gemini-1.5-flash-002
   - TEMPERATURE    = 0.2
   - MAX_TOKENS     = 256
@@ -85,7 +85,7 @@ Both workflows authenticate to Google Cloud via Workload Identity Federation usi
 ## 6) Manual deploy (optional)
 If you want to deploy manually before CI:
 - Build and push image (requires Artifact Registry repo exists):
-  - REGION=us-west4 PROJECT=warm-actor-253703 GAR=cr-demo SERVICE=gemini-flash-demo
+  - REGION=us-west4 PROJECT=warm-actor-253703 GAR=cr-demo SERVICE=aimsbot
   - IMAGE="$REGION-docker.pkg.dev/$PROJECT/$GAR/$SERVICE:manual"
   - docker build -t "$IMAGE" .
   - gcloud auth configure-docker $REGION-docker.pkg.dev

@@ -13,7 +13,7 @@ variable "region" {
 variable "service_name" {
   type        = string
   description = "Cloud Run service name (used by CI/CD, not created by TF)"
-  default     = "gemini-flash-demo"
+  default     = "aimsbot"
 }
 
 variable "gar_repo" {
