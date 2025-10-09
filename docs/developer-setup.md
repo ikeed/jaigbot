@@ -74,7 +74,7 @@ Both workflows authenticate to Google Cloud via Workload Identity Federation usi
 ## 5) Local app development
 - Run API locally (requires ADC and env vars):
   - export PROJECT_ID=warm-actor-253703
-  - export REGION=us-west4
+  - export REGION=us-central1
   - export VERTEX_LOCATION=global  # optional; use global location for publisher models
   - export MODEL_ID=gemini-2.5-pro
   - gcloud auth application-default login
@@ -96,7 +96,7 @@ If you want to deploy manually before CI:
     --region "$REGION" \
     --allow-unauthenticated \
     --service-account "cr-vertex-runtime@${PROJECT}.iam.gserviceaccount.com" \
-    --set-env-vars "PROJECT_ID=${PROJECT},REGION=${REGION},MODEL_ID=${MODEL_ID:-gemini-2.5-pro},TEMPERATURE=0.2,MAX_TOKENS=256" \
+    --set-env-vars "PROJECT_ID=${PROJECT},REGION=${REGION},VERTEX_LOCATION=${VERTEX_LOCATION:-global},MODEL_ID=${MODEL_ID:-gemini-2.5-pro},TEMPERATURE=0.2,MAX_TOKENS=256" \
     --memory=512Mi --cpu=0.5 --concurrency=20 --max-instances=2 --timeout=60
 
 ## 7) Migrating to another project or repo
