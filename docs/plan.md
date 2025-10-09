@@ -112,7 +112,7 @@ Inputs confirmed:
 
 ## 5) Cloud Run service configuration defaults (configurable)
 
-- Service name: gemini-flash-demo
+- Service name: aimsbot
 - Region: us-west4
 - Resources: 0.5 vCPU, 512Mi RAM
 - Concurrency: 20
@@ -138,7 +138,7 @@ Inputs confirmed:
   - GCP_PROJECT_ID=warm-actor-253703 (secret or variable)
   - GCP_REGION=us-west4 (variable)
   - GAR_REPO=cr-demo (variable)
-  - SERVICE_NAME=gemini-flash-demo (variable)
+  - SERVICE_NAME=aimsbot (variable)
   - WORKLOAD_IDP=projects/.../locations/global/workloadIdentityPools/.../providers/... (secret)
   - WORKLOAD_SA=cr-deployer@warm-actor-253703.iam.gserviceaccount.com (secret)
   - MODEL_ID=gemini-1.5-flash (variable)
@@ -149,7 +149,7 @@ Inputs confirmed:
   - Grant cr-deployer the roles above; allow it to impersonate itself and use Service Account Token Creator.
   - Grant cr-deployer roles/iam.serviceAccountUser on cr-vertex-runtime.
 - Image path example:
-  - us-west4-docker.pkg.dev/warm-actor-253703/cr-demo/gemini-flash-demo:$GIT_SHA
+  - us-west4-docker.pkg.dev/warm-actor-253703/cr-demo/aimsbot:$GIT_SHA
 
 ---
 

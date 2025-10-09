@@ -23,7 +23,7 @@ What it does NOT create:
 ## Variables (with defaults)
 - project_id (default: warm-actor-253703)
 - region (default: us-west4)
-- service_name (default: gemini-flash-demo)
+- service_name (default: aimsbot)
 - gar_repo (default: cr-demo)
 - github_org (default: ikeed)
 - github_repo (default: jaigbot)
@@ -37,7 +37,7 @@ Override via `-var` flags or a tfvars file.
 Example terraform.tfvars:
 project_id        = "warm-actor-253703"
 region            = "us-west4"
-service_name      = "gemini-flash-demo"
+service_name      = "aimsbot"
 gar_repo          = "cr-demo"
 github_org        = "ikeed"
 github_repo       = "jaigbot"
@@ -52,7 +52,7 @@ Initialize and apply:
 
 Outputs include:
 - artifact_registry_repo: e.g., us-west4-docker.pkg.dev/PROJECT/cr-demo
-- image_repo: e.g., us-west4-docker.pkg.dev/PROJECT/cr-demo/gemini-flash-demo
+- image_repo: e.g., us-west4-docker.pkg.dev/PROJECT/cr-demo/aimsbot
 - runtime_service_account_email: cr-vertex-runtime@PROJECT.iam.gserviceaccount.com
 - deployer_service_account_email: cr-deployer@PROJECT.iam.gserviceaccount.com
 - wif_provider_name: projects/…/locations/global/workloadIdentityPools/…/providers/…
