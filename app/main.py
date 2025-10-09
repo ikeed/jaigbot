@@ -566,7 +566,7 @@ async def chat(req: Request, body: ChatRequest):
     if AIMS_COACHING_ENABLED and getattr(body, "coach", False):
         # Helper imports
         from .aims_engine import evaluate_turn, load_mapping
-        from .json_schemas import REPLY_SCHEMA, validate_json, SchemaValidationError
+        from .json_schemas import REPLY_SCHEMA, CLASSIFY_SCHEMA, validate_json, SchemaValidationError
 
         # Load mapping once per process and cache in memory
         mapping = getattr(app.state, "aims_mapping", None)
@@ -591,7 +591,7 @@ async def chat(req: Request, body: ChatRequest):
         history_text = _format_history(mem["history"]) if mem and mem.get("history") else ""
 
         def _vertex_call(prompt: str) -> str:
-            """Call Vertex with model fallback support.
+            """Call Vertex with model fallback support for patient reply.
 
             Tries primary MODEL_ID first, then iterates MODEL_FALLBACKS on Vertex errors.
             Returns text response as string. Raises last error if all fail.
@@ -631,6 +631,46 @@ async def chat(req: Request, body: ChatRequest):
                 raise last_err
             raise RuntimeError("Vertex call failed with no models attempted")
 
+        def _vertex_call_json(prompt: str, schema: dict, log_path: str) -> str:
+            """Call Vertex with JSON schema enforcement for classifier or reply.
+
+            Uses model fallback. Returns text string. Raises last error if all fail.
+            log_path labels the event source for fallback logging.
+            """
+            last_err = None
+            tried = []
+            models_to_try = [MODEL_ID] + [m for m in MODEL_FALLBACKS if m and m != MODEL_ID]
+            for mid in models_to_try:
+                tried.append(mid)
+                client = VertexClient(project=PROJECT_ID, region=VERTEX_LOCATION, model_id=mid)
+                try:
+                    try:
+                        result = client.generate_text(
+                            prompt=prompt,
+                            temperature=TEMPERATURE,
+                            max_tokens=MAX_TOKENS,
+                            system_instruction=system_instruction,
+                            response_mime_type="application/json",
+                            response_schema=schema,
+                        )
+                    except TypeError:
+                        result = client.generate_text(prompt, TEMPERATURE, MAX_TOKENS)
+                    if isinstance(result, tuple) and len(result) == 2:
+                        return str(result[0])
+                    return str(result)
+                except Exception as e:
+                    last_err = e
+                    logger.info(json.dumps({
+                        "event": "vertex_model_fallback",
+                        "path": log_path,
+                        "failedModel": mid,
+                        "next": models_to_try[len(tried):][:1] or None,
+                    }))
+                    continue
+            if last_err:
+                raise last_err
+            raise RuntimeError("Vertex call failed with no models attempted")
+
         def _log_event(ev: dict):
             try:
                 logger.info(json.dumps(ev))
@@ -642,12 +682,57 @@ async def chat(req: Request, body: ChatRequest):
         retry_used = False
         fallback_used = False
         fb = evaluate_turn(parent_last, body.message, mapping)
+        # Default to deterministic result first (covers rapport/small talk with step=None)
         cls_payload = {
             "step": fb.get("step"),
             "score": fb.get("score", 2),
             "reasons": fb.get("reasons", ["deterministic"]),
             "tips": fb.get("tips", []),
         }
+
+        # One-way switch: attempt LLM-based classification for actual AIMS turns (not small talk)
+        if cls_payload.get("step") in {"Announce", "Inquire", "Mirror", "Secure"}:
+            classify_prompt = (
+                "[AIMS_CLASSIFY]\n"
+                "Classify the clinician's last message into one AIMS step and generate brief coaching.\n"
+                "AIMS steps: Announce, Inquire, Mirror, Secure.\n"
+                "Return STRICT JSON only with keys: step, score (0-3), reasons (array of strings), tips (array of strings). Do not include any other text.\n"
+                "Keep tips to at most one item.\n"
+                "Use the prior parent line for context.\n\n"
+                f"Parent_last: {parent_last}\n"
+                f"Clinician_last: {body.message}\n"
+            )
+            used_llm_cls = False
+            for attempt in (1, 2):
+                try:
+                    raw = _vertex_call_json(classify_prompt, CLASSIFY_SCHEMA, "coach_classify")
+                    cand = json.loads((raw or "").strip())
+                    validate_json(cand, CLASSIFY_SCHEMA)
+                    # Clip tips to at most one as policy
+                    tips = (cand.get("tips") or [])
+                    if isinstance(tips, list) and len(tips) > 1:
+                        tips = tips[:1]
+                    cls_payload = {
+                        "step": cand.get("step"),
+                        "score": int(cand.get("score", 2)),
+                        "reasons": cand.get("reasons") or ["llm"],
+                        "tips": tips,
+                    }
+                    used_llm_cls = True
+                    break
+                except Exception as ve:
+                    _log_event({
+                        "event": "aims_classifier_invalid_json" if attempt == 1 else "aims_classifier_fallback",
+                        "attempt": attempt,
+                        "sessionId": session_id,
+                        "error": str(ve),
+                    })
+                    if attempt == 1:
+                        continue
+                    # On second failure, keep deterministic cls_payload
+                    break
+            # If the model request itself failed upstream, swallow and keep deterministic
+            # We rely on _vertex_call_json raising VertexAIError; just log a soft event.
 
         # Persist AIMS metrics
         if MEMORY_ENABLED and session_id:

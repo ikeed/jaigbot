@@ -16,6 +16,17 @@ import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
+# Regex patterns for small-talk detection of generic well-being questions
+_GENERIC_WELLBEING_Q = re.compile(
+    r"^(has|is|are|how('?s| is))\s+(he|she|they|your\s+\w+)\s+(been\s+)?"
+    r"(sleep|sleeping|napping|eating|pooping|poo|stooling|peeing|pee|diapers?|teething|daycare|preschool|school|weekend|birthday|morning|afternoon|evening)\b.*\?$"
+)
+
+# Tokens that indicate clinical assessment/decision content (not small talk)
+_CLINICAL_TOKENS = re.compile(
+    r"\b(vaccine|shot|mmr|booster|immuniz|due|rash today|fever today|pain today|vomiting|dehydrated|lethargic|wheezing|croup|pneumonia|ER|urgent care)\b"
+)
+
 
 AIMS_STEPS = ("Announce", "Inquire", "Mirror", "Secure")
 
@@ -81,7 +92,8 @@ def _is_small_talk(text: str) -> bool:
     """Detect pleasantries/rapport/openers that are not an AIMS step.
 
     Heuristics: greetings, compliments, social niceties (no clinical content),
-    e.g., hello/hi/good to see you/wow [child] is getting so big/"eating all vegetables".
+    and generic well-being check-ins. Works for single- or multi-sentence turns
+    (e.g., rapport sentence followed by "Has he been sleeping ok?").
     We keep this conservative: only return True when such phrases are present;
     caller should also ensure no AIMS markers matched.
     """
@@ -93,8 +105,26 @@ def _is_small_talk(text: str) -> bool:
         "great to see", "welcome", "how are you", "how’s it going", "how's it going",
         "wow", "getting so big", "so big", "big boy", "big girl", "eating all of",
         "vegetable", "thanks for coming", "good to see both of you", "so good to see both",
+        # Added rapport/compliment/growth phrases
+        "how he's grown", "how she’s grown", "how she's grown", "grown so much", "so grown up",
+        "look how big", "so cute", "adorable", "handsome little", "big guy", "big man",
+        "buddy", "champ", "big and strong", "looks big", "looks so big", "he looks big", "she looks big"
     ]
-    return any(c in lt for c in cues)
+    # Basic cue check
+    if any(c in lt for c in cues):
+        return True
+    # Exclamatory rapport without clinical tokens → treat as small talk
+    if lt.endswith("!") and not re.search(r"\b(vaccine|shot|mmr|booster|immuniz|due)\b", lt):
+        return True
+    # Question-form generic well-being rapport (sleep/eat/teething/daycare/etc.)
+    # Support multi-sentence: extract the trailing question sentence and test it.
+    if "?" in lt and not _CLINICAL_TOKENS.search(lt):
+        m = re.search(r"([^.?!]*\?)\s*$", lt)
+        if m:
+            last_q = m.group(1).strip()
+            if _GENERIC_WELLBEING_Q.match(last_q):
+                return True
+    return False
 
 
 def classify_step(parent_last: str, clinician_last: str, mapping: Dict[str, Any]) -> ClassificationResult:
@@ -109,17 +139,46 @@ def classify_step(parent_last: str, clinician_last: str, mapping: Dict[str, Any]
     pt = (parent_last or "").strip().lower()
     lt = text.lower()
 
+    # Early rapport guard for question-form small talk (so it doesn't get mislabeled as Inquire)
+    if lt.endswith("?") and _is_small_talk(lt):
+        return ClassificationResult(step="", reasons=["Rapport/pleasantries detected — no AIMS step attempted (allowed)."])
+
     # Heuristic checks per step
     mirror_match = _starts_with_any(lt, [
         "it sounds like", "you're worried", "you are worried", "i'm hearing", "you feel", "you want",
-        "i get you're", "i get that you're", "i hear you're", "i hear that you're"
+        "i get you're", "i get that you're", "i hear you're", "i hear that you're", "i hear you", "i hear that"
     ]) or _stem_match(lt, (markers.get("Mirror", {}).get("linguistic", [])))
 
     inquire_match = lt.endswith("?") or _starts_with_any(lt, ["what ", "how "]) or _stem_match(
         lt, (markers.get("Inquire", {}).get("linguistic", []))
     )
 
-    secure_match = _stem_match(lt, (markers.get("Secure", {}).get("linguistic", [])))
+    # Strengthened Secure detection: autonomy + (option or safety) OR option + safety
+    autonomy_cues = [
+        "it's your decision", "it's your call", "up to you", "your choice", "i'm here to support"
+    ]
+    option_re = re.compile(
+        r"\b("
+        r"we can (do it|give it|get it|do the shot|schedule|wait|hold off|review|go over|share|check in)"
+        r"|do it (today|now)"
+        r"|today or (later|next week)"
+        r"|now or later"
+        r"|options include"
+        r"|prefer"
+        r"|handout"
+        r"|follow-?up"
+        r"|check in"
+        r"|schedule"
+        r")\b"
+    )
+    safety_re = re.compile(r"\b(what to expect|watch for|call if|reach (out|me)|how to reach|fever|redness|soreness|tylenol|acetaminophen|ibuprofen)\b")
+
+    has_autonomy = _stem_match(lt, autonomy_cues)
+    # Guard against bare "we can" without a concrete option/action
+    has_option = bool(option_re.search(lt))
+    has_safety = bool(safety_re.search(lt))
+
+    secure_match = (has_autonomy and (has_option or has_safety)) or (has_option and has_safety)
 
     announce_match = _stem_match(lt, (markers.get("Announce", {}).get("linguistic", [])))
 
@@ -163,15 +222,20 @@ def classify_step(parent_last: str, clinician_last: str, mapping: Dict[str, Any]
     if mirror_match and inquire_match:
         # consider first sentence dominance
         first_sentence = lt.split("?")[0].split(".")[0]
-        if _starts_with_any(first_sentence, ["it sounds like", "you're", "you are", "i'm hearing", "you feel", "you want"]):
+        if _starts_with_any(first_sentence, ["it sounds like", "you're", "you are", "i'm hearing", "you feel", "you want", "i hear you", "i hear that", "i hear you're", "i hear that you're"]):
             step = "Mirror"
             reasons.append("Tie-breaker: reflection preceded question → Mirror")
         else:
             step = "Inquire"
             reasons.append("Tie-breaker: question primary → Inquire")
 
-    # If both announce and secure markers present, but no options/resources mentioned, stay Announce
-    if step == "Announce" and secure_match and not re.search(r"\b(option|we can|prefer|today|later|handout|follow-up|follow up)\b", lt):
+    # Tie-breaker: if both Inquire and strengthened Secure cues are present, prefer Secure
+    if inquire_match and secure_match:
+        step = "Secure"
+        reasons.append("Preference question within options/safety context → Secure")
+
+    # If only autonomy phrase present but no concrete options/resources, remain Announce
+    if step == "Announce" and has_autonomy and not (has_option or has_safety):
         reasons.append("Autonomy phrase present but no concrete options → remain Announce")
 
     return ClassificationResult(step=step, reasons=reasons)
@@ -244,9 +308,25 @@ def score_step(step: str, parent_last: str, clinician_last: str, mapping: Dict[s
             reasons.append("Invited dialogue")
 
     elif step == "Secure":
-        autonomy = _stem_match(lt, ["it's your decision", "i'm here to support"])
-        options = bool(re.search(r"\b(we can|options include|prefer|today|later|handout|follow-?up)\b", lt))
-        safety = bool(re.search(r"what to expect|watch for|reach me|call if|how to reach", lt))
+        autonomy = _stem_match(lt, [
+            "it's your decision", "i'm here to support", "it's your call", "up to you", "your choice"
+        ])
+        options = bool(re.search(
+            r"\b("
+            r"we can (do it|give it|get it|do the shot|schedule|wait|hold off|review|go over|share|check in)"
+            r"|do it (today|now)"
+            r"|today or (later|next week)"
+            r"|now or later"
+            r"|options include"
+            r"|prefer"
+            r"|handout"
+            r"|follow-?up"
+            r"|check in"
+            r"|schedule"
+            r")\b",
+            lt,
+        ))
+        safety = bool(re.search(r"\b(what to expect|watch for|reach (out|me)|call if|how to reach|fever|redness|soreness|tylenol|acetaminophen|ibuprofen)\b", lt))
         if autonomy and options:
             score = max(score, 2)
             reasons.append("Autonomy affirmed with concrete option(s)")
