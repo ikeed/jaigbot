@@ -136,7 +136,7 @@ resource "null_resource" "update_cloud_run_timeout" {
   }
 
   provisioner "local-exec" {
-    command = "gcloud run services update ${var.service_name} --region=${var.region} --timeout=${var.cloud_run_timeout_seconds}"
+    command = "gcloud run services update ${var.service_name} --project=${var.project_id} --region=${var.region} --timeout=${var.cloud_run_timeout_seconds}"
   }
 
   depends_on = [
