@@ -5,6 +5,44 @@ import httpx
 import chainlit as cl
 from app.persona import DEFAULT_CHARACTER, DEFAULT_SCENE
 
+
+def _register_avatars_once() -> None:
+    """Register avatars globally at import time so /avatars/* resolves
+    even before the first chat starts (avoids default-cache on first load)."""
+    try:
+        root = Path(__file__).resolve().parent
+
+        def _abs_existing(path_like: str | None) -> str | None:
+            if not path_like:
+                return None
+            p = Path(path_like)
+            if not p.is_absolute():
+                p = root / p
+            return str(p.resolve()) if p.exists() else None
+
+        def _pick_avatar(name: str, env_path_var: str, defaults: list[str], env_url_var: str):
+            path = _abs_existing(os.getenv(env_path_var))
+            if not path:
+                for d in defaults:
+                    path = _abs_existing(d)
+                    if path:
+                        break
+            if path:
+                cl.Avatar(id=name, name=name, path=path).save()
+                return
+            url = os.getenv(env_url_var)
+            if url and (url.startswith("http://") or url.startswith("https://")):
+                cl.Avatar(id=name, name=name, url=url).save()
+
+        _pick_avatar("Patient", "PATIENT_AVATAR_PATH", [".chainlit/public/patient.svg", "public/patient.svg"], "PATIENT_AVATAR_URL")
+        _pick_avatar("Doctor", "DOCTOR_AVATAR_PATH", [".chainlit/public/doctor.svg", "public/doctor.svg"], "DOCTOR_AVATAR_URL")
+        _pick_avatar("Coach", "COACH_AVATAR_PATH", [".chainlit/public/coach.svg", "public/coach.svg"], "COACH_AVATAR_URL")
+    except Exception:
+        pass
+
+# Perform an early registration so avatars are ready on first render
+_register_avatars_once()
+
 # The backend URL for the FastAPI /chat endpoint. This can be overridden
 # at runtime by setting the BACKEND_URL environment variable.  For local
 # development, the FastAPI app typically runs on http://localhost:8080.
@@ -17,12 +55,15 @@ CHAINLIT_COACH_DEFAULT = (os.getenv("CHAINLIT_COACH_DEFAULT") or os.getenv("AIMS
 def _author_from_role(role: str) -> str:
     """
     Map our simple role string to a display author label for Chainlit.
+    We render the human as "Doctor" and the assistant as "Patient" to
+    better fit the clinical simulation. Anything else falls back to
+    the assistant label.
     """
     if role == "user":
-        return "User"
+        return "Doctor"
     if role == "assistant":
-        return "Assistant"
-    return role or "Assistant"
+        return "Patient"
+    return role or "Patient"
 
 
 async def _replay_history(history: list[dict]):
@@ -68,6 +109,24 @@ def _get_persistent_session_id() -> str:
         return str(uuid.uuid4())
 
 
+# Chat profile: present the clinician as "Doctor" with a custom icon so their role is visible in the UI.
+@cl.set_chat_profiles
+async def chat_profiles():
+    try:
+        # Prefer public URL that Chainlit serves
+        icon = "/public/doctor.svg"
+        return [
+            cl.ChatProfile(
+                name="Doctor",
+                markdown_description="Clinician perspective",
+                icon=icon,
+                default=True,
+            )
+        ]
+    except Exception:
+        return [cl.ChatProfile(name="Doctor", markdown_description="Clinician perspective", default=True)]
+
+
 @cl.on_chat_start
 async def start_chat():
     """
@@ -89,6 +148,42 @@ async def start_chat():
     cl.user_session.set("history", [])
     history = []
 
+    # Register custom avatars for roles in this simulation. Users can override with env URLs.
+    try:
+        root = Path(__file__).resolve().parent
+
+        def _abs_existing(path_like: str | None) -> str | None:
+            if not path_like:
+                return None
+            p = Path(path_like)
+            if not p.is_absolute():
+                p = root / p
+            return str(p.resolve()) if p.exists() else None
+
+        def _pick_avatar(name: str, env_path_var: str, defaults: list[str], env_url_var: str):
+            # Prefer a real file path (absolute) so Chainlit can serve it via /avatars/<name> reliably.
+            # Try env-provided path, then known defaults under .chainlit/public and public.
+            path = _abs_existing(os.getenv(env_path_var))
+            if not path:
+                for d in defaults:
+                    path = _abs_existing(d)
+                    if path:
+                        break
+            if path:
+                cl.Avatar(id=name, name=name, path=path).save()
+                return
+            # Fallback: if an explicit http(s) URL is provided, register it.
+            url = os.getenv(env_url_var)
+            if url and (url.startswith("http://") or url.startswith("https://")):
+                cl.Avatar(id=name, name=name, url=url).save()
+
+        _pick_avatar("Patient", "PATIENT_AVATAR_PATH", [".chainlit/public/patient.svg", "public/patient.svg"], "PATIENT_AVATAR_URL")
+        _pick_avatar("Doctor", "DOCTOR_AVATAR_PATH", [".chainlit/public/doctor.svg", "public/doctor.svg"], "DOCTOR_AVATAR_URL")
+        _pick_avatar("Coach", "COACH_AVATAR_PATH", [".chainlit/public/coach.svg", "public/coach.svg"], "COACH_AVATAR_URL")
+    except Exception:
+        # Avatars are optional; ignore any errors (e.g., file not found in dev)
+        pass
+
     # At chat start, show a neutral appointment entry and wait for the clinician's first message.
     # Do NOT call the backend here to avoid startup delays and to let the clinician lead (Announce/Inquire).
     scenario_lines = [
@@ -102,7 +197,7 @@ async def start_chat():
     history = cl.user_session.get("history")
     history.append({"role": "assistant", "content": card})
     cl.user_session.set("history", history)
-    await cl.Message(card).send()
+    await cl.Message(card, author="Patient").send()
 
     # Preflight check: verify backend is reachable and reasonably configured.
     # This avoids confusing 500 errors later (e.g., PROJECT_ID not set).
@@ -150,11 +245,6 @@ async def start_chat():
                         await cl.Message(
                             f"System: The configured model '{mid}' is not available in region '{reg}'. "
                             "Open /models or /config to choose an available model, or update MODEL_ID/REGION."
-                        ).send()
-                    elif str(avail).lower() == "unknown":
-                        await cl.Message(
-                            f"System: Could not confirm model availability for '{mid}' in location '{reg}'. "
-                            "You can still try sending a message. See /models or /config for details."
                         ).send()
             except Exception:
                 # /modelcheck may not exist or ADC may be missing; ignore quietly.
@@ -258,13 +348,24 @@ async def handle_message(message: cl.Message):
         if tips:
             parts.append(f"Tip: {tips[0]}")
         if parts:
-            await cl.Message("\n".join(parts), author="Coach").send()
+                # Render a clearly differentiated coaching block using inline HTML so it does not
+                # rely on external CSS or DOM-specific selectors. This requires
+                # features.unsafe_allow_html=true in .chainlit/config.toml.
+                items_html = "".join([f"<li>{p}</li>" for p in parts])
+                html = (
+                    '<div style="background:#fff7e6;border-left:4px solid #ffb020;padding:10px 12px;'
+                    'border-radius:6px;color:#8a5a00;opacity:1;">'
+                    '<div style="font-weight:700;margin-bottom:4px;">🧭 Coaching</div>'
+                    f'<ul style="margin:4px 0 0 18px;padding:0;color:inherit;opacity:1;">{items_html}</ul>'
+                    '</div>'
+                )
+                await cl.Message(html, author="Coach").send()
 
     # Append assistant reply to history and send to UI after coaching
     history.append({"role": "assistant", "content": reply})
     cl.user_session.set("history", history)
 
-    await cl.Message(reply).send()
+    await cl.Message(reply, author="Patient").send()
 
 
 @cl.on_chat_resume
