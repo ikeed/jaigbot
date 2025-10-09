@@ -6,8 +6,8 @@ variable "project_id" {
 
 variable "region" {
   type        = string
-  description = "Region for Cloud Run, Vertex AI, and Artifact Registry"
-  default     = "us-central1"
+  description = "Primary region for Cloud Run and Artifact Registry; CI also maps this to the app's REGION env for Vertex AI calls"
+  default     = "us-west4"
 }
 
 variable "service_name" {

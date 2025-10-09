@@ -24,7 +24,7 @@ allow_origins = ["*"]
 
 [features]
 # Process and display HTML in messages. This can be a security risk (see https://stackoverflow.com/questions/19603097/why-is-it-dangerous-to-render-user-generated-html-or-javascript)
-unsafe_allow_html = false
+unsafe_allow_html = true
 
 # Process and display mathematical expressions. This can clash with "$" characters in messages.
 latex = false
@@ -102,7 +102,7 @@ cot = "full"
 
 # Specify a CSS file that can be used to customize the user interface.
 # The CSS file can be served from the public directory or via an external link.
-# custom_css = "/public/test.css"
+custom_css = "/public/jaigbot.css"
 
 # Specify additional attributes for a custom CSS file
 # custom_css_attributes = "media=\"print\""
@@ -131,10 +131,13 @@ alert_style = "classic"
 # custom_meta_image_url = "https://chainlit-cloud.s3.eu-west-3.amazonaws.com/logo/chainlit_banner.png"
 
 # Load assistant logo directly from URL.
-logo_file_url = ""
+# Use Patient avatar for assistant/system bubbles by default
+logo_file_url = "/public/patient.svg"
 
-# Load assistant avatar image directly from URL.
-default_avatar_file_url = ""
+# Load user avatar image directly from URL.
+# Use Patient as the default avatar for assistant-like messages; user bubble may not show an avatar in Chainlit 2.8
+# We’ll style the user bubble separately via CSS.
+default_avatar_file_url = "/public/patient.svg"
 
 # Specify a custom build directory for the frontend.
 # This can be used to customize the frontend code.
