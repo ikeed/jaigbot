@@ -30,6 +30,7 @@ What it does NOT create:
 - github_branch_ref (default: refs/heads/main)
 - wif_pool_id (default: github-pool)
 - wif_provider_id (default: github-provider)
+- cloud_run_timeout_seconds (default: 1800) — Cloud Run request timeout applied post-deploy via gcloud
 
 Override via `-var` flags or a tfvars file.
 
@@ -173,6 +174,30 @@ Once roles are fixed and resources are imported if needed:
 - WIF attribute_condition restricts deployments to the main branch of ikeed/jaigbot by default. Override `github_branch_ref` if needed.
 - The deploy workflow expects the runtime service account to exist and will set env vars during `gcloud run deploy`.
 
+
+## Optional: Update Cloud Run timeout via Terraform
+
+This repo intentionally does not manage the Cloud Run service (CI deploys it). However, you can still set the service request timeout via Terraform using a post-deploy step that invokes gcloud.
+
+How it works:
+- Variable: `cloud_run_timeout_seconds` (default: 1800)
+- Resource: `null_resource.update_cloud_run_timeout` runs:
+  - `gcloud run services update ${var.service_name} --region=${var.region} --timeout=${var.cloud_run_timeout_seconds}`
+
+Requirements:
+- `gcloud` must be available in the environment running `terraform apply`.
+- The identity running Terraform must have `roles/run.admin` (or equivalent) in the target project.
+- The Cloud Run service must already exist (deployed by CI or manually) before this step runs. If it doesn’t exist yet, the apply will fail at this step; re-run after the first deployment.
+
+Usage:
+- Adjust the timeout by setting a variable:
+  - `-var cloud_run_timeout_seconds=3600` (max allowed by Cloud Run)
+- Re-run `terraform apply` after your service is deployed.
+- Changing `cloud_run_timeout_seconds` will re-trigger the `null_resource` and update the service.
+
+Notes:
+- This approach avoids TF taking ownership of the Cloud Run service, so it won’t fight with your CI deploys.
+- If you prefer Terraform to fully manage the Cloud Run service (including image, env vars, and timeout), migrate to a `google_cloud_run_v2_service` resource instead; that is a larger change and currently out of scope here.
 
 ## See also
 - Root README for app overview: ../README.md
