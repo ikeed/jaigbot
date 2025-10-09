@@ -75,6 +75,7 @@ Both workflows authenticate to Google Cloud via Workload Identity Federation usi
 - Run API locally (requires ADC and env vars):
   - export PROJECT_ID=warm-actor-253703
   - export REGION=us-west4
+  - export VERTEX_LOCATION=global  # optional; use global location for publisher models
   - export MODEL_ID=gemini-2.5-pro
   - gcloud auth application-default login
   - uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload

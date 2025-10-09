@@ -151,6 +151,11 @@ async def start_chat():
                             f"System: The configured model '{mid}' is not available in region '{reg}'. "
                             "Open /models or /config to choose an available model, or update MODEL_ID/REGION."
                         ).send()
+                    elif str(avail).lower() == "unknown":
+                        await cl.Message(
+                            f"System: Could not confirm model availability for '{mid}' in location '{reg}'. "
+                            "You can still try sending a message. See /models or /config for details."
+                        ).send()
             except Exception:
                 # /modelcheck may not exist or ADC may be missing; ignore quietly.
                 pass

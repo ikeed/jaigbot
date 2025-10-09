@@ -17,13 +17,15 @@ from .persona import DEFAULT_CHARACTER, DEFAULT_SCENE
 # Environment configuration with sensible defaults
 PROJECT_ID = os.getenv("PROJECT_ID")
 REGION = os.getenv("REGION", "us-west4")
+# Allow Vertex AI location to be global or decoupled from Cloud Run region
+VERTEX_LOCATION = os.getenv("VERTEX_LOCATION", REGION)
 # Use widely available defaults; override via env as needed
 MODEL_ID = os.getenv("MODEL_ID", "gemini-2.5-pro")
 TEMPERATURE = float(os.getenv("TEMPERATURE", "0.2"))
 # Increase default to allow longer responses; still configurable via env
 MAX_TOKENS = int(os.getenv("MAX_TOKENS", "2048"))
 ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
-model_fallbacks = os.getenv("MODEL_FALLBACKS", "gemini-2.5-pro-001,gemini-2.0-pro").split(",")
+model_fallbacks = os.getenv("MODEL_FALLBACKS", "gemini-2.5-pro-001,gemini-2.5-pro").split(",")
 MODEL_FALLBACKS = [m.strip() for m in model_fallbacks if m.strip()]
 LOG_LEVEL = os.getenv("LOG_LEVEL", "info").upper()
 LOG_REQUEST_BODY_MAX = int(os.getenv("LOG_REQUEST_BODY_MAX", "1024"))
@@ -107,11 +109,11 @@ if ALLOWED_ORIGINS:
 # Model availability preflight (diagnostics-only)
 @app.on_event("startup")
 async def _model_preflight():
-    """Best-effort check whether the configured MODEL_ID exists in the selected REGION.
+    """Best-effort check whether the configured MODEL_ID exists in the selected Vertex location.
     Stores tri-state availability in app.state.model_check: { available: true|false|"unknown", ... }.
     Never raises; only logs.
     """
-    app.state.model_check = {"available": "unknown", "modelId": MODEL_ID, "region": REGION}
+    app.state.model_check = {"available": "unknown", "modelId": MODEL_ID, "region": VERTEX_LOCATION}
     if not VALIDATE_MODEL_ON_STARTUP:
         app.state.model_check["reason"] = "disabled_by_env"
         return
@@ -123,26 +125,88 @@ async def _model_preflight():
         from google.auth.transport.requests import AuthorizedSession  # type: ignore
         creds, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
         session = AuthorizedSession(creds)
-        def try_get(api_version: str) -> int:
+
+        attempts: list[dict] = []
+
+        def try_get(api_version: str) -> tuple[int, str]:
+            loc = VERTEX_LOCATION
+            host = "aiplatform.googleapis.com" if str(loc).lower() == "global" else f"{loc}-aiplatform.googleapis.com"
             url = (
-                f"https://{REGION}-aiplatform.googleapis.com/{api_version}/projects/{PROJECT_ID}"
-                f"/locations/{REGION}/publishers/google/models/{MODEL_ID}"
+                f"https://{host}/{api_version}/projects/{PROJECT_ID}"
+                f"/locations/{loc}/publishers/google/models/{MODEL_ID}"
             )
             r = session.get(url)
-            return r.status_code
+            attempts.append({"apiVersion": api_version, "url": url, "httpStatus": r.status_code})
+            return r.status_code, url
+
         # Pick version heuristic similar to Vertex client
         primary = "v1beta" if str(MODEL_ID).startswith("gemini-2") else "v1"
-        code = try_get(primary)
+        code, url_primary = try_get(primary)
         app.state.model_check["apiVersion"] = primary
+        app.state.model_check["urlPrimary"] = url_primary
+        app.state.model_check["httpStatusPrimary"] = code
+
         if code == 404:
             alt = "v1" if primary == "v1beta" else "v1beta"
-            code2 = try_get(alt)
+            code2, url_alt = try_get(alt)
             app.state.model_check["altApiVersionTried"] = alt
-            app.state.model_check["httpStatus"] = code2
-            app.state.model_check["available"] = True if code2 == 200 else False if code2 == 404 else "unknown"
+            app.state.model_check["urlAlt"] = url_alt
+            app.state.model_check["httpStatus"] = code2  # preserve legacy field name
+            app.state.model_check["httpStatusAlt"] = code2
+            # Default to unknown on 404 to avoid false negatives; only set true on 200 or list match
+            app.state.model_check["available"] = True if code2 == 200 else "unknown"
+            # If both 404, fall back to listing models (v1, then v1beta) to avoid false negatives
+            if code2 == 404:
+                loc = VERTEX_LOCATION
+                host = "aiplatform.googleapis.com" if str(loc).lower() == "global" else f"{loc}-aiplatform.googleapis.com"
+                list_url = f"https://{host}/v1/projects/{PROJECT_ID}/locations/{loc}/publishers/google/models"
+                app.state.model_check["listUrl"] = list_url
+                rlist = session.get(list_url)
+                app.state.model_check["listHttpStatus"] = rlist.status_code
+                matched = False
+                if rlist.status_code == 200:
+                    try:
+                        data = rlist.json()
+                    except Exception:
+                        data = {}
+                    models = data.get("models", []) or []
+                    app.state.model_check["listCount"] = len(models)
+                    matched = any(((m.get("name", "").split("/models/")[-1]) == MODEL_ID) for m in models)
+                # If v1 listing failed to find or 404, try v1beta as a secondary listing
+                if not matched:
+                    list_url_alt = f"https://{host}/v1beta/projects/{PROJECT_ID}/locations/{loc}/publishers/google/models"
+                    app.state.model_check["listUrlAlt"] = list_url_alt
+                    rlist2 = session.get(list_url_alt)
+                    app.state.model_check["listHttpStatusAlt"] = rlist2.status_code
+                    if rlist2.status_code == 200:
+                        try:
+                            data2 = rlist2.json()
+                        except Exception:
+                            data2 = {}
+                        models2 = data2.get("models", []) or []
+                        app.state.model_check["listCountAlt"] = len(models2)
+                        matched = any(((m.get("name", "").split("/models/")[-1]) == MODEL_ID) for m in models2)
+                app.state.model_check["listMatched"] = matched
+                if matched:
+                    app.state.model_check["available"] = True
         else:
             app.state.model_check["httpStatus"] = code
             app.state.model_check["available"] = True if code == 200 else "unknown"
+
+        # Record all attempts for debugging
+        app.state.model_check["urlsTried"] = attempts
+        # Precompute the generateContent base URL(s) that the Vertex client would use
+        try:
+            loc = VERTEX_LOCATION
+            host = "aiplatform.googleapis.com" if str(loc).lower() == "global" else f"{loc}-aiplatform.googleapis.com"
+            gen_primary = "v1beta" if str(MODEL_ID).startswith("gemini-2") else "v1"
+            base_gen_url = f"https://{host}/{gen_primary}/projects/{PROJECT_ID}/locations/{loc}/publishers/google/models/{MODEL_ID}:generateContent"
+            app.state.model_check["baseGenerateUrlPrimary"] = base_gen_url
+            gen_alt = "v1" if gen_primary == "v1beta" else "v1beta"
+            app.state.model_check["baseGenerateUrlAlt"] = base_gen_url.replace(f"/{gen_primary}/", f"/{gen_alt}/", 1)
+        except Exception:
+            pass
+
     except Exception as e:
         # ADC missing or network error — mark unknown
         try:
@@ -151,7 +215,7 @@ async def _model_preflight():
                 "status": "exception",
                 "error": str(e),
                 "modelId": MODEL_ID,
-                "region": REGION,
+                "region": VERTEX_LOCATION,
             }))
         except Exception:
             logger.info("model preflight error: %s", e)
@@ -537,7 +601,7 @@ async def chat(req: Request, body: ChatRequest):
             models_to_try = [MODEL_ID] + [m for m in MODEL_FALLBACKS if m and m != MODEL_ID]
             for mid in models_to_try:
                 tried.append(mid)
-                client = VertexClient(project=PROJECT_ID, region=REGION, model_id=mid)
+                client = VertexClient(project=PROJECT_ID, region=VERTEX_LOCATION, model_id=mid)
                 try:
                     try:
                         result = client.generate_text(
@@ -545,6 +609,8 @@ async def chat(req: Request, body: ChatRequest):
                             temperature=TEMPERATURE,
                             max_tokens=MAX_TOKENS,
                             system_instruction=system_instruction,
+                            response_mime_type="application/json",
+                            response_schema=REPLY_SCHEMA,
                         )
                     except TypeError:
                         result = client.generate_text(prompt, TEMPERATURE, MAX_TOKENS)
@@ -975,7 +1041,7 @@ async def chat(req: Request, body: ChatRequest):
         return resp
 
     def _attempt(model_id: str):
-        client = VertexClient(project=PROJECT_ID, region=REGION, model_id=model_id)
+        client = VertexClient(project=PROJECT_ID, region=VERTEX_LOCATION, model_id=model_id)
         # Support both new and legacy VertexClient interfaces used in tests:
         # - New: generate_text(prompt=..., temperature=..., max_tokens=..., system_instruction=...) -> (text, meta)
         # - Legacy/mock: generate_text(prompt, temperature, max_tokens) -> text
@@ -1328,6 +1394,7 @@ async def config():
     return {
         "projectId": PROJECT_ID,
         "region": REGION,
+        "vertexLocation": VERTEX_LOCATION,
         "modelId": MODEL_ID,
         "temperature": TEMPERATURE,
         "maxTokens": MAX_TOKENS,
@@ -1371,7 +1438,7 @@ async def config():
 @app.get("/modelcheck")
 async def modelcheck():
     mc = getattr(app.state, "model_check", {"available": "unknown"})
-    return {"modelId": MODEL_ID, "region": REGION, **mc}
+    return {"modelId": MODEL_ID, "region": VERTEX_LOCATION, **mc}
 
 
 @app.get("/diagnostics")
@@ -1416,7 +1483,9 @@ async def list_models(request: Request):
     try:
         creds, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
         session = AuthorizedSession(creds)
-        url = f"https://{REGION}-aiplatform.googleapis.com/v1/projects/{PROJECT_ID}/locations/{REGION}/publishers/google/models"
+        loc = VERTEX_LOCATION
+        host = "aiplatform.googleapis.com" if str(loc).lower() == "global" else f"{loc}-aiplatform.googleapis.com"
+        url = f"https://{host}/v1/projects/{PROJECT_ID}/locations/{loc}/publishers/google/models"
         r = session.get(url)
         latency_ms = int((time.time() - started) * 1000)
         if r.status_code != 200:
@@ -1448,7 +1517,7 @@ async def list_models(request: Request):
             "count": len(out),
             "requestId": req_id,
         }))
-        return {"models": out, "count": len(out), "region": REGION}
+        return {"models": out, "count": len(out), "region": VERTEX_LOCATION}
     except Exception as e:
         latency_ms = int((time.time() - started) * 1000)
         logger.exception("/models error: %s", e)

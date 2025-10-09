@@ -25,6 +25,8 @@ This repository contains a tiny FastAPI backend that exposes a simple /chat endp
    ```bash
    export PROJECT_ID=your-gcp-project-id
    export REGION=us-west4
+   # Optional: use global Vertex AI location for publisher models (recommended for Gemini 2.x)
+   export VERTEX_LOCATION=global
    export MODEL_ID=gemini-2.5-pro
    ```
 3. Start the FastAPI app:

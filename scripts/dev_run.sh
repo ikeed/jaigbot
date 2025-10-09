@@ -29,7 +29,7 @@ export REGION="${REGION:-us-west4}"
 export MODEL_ID="${MODEL_ID:-gemini-2.5-pro}"
 export TEMPERATURE="${TEMPERATURE:-0.2}"
 export MAX_TOKENS="${MAX_TOKENS:-256}"
-export MODEL_FALLBACKS="${MODEL_FALLBACKS:-gemini-2.5-pro-001,gemini-2.0-pro}"
+export MODEL_FALLBACKS="${MODEL_FALLBACKS:-gemini-2.5-pro-001,gemini-2.5-pro}"
 export LOG_LEVEL="${LOG_LEVEL:-info}"
 # Force Chainlit UI language to English by default (can be overridden)
 export CHAINLIT_LOCALE="${CHAINLIT_LOCALE:-en}"
