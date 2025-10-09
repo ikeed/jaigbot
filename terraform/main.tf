@@ -125,3 +125,21 @@ resource "google_service_account_iam_member" "wif_impersonate_deployer" {
   role               = "roles/iam.workloadIdentityUser"
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.pool.name}/attribute.repository/${var.github_org}/${var.github_repo}"
 }
+
+# Optional: Update Cloud Run request timeout using gcloud (keeps service managed by CI)
+# Note: Requires gcloud available where terraform apply runs and the caller to have roles/run.admin.
+resource "null_resource" "update_cloud_run_timeout" {
+  triggers = {
+    service_name = var.service_name
+    region       = var.region
+    timeout      = tostring(var.cloud_run_timeout_seconds)
+  }
+
+  provisioner "local-exec" {
+    command = "gcloud run services update ${var.service_name} --region=${var.region} --timeout=${var.cloud_run_timeout_seconds}"
+  }
+
+  depends_on = [
+    google_project_service.run
+  ]
+}

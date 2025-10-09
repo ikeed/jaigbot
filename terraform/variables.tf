@@ -51,3 +51,9 @@ variable "wif_provider_id" {
   description = "Workload Identity Pool Provider ID"
   default     = "github-provider"
 }
+
+variable "cloud_run_timeout_seconds" {
+  type        = number
+  description = "Cloud Run request timeout in seconds (affects WebSocket lifetime). Max 3600."
+  default     = 1800
+}
