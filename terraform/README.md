@@ -1,3 +1,4 @@
+
 # Terraform IaC for JaigBot infra
 
 This Terraform config provisions the minimal Google Cloud infrastructure to build and deploy the hello‑world Gemini app via Cloud Run and GitHub Actions.
@@ -21,7 +22,7 @@ What it does NOT create:
 
 ## Variables (with defaults)
 - project_id (default: warm-actor-253703)
-- region (default: us-west4)
+- region (default: us-central1)
 - service_name (default: gemini-flash-demo)
 - gar_repo (default: cr-demo)
 - github_org (default: ikeed)
@@ -34,7 +35,7 @@ Override via `-var` flags or a tfvars file.
 
 Example terraform.tfvars:
 project_id        = "warm-actor-253703"
-region            = "us-west4"
+region            = "us-central1"
 service_name      = "gemini-flash-demo"
 gar_repo          = "cr-demo"
 github_org        = "ikeed"
@@ -49,8 +50,8 @@ Initialize and apply:
 - terraform apply -auto-approve
 
 Outputs include:
-- artifact_registry_repo: e.g., us-west4-docker.pkg.dev/PROJECT/cr-demo
-- image_repo: e.g., us-west4-docker.pkg.dev/PROJECT/cr-demo/gemini-flash-demo
+- artifact_registry_repo: e.g., us-central1-docker.pkg.dev/PROJECT/cr-demo
+- image_repo: e.g., us-central1-docker.pkg.dev/PROJECT/cr-demo/gemini-flash-demo
 - runtime_service_account_email: cr-vertex-runtime@PROJECT.iam.gserviceaccount.com
 - deployer_service_account_email: cr-deployer@PROJECT.iam.gserviceaccount.com
 - wif_provider_name: projects/…/locations/global/workloadIdentityPools/…/providers/…
@@ -98,9 +99,77 @@ terraform {
   - If TF_BACKEND_BUCKET/TF_BACKEND_PREFIX are not set, CI will still run plan but will skip apply to avoid losing state.
   - Use a protected GitHub Environment if you want manual approval before apply.
 
+## Troubleshooting: Permission denied and existing resources
+If CI or local Terraform shows errors like:
+- Permission 'iam.serviceAccounts.create' denied
+- Permission 'artifactregistry.repositories.create' denied
+- Requested entity already exists (for WIF pool)
+
+Here’s how to resolve:
+
+1) Ensure the identity running Terraform has minimum roles (project-level)
+- For creating service accounts: roles/iam.serviceAccountAdmin
+- For managing the WIF pool/provider: roles/iam.workloadIdentityPoolAdmin
+- For creating Artifact Registry repos: roles/artifactregistry.admin
+
+Example (replace PROJECT):
+
+gcloud projects add-iam-policy-binding PROJECT \
+  --member="serviceAccount:cr-deployer@PROJECT.iam.gserviceaccount.com" \
+  --role=roles/iam.serviceAccountAdmin
+
+gcloud projects add-iam-policy-binding PROJECT \
+  --member="serviceAccount:cr-deployer@PROJECT.iam.gserviceaccount.com" \
+  --role=roles/iam.workloadIdentityPoolAdmin
+
+gcloud projects add-iam-policy-binding PROJECT \
+  --member="serviceAccount:cr-deployer@PROJECT.iam.gserviceaccount.com" \
+  --role=roles/artifactregistry.admin
+
+Notes:
+- For the very first bootstrap, you can also run `terraform apply` as a human with Project Owner, then switch to CI via WIF.
+- If the cr-deployer service account doesn’t exist yet, grant these roles temporarily to your human account to create resources, then tighten later.
+
+2) Import already-existing resources into Terraform state
+If a resource already exists, import it so Terraform stops trying to create it.
+
+Get your project number:
+PROJECT_NUMBER=$(gcloud projects describe PROJECT --format='value(projectNumber)')
+
+- Workload Identity Pool (defaults to id github-pool)
+terraform import google_iam_workload_identity_pool.pool \
+  projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-pool
+
+- Workload Identity Provider (defaults to id github-provider)
+terraform import google_iam_workload_identity_pool_provider.github \
+  projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+
+- Service accounts
+terraform import google_service_account.deployer \
+  projects/PROJECT/serviceAccounts/cr-deployer@PROJECT.iam.gserviceaccount.com
+
+terraform import google_service_account.runtime \
+  projects/PROJECT/serviceAccounts/cr-vertex-runtime@PROJECT.iam.gserviceaccount.com
+
+- Artifact Registry repository
+terraform import google_artifact_registry_repository.docker \
+  projects/PROJECT/locations/REGION/repositories/cr-demo
+
+After importing, run `terraform plan` to confirm it wants no changes (or only harmless updates like descriptions).
+
+3) Re-run apply
+Once roles are fixed and resources are imported if needed:
+- terraform apply
+- Verify outputs
+
+4) Least-privilege notes
+- The runtime SA (cr-vertex-runtime) is granted roles/aiplatform.user, logging.logWriter, and monitoring.metricWriter.
+- The deployer SA is granted run.admin (for Cloud Run deploy), artifactregistry.writer (to push images), and iam.serviceAccountTokenCreator for impersonation.
+- The WIF binding allows your GitHub repo/branch to impersonate the deployer SA (via roles/iam.workloadIdentityUser).
+
 ## Notes
 - Ensure Artifact Registry region matches Cloud Run region for efficiency.
-- The deploy workflow maps Terraform var.region to the GitHub variable GCP_REGION and sets Cloud Run env REGION accordingly. The backend uses VERTEX_LOCATION (if set) or REGION for Vertex AI calls. Ensure your chosen MODEL_ID is available in that location (e.g., gemini-2.5-pro in global or us-west4).
+- The deploy workflow maps Terraform var.region to the GitHub variable GCP_REGION and sets Cloud Run env REGION accordingly. The backend can use a separate Vertex location via VERTEX_LOCATION (recommended: global for Gemini 2.x). Ensure your chosen MODEL_ID is available in that location (e.g., set VERTEX_LOCATION=global for gemini-2.5-pro).
 - WIF attribute_condition restricts deployments to the main branch of ikeed/jaigbot by default. Override `github_branch_ref` if needed.
 - The deploy workflow expects the runtime service account to exist and will set env vars during `gcloud run deploy`.
 
