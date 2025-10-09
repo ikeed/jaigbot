@@ -16,14 +16,14 @@ from .persona import DEFAULT_CHARACTER, DEFAULT_SCENE
 
 # Environment configuration with sensible defaults
 PROJECT_ID = os.getenv("PROJECT_ID")
-REGION = os.getenv("REGION", "us-central1")
+REGION = os.getenv("REGION", "us-west4")
 # Use widely available defaults; override via env as needed
-MODEL_ID = os.getenv("MODEL_ID", "gemini-2.5-flash")
+MODEL_ID = os.getenv("MODEL_ID", "gemini-2.5-pro")
 TEMPERATURE = float(os.getenv("TEMPERATURE", "0.2"))
 # Increase default to allow longer responses; still configurable via env
 MAX_TOKENS = int(os.getenv("MAX_TOKENS", "2048"))
 ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
-model_fallbacks = os.getenv("MODEL_FALLBACKS", "gemini-2.5-flash-001").split(",")
+model_fallbacks = os.getenv("MODEL_FALLBACKS", "gemini-2.5-pro-001,gemini-2.0-pro").split(",")
 MODEL_FALLBACKS = [m.strip() for m in model_fallbacks if m.strip()]
 LOG_LEVEL = os.getenv("LOG_LEVEL", "info").upper()
 LOG_REQUEST_BODY_MAX = int(os.getenv("LOG_REQUEST_BODY_MAX", "1024"))
@@ -40,6 +40,8 @@ MAX_CONTINUATIONS = int(os.getenv("MAX_CONTINUATIONS", "2"))
 SUPPRESS_VERTEXAI_DEPRECATION = os.getenv("SUPPRESS_VERTEXAI_DEPRECATION", "true").lower() == "true"
 # Feature flag for AIMS coaching (backward-compatible default: disabled)
 AIMS_COACHING_ENABLED = os.getenv("AIMS_COACHING_ENABLED", "false").lower() == "true"
+# Model preflight validation (diagnostics only)
+VALIDATE_MODEL_ON_STARTUP = os.getenv("VALIDATE_MODEL_ON_STARTUP", "true").lower() == "true"
 # Memory configuration
 MEMORY_ENABLED = os.getenv("MEMORY_ENABLED", "true").lower() == "true"
 MEMORY_MAX_TURNS = int(os.getenv("MEMORY_MAX_TURNS", "8"))  # number of user/assistant turns to keep
@@ -67,7 +69,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("app")
 
-app = FastAPI(title="Gemini Flash Demo", version="0.1.0")
+app = FastAPI(title="JaigBot (Vertex AI)", version="0.1.0")
 
 # Memory store abstraction (factored into app.memory_store for readability)
 from .memory_store import InMemoryStore, RedisStore
@@ -101,6 +103,60 @@ if ALLOWED_ORIGINS:
         max_age=3600,
     )
 
+
+# Model availability preflight (diagnostics-only)
+@app.on_event("startup")
+async def _model_preflight():
+    """Best-effort check whether the configured MODEL_ID exists in the selected REGION.
+    Stores tri-state availability in app.state.model_check: { available: true|false|"unknown", ... }.
+    Never raises; only logs.
+    """
+    app.state.model_check = {"available": "unknown", "modelId": MODEL_ID, "region": REGION}
+    if not VALIDATE_MODEL_ON_STARTUP:
+        app.state.model_check["reason"] = "disabled_by_env"
+        return
+    if not PROJECT_ID:
+        app.state.model_check["reason"] = "no_project_id"
+        return
+    try:
+        import google.auth  # type: ignore
+        from google.auth.transport.requests import AuthorizedSession  # type: ignore
+        creds, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+        session = AuthorizedSession(creds)
+        def try_get(api_version: str) -> int:
+            url = (
+                f"https://{REGION}-aiplatform.googleapis.com/{api_version}/projects/{PROJECT_ID}"
+                f"/locations/{REGION}/publishers/google/models/{MODEL_ID}"
+            )
+            r = session.get(url)
+            return r.status_code
+        # Pick version heuristic similar to Vertex client
+        primary = "v1beta" if str(MODEL_ID).startswith("gemini-2") else "v1"
+        code = try_get(primary)
+        app.state.model_check["apiVersion"] = primary
+        if code == 404:
+            alt = "v1" if primary == "v1beta" else "v1beta"
+            code2 = try_get(alt)
+            app.state.model_check["altApiVersionTried"] = alt
+            app.state.model_check["httpStatus"] = code2
+            app.state.model_check["available"] = True if code2 == 200 else False if code2 == 404 else "unknown"
+        else:
+            app.state.model_check["httpStatus"] = code
+            app.state.model_check["available"] = True if code == 200 else "unknown"
+    except Exception as e:
+        # ADC missing or network error — mark unknown
+        try:
+            logger.info(json.dumps({
+                "event": "model_preflight",
+                "status": "exception",
+                "error": str(e),
+                "modelId": MODEL_ID,
+                "region": REGION,
+            }))
+        except Exception:
+            logger.info("model preflight error: %s", e)
+        app.state.model_check["available"] = "unknown"
+        app.state.model_check["error"] = str(e)
 
 
 # Exception handlers to surface better errors with request correlation
@@ -471,19 +527,43 @@ async def chat(req: Request, body: ChatRequest):
         history_text = _format_history(mem["history"]) if mem and mem.get("history") else ""
 
         def _vertex_call(prompt: str) -> str:
-            client = VertexClient(project=PROJECT_ID, region=REGION, model_id=MODEL_ID)
-            try:
-                result = client.generate_text(
-                    prompt=prompt,
-                    temperature=TEMPERATURE,
-                    max_tokens=MAX_TOKENS,
-                    system_instruction=system_instruction,
-                )
-            except TypeError:
-                result = client.generate_text(prompt, TEMPERATURE, MAX_TOKENS)
-            if isinstance(result, tuple) and len(result) == 2:
-                return str(result[0])
-            return str(result)
+            """Call Vertex with model fallback support.
+
+            Tries primary MODEL_ID first, then iterates MODEL_FALLBACKS on Vertex errors.
+            Returns text response as string. Raises last error if all fail.
+            """
+            last_err = None
+            tried = []
+            models_to_try = [MODEL_ID] + [m for m in MODEL_FALLBACKS if m and m != MODEL_ID]
+            for mid in models_to_try:
+                tried.append(mid)
+                client = VertexClient(project=PROJECT_ID, region=REGION, model_id=mid)
+                try:
+                    try:
+                        result = client.generate_text(
+                            prompt=prompt,
+                            temperature=TEMPERATURE,
+                            max_tokens=MAX_TOKENS,
+                            system_instruction=system_instruction,
+                        )
+                    except TypeError:
+                        result = client.generate_text(prompt, TEMPERATURE, MAX_TOKENS)
+                    if isinstance(result, tuple) and len(result) == 2:
+                        return str(result[0])
+                    return str(result)
+                except Exception as e:
+                    last_err = e
+                    logger.info(json.dumps({
+                        "event": "vertex_model_fallback",
+                        "path": "coach_reply",
+                        "failedModel": mid,
+                        "next": models_to_try[len(tried):][:1] or None,
+                    }))
+                    continue
+            # All attempts failed
+            if last_err:
+                raise last_err
+            raise RuntimeError("Vertex call failed with no models attempted")
 
         def _log_event(ev: dict):
             try:
@@ -602,64 +682,145 @@ async def chat(req: Request, body: ChatRequest):
                 },
             })
         else:
-            for attempt in (1, 2):
-                raw = _vertex_call(reply_prompt)
-                try:
-                    cand = json.loads((raw or "").strip())
-                    validate_json(cand, REPLY_SCHEMA)
-                    text = cand.get("patient_reply", "").strip()
-                    # Safety post-check: parent should never give advice
-                    advice_hits = _detect_advice_patterns(text)
-                    if advice_hits:
-                        safety_rewrite_flag = True
-                        # Show explicit error in the conversation (as agreed)
-                        reply_payload = {"patient_reply": "Error: parent persona generated clinician-style advice. Logged for debugging. Please try again."}
-                        # Verbose log with caps
-                        try:
-                            req_log = json.dumps({
-                                "message": body.message,
-                                "coach": getattr(body, "coach", None),
+            try:
+                for attempt in (1, 2):
+                    raw = _vertex_call(reply_prompt)
+                    try:
+                        cand = json.loads((raw or "").strip())
+                        validate_json(cand, REPLY_SCHEMA)
+                        text = cand.get("patient_reply", "").strip()
+                        # Safety post-check: parent should never give advice
+                        advice_hits = _detect_advice_patterns(text)
+                        if advice_hits:
+                            safety_rewrite_flag = True
+                            # Show explicit error in the conversation (as agreed)
+                            reply_payload = {"patient_reply": "Error: parent persona generated clinician-style advice. Logged for debugging. Please try again."}
+                            # Verbose log with caps
+                            try:
+                                req_log = json.dumps({
+                                    "message": body.message,
+                                    "coach": getattr(body, "coach", None),
+                                    "sessionId": session_id,
+                                })
+                            except Exception:
+                                req_log = str({"message": body.message, "coach": getattr(body, "coach", None), "sessionId": session_id})
+                            _log_event({
+                                "event": "aims_patient_reply_safety_violation",
                                 "sessionId": session_id,
+                                "patterns": advice_hits,
+                                "requestBody": _truncate_for_log(req_log, SAFETY_LOG_CAP),
+                                "rawModelResponse": _truncate_for_log(str(raw), SAFETY_LOG_CAP),
+                                "retryUsed": attempt > 1,
                             })
-                        except Exception:
-                            req_log = str({"message": body.message, "coach": getattr(body, "coach", None), "sessionId": session_id})
-                        _log_event({
-                            "event": "aims_patient_reply_safety_violation",
-                            "sessionId": session_id,
-                            "patterns": advice_hits,
-                            "requestBody": _truncate_for_log(req_log, SAFETY_LOG_CAP),
-                            "rawModelResponse": _truncate_for_log(str(raw), SAFETY_LOG_CAP),
-                            "retryUsed": attempt > 1,
-                        })
+                            break
+                        # Normal safe path
+                        reply_payload = {"patient_reply": text}
                         break
-                    # Normal safe path
-                    reply_payload = {"patient_reply": text}
-                    break
-                except Exception as ve:
-                    _log_event({
-                        "event": "aims_patient_reply_invalid_json",
-                        "attempt": attempt,
+                    except Exception as ve:
+                        _log_event({
+                            "event": "aims_patient_reply_invalid_json",
+                            "attempt": attempt,
+                            "sessionId": session_id,
+                            "jsonInvalid": True,
+                            "error": str(ve),
+                        })
+                        if attempt == 1:
+                            retry_used = True
+                            continue
+                        # Fallback: minimal safe reply template based on step
+                        step = (cls_payload or {}).get("step", "Inquire")
+                        # Friendly, in-character fallbacks by detected step, with a special case for rapport/pleasantries (no step)
+                        recognized = {"Announce", "Inquire", "Mirror", "Secure"}
+                        if not step or step not in recognized:
+                            fallback_text = "Oh, thank you! He does love his veggies some days. How should we get started today?"
+                        else:
+                            fallback_text = "Okay."
+                            if step == "Inquire":
+                                fallback_text = "I’m not sure — I have some questions, but I’d like to hear more."
+                            elif step == "Mirror":
+                                fallback_text = "Yeah, that’s right — I’m mostly worried and trying to be careful."
+                            elif step == "Announce":
+                                fallback_text = "Okay — thanks for letting me know."
+                            elif step == "Secure":
+                                fallback_text = "I appreciate that. Let me think about which option makes sense."
+                        reply_payload = {"patient_reply": fallback_text}
+                        fallback_used = True
+                        break
+            except VertexAIError as e:
+                # Map model-not-found and upstream errors in coached path consistently with legacy path
+                latency_ms = int((time.time() - started) * 1000)
+                req_id = _get_request_id(req)
+                if getattr(e, "status_code", None) == 404:
+                    mc = getattr(app.state, "model_check", {"available": "unknown"})
+                    logger.error(json.dumps({
+                        "event": "aims_turn",
+                        "status": "model_not_found",
+                        "latencyMs": latency_ms,
+                        "modelId": MODEL_ID,
+                        "region": REGION,
+                        "modelAvailable": mc.get("available"),
+                        "requestId": req_id,
                         "sessionId": session_id,
-                        "jsonInvalid": True,
-                        "error": str(ve),
-                    })
-                    if attempt == 1:
-                        retry_used = True
-                        continue
-                    # Fallback: minimal safe reply template based on step
-                    step = (cls_payload or {}).get("step", "Inquire")
-                    fallback_text = "Okay."
-                    if step == "Inquire":
-                        fallback_text = "I’m not sure — I have some questions, but I’d like to hear more."
-                    elif step == "Mirror":
-                        fallback_text = "Yeah, that’s right — I’m mostly worried and trying to be careful."
-                    elif step == "Announce":
-                        fallback_text = "Hmm, okay. Can you tell me a bit more about it?"
-                    elif step == "Secure":
-                        fallback_text = "I appreciate that. Let me think about which option makes sense."
-                    reply_payload = {"patient_reply": fallback_text}
-                    fallback_used = True
-                    break
+                        "error": str(e),
+                    }))
+                    guidance = (
+                        "Publisher model not found or access denied. Verify MODEL_ID spelling and REGION; ensure Vertex AI API is enabled, "
+                        "billing is active, and your ADC principal has roles/aiplatform.user. Use GET /models or /modelcheck to confirm availability in this region. "
+                        "Consider switching MODEL_ID to one listed there (e.g., 'gemini-1.5-pro') or changing REGION."
+                    )
+                    payload = {
+                        "error": {
+                            "message": guidance,
+                            "code": 404,
+                            "requestId": req_id,
+                            "modelAvailable": mc.get("available"),
+                            "region": REGION,
+                            "modelId": MODEL_ID,
+                        }
+                    }
+                    if EXPOSE_UPSTREAM_ERROR:
+                        payload["error"]["upstream"] = str(e)
+                    resp = JSONResponse(status_code=404, content=payload)
+                    try:
+                        resp.set_cookie(
+                            key=SESSION_COOKIE_NAME,
+                            value=session_id,
+                            max_age=SESSION_COOKIE_MAX_AGE,
+                            httponly=True,
+                            secure=SESSION_COOKIE_SECURE,
+                            samesite=SESSION_COOKIE_SAMESITE,
+                            path="/",
+                        )
+                    except Exception:
+                        pass
+                    return resp
+                # Other upstream errors → 502
+                logger.error(json.dumps({
+                    "event": "aims_turn",
+                    "status": "upstream_error",
+                    "latencyMs": latency_ms,
+                    "modelId": MODEL_ID,
+                    "requestId": req_id,
+                    "sessionId": session_id,
+                    "error": str(e),
+                }))
+                payload = {"error": {"message": "Upstream error calling Vertex AI", "code": 502, "requestId": req_id}}
+                if EXPOSE_UPSTREAM_ERROR:
+                    payload["error"]["upstream"] = str(e)
+                resp = JSONResponse(status_code=502, content=payload)
+                try:
+                    resp.set_cookie(
+                        key=SESSION_COOKIE_NAME,
+                        value=session_id,
+                        max_age=SESSION_COOKIE_MAX_AGE,
+                        httponly=True,
+                        secure=SESSION_COOKIE_SECURE,
+                        samesite=SESSION_COOKIE_SAMESITE,
+                        path="/",
+                    )
+                except Exception:
+                    pass
+                return resp
 
         latency_ms = int((time.time() - started) * 1000)
         _log_event({
@@ -1055,6 +1216,8 @@ async def chat(req: Request, body: ChatRequest):
         latency_ms = int((time.time() - started) * 1000)
         # Map 404 Not Found distinctly for clearer client-side action
         if getattr(e, "status_code", None) == 404:
+            # Include preflight availability in logs and response
+            mc = getattr(app.state, "model_check", {"available": "unknown"})
             logger.error(
                 json.dumps(
                     {
@@ -1062,6 +1225,8 @@ async def chat(req: Request, body: ChatRequest):
                         "status": "model_not_found",
                         "latencyMs": latency_ms,
                         "modelId": MODEL_ID,
+                        "region": REGION,
+                        "modelAvailable": mc.get("available"),
                         "requestId": _get_request_id(req),
                         "error": str(e),
                     }
@@ -1069,11 +1234,11 @@ async def chat(req: Request, body: ChatRequest):
             )
             req_id = _get_request_id(req)
             guidance = (
-                "Publisher model not found or access denied. Verify MODEL_ID and REGION; ensure Vertex AI API is enabled, "
-                "billing is active, and your ADC principal has roles/aiplatform.user in the project. You may set MODEL_FALLBACKS "
-                "(comma-separated) to try alternative model IDs like 'gemini-2.5-flash' or 'gemini-2.5-flash-001'."
+                "Publisher model not found or access denied. Verify MODEL_ID spelling and REGION; ensure Vertex AI API is enabled, "
+                "billing is active, and your ADC principal has roles/aiplatform.user. Use GET /models or /modelcheck to confirm availability in this region. "
+                "Consider switching MODEL_ID to one listed there (e.g., 'gemini-1.5-pro') or changing REGION."
             )
-            payload = {"error": {"message": guidance, "code": 404, "requestId": req_id}}
+            payload = {"error": {"message": guidance, "code": 404, "requestId": req_id, "modelAvailable": mc.get("available"), "region": REGION, "modelId": MODEL_ID}}
             if EXPOSE_UPSTREAM_ERROR:
                 payload["error"]["upstream"] = str(e)
             resp = JSONResponse(status_code=404, content=payload)
@@ -1158,6 +1323,8 @@ async def chat(req: Request, body: ChatRequest):
 
 @app.get("/config")
 async def config():
+    # Pull model preflight info if available
+    mc = getattr(app.state, "model_check", {"available": "unknown"})
     return {
         "projectId": PROJECT_ID,
         "region": REGION,
@@ -1172,6 +1339,8 @@ async def config():
         "exposeUpstreamError": EXPOSE_UPSTREAM_ERROR,
         "debugMode": DEBUG_MODE,
         "modelFallbacks": MODEL_FALLBACKS,
+        "modelAvailable": mc.get("available"),
+        "modelCheck": mc,
         "autoContinueOnMaxTokens": AUTO_CONTINUE_ON_MAX_TOKENS,
         "maxContinuations": MAX_CONTINUATIONS,
         "suppressVertexAIDeprecation": SUPPRESS_VERTEXAI_DEPRECATION,
@@ -1197,6 +1366,12 @@ async def config():
             "maxAge": SESSION_COOKIE_MAX_AGE,
         },
     }
+
+
+@app.get("/modelcheck")
+async def modelcheck():
+    mc = getattr(app.state, "model_check", {"available": "unknown"})
+    return {"modelId": MODEL_ID, "region": REGION, **mc}
 
 
 @app.get("/diagnostics")

@@ -89,18 +89,6 @@ async def start_chat():
     cl.user_session.set("history", [])
     history = []
 
-    # intro_lines = [
-    #     "Hello! I'm connected to the Gemini backend.",
-    #     "I'll get us started...",
-    # ]
-    # if DEBUG_MODE:
-    #     if character:
-    #         intro_lines.append(f"Persona active: {character}")
-    #     if scene:
-    #         intro_lines.append(f"Scene: {scene}")
-    #
-    # await cl.Message("\n".join(intro_lines)).send()
-
     # At chat start, show a neutral appointment entry and wait for the clinician's first message.
     # Do NOT call the backend here to avoid startup delays and to let the clinician lead (Announce/Inquire).
     scenario_lines = [
@@ -115,6 +103,60 @@ async def start_chat():
     history.append({"role": "assistant", "content": card})
     cl.user_session.set("history", history)
     await cl.Message(card).send()
+
+    # Preflight check: verify backend is reachable and reasonably configured.
+    # This avoids confusing 500 errors later (e.g., PROJECT_ID not set).
+    try:
+        import httpx  # local import to avoid import cycles
+        base_url = BACKEND_URL[:-5] if BACKEND_URL.endswith("/chat") else BACKEND_URL
+        timeout = float(os.getenv("CHAINLIT_HTTP_TIMEOUT", "15"))
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            ok = False
+            try:
+                r = await client.get(f"{base_url}/healthz")
+                ok = r.status_code == 200
+            except Exception:
+                ok = False
+            if not ok:
+                await cl.Message(
+                    f"Backend at {base_url} is not reachable. Start it first: ./scripts/dev_run.sh or `uvicorn app.main:app --port 8080`."
+                ).send()
+                return
+            # Try to fetch /config; if it reveals a missing PROJECT_ID, warn helpfully.
+            try:
+                r2 = await client.get(f"{base_url}/config")
+                if r2.status_code == 200:
+                    data = r2.json() if r2.headers.get("content-type", "").startswith("application/json") else {}
+                    # Heuristic: look for falsy/empty project id fields
+                    proj = data.get("projectId") or data.get("project_id") or data.get("project")
+                    if proj in (None, "", "<unset>"):
+                        await cl.Message(
+                            "Warning: Backend PROJECT_ID appears unset. You may see a 500 on /chat. "
+                            "Fix by setting PROJECT_ID (and authenticating with `gcloud auth application-default login`)."
+                        ).send()
+            except Exception:
+                # /config may not exist; ignore quietly.
+                pass
+
+            # Model availability preflight: advise early if the configured model is not available in the region
+            try:
+                r3 = await client.get(f"{base_url}/modelcheck")
+                if r3.status_code == 200:
+                    mc = r3.json() if r3.headers.get("content-type", "").startswith("application/json") else {}
+                    avail = mc.get("available")
+                    mid = mc.get("modelId")
+                    reg = mc.get("region")
+                    if avail is False:
+                        await cl.Message(
+                            f"System: The configured model '{mid}' is not available in region '{reg}'. "
+                            "Open /models or /config to choose an available model, or update MODEL_ID/REGION."
+                        ).send()
+            except Exception:
+                # /modelcheck may not exist or ADC may be missing; ignore quietly.
+                pass
+    except Exception:
+        # httpx not available or some unexpected error; skip preflight.
+        pass
 
 @cl.on_message
 async def handle_message(message: cl.Message):
@@ -176,7 +218,25 @@ async def handle_message(message: cl.Message):
             error_msg = data.get("error", {}).get("message")
         except Exception:
             error_msg = None
-        reply = f"Error: {error_msg or f'HTTP {response.status_code}'}"
+        # Show a concise system message and avoid polluting the conversation with diagnostics
+        msg = None
+        status = response.status_code
+        if error_msg and "project_id not set" in (error_msg or "").lower():
+            msg = (
+                "Backend misconfiguration: PROJECT_ID is not set. "
+                "Set PROJECT_ID and restart the backend (e.g., ./scripts/dev_run.sh "
+                "or export PROJECT_ID=your-gcp-project and run uvicorn)."
+            )
+        elif status == 404 and error_msg and ("model not found" in error_msg.lower() or "publisher model not found" in error_msg.lower()):
+            msg = (
+                "Assistant unavailable: configured MODEL_ID was not found or access is denied in this REGION. "
+                "Open /models or /modelcheck to see available models, then update MODEL_ID or REGION."
+            )
+        else:
+            msg = f"Backend error: HTTP {status}{(' — ' + error_msg) if error_msg else ''}"
+        # Send as a system note and return without appending an assistant turn
+        await cl.Message(msg, author="System").send()
+        return
 
     # If coaching info is present, render it immediately after the user's message (before assistant reply)
     coaching = data.get("coaching") if isinstance(data, dict) else None

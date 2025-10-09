@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.vertex import VertexAIError
 
 
 client = TestClient(app)
@@ -29,6 +30,14 @@ class FakeVertexAdviceJSON:
     def generate_text(self, *args, **kwargs):
         # Valid JSON envelope but with advice-like content
         return json.dumps({"patient_reply": "You should take 5 mg every 6 hours."})
+
+
+class FakeVertexRaises404:
+    def __init__(self, project: str, region: str, model_id: str):
+        pass
+
+    def generate_text(self, *args, **kwargs):
+        raise VertexAIError("Model not found: HTTP 404", status_code=404)
 
 
 @pytest.fixture(autouse=True)
@@ -123,3 +132,17 @@ def test_summary_endpoint(monkeypatch):
     assert set(data["stepCoverage"].keys()) >= {"Announce", "Inquire", "Mirror", "Secure"}
     assert "strengths" in data and isinstance(data["strengths"], list)
     assert "growthAreas" in data and isinstance(data["growthAreas"], list)
+
+
+def test_coach_path_model_not_found_maps_to_404(monkeypatch):
+    import app.main as m
+    # Force coached path and Vertex 404 in LLM-2
+    monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", True)
+    monkeypatch.setattr(m, "VertexClient", FakeVertexRaises404)
+    r = client.post("/chat", json={"message": "hi", "coach": True, "sessionId": "s404"})
+    assert r.status_code == 404
+    data = r.json()
+    assert "error" in data and data["error"]["code"] == 404
+    # Helpful guidance fields are present
+    assert "modelId" in data["error"]
+    assert "region" in data["error"]

@@ -298,7 +298,9 @@ class VertexClient:
         try:
             creds, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
             session = AuthorizedSession(creds)
-            base_url = f"https://{self.region}-aiplatform.googleapis.com/v1/projects/{self.project}/locations/{self.region}/publishers/google/models/{self.model_id}:generateContent"
+            # Choose API version: Gemini 2.x models are currently exposed under v1beta; others can use v1
+            api_version = "v1beta" if str(self.model_id).startswith("gemini-2") else "v1"
+            base_url = f"https://{self.region}-aiplatform.googleapis.com/{api_version}/projects/{self.project}/locations/{self.region}/publishers/google/models/{self.model_id}:generateContent"
 
             def call(contents: List[Dict[str, Any]]):
                 body: Dict[str, Any] = {
@@ -313,6 +315,12 @@ class VertexClient:
                     body["systemInstruction"] = {"role": "system", "parts": [{"text": system_instruction}]}
                 r = session.post(base_url, json=body)
                 if r.status_code == 404:
+                    # Some Gemini models (e.g., 2.x) may only be available on v1beta; if we used v1, retry once on v1beta
+                    if "/v1/" in base_url:
+                        alt_url = base_url.replace("/v1/", "/v1beta/", 1)
+                        r2 = session.post(alt_url, json=body)
+                        if r2.status_code < 400:
+                            return r2.json()
                     raise VertexAIError(f"Model not found: HTTP 404", status_code=404)
                 if r.status_code >= 400:
                     raise VertexAIError(f"Vertex REST error HTTP {r.status_code}: {r.text}")

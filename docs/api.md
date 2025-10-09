@@ -46,7 +46,7 @@ Response (coaching disabled)
 ```json
 {
   "reply": "...",
-  "model": "gemini-2.5-flash",
+  "model": "gemini-2.0-pro",
   "latencyMs": 123
 }
 ```
@@ -55,7 +55,7 @@ Response (coaching enabled)
 ```json
 {
   "reply": "...",
-  "model": "gemini-2.5-flash",
+  "model": "gemini-2.0-pro",
   "latencyMs": 234,
   "coaching": {
     "step": "Announce|Inquire|Mirror|Secure",
@@ -110,7 +110,8 @@ Notes
 
 ## Health and diagnostics
 - GET /healthz: liveness check (200 OK when server is up)
-- GET /config: curated configuration snapshot (safe to expose)
+- GET /config: curated configuration snapshot (safe to expose). Includes `modelAvailable` (true|false|"unknown") and a `modelCheck` object with details when available.
+- GET /modelcheck: attempts to verify the configured `MODEL_ID` exists in the selected `REGION` (best‑effort). Helpful to debug "Model not found" errors without making a chat call.
 - GET /diagnostics: runtime diagnostics; may include memory backend and store size
 
 ## Environment flags

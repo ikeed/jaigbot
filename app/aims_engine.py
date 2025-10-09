@@ -275,7 +275,7 @@ def evaluate_turn(parent_last: str, clinician_last: str, mapping: Dict[str, Any]
             "step": None,  # omit in UI; treated as non-step by callers
             "score": 0,
             "reasons": [
-                "Rapport/pleasantries — no AIMS step attempted (allowed at the start)."
+                "Rapport/pleasantries — no AIMS step attempted (allowed anytime)."
             ],
             "tips": tips,
         }
