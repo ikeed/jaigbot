@@ -40,7 +40,7 @@ Repository Settings → Secrets and variables:
   - WORKLOAD_SA  = Terraform output deployer_service_account_email (e.g., cr-deployer@PROJECT.iam.gserviceaccount.com)
 - Variables:
   - GCP_PROJECT_ID = Terraform var project_id (e.g., warm-actor-253703)
-  - GCP_REGION     = terraform var region (e.g., us-central1)
+  - GCP_REGION     = terraform var region (e.g., us-west4)
   - GAR_REPO       = terraform var gar_repo (e.g., cr-demo)
   - SERVICE_NAME   = terraform var service_name (e.g., gemini-flash-demo)
   - MODEL_ID       = gemini-1.5-flash-002
@@ -85,7 +85,7 @@ Both workflows authenticate to Google Cloud via Workload Identity Federation usi
 ## 6) Manual deploy (optional)
 If you want to deploy manually before CI:
 - Build and push image (requires Artifact Registry repo exists):
-  - REGION=us-central1 PROJECT=warm-actor-253703 GAR=cr-demo SERVICE=gemini-flash-demo
+  - REGION=us-west4 PROJECT=warm-actor-253703 GAR=cr-demo SERVICE=gemini-flash-demo
   - IMAGE="$REGION-docker.pkg.dev/$PROJECT/$GAR/$SERVICE:manual"
   - docker build -t "$IMAGE" .
   - gcloud auth configure-docker $REGION-docker.pkg.dev
@@ -101,7 +101,7 @@ If you want to deploy manually before CI:
 
 ## 7) Migrating to another project or repo
 - Update Terraform vars and re-apply:
-  - terraform apply -var "project_id=NEW_PROJECT" -var "region=us-central1" -var "github_org=NEW_ORG" -var "github_repo=NEW_REPO"
+  - terraform apply -var "project_id=NEW_PROJECT" -var "region=us-west4" -var "github_org=NEW_ORG" -var "github_repo=NEW_REPO"
 - Update GitHub repo (for the new repo):
   - Set WORKLOAD_IDP and WORKLOAD_SA from the new project’s Terraform outputs
   - Set variables GCP_PROJECT_ID/GCP_REGION/GAR_REPO/SERVICE_NAME/TF_BACKEND_BUCKET/TF_BACKEND_PREFIX
