@@ -67,7 +67,7 @@ Set the following in your GitHub repo (Settings → Secrets and variables):
   - GCP_REGION     = var.region
   - GAR_REPO       = var.gar_repo
   - SERVICE_NAME   = var.service_name
-  - MODEL_ID       = gemini-2.5-flash (or your choice)
+  - MODEL_ID       = gemini-2.5-pro (or your choice)
   - TEMPERATURE    = 0.2
   - MAX_TOKENS     = 256
 

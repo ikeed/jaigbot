@@ -22,7 +22,7 @@ Python version
 Environment variables expected by the backend
 - PROJECT_ID — GCP project ID (required for live calls)
 - REGION — e.g., us-central1
-- MODEL_ID — default gemini-2.5-flash (configurable)
+- MODEL_ID — default gemini-2.5-pro (configurable)
 - Optional runtime tuning variables may exist (e.g., temperature, max tokens) as documented in README/docs.
 
 How to run locally (backend)
@@ -44,7 +44,7 @@ Running tests
 
 Build and packaging
 - Docker: docker build -t jaigbot:local .
-- Run container locally (example): docker run -p 8080:8080 -e PROJECT_ID=your-project -e REGION=us-central1 -e MODEL_ID=gemini-2.5-flash jaigbot:local
+- Run container locally (example): docker run -p 8080:8080 -e PROJECT_ID=your-project -e REGION=us-central1 -e MODEL_ID=gemini-2.5-pro jaigbot:local
 - Cloud Run deploys are handled by CI (see terraform/README.md for required WIF/secret configuration).
 - Junie does not need to build the Docker image unless the change specifically affects container/runtime behavior.
 
