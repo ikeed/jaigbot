@@ -17,7 +17,8 @@ CLASSIFY_SCHEMA: Dict[str, Any] = {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "type": "object",
     "properties": {
-        "step": {"type": "string", "enum": ["Announce", "Inquire", "Mirror", "Secure"]},
+        # Allow string or null for local validation; Vertex schema will be adapted via vertex_response_schema()
+        "step": {"type": ["string", "null"], "enum": ["Announce", "Inquire", "Mirror", "Secure", "Mirror+Inquire", None]},
         "score": {"type": "integer", "minimum": 0, "maximum": 3},
         "reasons": {"type": "array", "items": {"type": "string"}, "minItems": 1},
         "tips": {"type": "array", "items": {"type": "string"}},
@@ -63,6 +64,52 @@ SUMMARY_SCHEMA: Dict[str, Any] = {
 
 class SchemaValidationError(ValueError):
     pass
+
+
+def _sanitize_for_vertex(value: Any) -> Any:
+    """Recursively adapt a JSON Schema dict to a Vertex-compatible response_schema.
+
+    - Replace type arrays like ["string", "null"] with type="string" and nullable=True.
+    - Remove None from enum lists and set nullable=True when present.
+    - Drop top-level "$schema" keys.
+    The adapter is conservative and only touches known incompatibilities.
+    """
+    if isinstance(value, dict):
+        out: Dict[str, Any] = {}
+        # Handle $schema drop early
+        for k, v in value.items():
+            if k == "$schema":
+                continue
+            out[k] = _sanitize_for_vertex(v)
+        # Fix type arrays on this dict node
+        t = out.get("type")
+        if isinstance(t, list):
+            # If nullability is expressed via type array, convert to nullable flag
+            if "null" in t:
+                # Prefer the first non-null type; default to "string" if ambiguous
+                non_null = [x for x in t if x != "null"]
+                out["type"] = non_null[0] if non_null else "string"
+                out["nullable"] = True
+            else:
+                # Use the first type if multiple provided (Vertex does not support arrays here)
+                out["type"] = t[0] if t else "string"
+        # Remove None from enum and mark nullable if needed
+        if "enum" in out and isinstance(out["enum"], list):
+            enum_vals = [e for e in out["enum"] if e is not None]
+            if len(enum_vals) != len(out["enum"]):
+                out["enum"] = enum_vals
+                # If we removed None, mark as nullable
+                out.setdefault("nullable", True)
+        return out
+    elif isinstance(value, list):
+        return [_sanitize_for_vertex(v) for v in value]
+    else:
+        return value
+
+
+def vertex_response_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
+    """Return a deep-copied, Vertex-compatible schema from a standard JSON Schema dict."""
+    return _sanitize_for_vertex(schema)
 
 
 def validate_json(instance: Dict[str, Any], schema: Dict[str, Any]) -> None:
