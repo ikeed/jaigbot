@@ -139,19 +139,19 @@ def classify_step(parent_last: str, clinician_last: str, mapping: Dict[str, Any]
     pt = (parent_last or "").strip().lower()
     lt = text.lower()
 
-    # Early rapport guard for question-form small talk (so it doesn't get mislabeled as Inquire)
-    if lt.endswith("?") and _is_small_talk(lt):
-        return ClassificationResult(step="", reasons=["Rapport/pleasantries detected — no AIMS step attempted (allowed)."])
-
-    # Heuristic checks per step
+    # Heuristic checks per step (stages take precedence; small-talk is fallback only)
     mirror_match = _starts_with_any(lt, [
         "it sounds like", "you're worried", "you are worried", "i'm hearing", "you feel", "you want",
-        "i get you're", "i get that you're", "i hear you're", "i hear that you're", "i hear you", "i hear that"
+        "i get you're", "i get that you're", "i hear you're", "i hear that you're", "i hear you", "i hear that",
+        "i understand", "it seems like", "it feels like", "that feels like", "that sounds like"
     ]) or _stem_match(lt, (markers.get("Mirror", {}).get("linguistic", [])))
 
     inquire_match = lt.endswith("?") or _starts_with_any(lt, ["what ", "how "]) or _stem_match(
         lt, (markers.get("Inquire", {}).get("linguistic", []))
     )
+    # Do not treat generic well-being/small-talk questions as Inquire; let them fall back to small-talk
+    if inquire_match and _is_small_talk(lt):
+        inquire_match = False
 
     # Strengthened Secure detection: autonomy + (option or safety) OR option + safety
     autonomy_cues = [
@@ -222,8 +222,14 @@ def classify_step(parent_last: str, clinician_last: str, mapping: Dict[str, Any]
         step = "Announce"
         reasons.append("Detected recommendation language")
     elif didactic_secure:
-        step = "Secure"
-        reasons.append("Didactic education/reassurance detected; mapping to Secure")
+        # If the didactic content is coupled with a reflection accuracy check, prefer Mirror
+        _REFLECTION_CHECK_RE = re.compile(r"\b(did i get that right|do i have that right|did i capture (that|what you said)|is that right)\b")
+        if _REFLECTION_CHECK_RE.search(lt):
+            step = "Mirror"
+            reasons.append("Reflection check after brief reflection → Mirror")
+        else:
+            step = "Secure"
+            reasons.append("Didactic education/reassurance detected; mapping to Secure")
     elif inquire_match:
         step = "Inquire"
         reasons.append("Detected open-ended question; inviting elaboration")
@@ -248,10 +254,23 @@ def classify_step(parent_last: str, clinician_last: str, mapping: Dict[str, Any]
             step = "Inquire"
             reasons.append("Tie-breaker: question primary → Inquire")
 
-    # Tie-breaker: if both Inquire and strengthened Secure cues are present, prefer Secure
+    # Tie-breaker refinement: distinguish reflection vs comprehension checks vs open inquiry
     if inquire_match and secure_match:
-        step = "Secure"
-        reasons.append("Preference question within options/safety context → Secure")
+        # Helpers to detect reflection accuracy checks versus comprehension checks
+        _REFLECTION_CHECK_RE = re.compile(r"\b(did i get that right|do i have that right|did i capture (that|what you said)|is that right)\b")
+        _COMPREHENSION_CHECK_RE = re.compile(r"\b(does that make sense|is that clear|do(es)? you (understand|get it))\b")
+        is_reflection_check = bool(_REFLECTION_CHECK_RE.search(lt))
+        is_comprehension_check = bool(_COMPREHENSION_CHECK_RE.search(lt))
+        if is_reflection_check:
+            step = "Mirror"
+            reasons.append("Tie-breaker: reflection/accuracy check → Mirror")
+        else:
+            # In options/safety context, default to Secure. Comprehension checks or didactic tokens reinforce Secure.
+            step = "Secure"
+            if is_comprehension_check or didactic_re.search(lt):
+                reasons.append("Tie-breaker: comprehension/didactic within options context → Secure")
+            else:
+                reasons.append("Tie-breaker: options/safety context dominates → Secure")
 
     # If only autonomy phrase present but no concrete options/resources, remain Announce
     if step == "Announce" and has_autonomy and not (has_option or has_safety):

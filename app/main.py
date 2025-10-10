@@ -145,56 +145,34 @@ async def _model_preflight():
             attempts.append({"apiVersion": api_version, "url": url, "httpStatus": r.status_code})
             return r.status_code, url
 
-        # Pick version heuristic similar to Vertex client
-        primary = "v1beta" if str(MODEL_ID).startswith("gemini-2") else "v1"
+        # Use stable v1 endpoint only (skip beta)
+        primary = "v1"
         code, url_primary = try_get(primary)
         app.state.model_check["apiVersion"] = primary
         app.state.model_check["urlPrimary"] = url_primary
         app.state.model_check["httpStatusPrimary"] = code
 
         if code == 404:
-            alt = "v1" if primary == "v1beta" else "v1beta"
-            code2, url_alt = try_get(alt)
-            app.state.model_check["altApiVersionTried"] = alt
-            app.state.model_check["urlAlt"] = url_alt
-            app.state.model_check["httpStatus"] = code2  # preserve legacy field name
-            app.state.model_check["httpStatusAlt"] = code2
-            # Default to unknown on 404 to avoid false negatives; only set true on 200 or list match
-            app.state.model_check["available"] = True if code2 == 200 else "unknown"
-            # If both 404, fall back to listing models (v1, then v1beta) to avoid false negatives
-            if code2 == 404:
-                loc = VERTEX_LOCATION
-                host = "aiplatform.googleapis.com" if str(loc).lower() == "global" else f"{loc}-aiplatform.googleapis.com"
-                list_url = f"https://{host}/v1/projects/{PROJECT_ID}/locations/{loc}/publishers/google/models"
-                app.state.model_check["listUrl"] = list_url
-                rlist = session.get(list_url)
-                app.state.model_check["listHttpStatus"] = rlist.status_code
-                matched = False
-                if rlist.status_code == 200:
-                    try:
-                        data = rlist.json()
-                    except Exception:
-                        data = {}
-                    models = data.get("models", []) or []
-                    app.state.model_check["listCount"] = len(models)
-                    matched = any(((m.get("name", "").split("/models/")[-1]) == MODEL_ID) for m in models)
-                # If v1 listing failed to find or 404, try v1beta as a secondary listing
-                if not matched:
-                    list_url_alt = f"https://{host}/v1beta/projects/{PROJECT_ID}/locations/{loc}/publishers/google/models"
-                    app.state.model_check["listUrlAlt"] = list_url_alt
-                    rlist2 = session.get(list_url_alt)
-                    app.state.model_check["listHttpStatusAlt"] = rlist2.status_code
-                    if rlist2.status_code == 200:
-                        try:
-                            data2 = rlist2.json()
-                        except Exception:
-                            data2 = {}
-                        models2 = data2.get("models", []) or []
-                        app.state.model_check["listCountAlt"] = len(models2)
-                        matched = any(((m.get("name", "").split("/models/")[-1]) == MODEL_ID) for m in models2)
-                app.state.model_check["listMatched"] = matched
-                if matched:
-                    app.state.model_check["available"] = True
+            # Default to unknown on 404; do a v1 models list to avoid false negatives
+            app.state.model_check["available"] = "unknown"
+            loc = VERTEX_LOCATION
+            host = "aiplatform.googleapis.com" if str(loc).lower() == "global" else f"{loc}-aiplatform.googleapis.com"
+            list_url = f"https://{host}/v1/projects/{PROJECT_ID}/locations/{loc}/publishers/google/models"
+            app.state.model_check["listUrl"] = list_url
+            rlist = session.get(list_url)
+            app.state.model_check["listHttpStatus"] = rlist.status_code
+            matched = False
+            if rlist.status_code == 200:
+                try:
+                    data = rlist.json()
+                except Exception:
+                    data = {}
+                models = data.get("models", []) or []
+                app.state.model_check["listCount"] = len(models)
+                matched = any(((m.get("name", "").split("/models/")[-1]) == MODEL_ID) for m in models)
+            app.state.model_check["listMatched"] = matched
+            if matched:
+                app.state.model_check["available"] = True
         else:
             app.state.model_check["httpStatus"] = code
             app.state.model_check["available"] = True if code == 200 else "unknown"
@@ -205,11 +183,9 @@ async def _model_preflight():
         try:
             loc = VERTEX_LOCATION
             host = "aiplatform.googleapis.com" if str(loc).lower() == "global" else f"{loc}-aiplatform.googleapis.com"
-            gen_primary = "v1beta" if str(MODEL_ID).startswith("gemini-2") else "v1"
+            gen_primary = "v1"
             base_gen_url = f"https://{host}/{gen_primary}/projects/{PROJECT_ID}/locations/{loc}/publishers/google/models/{MODEL_ID}:generateContent"
             app.state.model_check["baseGenerateUrlPrimary"] = base_gen_url
-            gen_alt = "v1" if gen_primary == "v1beta" else "v1beta"
-            app.state.model_check["baseGenerateUrlAlt"] = base_gen_url.replace(f"/{gen_primary}/", f"/{gen_alt}/", 1)
         except Exception:
             pass
 
