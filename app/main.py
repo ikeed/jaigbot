@@ -4,6 +4,7 @@ import os
 import time
 import uuid
 from typing import Optional
+import re
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -42,6 +43,11 @@ MAX_CONTINUATIONS = int(os.getenv("MAX_CONTINUATIONS", "2"))
 SUPPRESS_VERTEXAI_DEPRECATION = os.getenv("SUPPRESS_VERTEXAI_DEPRECATION", "true").lower() == "true"
 # Feature flag for AIMS coaching (backward-compatible default: disabled)
 AIMS_COACHING_ENABLED = os.getenv("AIMS_COACHING_ENABLED", "false").lower() == "true"
+# Classifier mode: hybrid (default), llm, or deterministic
+AIMS_CLASSIFIER_MODE = os.getenv("AIMS_CLASSIFIER", "hybrid").lower()
+# LLM classifier context sizing
+AIMS_CLASSIFY_CONTEXT_TURNS = int(os.getenv("AIMS_CLASSIFY_CONTEXT_TURNS", "6"))  # last N turns to include
+AIMS_CLASSIFY_MAX_CONCERNS = int(os.getenv("AIMS_CLASSIFY_MAX_CONCERNS", "3"))   # recent concern lines to include
 # Model preflight validation (diagnostics only)
 VALIDATE_MODEL_ON_STARTUP = os.getenv("VALIDATE_MODEL_ON_STARTUP", "true").lower() == "true"
 # Memory configuration
@@ -139,56 +145,34 @@ async def _model_preflight():
             attempts.append({"apiVersion": api_version, "url": url, "httpStatus": r.status_code})
             return r.status_code, url
 
-        # Pick version heuristic similar to Vertex client
-        primary = "v1beta" if str(MODEL_ID).startswith("gemini-2") else "v1"
+        # Use stable v1 endpoint only (skip beta)
+        primary = "v1"
         code, url_primary = try_get(primary)
         app.state.model_check["apiVersion"] = primary
         app.state.model_check["urlPrimary"] = url_primary
         app.state.model_check["httpStatusPrimary"] = code
 
         if code == 404:
-            alt = "v1" if primary == "v1beta" else "v1beta"
-            code2, url_alt = try_get(alt)
-            app.state.model_check["altApiVersionTried"] = alt
-            app.state.model_check["urlAlt"] = url_alt
-            app.state.model_check["httpStatus"] = code2  # preserve legacy field name
-            app.state.model_check["httpStatusAlt"] = code2
-            # Default to unknown on 404 to avoid false negatives; only set true on 200 or list match
-            app.state.model_check["available"] = True if code2 == 200 else "unknown"
-            # If both 404, fall back to listing models (v1, then v1beta) to avoid false negatives
-            if code2 == 404:
-                loc = VERTEX_LOCATION
-                host = "aiplatform.googleapis.com" if str(loc).lower() == "global" else f"{loc}-aiplatform.googleapis.com"
-                list_url = f"https://{host}/v1/projects/{PROJECT_ID}/locations/{loc}/publishers/google/models"
-                app.state.model_check["listUrl"] = list_url
-                rlist = session.get(list_url)
-                app.state.model_check["listHttpStatus"] = rlist.status_code
-                matched = False
-                if rlist.status_code == 200:
-                    try:
-                        data = rlist.json()
-                    except Exception:
-                        data = {}
-                    models = data.get("models", []) or []
-                    app.state.model_check["listCount"] = len(models)
-                    matched = any(((m.get("name", "").split("/models/")[-1]) == MODEL_ID) for m in models)
-                # If v1 listing failed to find or 404, try v1beta as a secondary listing
-                if not matched:
-                    list_url_alt = f"https://{host}/v1beta/projects/{PROJECT_ID}/locations/{loc}/publishers/google/models"
-                    app.state.model_check["listUrlAlt"] = list_url_alt
-                    rlist2 = session.get(list_url_alt)
-                    app.state.model_check["listHttpStatusAlt"] = rlist2.status_code
-                    if rlist2.status_code == 200:
-                        try:
-                            data2 = rlist2.json()
-                        except Exception:
-                            data2 = {}
-                        models2 = data2.get("models", []) or []
-                        app.state.model_check["listCountAlt"] = len(models2)
-                        matched = any(((m.get("name", "").split("/models/")[-1]) == MODEL_ID) for m in models2)
-                app.state.model_check["listMatched"] = matched
-                if matched:
-                    app.state.model_check["available"] = True
+            # Default to unknown on 404; do a v1 models list to avoid false negatives
+            app.state.model_check["available"] = "unknown"
+            loc = VERTEX_LOCATION
+            host = "aiplatform.googleapis.com" if str(loc).lower() == "global" else f"{loc}-aiplatform.googleapis.com"
+            list_url = f"https://{host}/v1/projects/{PROJECT_ID}/locations/{loc}/publishers/google/models"
+            app.state.model_check["listUrl"] = list_url
+            rlist = session.get(list_url)
+            app.state.model_check["listHttpStatus"] = rlist.status_code
+            matched = False
+            if rlist.status_code == 200:
+                try:
+                    data = rlist.json()
+                except Exception:
+                    data = {}
+                models = data.get("models", []) or []
+                app.state.model_check["listCount"] = len(models)
+                matched = any(((m.get("name", "").split("/models/")[-1]) == MODEL_ID) for m in models)
+            app.state.model_check["listMatched"] = matched
+            if matched:
+                app.state.model_check["available"] = True
         else:
             app.state.model_check["httpStatus"] = code
             app.state.model_check["available"] = True if code == 200 else "unknown"
@@ -199,11 +183,9 @@ async def _model_preflight():
         try:
             loc = VERTEX_LOCATION
             host = "aiplatform.googleapis.com" if str(loc).lower() == "global" else f"{loc}-aiplatform.googleapis.com"
-            gen_primary = "v1beta" if str(MODEL_ID).startswith("gemini-2") else "v1"
+            gen_primary = "v1"
             base_gen_url = f"https://{host}/{gen_primary}/projects/{PROJECT_ID}/locations/{loc}/publishers/google/models/{MODEL_ID}:generateContent"
             app.state.model_check["baseGenerateUrlPrimary"] = base_gen_url
-            gen_alt = "v1" if gen_primary == "v1beta" else "v1beta"
-            app.state.model_check["baseGenerateUrlAlt"] = base_gen_url.replace(f"/{gen_primary}/", f"/{gen_alt}/", 1)
         except Exception:
             pass
 
@@ -566,7 +548,7 @@ async def chat(req: Request, body: ChatRequest):
     if AIMS_COACHING_ENABLED and getattr(body, "coach", False):
         # Helper imports
         from .aims_engine import evaluate_turn, load_mapping
-        from .json_schemas import REPLY_SCHEMA, CLASSIFY_SCHEMA, validate_json, SchemaValidationError
+        from .json_schemas import REPLY_SCHEMA, CLASSIFY_SCHEMA, validate_json, SchemaValidationError, vertex_response_schema
 
         # Load mapping once per process and cache in memory
         mapping = getattr(app.state, "aims_mapping", None)
@@ -651,7 +633,7 @@ async def chat(req: Request, body: ChatRequest):
                             max_tokens=MAX_TOKENS,
                             system_instruction=system_instruction,
                             response_mime_type="application/json",
-                            response_schema=schema,
+                            response_schema=vertex_response_schema(schema),
                         )
                     except TypeError:
                         result = client.generate_text(prompt, TEMPERATURE, MAX_TOKENS)
@@ -690,19 +672,101 @@ async def chat(req: Request, body: ChatRequest):
             "tips": fb.get("tips", []),
         }
 
-        # One-way switch: attempt LLM-based classification for actual AIMS turns (not small talk)
-        if cls_payload.get("step") in {"Announce", "Inquire", "Mirror", "Secure"}:
-            classify_prompt = (
-                "[AIMS_CLASSIFY]\n"
-                "Classify the clinician's last message into one AIMS step and generate brief coaching.\n"
-                "AIMS steps: Announce, Inquire, Mirror, Secure.\n"
-                "Return STRICT JSON only with keys: step, score (0-3), reasons (array of strings), tips (array of strings). Do not include any other text.\n"
-                "Keep tips to at most one item.\n"
-                "Use the prior parent line for context.\n\n"
-                f"Parent_last: {parent_last}\n"
-                f"Clinician_last: {body.message}\n"
-            )
-            used_llm_cls = False
+        # Always attempt LLM-based classification (vaccine relevance + Mirror+Inquire support);
+        # deterministic result serves as fallback if LLM JSON is invalid twice.
+        prior_state = None
+        if MEMORY_ENABLED and session_id:
+            try:
+                mem = _MEMORY_STORE.get(session_id) or {}
+                prior_state = (mem.get("aims_state") or {})
+            except Exception:
+                prior_state = None
+        prior_announced = bool((prior_state or {}).get("announced", False))
+        prior_phase = (prior_state or {}).get("phase", "PreAnnounce")
+
+        # Inject concise mapping markers into the LLM classifier prompt for grounding
+        markers = ((mapping or {}).get("meta", {}) or {}).get("per_step_classification_markers", {})
+        def _fmt_markers(md: dict) -> str:
+            try:
+                lines = []
+                for step_name in ("Announce", "Inquire", "Mirror", "Secure"):
+                    lst = (md.get(step_name, {}).get("linguistic", []) or [])
+                    if lst:
+                        # Keep it compact to avoid prompt bloat
+                        excerpt = ", ".join(lst[:12])
+                        lines.append(f"{step_name}.linguistic: [{excerpt}]")
+                return "\n".join(lines)
+            except Exception:
+                return ""
+        markers_text = _fmt_markers(markers)
+
+        # Build compact recent context and parent concerns for classifier grounding
+        def _recent_context(turns: list[dict], n_turns: int) -> str:
+            if not turns:
+                return ""
+            # Take last n_turns items (user/assistant mix)
+            tail = turns[-(n_turns):]
+            lines = []
+            for t in tail:
+                role = t.get("role")
+                content = (t.get("content") or "").strip()
+                if not content:
+                    continue
+                if role == "user":
+                    lines.append(f"Clinician: {content}")
+                elif role == "assistant":
+                    lines.append(f"Parent: {content}")
+            return "\n".join(lines)
+
+        def _extract_recent_concerns(turns: list[dict], max_items: int = 3) -> list[str]:
+            vax_cues = [
+                "vaccine", "vaccin", "shot", "mmr", "measles", "booster",
+                "immuniz", "side effect", "adverse event", "vaers", "thimerosal",
+                "immunity", "immune", "schedule", "dose", "hib", "pcv", "hepb",
+                "mmrv", "rotavirus", "pertussis", "varicella", "dtap", "polio",
+            ]
+            concern_cues = [
+                "worried", "concern", "scared", "afraid", "nervous", "hesitant",
+                "risk", "autism", "too many", "too soon", "safety",
+            ]
+            items: list[str] = []
+            for t in reversed(turns or []):
+                if t.get("role") == "assistant":  # parent persona in this app
+                    txt = (t.get("content") or "")
+                    lt = txt.lower()
+                    if any(v in lt for v in vax_cues) and any(c in lt for c in concern_cues):
+                        items.append(txt[:300])
+                        if len(items) >= max_items:
+                            break
+            return list(reversed(items))
+
+        recent_ctx = _recent_context(mem.get("history", []) if mem else [], AIMS_CLASSIFY_CONTEXT_TURNS * 2)
+        parent_recent_concerns = _extract_recent_concerns(mem.get("history", []) if mem else [], AIMS_CLASSIFY_MAX_CONCERNS)
+
+        classify_prompt = (
+            "[AIMS_CLASSIFY]\n"
+            "You classify a clinician turn using AIMS for vaccine conversations.\n"
+            "RULES:\n"
+            "- Apply AIMS only if the turn is vaccine-related (vaccines/shots/MMR/measles/booster/schedule/dose/side effects/immunity/immune system, etc.).\n"
+            "- If not vaccine-related, return step = null (rapport/small talk).\n"
+            "- Allowed steps: Announce, Inquire, Mirror, Mirror+Inquire, Secure, null.\n"
+            "- Compound allowed only as Mirror+Inquire (reflection immediately followed by an open question in the same turn).\n"
+            "- Mirror can reflect a concern that the parent expressed earlier in the visit (not only the last parent line).\n"
+            "- Didactic education/reassurance about vaccines counts as Secure (even without explicit options/autonomy).\n"
+            "- Only caution against asking 'what else' before mirroring when unmirrored concerns remain; if all known concerns are mirrored, Inquire for more is appropriate.\n"
+            "- Scoring/coaching preferences: Announce is strongest early; Mirror+Inquire is ideal when concerns are present; Secure scores best after concerns feel heard. Do not change the step to fit a sequence; just classify, score, and provide a tip.\n"
+            + ("AIMS markers (from mapping):\n" + markers_text + "\n" if markers_text else "") +
+            "OUTPUT STRICT JSON only with keys: step, score (0-3), reasons (array of strings), tips (array of strings, <=1). No other text.\n\n"
+            + (f"Recent context (last {AIMS_CLASSIFY_CONTEXT_TURNS} turns):\n{recent_ctx}\n\n" if recent_ctx else "")
+            + ("Parent_recent_concerns:\n- " + "\n- ".join(parent_recent_concerns) + "\n\n" if parent_recent_concerns else "")
+            + f"Parent_last: {parent_last}\n"
+            + f"Clinician_last: {body.message}\n"
+            + f"Prior: announced={str(prior_announced).lower()}, phase={prior_phase}\n"
+        )
+        used_llm_cls = False
+        pre_gate_rapport = (fb.get("step") is None)
+        do_llm = (AIMS_CLASSIFIER_MODE in ("hybrid", "llm")) and (not pre_gate_rapport)
+        if do_llm:
             for attempt in (1, 2):
                 try:
                     raw = _vertex_call_json(classify_prompt, CLASSIFY_SCHEMA, "coach_classify")
@@ -731,8 +795,266 @@ async def chat(req: Request, body: ChatRequest):
                         continue
                     # On second failure, keep deterministic cls_payload
                     break
-            # If the model request itself failed upstream, swallow and keep deterministic
-            # We rely on _vertex_call_json raising VertexAIError; just log a soft event.
+        # If the model request itself failed upstream, swallow and keep deterministic
+        # We rely on _vertex_call_json raising VertexAIError; just log a soft event.
+
+        # Vaccine-relevance gating: if LLM classification was used but the clinician text is not vaccine-related,
+        # treat this as rapport/small talk and do not apply an AIMS step.
+        if used_llm_cls:
+            lt_msg = (body.message or "").strip().lower()
+            pt_msg = (parent_last or "").strip().lower()
+            ctx_blob = ("\n".join(parent_recent_concerns) if parent_recent_concerns else "").lower()
+            vax_cues = [
+                "vaccine", "vaccin", "shot", "jab", "jabs", "mmr", "measles", "booster",
+                "immuniz", "side effect", "adverse event", "vaers", "thimerosal",
+                "immunity", "immune", "schedule", "dose", "hib", "pcv", "hepb", "mmrv", "rotavirus",
+                "pertussis", "varicella", "dtap", "polio"
+            ]
+            # Consider clinician text OR parent context/concerns OR prior announced state
+            is_vax_related = (
+                any(cue in lt_msg for cue in vax_cues)
+                or any(cue in pt_msg for cue in vax_cues)
+                or any(cue in ctx_blob for cue in vax_cues)
+                or bool(prior_announced)
+            )
+            if not is_vax_related and (cls_payload.get("step") in {"Announce", "Inquire", "Mirror", "Secure", "Mirror+Inquire"}):
+                cls_payload = {
+                    "step": None,
+                    "score": 0,
+                    "reasons": [
+                        "Non-vaccine rapport/small talk — AIMS not applied"
+                    ],
+                    "tips": [
+                        "When you're ready, lead with a brief vaccine-specific Announce."
+                    ],
+                }
+            else:
+                # If LLM returned null but this is clearly vaccine-related, prefer deterministic result
+                if cls_payload.get("step") is None:
+                    fb_step = fb.get("step")
+                    if is_vax_related and fb_step in {"Announce", "Inquire", "Mirror", "Secure"}:
+                        cls_payload = {
+                            "step": fb_step,
+                            "score": fb.get("score", 2),
+                            "reasons": [
+                                "LLM returned null; using deterministic fallback for vaccine-related turn"
+                            ] + (fb.get("reasons") or []),
+                            "tips": fb.get("tips", []),
+                        }
+                # Post-hoc correction: didactic education with no question should be Secure, not Inquire
+                lt = (body.message or "").strip().lower()
+                if (cls_payload.get("step") == "Inquire") and ("?" not in lt):
+                    if any(tok in lt for tok in ["study", "studies", "evidence", "data", "statistic", "percent", "%", "risk", "safe", "side effect", "protect", "immun", "schedule", "dose", "herd immunity"]):
+                        cls_payload["reasons"] = [
+                            "Didactic education detected; overriding Inquire to Secure"
+                        ] + (cls_payload.get("reasons") or [])
+                        cls_payload["step"] = "Secure"
+                # Score normalization: avoid 0 for valid steps
+                if cls_payload.get("step") in {"Announce", "Inquire", "Mirror", "Secure", "Mirror+Inquire"} and int(cls_payload.get("score", 0)) < 1:
+                    cls_payload["score"] = 1
+
+        # Coaching-only guidance and observational state updates (no step mutation)
+        if MEMORY_ENABLED and session_id:
+            try:
+                mem = _MEMORY_STORE.get(session_id) or {"history": [], "character": None, "scene": None, "updated": time.time()}
+                state = mem.setdefault("aims_state", {"announced": False, "phase": "PreAnnounce", "first_inquire_done": False, "pending_concerns": True, "parent_concerns": []})
+                step_current = cls_payload.get("step")
+
+                # Track parent concerns opportunistically from the last parent line (topic-based)
+                _AFFECT_CUES = [
+                    "worried", "concern", "scared", "afraid", "nervous", "hesitant",
+                ]
+                _TOPICAL_CUES = {
+                    "autism": ["autism", "asd"],
+                    "immune_load": ["too many", "too soon", "immune", "immune system", "overload", "immune overload", "immune system load", "viral load"],
+                    "side_effects": ["side effect", "adverse event", "vaers", "reaction", "fever", "swelling", "redness"],
+                    "ingredients": ["thimerosal", "aluminum", "adjuvant", "preservative", "ingredient"],
+                    "schedule_timing": ["schedule", "spacing", "delay", "alternative schedule", "wait"],
+                    "effectiveness": ["effective", "efficacy", "works", "breakthrough"],
+                    "trust": ["data", "study", "studies", "pharma", "big pharma", "trust"],
+                }
+
+                def _concern_topic(text: str) -> Optional[str]:
+                    lt = (text or "").lower()
+                    for topic, cues in _TOPICAL_CUES.items():
+                        if any(c in lt for c in cues):
+                            return topic
+                    return None
+
+                def _canon(text: str) -> str:
+                    t = (text or "").lower()
+                    t = re.sub(r"[^a-z0-9\s]", "", t)
+                    t = re.sub(r"\s+", " ", t).strip()
+                    # light synonym folding for immune_load
+                    t = t.replace("too many shots", "too many").replace("too many vaccines", "too many")
+                    t = t.replace("immune system load", "immune load").replace("immune overload", "immune load")
+                    t = t.replace("viral load", "immune load")
+                    return t
+
+                def _is_duplicate_concern(existing: list, new_desc: str, topic: str) -> bool:
+                    new_c = _canon(new_desc)
+                    for c in existing:
+                        if c.get("topic") != topic:
+                            continue
+                        old_c = _canon(c.get("desc") or "")
+                        if not old_c:
+                            continue
+                        if (new_c in old_c) or (old_c in new_c):
+                            return True
+                    return False
+
+                def _maybe_add_parent_concern(st: dict, parent_text: str):
+                    if not parent_text:
+                        return
+                    topic = _concern_topic(parent_text)
+                    if not topic:
+                        # affect-only mentions (nervous/worried/etc.) do not create a concern item
+                        return
+                    concerns = st.setdefault("parent_concerns", [])
+                    desc = parent_text.strip()[:240]
+                    if not _is_duplicate_concern(concerns, desc, topic):
+                        concerns.append({"desc": desc, "topic": topic, "is_mirrored": False, "is_secured": False})
+
+                def _topics_in(text: str) -> set[str]:
+                    lt = (text or "").lower()
+                    found: set[str] = set()
+                    for topic, cues in _TOPICAL_CUES.items():
+                        if any(c in lt for c in cues):
+                            found.add(topic)
+                    return found
+
+                def _mark_mirrored_multi(st: dict, clinician_text: str, parent_text: str):
+                    """Mark all relevant concerns as mirrored based on clinician reflection.
+
+                    Prefer topics detected in the clinician's reflective text (shotgun mirrors),
+                    then fall back to the parent's last topical mention, then any first unmirrored.
+                    """
+                    concerns = st.get("parent_concerns") or []
+                    if not concerns:
+                        return
+                    topics = _topics_in(clinician_text)
+                    marked_any = False
+                    if topics:
+                        for c in concerns:
+                            if (c.get("topic") in topics) and not c.get("is_mirrored"):
+                                c["is_mirrored"] = True
+                                marked_any = True
+                    if not marked_any:
+                        # Fallback to the parent's last topical mention
+                        pt_topic = _concern_topic(parent_text)
+                        if pt_topic:
+                            for c in concerns:
+                                if (c.get("topic") == pt_topic) and not c.get("is_mirrored"):
+                                    c["is_mirrored"] = True
+                                    marked_any = True
+                                    break
+                    if not marked_any:
+                        # Last resort: mark the first unmirrored concern
+                        for c in concerns:
+                            if not c.get("is_mirrored"):
+                                c["is_mirrored"] = True
+                                break
+
+                def _mark_best_match_mirrored(st: dict, parent_text: str):
+                    """Backwards-compatible single-topic mirror using only parent's last text."""
+                    concerns = st.get("parent_concerns") or []
+                    if not concerns:
+                        return
+                    topic = _concern_topic(parent_text)
+                    if topic:
+                        for c in concerns:
+                            if (c.get("topic") == topic) and not c.get("is_mirrored"):
+                                c["is_mirrored"] = True
+                                return
+                    # fallback: first unmirrored
+                    for c in concerns:
+                        if not c.get("is_mirrored"):
+                            c["is_mirrored"] = True
+                            return
+
+                def _mark_secured_by_topic(st: dict, clinician_text: str):
+                    concerns = st.get("parent_concerns") or []
+                    if not concerns:
+                        return
+                    topic = _concern_topic(clinician_text)
+                    if topic:
+                        for c in concerns:
+                            if (c.get("topic") == topic) and c.get("is_mirrored") and not c.get("is_secured"):
+                                c["is_secured"] = True
+                                return
+                    # fallback: first mirrored but not yet secured
+                    for c in concerns:
+                        if c.get("is_mirrored") and not c.get("is_secured"):
+                            c["is_secured"] = True
+                            return
+
+                # Add latest parent concern if any
+                if parent_last:
+                    _maybe_add_parent_concern(state, parent_last)
+
+                # Coaching guidance (no step mutation)
+                # Suppress 'what else' caution tip if all known concerns have been mirrored
+                if step_current in ("Inquire", "Mirror+Inquire"):
+                    concerns_list = state.get("parent_concerns") or []
+                    has_unmirrored = any(not c.get("is_mirrored") for c in concerns_list)
+                    if not has_unmirrored:
+                        tip_list = cls_payload.get("tips") or []
+                        if tip_list:
+                            tip0 = (tip_list[0] or "")
+                            tip0_l = tip0.lower()
+                            if ("what else" in tip0_l) or ("before asking" in tip0_l and ("what else" in tip0_l or "explore and address" in tip0_l)):
+                                cls_payload["tips"] = []
+                if step_current == "Announce" and state.get("first_inquire_done", False):
+                    cls_payload["reasons"] = [
+                        "Announce after inquiry is allowed, but it can feel abrupt at this point"
+                    ] + (cls_payload.get("reasons") or [])
+                    cls_payload.setdefault("tips", []).append(
+                        "Keep it brief and invite input (e.g., ‘How does that sound?’)."
+                    )
+                    try:
+                        cls_payload["score"] = min(2, int(cls_payload.get("score", 2)))
+                    except Exception:
+                        cls_payload["score"] = 2
+
+                if step_current in ("Mirror", "Mirror+Inquire"):
+                    _mark_mirrored_multi(state, body.message, parent_last)
+
+                if step_current == "Secure":
+                    needs_mirror = any(not c.get("is_mirrored") for c in (state.get("parent_concerns") or []))
+                    if needs_mirror:
+                        cls_payload["reasons"] = [
+                            "Securing before mirroring — allowed, but mirror first so the parent feels heard"
+                        ] + (cls_payload.get("reasons") or [])
+                        cls_payload.setdefault("tips", []).append(
+                            "Before educating, briefly reflect the concern (e.g., ‘It feels like a lot at once — did I get that right?’)."
+                        )
+                        try:
+                            cls_payload["score"] = min(2, int(cls_payload.get("score", 2)))
+                        except Exception:
+                            cls_payload["score"] = 2
+                    _mark_secured_by_topic(state, body.message)
+
+                # Observational state updates only
+                if step_current == "Announce":
+                    state["announced"] = True
+                    if state.get("phase") == "PreAnnounce":
+                        state["phase"] = "PreAnnounce"  # remain until inquiry begins
+                elif step_current in ("Inquire", "Mirror+Inquire"):
+                    state["first_inquire_done"] = True
+                    state["phase"] = "InquireMirror"
+                elif step_current == "Mirror":
+                    state["phase"] = "InquireMirror"
+                elif step_current == "Secure":
+                    state["phase"] = "Secure"
+                    # pending_concerns becomes False if all concerns are secured; otherwise keep True
+                    pc = state.get("parent_concerns") or []
+                    state["pending_concerns"] = not all(c.get("is_mirrored") and c.get("is_secured") for c in pc) if pc else False
+
+                mem["aims_state"] = state
+                mem["updated"] = time.time()
+                _MEMORY_STORE[session_id] = mem
+            except Exception:
+                logger.debug("AIMS state persistence failed for session %s", session_id)
 
         # Persist AIMS metrics
         if MEMORY_ENABLED and session_id:
@@ -742,9 +1064,17 @@ async def chat(req: Request, body: ChatRequest):
                 step = cls_payload.get("step")
                 # Always count the turn; only score/count recognized AIMS steps
                 aims["totalTurns"] = int(aims.get("totalTurns", 0)) + 1
-                if step in {"Announce", "Inquire", "Mirror", "Secure"}:
-                    aims["perStepCounts"][step] = aims["perStepCounts"].get(step, 0) + 1
-                    aims["scores"].setdefault(step, []).append(int(cls_payload.get("score", 2)))
+                if step in {"Announce", "Inquire", "Mirror", "Secure", "Mirror+Inquire"}:
+                    score_val = int(cls_payload.get("score", 2))
+                    if step == "Mirror+Inquire":
+                        # Expand into both Mirror and Inquire for metrics
+                        aims["perStepCounts"]["Mirror"] = aims["perStepCounts"].get("Mirror", 0) + 1
+                        aims["perStepCounts"]["Inquire"] = aims["perStepCounts"].get("Inquire", 0) + 1
+                        aims["scores"].setdefault("Mirror", []).append(score_val)
+                        aims["scores"].setdefault("Inquire", []).append(score_val)
+                    else:
+                        aims["perStepCounts"][step] = aims["perStepCounts"].get(step, 0) + 1
+                        aims["scores"].setdefault(step, []).append(score_val)
                 mem["aims"] = aims
                 mem["updated"] = time.time()
                 _MEMORY_STORE[session_id] = mem
@@ -752,30 +1082,21 @@ async def chat(req: Request, body: ChatRequest):
                 logger.debug("AIMS metrics persistence failed for session %s", session_id)
 
         # LLM-2: patient reply
+        # Stricter advice-like detection: match medication/dose/interval; ignore benign 'take home'
+        import re as _re  # local alias to avoid clobber
+        _MED_TERMS = r"acetaminophen|ibuprofen|paracetamol|tylenol|antibiotic|amoxicillin|penicillin|azithromycin"
+        _ADVICE_RE = _re.compile(
+            rf"\b(((you|he|she)\s+(should|needs\s+to|must))|((give|take)\s+({_MED_TERMS}))|\d+\s*mg|every\s+\d+\s+(hours|days))\b",
+            _re.I,
+        )
+        _IGNORE_RE = _re.compile(r"\btake\s+home\b", _re.I)
+
         def _detect_advice_patterns(text: str) -> list[str]:
-            t = (text or "")
-            lower = t.lower()
-            patterns = [
-                "you should",
-                "take ",
-                "dose",
-                "mg",
-                "prescribe",
-                "treatment",
-                "antibiotic",
-                "the best treatment",
-                "every 4 hours",
-                "every 6 hours",
-                "vaccine schedule for you is",
-            ]
-            matched = [p for p in patterns if p in lower]
-            # simple numeric dosing pattern
-            import re as _re  # local alias to avoid clobber
-            if _re.search(r"\b\d+\s*mg\b", lower):
-                matched.append("<mg_dose_pattern>")
-            if _re.search(r"\bevery\s+\d+\s+(hours|days)\b", lower):
-                matched.append("<interval_pattern>")
-            return matched
+            lower = (text or "").lower()
+            hits: list[str] = []
+            if _ADVICE_RE.search(lower) and not _IGNORE_RE.search(lower):
+                hits.append("clinical_advice_like")
+            return hits
 
         def _truncate_for_log(s: str, cap: int = SAFETY_LOG_CAP) -> str:
             try:
@@ -844,8 +1165,9 @@ async def chat(req: Request, body: ChatRequest):
                         advice_hits = _detect_advice_patterns(text)
                         if advice_hits:
                             safety_rewrite_flag = True
-                            # Show explicit error in the conversation (as agreed)
-                            reply_payload = {"patient_reply": "Error: parent persona generated clinician-style advice. Logged for debugging. Please try again."}
+                            violation_id = str(uuid.uuid4())
+                            # Show explicit error in the conversation with correlation id
+                            reply_payload = {"patient_reply": f"Error: parent persona generated clinician-style advice (id={violation_id}). Logged for debugging. Please try again."}
                             # Verbose log with caps
                             try:
                                 req_log = json.dumps({
@@ -858,6 +1180,7 @@ async def chat(req: Request, body: ChatRequest):
                             _log_event({
                                 "event": "aims_patient_reply_safety_violation",
                                 "sessionId": session_id,
+                                "violationId": violation_id,
                                 "patterns": advice_hits,
                                 "requestBody": _truncate_for_log(req_log, SAFETY_LOG_CAP),
                                 "rawModelResponse": _truncate_for_log(str(raw), SAFETY_LOG_CAP),

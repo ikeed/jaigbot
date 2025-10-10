@@ -59,7 +59,7 @@ def test_chat_success_with_mock(monkeypatch):
     # Ensure env values are present for route checks
     monkeypatch.setattr(m, "PROJECT_ID", "test-project")
     monkeypatch.setattr(m, "REGION", "us-central1")
-    monkeypatch.setattr(m, "MODEL_ID", "gemini-2.5-flash")
+    monkeypatch.setattr(m, "MODEL_ID", "gemini-2.5-pro")
 
     # Inject our fake client into the module
     monkeypatch.setattr(m, "VertexClient", FakeVertex)
@@ -68,5 +68,5 @@ def test_chat_success_with_mock(monkeypatch):
     assert r.status_code == 200
     data = r.json()
     assert data["reply"] == "echo: ping"
-    assert data["model"] == "gemini-2.5-flash"
+    assert data["model"] == "gemini-2.5-pro"
     assert isinstance(data["latencyMs"], int)

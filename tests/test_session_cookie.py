@@ -17,7 +17,7 @@ def test_cookie_issued_and_memory_persists(monkeypatch):
     # Ensure env values are present for route checks
     monkeypatch.setattr(m, "PROJECT_ID", "test-project")
     monkeypatch.setattr(m, "REGION", "us-central1")
-    monkeypatch.setattr(m, "MODEL_ID", "gemini-2.5-flash")
+    monkeypatch.setattr(m, "MODEL_ID", "gemini-2.5-pro")
     # Ensure cookies work over http in TestClient by disabling the Secure flag
     monkeypatch.setattr(m, "SESSION_COOKIE_SECURE", False)
 

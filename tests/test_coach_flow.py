@@ -46,7 +46,7 @@ def ensure_env(monkeypatch):
     # Ensure base env values
     monkeypatch.setattr(m, "PROJECT_ID", "proj")
     monkeypatch.setattr(m, "REGION", "us-central1")
-    monkeypatch.setattr(m, "MODEL_ID", "gemini-2.5-flash")
+    monkeypatch.setattr(m, "MODEL_ID", "gemini-2.5-pro")
     # Enable coaching by default for these tests
     monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", True)
     yield

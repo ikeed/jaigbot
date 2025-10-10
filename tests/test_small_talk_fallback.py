@@ -23,7 +23,7 @@ def enable_coaching(monkeypatch):
     import app.main as m
     monkeypatch.setattr(m, "PROJECT_ID", "proj")
     monkeypatch.setattr(m, "REGION", "us-central1")
-    monkeypatch.setattr(m, "MODEL_ID", "gemini-2.5-flash")
+    monkeypatch.setattr(m, "MODEL_ID", "gemini-2.5-pro")
     monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", True)
     monkeypatch.setattr(m, "VertexClient", FakeVertexInvalidJSON)
     yield

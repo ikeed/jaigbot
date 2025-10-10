@@ -341,8 +341,8 @@ class VertexClient:
         try:
             creds, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
             session = AuthorizedSession(creds)
-            # Choose API version: Gemini 2.x models are currently exposed under v1beta; others can use v1
-            api_version = "v1beta" if str(self.model_id).startswith("gemini-2") else "v1"
+            # Use stable v1 endpoint only (skip beta endpoints)
+            api_version = "v1"
             loc = self.region
             host = "aiplatform.googleapis.com" if str(loc).lower() == "global" else f"{loc}-aiplatform.googleapis.com"
             base_url = f"https://{host}/{api_version}/projects/{self.project}/locations/{loc}/publishers/google/models/{self.model_id}:generateContent"
@@ -376,30 +376,6 @@ class VertexClient:
                     body["systemInstruction"] = {"role": "system", "parts": [{"text": system_instruction}]}
                 r = session.post(base_url, json=body)
                 if r.status_code == 404:
-                    # Fallback across API versions on 404 (both directions)
-                    alt_url = None
-                    if "/v1/" in base_url:
-                        alt_url = base_url.replace("/v1/", "/v1beta/", 1)
-                    elif "/v1beta/" in base_url:
-                        alt_url = base_url.replace("/v1beta/", "/v1/", 1)
-                    if alt_url:
-                        r2 = session.post(alt_url, json=body)
-                        try:
-                            self.logger.info(json.dumps({
-                                "event": "vertex_rest_generate_fallback",
-                                "from": base_url,
-                                "to": alt_url,
-                                "status": r2.status_code,
-                            }))
-                        except Exception:
-                            pass
-                        if r2.status_code < 400:
-                            return r2.json()
-                        # If the alt call also failed, propagate its status (only keep 404 if both are 404)
-                        if r2.status_code == 404:
-                            raise VertexAIError("Model not found: HTTP 404", status_code=404)
-                        raise VertexAIError(f"Vertex REST error HTTP {r2.status_code}: {r2.text}", status_code=r2.status_code)
-                    # No alt URL derivable; keep 404
                     raise VertexAIError("Model not found: HTTP 404", status_code=404)
                 if r.status_code >= 400:
                     raise VertexAIError(f"Vertex REST error HTTP {r.status_code}: {r.text}", status_code=r.status_code)
