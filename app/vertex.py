@@ -208,7 +208,6 @@ class VertexClient:
             def _extract(resp):
                 # Accessing resp.text can raise ValueError if the candidate has no parts.
                 # Guard it so we can fallback to inspecting candidate parts.
-                txt = None
                 try:
                     txt = resp.text  # may raise if response has no parts
                 except Exception:

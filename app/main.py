@@ -42,7 +42,7 @@ AUTO_CONTINUE_ON_MAX_TOKENS = os.getenv("AUTO_CONTINUE_ON_MAX_TOKENS", "true").l
 MAX_CONTINUATIONS = int(os.getenv("MAX_CONTINUATIONS", "2"))
 SUPPRESS_VERTEXAI_DEPRECATION = os.getenv("SUPPRESS_VERTEXAI_DEPRECATION", "true").lower() == "true"
 # Feature flag for AIMS coaching (backward-compatible default: disabled)
-AIMS_COACHING_ENABLED = os.getenv("AIMS_COACHING_ENABLED", "false").lower() == "true"
+AIMS_COACHING_ENABLED = os.getenv("AIMS_COACHING_ENABLED", "true").lower() == "true"
 # Classifier mode: hybrid (default), llm, or deterministic
 AIMS_CLASSIFIER_MODE = os.getenv("AIMS_CLASSIFIER", "hybrid").lower()
 # LLM classifier context sizing

@@ -1,6 +1,7 @@
 /.chainlit/translations/
 /.coverage
 /.chainlit/session_id
+/.vscode/
 
 # Terraform
 terraform/.terraform/
@@ -8,3 +9,6 @@ terraform/.terraform.*
 terraform/terraform.tfstate
 terraform/terraform.tfstate.*
 terraform/crash.log
+
+# JetBrains IDE configs (do not commit local run configurations)
+/.idea/

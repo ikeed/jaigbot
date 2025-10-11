@@ -46,6 +46,22 @@ A lightweight Chainlit chat interface replaces the old static index.html. It for
   ```
 - Details (session persistence, timeouts, model/transport options, auto‑continue): see docs/chainlit-ui.md
 
+## CLI conversation (no UI)
+If you just want to verify the service and have a quick conversation without a browser, use the helper script:
+
+```bash
+# In one terminal, start the backend (or use the PyCharm Compound run config):
+./scripts/dev_run.sh
+# In another terminal, run a chat loop against POST /chat:
+python scripts/converse_cli.py --session-id localtest --coach
+```
+
+Environment overrides:
+- BACKEND_URL (default http://localhost:8080/chat)
+- SESSION_ID or FIXED_SESSION_ID (to persist memory)
+
+This script prints the model, latency, reply text, and includes coaching/session sections if the server returns them.
+
 ## Cloud Run health checks
 During deploys Cloud Run may show two different but valid URLs, and hitting "/" can 404 if not served. Use the helper script to probe /healthz with backoff instead of a one‑shot curl.
 
@@ -64,4 +80,6 @@ The backend supports a session‑keyed memory with optional persona/scene, using
 - Chainlit UI details: docs/chainlit-ui.md
 - Health checks and URLs: docs/health-checks.md
 - Memory and persona: docs/memory-and-persona.md
+- MCP empowerment/readiness: docs/mcp-empowerment.md
+- Standing orders (minimize manual work via efficient tool use): docs/standing-orders.md
 - AIMS protocol mapping (reference): docs/aims/aims_mapping.json (source paper: fpubh-11-1120326.pdf)
