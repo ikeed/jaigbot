@@ -83,6 +83,23 @@ resource "google_project_iam_member" "deployer_ar_writer" {
   ]
 }
 
+# Allow deployer to administer Artifact Registry repositories (creation/deletion)
+resource "google_project_iam_member" "deployer_ar_admin" {
+  project = var.project_id
+  role    = "roles/artifactregistry.admin"
+  member  = "serviceAccount:${google_service_account.deployer.email}"
+  depends_on = [
+    google_project_service.artifactregistry
+  ]
+}
+
+# Allow deployer to enable/disable/list project services used by Terraform
+resource "google_project_iam_member" "deployer_serviceusage_admin" {
+  project = var.project_id
+  role    = "roles/serviceusage.serviceUsageAdmin"
+  member  = "serviceAccount:${google_service_account.deployer.email}"
+}
+
 resource "google_project_iam_member" "deployer_token_creator" {
   project = var.project_id
   role    = "roles/iam.serviceAccountTokenCreator"
