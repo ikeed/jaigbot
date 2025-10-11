@@ -1,3 +1,10 @@
 /.chainlit/translations/
 /.coverage
 /.chainlit/session_id
+
+# Terraform
+terraform/.terraform/
+terraform/.terraform.*
+terraform/terraform.tfstate
+terraform/terraform.tfstate.*
+terraform/crash.log
