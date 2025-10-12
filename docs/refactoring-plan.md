@@ -128,7 +128,10 @@ Progress tracker
   - Create telemetry/events module: ✓ Implemented and wired (log_event, truncate_for_log)
   - Extract conversation utilities: ✓ Implemented and wired (delegated from main)
   - Prune dead wrappers from main.py: ✓ Completed (removed _concern_topic, _canon, _is_duplicate_concern, _topics_in, _mark_best_match_mirrored)
-- Phase 3 — Session service extraction: not started
+- Maintenance (non-feature) updates: ✓ Completed
+  - AIMS metrics snapshot now prefers precomputed runningAverage when present and handles exceptions when calculating from scores (no behavior change intended; guards added in tests).
+  - Vaccine relevance cues expanded to include counseling terms: "option", "options", "decision" to improve detection consistency (documented and covered by gating tests).
+- Phase 3 — Session service extraction: * In progress (SessionService created; chat() wired for session resolution, prune, and persona/scene updates)
 - Phase 4 — Config module and DI: not started
 - Phase 5 — Error/logging standardization: not started
 - Phase 6 — Chainlit cleanup: not started

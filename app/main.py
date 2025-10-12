@@ -27,6 +27,7 @@ from .telemetry.events import (
     log_event as telemetry_log_event,
     truncate_for_log as telemetry_truncate,
 )
+from .services.session_service import SessionService, CookieSettings
 
 # Environment configuration with sensible defaults
 PROJECT_ID = os.getenv("PROJECT_ID")
@@ -118,7 +119,7 @@ if ALLOWED_ORIGINS:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=ALLOWED_ORIGINS,
-        allow_credentials=False,
+        allow_credentials=True,
         allow_methods=["POST", "OPTIONS"],
         allow_headers=["Content-Type"],
         max_age=3600,
@@ -499,37 +500,31 @@ async def chat(req: Request, body: ChatRequest):
 
     # Memory: prune expired sessions occasionally
     now = time.time()
-    if MEMORY_ENABLED and _MEMORY_STORE and int(now) % 29 == 0:  # lightweight periodic prune
-        try:
-            expired = [sid for sid, v in _MEMORY_STORE.items() if (now - v.get("updated", now)) > MEMORY_TTL_SECONDS]
-            for sid in expired:
-                _MEMORY_STORE.pop(sid, None)
-        except Exception:
-            pass
+    # Initialize SessionService (could be lifted to app.state in a later phase)
+    sess = SessionService(
+        _MEMORY_STORE,
+        cookie=CookieSettings(
+            name=SESSION_COOKIE_NAME,
+            secure=SESSION_COOKIE_SECURE,
+            samesite=SESSION_COOKIE_SAMESITE,
+            max_age=SESSION_COOKIE_MAX_AGE,
+        ),
+        memory_enabled=MEMORY_ENABLED,
+        memory_max_turns=MEMORY_MAX_TURNS,
+        memory_ttl_seconds=MEMORY_TTL_SECONDS,
+    )
+    if int(now) % 29 == 0:
+        sess.prune_expired()
 
     # Resolve session and persona/scene
-    # Prefer body.sessionId, else cookie, else generate a new one and set cookie on response
-    session_id = body.sessionId or req.cookies.get(SESSION_COOKIE_NAME)
-    generated_session = False
-    if not session_id:
-        session_id = str(uuid.uuid4())
-        generated_session = True
+    session_id, generated_session = sess.ensure_session(req, body.sessionId)
     character = body.character
     scene = body.scene
 
-    # Initialize or update memory record
+    # Initialize or update memory record and persona/scene
     mem = None
     if MEMORY_ENABLED and session_id:
-        mem = _MEMORY_STORE.get(session_id)
-        if not mem:
-            mem = {"history": [], "character": None, "scene": None, "updated": now}
-            _MEMORY_STORE[session_id] = mem
-        # Update persona/scene if provided
-        if character:
-            mem["character"] = character.strip()
-        if scene:
-            mem["scene"] = scene.strip()
-        mem["updated"] = now
+        mem = sess.update_persona_scene(session_id, character, scene) or sess.get_mem(session_id)
 
     # Build system instruction
     system_instruction = None
@@ -823,7 +818,9 @@ async def chat(req: Request, body: ChatRequest):
                 "vaccine", "vaccin", "shot", "jab", "jabs", "mmr", "measles", "booster",
                 "immuniz", "side effect", "adverse event", "vaers", "thimerosal",
                 "immunity", "immune", "schedule", "dose", "hib", "pcv", "hepb", "mmrv", "rotavirus",
-                "pertussis", "varicella", "dtap", "polio"
+                "pertussis", "varicella", "dtap", "polio",
+                # Broader cues often used during vaccine counseling that indicate vaccine context
+                "option", "options", "decision"
             ]
             # Consider clinician text OR parent context/concerns OR prior announced state
             is_vax_related = (
@@ -906,9 +903,16 @@ async def chat(req: Request, body: ChatRequest):
                     # Delegate to conversation_service with topical cues
                     return svc_mark_secured_by_topic(st, clinician_text, _TOPICAL_CUES)
 
-                # Add latest parent concern if any
+                # Add latest parent concern if any, but avoid duplicating by topic
                 if parent_last:
-                    _maybe_add_parent_concern(state, parent_last)
+                    try:
+                        from .services.conversation_service import concern_topic as svc_concern_topic
+                        pt_topic = svc_concern_topic(parent_last, _TOPICAL_CUES)
+                    except Exception:
+                        pt_topic = None
+                    existing = state.get("parent_concerns") or []
+                    if pt_topic is None or not any(c.get("topic") == pt_topic for c in existing):
+                        _maybe_add_parent_concern(state, parent_last)
 
                 # Coaching guidance (no step mutation)
                 # Suppress 'what else' caution tip if all known concerns have been mirrored
@@ -993,6 +997,16 @@ async def chat(req: Request, body: ChatRequest):
                     else:
                         aims["perStepCounts"][step] = aims["perStepCounts"].get(step, 0) + 1
                         aims["scores"].setdefault(step, []).append(score_val)
+                    # Maintain running averages per step for quick snapshot reads
+                    ra: dict[str, float] = {}
+                    for k, arr in (aims.get("scores", {}) or {}).items():
+                        if arr:
+                            try:
+                                ra[k] = sum(arr) / len(arr)
+                            except Exception:
+                                # ignore non-numeric entries gracefully
+                                pass
+                    aims["runningAverage"] = ra
                 mem["aims"] = aims
                 mem["updated"] = time.time()
                 _MEMORY_STORE[session_id] = mem
@@ -1258,10 +1272,15 @@ async def chat(req: Request, body: ChatRequest):
                 aims = (_MEMORY_STORE.get(session_id) or {}).get("aims") or {}
                 counts = {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0}
                 counts.update(aims.get("perStepCounts", {}))
-                running_avg = {}
-                for k, arr in (aims.get("scores", {}) or {}).items():
-                    if arr:
-                        running_avg[k] = sum(arr) / len(arr)
+                # Prefer precomputed runningAverage if available
+                running_avg = aims.get("runningAverage") or {}
+                if not running_avg:
+                    for k, arr in (aims.get("scores", {}) or {}).items():
+                        if arr:
+                            try:
+                                running_avg[k] = sum(arr) / len(arr)
+                            except Exception:
+                                pass
                 session_obj = {"totalTurns": aims.get("totalTurns", 0), "perStepCounts": counts, "runningAverage": running_avg}
             except Exception:
                 session_obj = None
