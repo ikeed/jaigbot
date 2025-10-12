@@ -23,6 +23,10 @@ from .security.jailbreak import (
     is_jailbreak_or_meta as sec_is_jailbreak_or_meta,
     is_jailbreak_legacy as sec_is_jailbreak_legacy,
 )
+from .telemetry.events import (
+    log_event as telemetry_log_event,
+    truncate_for_log as telemetry_truncate,
+)
 
 # Environment configuration with sensible defaults
 PROJECT_ID = os.getenv("PROJECT_ID")
@@ -668,11 +672,6 @@ async def chat(req: Request, body: ChatRequest):
                 log_fallback=_on_fallback,
             )
 
-        def _log_event(ev: dict):
-            try:
-                logger.info(json.dumps(ev))
-            except Exception:
-                logger.info(ev)
 
         # Deterministic classification/scoring (no LLM)
         started = time.time()
@@ -800,12 +799,13 @@ async def chat(req: Request, body: ChatRequest):
                     used_llm_cls = True
                     break
                 except Exception as ve:
-                    _log_event({
-                        "event": "aims_classifier_invalid_json" if attempt == 1 else "aims_classifier_fallback",
-                        "attempt": attempt,
-                        "sessionId": session_id,
-                        "error": str(ve),
-                    })
+                    telemetry_log_event(
+                        logger,
+                        "aims_classifier_invalid_json" if attempt == 1 else "aims_classifier_fallback",
+                        attempt=attempt,
+                        sessionId=session_id,
+                        error=str(ve),
+                    )
                     if attempt == 1:
                         continue
                     # On second failure, keep deterministic cls_payload
@@ -1065,16 +1065,17 @@ async def chat(req: Request, body: ChatRequest):
         if is_jb:
             confused = "Um… I’m just a parent here for my child’s visit. I’m not sure what you mean — are we still talking about the checkup today?"
             reply_payload = {"patient_reply": confused}
-            _log_event({
-                "event": "aims_patient_reply_jailbreak_intercept",
-                "sessionId": session_id,
-                "patterns": jb_matches,
-                "requestBody": {
+            telemetry_log_event(
+                logger,
+                "aims_patient_reply_jailbreak_intercept",
+                sessionId=session_id,
+                patterns=jb_matches,
+                requestBody={
                     "message": body.message,
                     "coach": getattr(body, "coach", None),
                     "sessionId": session_id,
                 },
-            })
+            )
         else:
             try:
                 for attempt in (1, 2):
@@ -1099,27 +1100,29 @@ async def chat(req: Request, body: ChatRequest):
                                 })
                             except Exception:
                                 req_log = str({"message": body.message, "coach": getattr(body, "coach", None), "sessionId": session_id})
-                            _log_event({
-                                "event": "aims_patient_reply_safety_violation",
-                                "sessionId": session_id,
-                                "violationId": violation_id,
-                                "patterns": advice_hits,
-                                "requestBody": _truncate_for_log(req_log, SAFETY_LOG_CAP),
-                                "rawModelResponse": _truncate_for_log(str(raw), SAFETY_LOG_CAP),
-                                "retryUsed": attempt > 1,
-                            })
+                            telemetry_log_event(
+                                logger,
+                                "aims_patient_reply_safety_violation",
+                                sessionId=session_id,
+                                violationId=violation_id,
+                                patterns=advice_hits,
+                                requestBody=telemetry_truncate(req_log, SAFETY_LOG_CAP),
+                                rawModelResponse=telemetry_truncate(str(raw), SAFETY_LOG_CAP),
+                                retryUsed=attempt > 1,
+                            )
                             break
                         # Normal safe path
                         reply_payload = {"patient_reply": text}
                         break
                     except Exception as ve:
-                        _log_event({
-                            "event": "aims_patient_reply_invalid_json",
-                            "attempt": attempt,
-                            "sessionId": session_id,
-                            "jsonInvalid": True,
-                            "error": str(ve),
-                        })
+                        telemetry_log_event(
+                            logger,
+                            "aims_patient_reply_invalid_json",
+                            attempt=attempt,
+                            sessionId=session_id,
+                            jsonInvalid=True,
+                            error=str(ve),
+                        )
                         if attempt == 1:
                             retry_used = True
                             continue
@@ -1219,18 +1222,19 @@ async def chat(req: Request, body: ChatRequest):
                 return resp
 
         latency_ms = int((time.time() - started) * 1000)
-        _log_event({
-            "event": "aims_turn",
-            "status": "ok",
-            "latencyMs": latency_ms,
-            "modelId": MODEL_ID,
-            "sessionId": session_id,
-            "retryUsed": retry_used,
-            "fallbackUsed": fallback_used,
-            "safetyRewrite": safety_rewrite_flag,
-            "step": cls_payload.get("step") if cls_payload else None,
-            "score": cls_payload.get("score") if cls_payload else None,
-        })
+        telemetry_log_event(
+            logger,
+            "aims_turn",
+            status="ok",
+            latencyMs=latency_ms,
+            modelId=MODEL_ID,
+            sessionId=session_id,
+            retryUsed=retry_used,
+            fallbackUsed=fallback_used,
+            safetyRewrite=safety_rewrite_flag,
+            step=(cls_payload.get("step") if cls_payload else None),
+            score=(cls_payload.get("score") if cls_payload else None),
+        )
 
         # Update conversation history (user + assistant)
         if MEMORY_ENABLED and session_id:
