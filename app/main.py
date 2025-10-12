@@ -575,83 +575,89 @@ async def chat(req: Request, body: ChatRequest):
         def _vertex_call(prompt: str) -> str:
             """Call Vertex with model fallback support for patient reply.
 
-            Tries primary MODEL_ID first, then iterates MODEL_FALLBACKS on Vertex errors.
+            Delegates to VertexGateway while preserving fallback logging event shape.
             Returns text response as string. Raises last error if all fail.
             """
-            last_err = None
-            tried = []
+            from .services.vertex_gateway import VertexGateway
+
+            # Establish the same model order as before for transparency in logs
             models_to_try = [MODEL_ID] + [m for m in MODEL_FALLBACKS if m and m != MODEL_ID]
-            for mid in models_to_try:
-                tried.append(mid)
-                client = VertexClient(project=PROJECT_ID, region=VERTEX_LOCATION, model_id=mid)
-                try:
-                    try:
-                        result = client.generate_text(
-                            prompt=prompt,
-                            temperature=TEMPERATURE,
-                            max_tokens=MAX_TOKENS,
-                            system_instruction=system_instruction,
-                            response_mime_type="application/json",
-                            response_schema=REPLY_SCHEMA,
-                        )
-                    except TypeError:
-                        result = client.generate_text(prompt, TEMPERATURE, MAX_TOKENS)
-                    if isinstance(result, tuple) and len(result) == 2:
-                        return str(result[0])
-                    return str(result)
-                except Exception as e:
-                    last_err = e
-                    logger.info(json.dumps({
-                        "event": "vertex_model_fallback",
-                        "path": "coach_reply",
-                        "failedModel": mid,
-                        "next": models_to_try[len(tried):][:1] or None,
-                    }))
-                    continue
-            # All attempts failed
-            if last_err:
-                raise last_err
-            raise RuntimeError("Vertex call failed with no models attempted")
+            tried: list[str] = []
+
+            def _on_fallback(failed_mid: str):
+                tried.append(failed_mid)
+                next_model = models_to_try[len(tried):][:1] or None
+                logger.info(json.dumps({
+                    "event": "vertex_model_fallback",
+                    "path": "coach_reply",
+                    "failedModel": failed_mid,
+                    "next": next_model,
+                }))
+
+            gateway = VertexGateway(
+                project=PROJECT_ID,
+                region=VERTEX_LOCATION,
+                primary_model=MODEL_ID,
+                fallbacks=MODEL_FALLBACKS,
+                temperature=TEMPERATURE,
+                max_tokens=MAX_TOKENS,
+                client_cls=VertexClient,
+            )
+            # Match original behavior: prefer JSON path if supported, else non-JSON fallback
+            try:
+                from .json_schemas import REPLY_SCHEMA
+                return gateway.generate_text_json(
+                    prompt=prompt,
+                    response_schema=REPLY_SCHEMA,
+                    system_instruction=system_instruction,
+                    log_fallback=_on_fallback,
+                )
+            except Exception:
+                # If JSON schema path is unsupported by client, fall back to plain text generation
+                return gateway.generate_text(
+                    prompt=prompt,
+                    system_instruction=system_instruction,
+                    log_fallback=_on_fallback,
+                )
 
         def _vertex_call_json(prompt: str, schema: dict, log_path: str) -> str:
             """Call Vertex with JSON schema enforcement for classifier or reply.
 
-            Uses model fallback. Returns text string. Raises last error if all fail.
+            Delegates to VertexGateway while preserving fallback logging event shape.
+            Returns text string. Raises last error if all fail.
             log_path labels the event source for fallback logging.
             """
-            last_err = None
-            tried = []
+            from .services.vertex_gateway import VertexGateway
+            from .json_schemas import vertex_response_schema
+
             models_to_try = [MODEL_ID] + [m for m in MODEL_FALLBACKS if m and m != MODEL_ID]
-            for mid in models_to_try:
-                tried.append(mid)
-                client = VertexClient(project=PROJECT_ID, region=VERTEX_LOCATION, model_id=mid)
-                try:
-                    try:
-                        result = client.generate_text(
-                            prompt=prompt,
-                            temperature=TEMPERATURE,
-                            max_tokens=MAX_TOKENS,
-                            system_instruction=system_instruction,
-                            response_mime_type="application/json",
-                            response_schema=vertex_response_schema(schema),
-                        )
-                    except TypeError:
-                        result = client.generate_text(prompt, TEMPERATURE, MAX_TOKENS)
-                    if isinstance(result, tuple) and len(result) == 2:
-                        return str(result[0])
-                    return str(result)
-                except Exception as e:
-                    last_err = e
-                    logger.info(json.dumps({
-                        "event": "vertex_model_fallback",
-                        "path": log_path,
-                        "failedModel": mid,
-                        "next": models_to_try[len(tried):][:1] or None,
-                    }))
-                    continue
-            if last_err:
-                raise last_err
-            raise RuntimeError("Vertex call failed with no models attempted")
+            tried: list[str] = []
+
+            def _on_fallback(failed_mid: str):
+                tried.append(failed_mid)
+                next_model = models_to_try[len(tried):][:1] or None
+                logger.info(json.dumps({
+                    "event": "vertex_model_fallback",
+                    "path": log_path,
+                    "failedModel": failed_mid,
+                    "next": next_model,
+                }))
+
+            gateway = VertexGateway(
+                project=PROJECT_ID,
+                region=VERTEX_LOCATION,
+                primary_model=MODEL_ID,
+                fallbacks=MODEL_FALLBACKS,
+                temperature=TEMPERATURE,
+                max_tokens=MAX_TOKENS,
+                client_cls=VertexClient,
+            )
+            return gateway.generate_text_json(
+                prompt=prompt,
+                response_schema=vertex_response_schema(schema),
+                system_instruction=system_instruction,
+                log_fallback=_on_fallback,
+            )
 
         def _log_event(ev: dict):
             try:
