@@ -14,6 +14,15 @@ from pydantic import BaseModel, Field
 
 from .vertex import VertexClient, VertexAIError
 from .persona import DEFAULT_CHARACTER, DEFAULT_SCENE
+from .services.conversation_service import (
+    maybe_add_parent_concern as svc_maybe_add_parent_concern,
+    mark_mirrored_multi as svc_mark_mirrored_multi,
+    mark_secured_by_topic as svc_mark_secured_by_topic,
+)
+from .security.jailbreak import (
+    is_jailbreak_or_meta as sec_is_jailbreak_or_meta,
+    is_jailbreak_legacy as sec_is_jailbreak_legacy,
+)
 
 # Environment configuration with sensible defaults
 PROJECT_ID = os.getenv("PROJECT_ID")
@@ -880,119 +889,22 @@ async def chat(req: Request, body: ChatRequest):
                     "trust": ["data", "study", "studies", "pharma", "big pharma", "trust"],
                 }
 
-                def _concern_topic(text: str) -> Optional[str]:
-                    lt = (text or "").lower()
-                    for topic, cues in _TOPICAL_CUES.items():
-                        if any(c in lt for c in cues):
-                            return topic
-                    return None
 
-                def _canon(text: str) -> str:
-                    t = (text or "").lower()
-                    t = re.sub(r"[^a-z0-9\s]", "", t)
-                    t = re.sub(r"\s+", " ", t).strip()
-                    # light synonym folding for immune_load
-                    t = t.replace("too many shots", "too many").replace("too many vaccines", "too many")
-                    t = t.replace("immune system load", "immune load").replace("immune overload", "immune load")
-                    t = t.replace("viral load", "immune load")
-                    return t
 
-                def _is_duplicate_concern(existing: list, new_desc: str, topic: str) -> bool:
-                    new_c = _canon(new_desc)
-                    for c in existing:
-                        if c.get("topic") != topic:
-                            continue
-                        old_c = _canon(c.get("desc") or "")
-                        if not old_c:
-                            continue
-                        if (new_c in old_c) or (old_c in new_c):
-                            return True
-                    return False
 
                 def _maybe_add_parent_concern(st: dict, parent_text: str):
-                    if not parent_text:
-                        return
-                    topic = _concern_topic(parent_text)
-                    if not topic:
-                        # affect-only mentions (nervous/worried/etc.) do not create a concern item
-                        return
-                    concerns = st.setdefault("parent_concerns", [])
-                    desc = parent_text.strip()[:240]
-                    if not _is_duplicate_concern(concerns, desc, topic):
-                        concerns.append({"desc": desc, "topic": topic, "is_mirrored": False, "is_secured": False})
+                    # Delegate to conversation_service with topical cues
+                    return svc_maybe_add_parent_concern(st, parent_text, _TOPICAL_CUES)
 
-                def _topics_in(text: str) -> set[str]:
-                    lt = (text or "").lower()
-                    found: set[str] = set()
-                    for topic, cues in _TOPICAL_CUES.items():
-                        if any(c in lt for c in cues):
-                            found.add(topic)
-                    return found
 
                 def _mark_mirrored_multi(st: dict, clinician_text: str, parent_text: str):
-                    """Mark all relevant concerns as mirrored based on clinician reflection.
+                    # Delegate to conversation_service with topical cues
+                    return svc_mark_mirrored_multi(st, clinician_text, parent_text, _TOPICAL_CUES)
 
-                    Prefer topics detected in the clinician's reflective text (shotgun mirrors),
-                    then fall back to the parent's last topical mention, then any first unmirrored.
-                    """
-                    concerns = st.get("parent_concerns") or []
-                    if not concerns:
-                        return
-                    topics = _topics_in(clinician_text)
-                    marked_any = False
-                    if topics:
-                        for c in concerns:
-                            if (c.get("topic") in topics) and not c.get("is_mirrored"):
-                                c["is_mirrored"] = True
-                                marked_any = True
-                    if not marked_any:
-                        # Fallback to the parent's last topical mention
-                        pt_topic = _concern_topic(parent_text)
-                        if pt_topic:
-                            for c in concerns:
-                                if (c.get("topic") == pt_topic) and not c.get("is_mirrored"):
-                                    c["is_mirrored"] = True
-                                    marked_any = True
-                                    break
-                    if not marked_any:
-                        # Last resort: mark the first unmirrored concern
-                        for c in concerns:
-                            if not c.get("is_mirrored"):
-                                c["is_mirrored"] = True
-                                break
-
-                def _mark_best_match_mirrored(st: dict, parent_text: str):
-                    """Backwards-compatible single-topic mirror using only parent's last text."""
-                    concerns = st.get("parent_concerns") or []
-                    if not concerns:
-                        return
-                    topic = _concern_topic(parent_text)
-                    if topic:
-                        for c in concerns:
-                            if (c.get("topic") == topic) and not c.get("is_mirrored"):
-                                c["is_mirrored"] = True
-                                return
-                    # fallback: first unmirrored
-                    for c in concerns:
-                        if not c.get("is_mirrored"):
-                            c["is_mirrored"] = True
-                            return
 
                 def _mark_secured_by_topic(st: dict, clinician_text: str):
-                    concerns = st.get("parent_concerns") or []
-                    if not concerns:
-                        return
-                    topic = _concern_topic(clinician_text)
-                    if topic:
-                        for c in concerns:
-                            if (c.get("topic") == topic) and c.get("is_mirrored") and not c.get("is_secured"):
-                                c["is_secured"] = True
-                                return
-                    # fallback: first mirrored but not yet secured
-                    for c in concerns:
-                        if c.get("is_mirrored") and not c.get("is_secured"):
-                            c["is_secured"] = True
-                            return
+                    # Delegate to conversation_service with topical cues
+                    return svc_mark_secured_by_topic(st, clinician_text, _TOPICAL_CUES)
 
                 # Add latest parent concern if any
                 if parent_last:
@@ -1111,6 +1023,7 @@ async def chat(req: Request, body: ChatRequest):
                 return s
 
         def _is_jailbreak_or_meta(user_text: str) -> tuple[bool, list[str]]:
+            """Use security helper for boolean decision; keep matched patterns for logging."""
             u = (user_text or "").lower()
             cues = [
                 "break character",
@@ -1129,7 +1042,10 @@ async def chat(req: Request, body: ChatRequest):
                 "disclose settings",
             ]
             matched = [c for c in cues if c in u]
-            return (len(matched) > 0, matched)
+            # Delegate decision to security module (may use different heuristics)
+            jb = bool(sec_is_jailbreak_or_meta(user_text))
+            # Ensure boolean reflects either module or explicit cue match for backward compatibility
+            return (jb or len(matched) > 0, matched)
 
         reply_prompt = (
             "[AIMS_PATIENT_REPLY]\n"
@@ -1389,6 +1305,7 @@ async def chat(req: Request, body: ChatRequest):
 
     # Legacy jailbreak/meta intercept: respond in-character without LLM
     def _is_jb_legacy(user_text: str) -> tuple[bool, list[str]]:
+        """Use security helper while preserving matched cues list for logs."""
         u = (user_text or "").lower()
         cues = [
             "break character",
@@ -1407,7 +1324,8 @@ async def chat(req: Request, body: ChatRequest):
             "disclose settings",
         ]
         matched = [c for c in cues if c in u]
-        return (len(matched) > 0, matched)
+        jb = bool(sec_is_jailbreak_legacy(user_text))
+        return (jb or len(matched) > 0, matched)
 
     jb_hit, jb_patterns = _is_jb_legacy(body.message)
     if jb_hit:

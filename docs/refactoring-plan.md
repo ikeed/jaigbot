@@ -123,10 +123,11 @@ Migration and rollout
 Progress tracker
 - Phase 2 — Vertex gateway and JSON enforcement: ✓ Completed (VertexGateway implemented; main.py delegates; tests passing locally)
 - W2 — Vertex fallback refactor: ✓ Completed
-- Phase 1 — Conversation/security/telemetry extraction: * In progress (next)
-  - Create security/jailbreak helpers module: pending
+- Phase 1 — Conversation/security/telemetry extraction: * In progress
+  - Create security/jailbreak helpers module: ✓ Initial module created (wired into main for jailbreak checks)
   - Create telemetry/events module: pending
-  - Extract conversation utilities: pending
+  - Extract conversation utilities: ✓ Implemented and wired (delegated from main)
+  - Prune dead wrappers from main.py: ✓ Completed (removed _concern_topic, _canon, _is_duplicate_concern, _topics_in, _mark_best_match_mirrored)
 - Phase 3 — Session service extraction: not started
 - Phase 4 — Config module and DI: not started
 - Phase 5 — Error/logging standardization: not started
