@@ -32,7 +32,6 @@ if SUPPRESS_VERTEXAI_DEPRECATION:
         module="vertexai.generative_models._generative_models",
     )
 
-
 class VertexAIError(Exception):
     def __init__(self, message: str, status_code: Optional[int] = None):
         super().__init__(message)
