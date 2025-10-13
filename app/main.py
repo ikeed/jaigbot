@@ -4,7 +4,6 @@ import os
 import time
 import uuid
 from typing import Optional
-import re
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -29,10 +28,6 @@ from .services.conversation_service import (
     maybe_add_parent_concern as svc_maybe_add_parent_concern,
     mark_mirrored_multi as svc_mark_mirrored_multi,
     mark_secured_by_topic as svc_mark_secured_by_topic,
-)
-from .security.jailbreak import (
-    is_jailbreak_or_meta as sec_is_jailbreak_or_meta,
-    is_jailbreak_legacy as sec_is_jailbreak_legacy,
 )
 from .telemetry.events import (
     log_event as telemetry_log_event,
@@ -633,7 +628,7 @@ async def chat(req: Request, body: ChatRequest):
     if AIMS_COACHING_ENABLED and getattr(body, "coach", False):
         # Helper imports
         from .aims_engine import evaluate_turn, load_mapping
-        from .json_schemas import REPLY_SCHEMA, CLASSIFY_SCHEMA, validate_json, SchemaValidationError, vertex_response_schema
+        from .json_schemas import REPLY_SCHEMA, CLASSIFY_SCHEMA, validate_json
 
         # Load mapping once per process and cache in memory
         mapping = getattr(app.state, "aims_mapping", None)
