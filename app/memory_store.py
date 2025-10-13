@@ -26,8 +26,14 @@ class InMemoryStore:
     def get(self, key: str) -> Optional[Dict[str, Any]]:
         return self._store.get(key)
 
+    def __getitem__(self, key: str) -> Dict[str, Any]:
+        return self._store[key]
+
     def __setitem__(self, key: str, value: Dict[str, Any]) -> None:
         self._store[key] = value
+
+    def __contains__(self, key: str) -> bool:  # pragma: no cover - trivial
+        return key in self._store
 
     def items(self) -> List[Tuple[str, Dict[str, Any]]]:
         return list(self._store.items())
