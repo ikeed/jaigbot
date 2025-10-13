@@ -830,20 +830,8 @@ async def chat(req: Request, body: ChatRequest):
 
         # LLM-2: patient reply
         # Stricter advice-like detection: match medication/dose/interval; ignore benign 'take home'
-        import re as _re  # local alias to avoid clobber
-        _MED_TERMS = r"acetaminophen|ibuprofen|paracetamol|tylenol|antibiotic|amoxicillin|penicillin|azithromycin"
-        _ADVICE_RE = _re.compile(
-            rf"\b(((you|he|she)\s+(should|needs\s+to|must))|((give|take)\s+({_MED_TERMS}))|\d+\s*mg|every\s+\d+\s+(hours|days))\b",
-            _re.I,
-        )
-        _IGNORE_RE = _re.compile(r"\btake\s+home\b", _re.I)
-
-        def _detect_advice_patterns(text: str) -> list[str]:
-            lower = (text or "").lower()
-            hits: list[str] = []
-            if _ADVICE_RE.search(lower) and not _IGNORE_RE.search(lower):
-                hits.append("clinical_advice_like")
-            return hits
+        # Extracted safety detector (behavior-preserving)
+        from app.services.coach_safety import detect_advice_patterns as _detect_advice_patterns
 
         def _truncate_for_log(s: str, cap: int = SAFETY_LOG_CAP) -> str:
             try:
@@ -1092,28 +1080,14 @@ async def chat(req: Request, body: ChatRequest):
         # Add cookie if we generated a new session id
         resp = JSONResponse(status_code=200, content=response_payload)
         try:
-            resp.set_cookie(
-                key=SESSION_COOKIE_NAME,
-                value=session_id,
-                max_age=SESSION_COOKIE_MAX_AGE,
-                httponly=True,
-                secure=SESSION_COOKIE_SECURE,
-                samesite=SESSION_COOKIE_SAMESITE,
-                path="/",
-            )
+            sess.apply_cookie(resp, session_id)
         except Exception:
             pass
         return resp
 
-    # Legacy path: single call with free-form text reply
-    if mem and mem.get("history"):
-        from .services.chat_helpers import format_history as _format_history
-        history_text = _format_history(mem["history"], MEMORY_MAX_TURNS).strip()
-        prompt_text = (
-            ("Conversation so far:\n" + history_text + "\n\n") if history_text else ""
-        ) + f"User: {body.message}\nAssistant:"
-    else:
-        prompt_text = body.message
+    # Legacy path: single call with free-form text reply (behavior-preserving)
+    from .services.legacy_chat import LegacyPromptBuilder as _LegacyPromptBuilder
+    prompt_text = _LegacyPromptBuilder.build_prompt_text(mem, MEMORY_MAX_TURNS, body.message)
 
     # Call Vertex AI
     started = time.time()
@@ -1154,53 +1128,21 @@ async def chat(req: Request, body: ChatRequest):
                 logger.debug("Memory persistence failed for session %s", session_id)
         resp = JSONResponse(status_code=200, content={"reply": confused, "model": MODEL_ID, "latencyMs": latency_ms})
         try:
-            resp.set_cookie(
-                key=SESSION_COOKIE_NAME,
-                value=session_id,
-                max_age=SESSION_COOKIE_MAX_AGE,
-                httponly=True,
-                secure=SESSION_COOKIE_SECURE,
-                samesite=SESSION_COOKIE_SAMESITE,
-                path="/",
-            )
+            sess.apply_cookie(resp, session_id)
         except Exception:
             pass
         return resp
 
     def _attempt(model_id: str):
+        from .services.legacy_chat import VertexTextAttempt as _VertexTextAttempt
         client = VertexClient(project=PROJECT_ID, region=VERTEX_LOCATION, model_id=model_id)
-        # Support both new and legacy VertexClient interfaces used in tests:
-        # - New: generate_text(prompt=..., temperature=..., max_tokens=..., system_instruction=...) -> (text, meta)
-        # - Legacy/mock: generate_text(prompt, temperature, max_tokens) -> text
-        try:
-            result = client.generate_text(
-                prompt=prompt_text,
-                temperature=TEMPERATURE,
-                max_tokens=MAX_TOKENS,
-                system_instruction=system_instruction,
-            )
-        except TypeError:
-            # Fallback for mocks that don't accept system_instruction or keyword args
-            result = client.generate_text(prompt_text, TEMPERATURE, MAX_TOKENS)
-        # Normalize return shape
-        if isinstance(result, tuple) and len(result) == 2:
-            text, meta = result
-        else:
-            text = str(result)
-            meta = {
-                "finishReason": None,
-                "promptTokens": None,
-                "candidatesTokens": None,
-                "totalTokens": None,
-                "thoughtsTokens": None,
-                "safety": [],
-                "textLen": len((text or "").strip()),
-                "transport": None,
-                "continuationCount": 0,
-                "noProgressBreak": None,
-                "continueTailChars": None,
-                "continuationInstructionEnabled": None,
-            }
+        text, meta = _VertexTextAttempt.attempt(
+            client,
+            prompt_text=prompt_text,
+            temperature=TEMPERATURE,
+            max_tokens=MAX_TOKENS,
+            system_instruction=system_instruction,
+        )
         return text, meta
 
     try:

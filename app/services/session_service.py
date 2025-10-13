@@ -138,3 +138,24 @@ class SessionService:
         except Exception:
             # best-effort only
             pass
+
+    # -------- HTTP cookie helper --------
+    def apply_cookie(self, response, session_id: str) -> None:
+        """Set the session cookie on a FastAPI Response-like object.
+
+        Behavior-preserving extraction of the repeated set_cookie blocks from app.main.
+        Silently ignores errors to match previous try/except.
+        """
+        try:
+            response.set_cookie(
+                key=self.cookie.name,
+                value=session_id,
+                max_age=self.cookie.max_age,
+                httponly=True,
+                secure=self.cookie.secure,
+                samesite=self.cookie.samesite,
+                path="/",
+            )
+        except Exception:
+            # Best-effort only; ignore failures
+            pass
