@@ -32,7 +32,6 @@ if SUPPRESS_VERTEXAI_DEPRECATION:
         module="vertexai.generative_models._generative_models",
     )
 
-
 class VertexAIError(Exception):
     def __init__(self, message: str, status_code: Optional[int] = None):
         super().__init__(message)
@@ -208,7 +207,6 @@ class VertexClient:
             def _extract(resp):
                 # Accessing resp.text can raise ValueError if the candidate has no parts.
                 # Guard it so we can fallback to inspecting candidate parts.
-                txt = None
                 try:
                     txt = resp.text  # may raise if response has no parts
                 except Exception:

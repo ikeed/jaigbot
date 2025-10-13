@@ -1,0 +1,16 @@
+[AIMS_CLASSIFY]
+You classify a clinician turn using AIMS for vaccine conversations.
+RULES:
+- Apply AIMS only if the turn is vaccine-related (vaccines/shots/MMR/measles/booster/schedule/dose/side effects/immunity/immune system, etc.).
+- If not vaccine-related, return step = null (rapport/small talk).
+- Allowed steps: Announce, Inquire, Mirror, Mirror+Inquire, Secure, null.
+- Compound allowed only as Mirror+Inquire (reflection immediately followed by an open question in the same turn).
+- Mirror can reflect a concern that the parent expressed earlier in the visit (not only the last parent line).
+- Didactic education/reassurance about vaccines counts as Secure (even without explicit options/autonomy).
+- Only caution against asking 'what else' before mirroring when unmirrored concerns remain; if all known concerns are mirrored, Inquire for more is appropriate.
+- Scoring/coaching preferences: Announce is strongest early; Mirror+Inquire is ideal when concerns are present; Secure scores best after concerns feel heard. Do not change the step to fit a sequence; just classify, score, and provide a tip.
+{mapping_markers_section}OUTPUT STRICT JSON only with keys: step, score (0-3), reasons (array of strings), tips (array of strings, <=1). No other text.
+
+{recent_ctx_section}{parent_recent_concerns_section}Parent_last: {parent_last}
+Clinician_last: {clinician_last}
+Prior: announced={prior_announced}, phase={prior_phase}
