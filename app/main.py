@@ -12,6 +12,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .vertex import VertexClient, VertexAIError
+
+# Lazy, cached Vertex client per (project, region, model, class) to avoid re-initializing
+# a new SDK client on every request while still allowing tests to monkeypatch VertexClient.
+_VERTEX_CLIENT_CACHE = {}
+
+def _get_vertex_client(project: str, region: str, model_id: str):
+    key = (project, region, model_id, VertexClient)
+    client = _VERTEX_CLIENT_CACHE.get(key)
+    if client is None:
+        client = VertexClient(project=project, region=region, model_id=model_id)
+        _VERTEX_CLIENT_CACHE[key] = client
+    return client
 from .persona import DEFAULT_CHARACTER, DEFAULT_SCENE
 from .services.conversation_service import (
     maybe_add_parent_concern as svc_maybe_add_parent_concern,
@@ -1135,7 +1147,7 @@ async def chat(req: Request, body: ChatRequest):
 
     def _attempt(model_id: str):
         from .services.legacy_chat import VertexTextAttempt as _VertexTextAttempt
-        client = VertexClient(project=PROJECT_ID, region=VERTEX_LOCATION, model_id=model_id)
+        client = _get_vertex_client(project=PROJECT_ID, region=VERTEX_LOCATION, model_id=model_id)
         text, meta = _VertexTextAttempt.attempt(
             client,
             prompt_text=prompt_text,
