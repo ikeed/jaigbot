@@ -215,12 +215,13 @@ def test_coach_path_model_not_found_maps_to_404(monkeypatch):
     def fake_evaluate_turn(*args, **kwargs):
         raise VertexAIError("Complete system failure", status_code=404)
     
-    monkeypatch.setattr("app.aims_engine.evaluate_turn", fake_evaluate_turn)
-    
-    r = client.post("/chat", json={"message": "hi", "coach": True, "sessionId": "s404"})
-    assert r.status_code == 404
-    data = r.json()
-    assert "error" in data and data["error"]["code"] == 404
-    # Helpful guidance fields are present
-    assert "modelId" in data["error"]
-    assert "region" in data["error"]
+    # Use pytest's mock.patch to ensure proper cleanup and isolation
+    from unittest.mock import patch
+    with patch("app.aims_engine.evaluate_turn", side_effect=fake_evaluate_turn):
+        r = client.post("/chat", json={"message": "hi", "coach": True, "sessionId": "s404"})
+        assert r.status_code == 404
+        data = r.json()
+        assert "error" in data and data["error"]["code"] == 404
+        # Helpful guidance fields are present
+        assert "modelId" in data["error"]
+        assert "region" in data["error"]
