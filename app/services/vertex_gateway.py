@@ -61,6 +61,8 @@ class VertexGateway:
                 except TypeError:
                     # Backward compatibility for older client signature
                     result = client.generate_text(prompt, self.temperature, self.max_tokens)
+                # Record the model that succeeded
+                self.last_model_used = mid
                 return self._normalize_result(result)
             except Exception as e:
                 last_err = e
@@ -94,6 +96,8 @@ class VertexGateway:
                 except TypeError:
                     # Backward compatibility for older client signature
                     result = client.generate_text(prompt, self.temperature, self.max_tokens)
+                # Record the model that succeeded
+                self.last_model_used = mid
                 return self._normalize_result(result)
             except Exception as e:
                 last_err = e
