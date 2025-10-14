@@ -56,6 +56,20 @@ def setup_env(monkeypatch):
     monkeypatch.setattr(m, "MODEL_ID", "gemini-2.5-pro")
     monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", True)
     monkeypatch.setattr(m, "VertexClient", FakeVertexAimsJSON)
+    
+    # Mock AIMS mapping to prevent Mock object iteration issues
+    mock_mapping = {
+        "meta": {
+            "per_step_classification_markers": {
+                "Announce": {"linguistic": ["I recommend", "It's time for"]},
+                "Inquire": {"linguistic": ["What concerns", "How are you feeling"]},
+                "Mirror": {"linguistic": ["It sounds like", "I'm hearing"]},
+                "Secure": {"linguistic": ["It's your decision", "I'm here to support"]}
+            }
+        }
+    }
+    monkeypatch.setattr("app.aims_engine.load_mapping", lambda: mock_mapping)
+    
     yield
 
 

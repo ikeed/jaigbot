@@ -26,6 +26,19 @@ def enable_coaching(monkeypatch):
     monkeypatch.setattr(m, "MODEL_ID", "gemini-2.5-pro")
     monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", True)
     
+    # Mock AIMS mapping to prevent Mock object iteration issues
+    mock_mapping = {
+        "meta": {
+            "per_step_classification_markers": {
+                "Announce": {"linguistic": ["I recommend", "It's time for"]},
+                "Inquire": {"linguistic": ["What concerns", "How are you feeling"]},
+                "Mirror": {"linguistic": ["It sounds like", "I'm hearing"]},
+                "Secure": {"linguistic": ["It's your decision", "I'm here to support"]}
+            }
+        }
+    }
+    monkeypatch.setattr("app.aims_engine.load_mapping", lambda: mock_mapping)
+    
     # Mock at the VertexGateway level since this uses coaching path
     class FakeGatewayInvalidJSON:
         def __init__(self, *args, **kwargs):

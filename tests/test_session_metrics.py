@@ -32,6 +32,19 @@ def test_session_metrics_counts_and_snapshot(monkeypatch):
     monkeypatch.setattr(m, "PROJECT_ID", "p", raising=False)
     monkeypatch.setattr(m, "REGION", "us-central1", raising=False)
     monkeypatch.setattr(m, "VERTEX_LOCATION", "us-central1", raising=False)
+    
+    # Mock AIMS mapping to prevent Mock object iteration issues
+    mock_mapping = {
+        "meta": {
+            "per_step_classification_markers": {
+                "Announce": {"linguistic": ["I recommend", "It's time for"]},
+                "Inquire": {"linguistic": ["What concerns", "How are you feeling"]},
+                "Mirror": {"linguistic": ["It sounds like", "I'm hearing"]},
+                "Secure": {"linguistic": ["It's your decision", "I'm here to support"]}
+            }
+        }
+    }
+    monkeypatch.setattr("app.aims_engine.load_mapping", lambda: mock_mapping)
 
     c = TestClient(m.app)
 
