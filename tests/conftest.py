@@ -1,5 +1,7 @@
 import os
 import sys
+import pytest
+from unittest.mock import patch
 
 # Ensure project root is on sys.path for `import app.*`
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -99,4 +101,60 @@ def pytest_load_initial_conftests(args, early_config, parser):
                 os.environ["PYTEST_ADDOPTS"] = " ".join(new_parts)
     except Exception:
         # Never break test discovery due to this helper
+        pass
+
+
+@pytest.fixture(scope="session", autouse=True)
+def aims_mapping_mock():
+    """
+    Session-scoped auto-use fixture that mocks AIMS mapping to prevent Mock iteration errors.
+    
+    This fixture is applied to ALL tests automatically to ensure consistent
+    behavior when classify_step() tries to access markers.get("Mirror", {}).get("linguistic", []).
+    """
+    import sys
+    
+    # Clear any cached modules that might have the old load_mapping
+    modules_to_clear = [k for k in sys.modules.keys() if k.startswith('app.aims_engine')]
+    for mod in modules_to_clear:
+        if mod in sys.modules:
+            del sys.modules[mod]
+    
+    mock_mapping = {
+        "meta": {
+            "per_step_classification_markers": {
+                "Announce": {"linguistic": ["I recommend", "It's time for", "She/he is due for", "Today we will", "My recommendation is"]},
+                "Inquire": {"linguistic": ["What concerns", "What have you heard", "What matters most", "How are you feeling about", "What would help"]},
+                "Mirror": {"linguistic": ["It sounds like", "You're worried that", "I'm hearing", "You want", "You feel"]},
+                "Secure": {"linguistic": ["It's your decision", "I'm here to support", "We can", "Options include", "If you'd prefer", "Here's what to expect"]}
+            }
+        }
+    }
+    
+    # Use session-scoped patch
+    with patch("app.aims_engine.load_mapping", return_value=mock_mapping):
+        yield mock_mapping
+
+
+@pytest.fixture(autouse=True)
+def clean_app_state():
+    """
+    Function-scoped auto-use fixture to clean up app.state.aims_mapping after each test
+    to prevent pollution between tests.
+    """
+    import app.main
+    
+    # Store original state
+    original_mapping = getattr(app.main.app.state, 'aims_mapping', None)
+    
+    yield
+    
+    # Clean up: reset to original state or delete if it wasn't there
+    try:
+        if original_mapping is not None:
+            app.main.app.state.aims_mapping = original_mapping
+        elif hasattr(app.main.app.state, 'aims_mapping'):
+            delattr(app.main.app.state, 'aims_mapping')
+    except Exception:
+        # Don't let cleanup failures break tests
         pass

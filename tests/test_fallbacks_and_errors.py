@@ -26,7 +26,29 @@ def test_model_fallback_succeeds(monkeypatch):
                 raise VertexAIError("not found", status_code=404)
             return "ok-from-fallback"
 
-    monkeypatch.setattr(m, "VertexClient", SwitchVertex)
+    # Mock at the VertexGateway level since this uses legacy chat path
+    class SwitchGateway:
+        def __init__(self, *args, primary_model=None, **kwargs):
+            self.primary_model = primary_model or primary
+            self.current_model = primary_model or primary
+            self.last_model_used = None
+
+        def generate_text(self, *args, **kwargs):
+            log_fallback = kwargs.get('log_fallback')
+
+            if self.current_model == primary:
+                if log_fallback:
+                    log_fallback(primary)
+                self.current_model = fallback  # switch to fallback
+                raise VertexAIError("not found", status_code=404)
+            # If we get here, we're using the fallback model
+            self.last_model_used = fallback
+            return "ok-from-fallback"
+
+        def generate_text_json(self, *args, **kwargs):
+            return self.generate_text(*args, **kwargs)
+    
+    monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", SwitchGateway)
 
     r = client.post("/chat", json={"message": "hi"})
     assert r.status_code == 200
@@ -51,7 +73,19 @@ def test_upstream_error_maps_to_502_and_sets_cookie(monkeypatch):
             # Non-404 error should map to 502
             raise VertexAIError("upstream boom", status_code=503)
 
-    monkeypatch.setattr(m, "VertexClient", ErrorVertex)
+    # Mock at the VertexGateway level since this uses legacy chat path
+    class ErrorGateway:
+        def __init__(self, *args, **kwargs):
+            pass
+        
+        def generate_text(self, *args, **kwargs):
+            # Non-404 error should map to 502
+            raise VertexAIError("upstream boom", status_code=503)
+        
+        def generate_text_json(self, *args, **kwargs):
+            return self.generate_text(*args, **kwargs)
+    
+    monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", ErrorGateway)
 
     r = client.post("/chat", json={"message": "hello"})
     assert r.status_code == 502

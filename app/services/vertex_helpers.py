@@ -3,6 +3,12 @@ from typing import Callable, Optional
 
 from ..vertex import VertexClient
 
+# Track last model used by the most recent gateway call for tests/telemetry
+_LAST_MODEL_USED: Optional[str] = None
+
+def get_last_model_used() -> Optional[str]:
+    return _LAST_MODEL_USED
+
 
 def vertex_call_with_fallback_text(
     *,
@@ -24,6 +30,7 @@ def vertex_call_with_fallback_text(
     (reply schema embedded via gateway) and falls back to plain text generation when
     unsupported.
     """
+    global _LAST_MODEL_USED
     from .vertex_gateway import VertexGateway
 
     models_to_try = [primary_model] + [m for m in fallbacks if m and m != primary_model]
@@ -57,18 +64,23 @@ def vertex_call_with_fallback_text(
     try:
         from ..json_schemas import REPLY_SCHEMA
 
-        return gateway.generate_text_json(
+        result = gateway.generate_text_json(
             prompt=prompt,
             response_schema=REPLY_SCHEMA,
             system_instruction=system_instruction,
             log_fallback=_on_fallback,
         )
+        # Record last model used
+        _LAST_MODEL_USED = getattr(gateway, "last_model_used", primary_model)
+        return result
     except Exception:
-        return gateway.generate_text(
+        result = gateway.generate_text(
             prompt=prompt,
             system_instruction=system_instruction,
             log_fallback=_on_fallback,
         )
+        _LAST_MODEL_USED = getattr(gateway, "last_model_used", primary_model)
+        return result
 
 
 def vertex_call_with_fallback_json(
@@ -87,6 +99,7 @@ def vertex_call_with_fallback_json(
     client_cls: type = VertexClient,
 ) -> str:
     """Generate a JSON-constrained response using Vertex with model fallback logging."""
+    global _LAST_MODEL_USED
     from .vertex_gateway import VertexGateway
     from ..json_schemas import vertex_response_schema
 
@@ -117,9 +130,11 @@ def vertex_call_with_fallback_json(
         client_cls=client_cls,
     )
 
-    return gateway.generate_text_json(
+    result = gateway.generate_text_json(
         prompt=prompt,
         response_schema=vertex_response_schema(schema),
         system_instruction=system_instruction,
         log_fallback=_on_fallback,
     )
+    _LAST_MODEL_USED = getattr(gateway, "last_model_used", primary_model)
+    return result

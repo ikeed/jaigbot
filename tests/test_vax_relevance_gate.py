@@ -1,8 +1,26 @@
 import json
 import pytest
 from fastapi.testclient import TestClient
+from unittest.mock import patch
 
 from app.main import app
+
+
+@pytest.fixture(scope="module", autouse=True)
+def local_aims_mapping_mock():
+    """Module-scoped mock AIMS mapping to prevent 'Mock' object is not iterable errors."""
+    mock_mapping = {
+        "meta": {
+            "per_step_classification_markers": {
+                "Announce": {"linguistic": ["I recommend", "It's time for", "She/he is due for", "Today we will", "My recommendation is"]},
+                "Inquire": {"linguistic": ["What concerns", "What have you heard", "What matters most", "How are you feeling about", "What would help"]},
+                "Mirror": {"linguistic": ["It sounds like", "You're worried that", "I'm hearing", "You want", "You feel"]},
+                "Secure": {"linguistic": ["It's your decision", "I'm here to support", "We can", "Options include", "If you'd prefer", "Here's what to expect"]}
+            }
+        }
+    }
+    with patch("app.aims_engine.load_mapping", return_value=mock_mapping):
+        yield mock_mapping
 
 
 class FakeVertexAimsJSON:
@@ -56,6 +74,9 @@ def setup_env(monkeypatch):
     monkeypatch.setattr(m, "MODEL_ID", "gemini-2.5-pro")
     monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", True)
     monkeypatch.setattr(m, "VertexClient", FakeVertexAimsJSON)
+    
+    # AIMS mapping mock is now handled globally by conftest.py
+    
     yield
 
 
