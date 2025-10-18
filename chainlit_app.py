@@ -1,5 +1,7 @@
 import os
 import uuid
+import json
+import random
 from pathlib import Path
 import httpx
 import chainlit as cl
@@ -127,6 +129,116 @@ async def chat_profiles():
         return [cl.ChatProfile(name="Doctor", markdown_description="Clinician perspective", default=True)]
 
 
+def _build_scenario_card() -> list[str]:
+    """
+    Build scenario lines from a JSON file. Falls back to a default if file is missing.
+    Environment variables:
+      - SCENARIOS_FILE: optional path to scenarios JSON file (default: app/prompts/scenarios.json)
+      - SCENARIO_INDEX: if set to an integer, picks that scenario index deterministically; otherwise random.
+    File schema (minimal):
+      {
+        "names": {
+          "parents": ["Full Name", ...],
+          "children_first": ["First", ...],
+          "adult_first": ["First", ...],
+          "last": ["Last", ...]
+        },
+        "scenarios": [
+          {"is_parent": true|false, "purposes": [...], "notes": [...]}, ...
+        ]
+      }
+    """
+    try:
+        # Resolve default path relative to this file
+        root = Path(__file__).resolve().parent
+        default_path = root / "app" / "prompts" / "scenarios.json"
+        # If running from repo root, also try that
+        if not default_path.exists():
+            default_path = root / "prompts" / "scenarios.json"
+        # Allow override via environment variable
+        path_str = os.getenv("SCENARIOS_FILE") or str(default_path)
+        p = Path(path_str)
+        if not p.is_absolute():
+            # Try relative to CWD and then relative to this module
+            p1 = Path(os.getcwd()) / p
+            p2 = root / p
+            p = p1 if p1.exists() else p2
+        data = json.loads(Path(p).read_text(encoding="utf-8"))
+        scenarios = data.get("scenarios") or []
+        names = data.get("names") or {}
+        if not scenarios:
+            raise ValueError("No scenarios in file")
+        # Pick scenario index
+        idx_env = os.getenv("SCENARIO_INDEX")
+        if idx_env is not None:
+            try:
+                idx = max(0, min(int(idx_env), len(scenarios) - 1))
+            except Exception:
+                idx = random.randrange(len(scenarios))
+        else:
+            idx = random.randrange(len(scenarios))
+        sc = scenarios[idx]
+        is_parent = bool(sc.get("is_parent", False))
+        purposes = list(sc.get("purposes") or [])
+        notes_list = list(sc.get("notes") or [])
+        purpose = purposes[0] if purposes else None
+        if purposes:
+            purpose = random.choice(purposes)
+        note = random.choice(notes_list) if notes_list else None
+
+        # Helper to split full name and extract last
+        def _split_last(full: str) -> tuple[str, str]:
+            parts = (full or "").strip().split()
+            if not parts:
+                return ("Alex", "Smith")
+            if len(parts) == 1:
+                return (parts[0], "Smith")
+            return (" ".join(parts[:-1]), parts[-1])
+
+        # Name pools
+        parent_pool = list(names.get("parents") or [])
+        child_first_pool = list(names.get("children_first") or [])
+        adult_first_pool = list(names.get("adult_first") or [])
+        last_pool = list(names.get("last") or [])
+        if not last_pool:
+            last_pool = ["Jenkins", "Patel", "Gomez", "Nguyen", "Kim", "Lopez"]
+
+        scenario_lines: list[str] = []
+        if is_parent:
+            # Parent + child
+            if parent_pool:
+                parent_full = random.choice(parent_pool)
+                parent_first, parent_last = _split_last(parent_full)
+                parent_full = f"{parent_first} {parent_last}"
+            else:
+                parent_first = random.choice(adult_first_pool or ["Jordan", "Taylor"]) 
+                parent_last = random.choice(last_pool)
+                parent_full = f"{parent_first} {parent_last}"
+            child_first = random.choice(child_first_pool or ["Liam", "Maya"]) 
+            child_full = f"{child_first} {parent_last}"
+            scenario_lines.append(f"Parent: {parent_full}")
+            scenario_lines.append(f"Patient: {child_full}")
+        else:
+            # Adult patient only
+            first = random.choice(adult_first_pool or ["Jordan", "Taylor"]) 
+            last = random.choice(last_pool)
+            scenario_lines.append(f"Patient: {first} {last}")
+
+        if purpose:
+            scenario_lines.append(f"Purpose: {purpose}")
+        if note:
+            scenario_lines.append(f"Notes: {note}")
+        return scenario_lines
+    except Exception:
+        # Fallback to prior hard-coded scenario
+        return [
+            "Parent: Sarah Jenkins",
+            "Patient: Liam Jenkins",
+            "Purpose: Two-year checkup",
+            "Notes: Due for MMR inoculation",
+        ]
+
+
 @cl.on_chat_start
 async def start_chat():
     """
@@ -184,14 +296,9 @@ async def start_chat():
         # Avatars are optional; ignore any errors (e.g., file not found in dev)
         pass
 
-    # At chat start, show a neutral appointment entry and wait for the clinician's first message.
+    # At chat start, show a scenario card built from file-driven configuration.
     # Do NOT call the backend here to avoid startup delays and to let the clinician lead (Announce/Inquire).
-    scenario_lines = [
-        "Parent: Sarah Jenkins",
-        "Patient: Liam Jenkins",
-        "Purpose: Two-year checkup",
-        "Notes: Due for MMR inoculation",
-    ]
+    scenario_lines = _build_scenario_card()
     card = "\n".join(scenario_lines)
     # Save to client-side history (for UI replay only)
     history = cl.user_session.get("history")

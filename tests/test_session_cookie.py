@@ -34,7 +34,20 @@ def test_cookie_issued_and_memory_persists(monkeypatch):
             # Return a small reply to ensure it's stored in memory too
             return "ack"
 
-    monkeypatch.setattr(m, "VertexClient", RecordingVertex)
+    # Mock at the VertexGateway level since this uses legacy chat path
+    class RecordingGateway:
+        def __init__(self, *args, **kwargs):
+            pass
+        
+        def generate_text(self, prompt: str, *args, **kwargs):
+            prompts.append(prompt)
+            # Return a small reply to ensure it's stored in memory too
+            return "ack"
+        
+        def generate_text_json(self, prompt: str, *args, **kwargs):
+            return self.generate_text(prompt, *args, **kwargs)
+    
+    monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", RecordingGateway)
 
     # 1) First call without sessionId should set a cookie
     r1 = client.post("/chat", json={"message": "ping"})
@@ -50,6 +63,6 @@ def test_cookie_issued_and_memory_persists(monkeypatch):
     # Verify that the second prompt contains a history prefix with the prior user turn
     assert len(prompts) >= 2
     second_prompt = prompts[-1]
-    assert "Conversation so far:" in second_prompt
     assert "User: ping" in second_prompt
+    assert "Assistant: ack" in second_prompt
     assert second_prompt.rstrip().endswith("Assistant:")
