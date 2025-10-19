@@ -100,7 +100,43 @@ terraform {
   - If TF_BACKEND_BUCKET/TF_BACKEND_PREFIX are not set, CI will still run plan but will skip apply to avoid losing state.
   - Use a protected GitHub Environment if you want manual approval before apply.
 
-## Troubleshooting: Permission denied and existing resources
+## Troubleshooting: Remote state, permissions, and existing resources
+If CI or local Terraform shows errors like:
+- Error: Failed to get existing workspaces: querying Cloud Storage failed: storage: bucket doesn't exist
+- Permission 'iam.serviceAccounts.create' denied
+- Permission 'artifactregistry.repositories.create' denied
+- Requested entity already exists (for WIF pool)
+
+Here’s how to resolve the most common issues:
+
+### A) "bucket doesn't exist" during terraform init
+Most often this happens in CI when TF_BACKEND_BUCKET or TF_BACKEND_PREFIX contain leading/trailing spaces or are unset. The init step then points Terraform at a non-existent bucket name (with an invisible space at the start).
+
+Fixes:
+- Ensure your GitHub repo Variable values have no leading/trailing whitespace:
+  - TF_BACKEND_BUCKET = tf-state-aimsbot
+  - TF_BACKEND_PREFIX = jaigbot/prod
+- Prefer using the helper script which trims values and handles PR vs push: `bash scripts/terraform_init.sh`.
+- If you need to run init manually, quote the values and double-check:
+  - terraform init -backend-config="bucket=tf-state-aimsbot" -backend-config="prefix=jaigbot/prod"
+
+### B) Why do I see two state files in my bucket?
+You might notice both of these exist and are similar size (e.g., ~21 KB):
+- gs://tf-state-aimsbot/default.tfstate
+- gs://tf-state-aimsbot/jaigbot/prod/default.tfstate
+
+Reason: at some point Terraform was initialized without a prefix (writing to the bucket root), and at other times with a prefix (writing under jaigbot/prod). The backend block in this repo allows overriding via `terraform init -backend-config=…`; if one run omitted `prefix`, Terraform defaulted to writing to `default.tfstate` at the bucket root.
+
+What to do:
+- Pick a canonical location, ideally using a prefix, e.g., `TF_BACKEND_PREFIX=jaigbot/prod`.
+- Make sure all CI and local runs initialize with that prefix (use `scripts/terraform_init.sh`).
+- Optionally migrate state if your active state is at the root:
+  1. Ensure no one is running Terraform.
+  2. `terraform init -migrate-state -backend-config="bucket=tf-state-aimsbot" -backend-config="prefix=jaigbot/prod"`
+  3. Verify `terraform plan` shows no unintended changes.
+- After confirming the correct state is being used, you can delete the orphaned state file from the wrong location to avoid future confusion.
+
+### C) Permissions and existing resources
 If CI or local Terraform shows errors like:
 - Permission 'iam.serviceAccounts.create' denied
 - Permission 'artifactregistry.repositories.create' denied
