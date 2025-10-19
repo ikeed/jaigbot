@@ -17,6 +17,9 @@ env:
   MODEL_ID: ${{ vars.MODEL_ID }}
   TEMPERATURE: ${{ vars.TEMPERATURE }}
   MAX_TOKENS: ${{ vars.MAX_TOKENS }}
+  # Optional: for Terraform backend initialization (trimmed in script)
+  TF_BACKEND_BUCKET: ${{ vars.TF_BACKEND_BUCKET }}
+  TF_BACKEND_PREFIX: ${{ vars.TF_BACKEND_PREFIX }}
 
 jobs:
   deploy:
@@ -124,6 +127,11 @@ jobs:
 
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker $REGION-docker.pkg.dev -q
+
+      - name: Terraform init (safe, optional)
+        if: ${{ hashFiles('terraform/*.tf') != '' }}
+        working-directory: terraform
+        run: bash ../scripts/terraform_init.sh
 
       - name: Build and push container image
         run: |
