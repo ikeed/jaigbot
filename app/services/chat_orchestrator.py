@@ -160,7 +160,17 @@ class ChatOrchestrator:
                 "latencyMs": result["latency_ms"],
                 "coaching": result["coaching"],
                 "session": result["session"],
+                # Backward-compatible aliases for older clients
+                "text": result["reply"],
+                "modelId": result["model"],
+                "latency_ms": result["latency_ms"],
             }
+
+            # Always include the sessionId for clients that track by id
+            try:
+                response_payload["sessionId"] = ctx.session_id
+            except Exception:
+                pass
             
             # Add optional coach post for end-game scenarios
             if result.get("coach_post"):
@@ -213,7 +223,17 @@ class ChatOrchestrator:
                 "reply": result["reply"],
                 "model": result["model"],
                 "latencyMs": result["latency_ms"],
+                # Backward-compatible aliases for older clients
+                "text": result["reply"],
+                "modelId": result["model"],
+                "latency_ms": result["latency_ms"],
             }
+
+            # Always include the sessionId for clients that track by id
+            try:
+                response_payload["sessionId"] = ctx.session_id
+            except Exception:
+                pass
             
             # Add optional coaching/session if enabled and requested
             if result.get("coaching"):
