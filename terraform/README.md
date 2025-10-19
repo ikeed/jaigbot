@@ -239,3 +239,174 @@ Notes:
 - Root README for app overview: ../README.md
 - Developer setup and CI/CD workflows: ../docs/developer-setup.md
 - Cloud Run health checks helper: ../docs/health-checks.md
+
+
+## Troubleshooting: D) 403 AUTH_PERMISSION_DENIED during terraform plan (List Project Services / getIamPolicy)
+
+Symptoms
+- Errors like:
+  - Error when reading or editing Project Service PROJECT/service.googleapis.com: ... Error 403: Permission denied to list services for consumer container [projects/PROJECT_NUMBER], reason: AUTH_PERMISSION_DENIED
+  - Error retrieving IAM policy for project "PROJECT": googleapi: Error 403: The caller does not have permission, forbidden
+  - Permission 'iam.serviceAccounts.getIamPolicy' denied on resource (or it may not exist)
+
+Why this happens
+- The google_project_service resources need to list currently enabled services to compute the plan. That requires Service Usage read permissions on the target project.
+- Reading or editing project IAM bindings (google_project_iam_member, google_service_account_iam_member) requires permission to get the project/service account IAM policy.
+- If the identity running Terraform (your user account or the CI service account) lacks these read permissions, terraform plan will fail before it can even show changes.
+
+Minimum roles to run terraform plan successfully
+Grant these roles on the TARGET project to the identity that runs Terraform (pick one: your user, or the CI service account such as cr-deployer@PROJECT.iam.gserviceaccount.com):
+- roles/viewer OR roles/resourcemanager.projectIamViewer (to read project IAM policy)
+- roles/serviceusage.viewer OR roles/serviceusage.serviceUsageAdmin (to list project services)
+
+Recommended additional roles for apply (as documented above):
+- roles/iam.serviceAccountAdmin (create SAs)
+- roles/iam.workloadIdentityPoolAdmin (manage WIF pool/provider)
+- roles/artifactregistry.admin (create AR repositories)
+- roles/run.admin (if you use the optional Cloud Run timeout update step)
+
+How to grant (replace PROJECT and SA_EMAIL):
+```bash
+PROJECT=warm-actor-253703
+SA_EMAIL="cr-deployer@${PROJECT}.iam.gserviceaccount.com"  # or your user email
+
+# Read-only roles sufficient for 'terraform plan'
+gcloud projects add-iam-policy-binding "$PROJECT" \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/viewer"
+
+gcloud projects add-iam-policy-binding "$PROJECT" \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/serviceusage.viewer"
+
+# If you prefer a single role that also allows enabling/disabling services during apply:
+# gcloud projects add-iam-policy-binding "$PROJECT" \
+#   --member="serviceAccount:${SA_EMAIL}" \
+#   --role="roles/serviceusage.serviceUsageAdmin"
+```
+
+Notes
+- If you are bootstrapping for the first time, it is often easiest to run `terraform apply` locally as a Project Owner once, then switch CI to WIF with least-privilege.
+- The errors mention `projects/########`; that is the project NUMBER of your project. You can verify with:
+  `gcloud projects describe PROJECT --format='value(projectNumber)'`.
+- Without these read permissions, Terraform cannot even evaluate whether the APIs are enabled or what IAM bindings exist.
+
+
+
+## Troubleshooting: E) INVALID_ARGUMENT when granting roles/serviceusage.viewer
+
+Symptoms
+- gcloud errors like:
+  - ERROR: (gcloud.projects.add-iam-policy-binding) INVALID_ARGUMENT: Role roles/serviceusage.viewer is not supported for this resource.
+  - Policy modification failed. For a binding with condition, run gcloud alpha iam policies lint-condition to identify issues in condition.
+
+Why this happens
+- In some org/policy configurations, the legacy Service Usage Viewer role (roles/serviceusage.viewer) cannot be bound the way you are attempting (e.g., via a policy file with conditions, or restricted by Org Policy). While this role normally works at the project level, certain guardrails can reject it.
+- Terraform only needs to list enabled services during plan/apply for google_project_service resources. A broader role that’s commonly allowed is roles/serviceusage.serviceUsageAdmin, which includes list and enable/disable.
+
+Quick fixes
+1) Prefer the admin role when viewer is rejected
+```bash
+PROJECT=warm-actor-253703
+PRINCIPAL="serviceAccount:cr-deployer@${PROJECT}.iam.gserviceaccount.com"   # or your user email
+
+gcloud projects add-iam-policy-binding "$PROJECT" \
+  --member="$PRINCIPAL" \
+  --role="roles/serviceusage.serviceUsageAdmin"
+```
+
+2) If you must stay read-only, try adding Viewer with no conditions (some conditions aren’t supported for this role)
+```bash
+PROJECT=warm-actor-253703
+PRINCIPAL="serviceAccount:cr-deployer@${PROJECT}.iam.gserviceaccount.com"
+
+gcloud projects add-iam-policy-binding "$PROJECT" \
+  --member="$PRINCIPAL" \
+  --role="roles/viewer"
+```
+This lets Terraform read IAM policies. Combine with either roles/serviceusage.serviceUsageAdmin or ensure required services are already enabled.
+
+3) Manually enable required services (if you avoid serviceusage roles entirely)
+```bash
+PROJECT=warm-actor-253703
+APIS=(
+  aiplatform.googleapis.com
+  run.googleapis.com
+  artifactregistry.googleapis.com
+  iamcredentials.googleapis.com
+)
+for api in "${APIS[@]}"; do
+  gcloud services enable "$api" --project="$PROJECT"
+done
+```
+Once enabled, Terraform won’t need to toggle them, and a read-only plan will succeed if your identity has at least roles/viewer.
+
+Notes
+- If you use policy files with conditional bindings, some predefined roles don’t support conditions. Use add-iam-policy-binding without a condition, or lint with:
+  gcloud alpha iam policies lint-condition --condition-from-file=condition.json
+- If you prefer least privilege: roles/resourcemanager.projectIamViewer + pre-enabled services is sufficient for plan; for apply that changes services, use roles/serviceusage.serviceUsageAdmin.
+
+
+## Troubleshooting: F) INVALID_ARGUMENT: Policy members must be of the form "<type>:<value>" (and PROJECT_SET_IAM_DISALLOWED_MEMBER_TYPE)
+
+Symptoms
+- gcloud errors like:
+  - INVALID_ARGUMENT: Policy members must be of the form "<type>:<value>".
+  - PROJECT_SET_IAM_DISALLOWED_MEMBER_TYPE (disallowed member type for this project/org).
+
+Why this happens
+- The --member flag must include a principal type prefix. Examples:
+  - user:alice@example.com
+  - serviceAccount:my-sa@PROJECT.iam.gserviceaccount.com
+  - group:devs@example.com
+  - domain:example.com
+- If you pass just an email (e.g., alice@example.com) without a prefix, gcloud rejects it.
+- Some organizations disallow binding certain principal types (like user:) at the project level. In that case you’ll see PROJECT_SET_IAM_DISALLOWED_MEMBER_TYPE even if your syntax is correct. Use a permitted principal type (usually a service account) instead.
+
+Quick fixes
+1) Add the correct prefix to the member string
+```bash
+PROJECT=warm-actor-253703
+# Example for a human user:
+PRINCIPAL="user:craig.burnett@gmail.com"
+ROLE="roles/serviceusage.serviceUsageAdmin"
+
+gcloud projects add-iam-policy-binding "$PROJECT" \
+  --member="$PRINCIPAL" \
+  --role="$ROLE"
+```
+
+2) Prefer a service account if user principals are disallowed by org policy
+```bash
+PROJECT=warm-actor-253703
+SA_EMAIL="cr-deployer@${PROJECT}.iam.gserviceaccount.com"  # or another SA you control
+ROLE="roles/serviceusage.serviceUsageAdmin"
+
+gcloud projects add-iam-policy-binding "$PROJECT" \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="$ROLE"
+```
+
+3) Minimum roles for Terraform planning (recap)
+```bash
+PROJECT=warm-actor-253703
+SA_EMAIL="cr-deployer@${PROJECT}.iam.gserviceaccount.com"
+
+gcloud projects add-iam-policy-binding "$PROJECT" \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/viewer"
+
+# If roles/serviceusage.viewer is rejected in your org, use the admin role below instead
+#gcloud projects add-iam-policy-binding "$PROJECT" \
+#  --member="serviceAccount:${SA_EMAIL}" \
+#  --role="roles/serviceusage.viewer"
+
+gcloud projects add-iam-policy-binding "$PROJECT" \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/serviceusage.serviceUsageAdmin"
+```
+
+Notes
+- Always include the principal type prefix. gcloud does not infer it.
+- If your policy uses conditions, some predefined roles may not support conditional bindings; remove the condition or lint with: gcloud alpha iam policies lint-condition.
+- For CI, we recommend granting roles to the deployer service account (e.g., cr-deployer@PROJECT.iam.gserviceaccount.com) rather than to a human user.
