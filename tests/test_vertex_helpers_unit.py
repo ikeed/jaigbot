@@ -23,14 +23,21 @@ class FakeGateway:
         # capture constructor args for assertions if needed
         self.args = args
         self.kwargs = kwargs
+        # Allow tests to override return payloads
+        self.text_json_return = kwargs.get("text_json_return", None)
+        self.text_return = kwargs.get("text_return", None)
 
     def generate_text_json(self, *, prompt, response_schema, system_instruction, log_fallback):
         # simulate a fallback event then return a value
         log_fallback("primary-model")
+        if self.text_json_return is not None:
+            return self.text_json_return
         return "json-result"
 
     def generate_text(self, *, prompt, system_instruction, log_fallback):
         log_fallback("primary-model")
+        if self.text_return is not None:
+            return self.text_return
         return "text-result"
 
 
@@ -112,3 +119,57 @@ def test_vertex_call_with_fallback_json_uses_gateway_and_logs():
     )
     assert out == "json-result"
     assert any(rec.get("event") == "vertex_model_fallback" and rec.get("path") == "coach_classify" for rec in logger.records)
+
+
+def test_json_wrapper_is_sanitized_for_patient_reply(monkeypatch):
+    # Force gateway to return a wrapped markdown response
+    class WrappedGateway(FakeGateway):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.text_json_return = (
+                "Here is the JSON requested:\n\n```json\n{\n  \"patient_reply\": \"Hello there!\"\n}\n```\n"
+            )
+    monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", WrappedGateway)
+    logger = DummyLogger()
+    out = vh.vertex_call_with_fallback_text(
+        project="p",
+        region="r",
+        primary_model="m1",
+        fallbacks=["m2"],
+        temperature=0.1,
+        max_tokens=64,
+        prompt="hi",
+        system_instruction=None,
+        log_path="coach_reply",
+        logger=logger,
+        client_cls=object,
+    )
+    assert out == '{"patient_reply":"Hello there!"}'
+
+
+def test_json_wrapper_passthrough_for_generic_schema(monkeypatch):
+    # Gateway returns wrapped JSON that is not REPLY_SCHEMA; we expect compact JSON string
+    payload = "Here is the JSON requested:\n\n```json\n{\n  \"foo\": \"bar\",\n  \"n\": 1\n}\n```\n"
+
+    class WrappedGateway(FakeGateway):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.text_json_return = payload
+
+    monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", WrappedGateway)
+    logger = DummyLogger()
+    out = vh.vertex_call_with_fallback_json(
+        project="p",
+        region="r",
+        primary_model="m1",
+        fallbacks=["m2"],
+        temperature=0.0,
+        max_tokens=1,
+        prompt="classify",
+        system_instruction=None,
+        schema={"type": "object", "properties": {"foo": {"type": "string"}}},
+        log_path="coach_classify",
+        logger=logger,
+        client_cls=object,
+    )
+    assert out == '{"foo":"bar","n":1}'
