@@ -130,7 +130,7 @@ def vertex_call_with_fallback_text(
             _LAST_MODEL_USED = getattr(gateway, "last_model_used", primary_model)
             # Maintain existing contract for text path: return a JSON string envelope
             return json.dumps({"patient_reply": reply}, separators=(",", ":"))
-        # Record last model used and return raw result (legacy behavior)
+        # If JSON mode returned but could not be parsed, handle per-path fallback.
         _LAST_MODEL_USED = getattr(gateway, "last_model_used", primary_model)
         try:
             path = (log_path or "").lower()
