@@ -300,6 +300,20 @@ async def start_chat():
     cl.user_session.set("history", history)
     await cl.Message(card, author="Patient").send()
 
+    # Inject the scenario card into the scene context that we send to the backend,
+    # so the model has the exact names/purpose/notes as grounding and does not invent new ones.
+    try:
+        prev_scene = cl.user_session.get("scene")
+        scenario_scene_suffix = (
+            "\n\nScenario details (use these exact names; do not change them):\n" + card +
+            "\n\nIf asked for names, respond naturally but keep the same parent and child names."
+        )
+        new_scene = (prev_scene + scenario_scene_suffix) if prev_scene else scenario_scene_suffix
+        cl.user_session.set("scene", new_scene)
+    except Exception:
+        # Non-fatal if session store is unavailable
+        pass
+
     # Preflight check: verify backend is reachable and reasonably configured.
     # This avoids confusing 500 errors later (e.g., PROJECT_ID not set).
     try:
