@@ -198,9 +198,31 @@ class AimsCoachingHandler:
         # Step 4: Persist AIMS metrics (after state update)
         await self._persist_aims_metrics(ctx.session_id, cls_payload)
         
-        # Step 5: Generate patient reply
+        # Step 5: Generate patient reply (emit begin/end markers)
+        reply_start = time.time()
+        telemetry_log_event(
+            self.logger,
+            "aims_reply_begin",
+            sessionId=ctx.session_id,
+            requestId=request_id,
+            modelId=self.model_id,
+        )
         reply_payload = await self._generate_patient_reply(
             body.message, ctx.history_text, req, ctx.session_id
+        )
+        try:
+            from app.services.vertex_helpers import get_last_model_used
+            model_used_reply = get_last_model_used() or self.model_id
+        except Exception:
+            model_used_reply = self.model_id
+        telemetry_log_event(
+            self.logger,
+            "aims_reply_end",
+            sessionId=ctx.session_id,
+            requestId=request_id,
+            durationMs=int((time.time() - reply_start) * 1000),
+            modelUsed=model_used_reply,
+            textLen=len((reply_payload.get("patient_reply") or "").strip()),
         )
 
         # If this is the first assistant turn in the session, strip any accidental
