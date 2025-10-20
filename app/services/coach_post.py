@@ -158,12 +158,14 @@ class EndGameDetector:
 
     FOLLOWUP_CUES = [
         "follow up", "follow-up", "another appointment", "next visit", "come back",
-        "schedule", "set up an appointment", "later appointment",
+        "schedule", "set up an appointment", "later appointment", "set up",
+        "book an appointment", "make an appointment", "schedule something", "talk again",
     ]
 
     LITERATURE_CUES = [
         "handout", "handouts", "brochure", "pamphlet", "literature", "written info",
         "information to take home", "take home", "materials", "resource", "printout", "printed info",
+        "reading", "read this", "give you some literature", "leaflet", "info sheet",
     ]
 
     @staticmethod
