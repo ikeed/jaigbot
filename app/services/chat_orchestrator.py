@@ -49,6 +49,7 @@ class ChatOrchestrator:
         self.memory_ttl_seconds = memory_config["ttl_seconds"]
         
         self.aims_coaching_enabled = aims_config["enabled"]
+        self.force_coach_default = bool(aims_config.get("force_default", False))
         
         self.project_id = vertex_config.get("project_id")
         self.region = vertex_config["region"]
@@ -96,7 +97,7 @@ class ChatOrchestrator:
             )
             
             # Route to appropriate handler
-            if self.aims_coaching_enabled and getattr(body, "coach", False):
+            if self.aims_coaching_enabled and (getattr(body, "coach", False) or self.force_coach_default):
                 return await self._handle_coaching_path(req, body, ctx)
             else:
                 return await self._handle_legacy_path(req, body, ctx)
