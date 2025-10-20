@@ -177,13 +177,13 @@ def _build_scenario_card() -> list[str]:
                 idx = random.randrange(len(scenarios))
         else:
             idx = random.randrange(len(scenarios))
-        sc = scenarios[idx]
-        is_parent = bool(sc.get("is_parent", False))
+        # Always assume parent + child scenario; prefer scenarios marked is_parent=true
+        # Filter scenarios for parent/child if possible; fallback to selected index
+        sc_parent_first = [s for s in scenarios if s.get("is_parent") is not False]
+        sc = sc_parent_first[idx % len(sc_parent_first)] if sc_parent_first else scenarios[idx]
         purposes = list(sc.get("purposes") or [])
         notes_list = list(sc.get("notes") or [])
-        purpose = purposes[0] if purposes else None
-        if purposes:
-            purpose = random.choice(purposes)
+        purpose = random.choice(purposes) if purposes else None
         note = random.choice(notes_list) if notes_list else None
 
         # Helper to split full name and extract last
@@ -204,25 +204,19 @@ def _build_scenario_card() -> list[str]:
             last_pool = ["Jenkins", "Patel", "Gomez", "Nguyen", "Kim", "Lopez"]
 
         scenario_lines: list[str] = []
-        if is_parent:
-            # Parent + child
-            if parent_pool:
-                parent_full = random.choice(parent_pool)
-                parent_first, parent_last = _split_last(parent_full)
-                parent_full = f"{parent_first} {parent_last}"
-            else:
-                parent_first = random.choice(adult_first_pool or ["Jordan", "Taylor"]) 
-                parent_last = random.choice(last_pool)
-                parent_full = f"{parent_first} {parent_last}"
-            child_first = random.choice(child_first_pool or ["Liam", "Maya"]) 
-            child_full = f"{child_first} {parent_last}"
-            scenario_lines.append(f"Parent: {parent_full}")
-            scenario_lines.append(f"Patient: {child_full}")
+        # Parent + child only
+        if parent_pool:
+            parent_full = random.choice(parent_pool)
+            parent_first, parent_last = _split_last(parent_full)
+            parent_full = f"{parent_first} {parent_last}"
         else:
-            # Adult patient only
-            first = random.choice(adult_first_pool or ["Jordan", "Taylor"]) 
-            last = random.choice(last_pool)
-            scenario_lines.append(f"Patient: {first} {last}")
+            parent_first = random.choice(adult_first_pool or ["Jordan", "Taylor"]) 
+            parent_last = random.choice(last_pool)
+            parent_full = f"{parent_first} {parent_last}"
+        child_first = random.choice(child_first_pool or ["Liam", "Maya"]) 
+        child_full = f"{child_first} {parent_last}"
+        scenario_lines.append(f"Parent: {parent_full}")
+        scenario_lines.append(f"Patient: {child_full}")
 
         if purpose:
             scenario_lines.append(f"Purpose: {purpose}")
