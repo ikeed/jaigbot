@@ -115,6 +115,16 @@ class AimsCoachingHandler:
         reply_payload = await self._generate_patient_reply(
             body.message, ctx.history_text, req, ctx.session_id
         )
+
+        # If this is the first assistant turn in the session, strip any accidental
+        # scenario headers from the parent reply to avoid duplicating the UI card.
+        try:
+            if not (ctx.parent_last or "").strip():
+                from app.services.chat_helpers import strip_appointment_headers
+                pr = reply_payload.get("patient_reply", "")
+                reply_payload["patient_reply"] = strip_appointment_headers(pr)
+        except Exception:
+            pass
         
         # Step 6: Update conversation history
         await self._update_conversation_history(

@@ -236,3 +236,45 @@ def format_markers(md: dict) -> str:
         return "\n".join(lines)
     except Exception:
         return ""
+
+
+
+def strip_appointment_headers(text: str) -> str:
+    """Remove scenario header lines like 'Parent:', 'Patient:', 'Purpose:', 'Notes:' from text.
+
+    Intended for sanitizing the very first assistant reply so we don't show a duplicate
+    appointment summary when the UI already displayed a scenario card.
+    """
+    if not text:
+        return text
+    lines = (text or "").splitlines()
+    kept: list[str] = []
+    for ln in lines:
+        lt = ln.strip()
+        if not lt:
+            # Preserve single blank lines; we will collapse later
+            kept.append("")
+            continue
+        ltl = lt.lower()
+        if (
+            ltl.startswith("parent:")
+            or ltl.startswith("patient:")
+            or ltl.startswith("purpose:")
+            or ltl.startswith("notes:")
+        ):
+            # Skip header line
+            continue
+        kept.append(lt)
+    # Collapse multiple blank lines
+    out_lines: list[str] = []
+    prev_blank = False
+    for ln in kept:
+        if ln == "":
+            if prev_blank:
+                continue
+            prev_blank = True
+            out_lines.append("")
+        else:
+            prev_blank = False
+            out_lines.append(ln)
+    return "\n".join(out_lines).strip()
