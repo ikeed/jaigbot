@@ -85,7 +85,7 @@ class AimsCoachingHandler:
         self.endgame_temperature = float(os.getenv("AIMS_ENDGAME_TEMPERATURE", "0.1"))
         self.endgame_max_tokens = int(os.getenv("AIMS_ENDGAME_MAX_TOKENS", "192"))
         self.classify_budget_s = float(os.getenv("AIMS_CLASSIFY_BUDGET_S", "3.0"))
-        
+
         # Allow tests to monkeypatch the client via app.main.VertexClient
         self.client_cls = vertex_config.get("client_cls", None) or VertexClient
         
@@ -113,7 +113,7 @@ class AimsCoachingHandler:
                 return str(uuid.uuid4())
 
         request_id = _req_id()
-        
+
         # Load AIMS mapping (cached at app level)
         mapping = await self._load_aims_mapping()
         
@@ -197,6 +197,11 @@ class AimsCoachingHandler:
 
         # Step 4: Persist AIMS metrics (after state update)
         await self._persist_aims_metrics(ctx.session_id, cls_payload)
+        
+        # Step 5: Generate patient reply
+        reply_payload = await self._generate_patient_reply(
+            body.message, ctx.history_text, req, ctx.session_id
+        )
 
         # If this is the first assistant turn in the session, strip any accidental
         # scenario headers from the parent reply to avoid duplicating the UI card.
@@ -382,7 +387,7 @@ class AimsCoachingHandler:
                         cls_payload["score"] = 2
             except Exception:
                 pass
-        
+
         # Apply vaccine relevance gating if LLM was used
         if used_llm_cls:
             cls_payload = VaccineRelevanceGate.gate(
@@ -742,7 +747,7 @@ class AimsCoachingHandler:
                     if acc:
                         # Reverse back to chronological order and join
                         combined_reply_text = " ".join(reversed(acc)).strip()
-                    
+
                     # Count total assistant replies in history for gating
                     try:
                         assistant_count = sum(
@@ -752,7 +757,7 @@ class AimsCoachingHandler:
                         )
                     except Exception:
                         assistant_count = 0
-                    
+
                     # Heuristic: if clinician explicitly offered follow-up + literature and parent acknowledged, trigger endgame
                     try:
                         lu = (last_user_text or "").strip().lower()
@@ -788,7 +793,7 @@ class AimsCoachingHandler:
                                 return {"title": "🎉 Great job!", "lines": lines}
                     except Exception:
                         pass
-                        
+
                 except Exception:
                     pass
             
@@ -806,7 +811,7 @@ class AimsCoachingHandler:
                     return None
             except Exception:
                 pass
-            
+
             # First attempt: LLM-based endgame detection (robust to phrasing differences)
             try:
                 detect_prompt = (
@@ -834,7 +839,7 @@ class AimsCoachingHandler:
                 outcome = (obj.get("outcome") or "").strip()
             except Exception:
                 outcome = None
-            
+
             # Fallback: heuristic detector when LLM not confident/available
             if not outcome or outcome == "not_endgame":
                 eg = EndGameDetector.detect(combined_reply_text)
@@ -853,7 +858,7 @@ class AimsCoachingHandler:
                         pass
                     return None
                 outcome = eg.get("reason")
-            
+
             lines = []
             if outcome == "accepted_now":
                 lines.append("Outcome: Parent agreed to vaccinate today — well done!")
@@ -873,7 +878,7 @@ class AimsCoachingHandler:
                 except Exception:
                     pass
                 return None
-            
+
             # Add fallback bullets for end-game summary
             try:
                 from app.services.coach_post import build_endgame_bullets_fallback
