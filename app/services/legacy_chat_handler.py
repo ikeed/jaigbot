@@ -75,6 +75,14 @@ class LegacyChatHandler:
         
         # Generate response with fallbacks
         reply_text = await self._generate_reply(full_prompt)
+
+        # If first assistant turn this session, strip accidental scenario headers
+        try:
+            if not (ctx.parent_last or "").strip():
+                from app.services.chat_helpers import strip_appointment_headers
+                reply_text = strip_appointment_headers(reply_text)
+        except Exception:
+            pass
         
         # Update conversation history
         await self._update_conversation_history(ctx.session_id, body.message, reply_text)
