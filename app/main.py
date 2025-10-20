@@ -612,6 +612,7 @@ async def chat(req: Request, body: ChatRequest):
     
     aims_config = {
         "enabled": AIMS_COACHING_ENABLED,
+        "force_default": (os.getenv("AIMS_COACHING_DEFAULT", "false").lower() == "true"),
     }
     
     debug_config = {
@@ -658,6 +659,9 @@ async def config():
         "autoContinueOnMaxTokens": AUTO_CONTINUE_ON_MAX_TOKENS,
         "maxContinuations": MAX_CONTINUATIONS,
         "suppressVertexAIDeprecation": SUPPRESS_VERTEXAI_DEPRECATION,
+        # Coaching toggles
+        "aimsCoachingEnabled": AIMS_COACHING_ENABLED,
+        "aimsCoachingDefault": (os.getenv("AIMS_COACHING_DEFAULT", "false").lower() == "true"),
         # Reflect effective default here (Vertex client defaults to true now)
         "useVertexRest": os.getenv("USE_VERTEX_REST", "true").lower() == "true",
         "continueTailChars": int(os.getenv("CONTINUE_TAIL_CHARS", "500")),
