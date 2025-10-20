@@ -128,40 +128,6 @@ jobs:
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker $REGION-docker.pkg.dev -q
 
-      - name: Set up Terraform
-        if: ${{ hashFiles('terraform/*.tf') != '' }}
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_wrapper: false
-
-      - name: Validate Terraform backend access (non-fatal)
-        if: ${{ hashFiles('terraform/*.tf') != '' }}
-        run: |
-          set -euo pipefail
-          if [[ -z "${TF_BACKEND_BUCKET:-}" || -z "${TF_BACKEND_PREFIX:-}" ]]; then
-            echo "Terraform backend not configured; skipping validation."
-            exit 0
-          fi
-          trim() { awk '{$1=$1; print}' <<< "$1"; }
-          BUCKET="$(trim "${TF_BACKEND_BUCKET}")"
-          PREFIX="$(trim "${TF_BACKEND_PREFIX}")"
-          echo "Validating access to gs://${BUCKET}/${PREFIX} (non-fatal)"
-          set +e
-          gcloud storage buckets describe "gs://${BUCKET}" --format='value(name)'
-          DESCRIBE_RC=$?
-          gcloud storage objects list --bucket="${BUCKET}" --prefix="${PREFIX}/" --limit=1 >/dev/null 2>&1
-          LIST_RC=$?
-          set -e
-          if [[ ${DESCRIBE_RC} -ne 0 || ${LIST_RC} -ne 0 ]]; then
-            echo "Warning: Missing access to Terraform state bucket or prefix. Skipping terraform init in this job."
-            echo "SKIP_TF_INIT=1" >> "$GITHUB_ENV"
-          fi
-
-      - name: Terraform init (safe, optional)
-        if: ${{ hashFiles('terraform/*.tf') != '' && env.SKIP_TF_INIT != '1' }}
-        working-directory: terraform
-        run: bash ../scripts/terraform_init.sh
-
       - name: Build and push container image
         run: |
           IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/$GAR_REPO/$SERVICE_NAME:${GITHUB_SHA}"
