@@ -91,6 +91,19 @@ class AimsCoachingHandler:
     ) -> Dict[str, Any]:
         """Handle the full AIMS coaching flow."""
         started = time.time()
+
+        # Helper to get request id for correlation
+        def _req_id() -> str:
+            try:
+                return (
+                    req.headers.get("x-cloud-trace-context")
+                    or req.headers.get("x-request-id")
+                    or str(uuid.uuid4())
+                )
+            except Exception:
+                return str(uuid.uuid4())
+
+        request_id = _req_id()
         
         # Load AIMS mapping (cached at app level)
         mapping = await self._load_aims_mapping()
@@ -100,9 +113,32 @@ class AimsCoachingHandler:
             ctx.parent_last, body.message, mapping
         )
         
-        # Step 2: Enhanced LLM classification
+        # Step 2: Enhanced LLM classification (emit begin/end markers)
+        cls_start = time.time()
+        telemetry_log_event(
+            self.logger,
+            "aims_classify_begin",
+            sessionId=ctx.session_id,
+            requestId=request_id,
+            modelId=self.model_id,
+        )
         cls_payload = await self._enhance_with_llm_classification(
             cls_payload, body.message, ctx, mapping
+        )
+        try:
+            from app.services.vertex_helpers import get_last_model_used
+            model_used_cls = get_last_model_used() or self.model_id
+        except Exception:
+            model_used_cls = self.model_id
+        telemetry_log_event(
+            self.logger,
+            "aims_classify_end",
+            sessionId=ctx.session_id,
+            requestId=request_id,
+            durationMs=int((time.time() - cls_start) * 1000),
+            modelUsed=model_used_cls,
+            step=cls_payload.get("step"),
+            score=cls_payload.get("score"),
         )
         
         # Step 3: Update AIMS state and provide coaching guidance
@@ -111,9 +147,31 @@ class AimsCoachingHandler:
         # Step 4: Persist AIMS metrics  
         await self._persist_aims_metrics(ctx.session_id, cls_payload)
         
-        # Step 5: Generate patient reply
+        # Step 5: Generate patient reply (emit begin/end markers)
+        reply_start = time.time()
+        telemetry_log_event(
+            self.logger,
+            "aims_reply_begin",
+            sessionId=ctx.session_id,
+            requestId=request_id,
+            modelId=self.model_id,
+        )
         reply_payload = await self._generate_patient_reply(
             body.message, ctx.history_text, req, ctx.session_id
+        )
+        try:
+            from app.services.vertex_helpers import get_last_model_used
+            model_used_reply = get_last_model_used() or self.model_id
+        except Exception:
+            model_used_reply = self.model_id
+        telemetry_log_event(
+            self.logger,
+            "aims_reply_end",
+            sessionId=ctx.session_id,
+            requestId=request_id,
+            durationMs=int((time.time() - reply_start) * 1000),
+            modelUsed=model_used_reply,
+            textLen=len((reply_payload.get("patient_reply") or "").strip()),
         )
 
         # If this is the first assistant turn in the session, strip any accidental
@@ -602,6 +660,19 @@ class AimsCoachingHandler:
         self, session_id: str, reply_payload: Dict[str, Any], session_obj: Dict[str, Any] | None
     ) -> Dict[str, Any] | None:
         """Check for end-game scenarios and build coach post if needed."""
+        # Emit begin marker with gating context
+        eg_begin_time = time.time()
+        assistant_count = 0
+        combined_reply_text = reply_payload.get("patient_reply", "")
+        try:
+            telemetry_log_event(
+                self.logger,
+                "aims_endgame_begin",
+                sessionId=session_id,
+                combinedReplyLen=len((combined_reply_text or "").strip()),
+            )
+        except Exception:
+            pass
         try:
             # Get combined reply text from recent assistant messages
             combined_reply_text = reply_payload.get("patient_reply", "")
@@ -679,6 +750,18 @@ class AimsCoachingHandler:
             if not outcome or outcome == "not_endgame":
                 eg = EndGameDetector.detect(combined_reply_text)
                 if not eg:
+                    # Emit end marker (no outcome)
+                    try:
+                        telemetry_log_event(
+                            self.logger,
+                            "aims_endgame_end",
+                            sessionId=session_id,
+                            durationMs=int((time.time() - eg_begin_time) * 1000),
+                            assistantCount=int(assistant_count or 0),
+                            outcome="none",
+                        )
+                    except Exception:
+                        pass
                     return None
                 outcome = eg.get("reason")
             
@@ -688,6 +771,18 @@ class AimsCoachingHandler:
             elif outcome == "followup_literature":
                 lines.append("Outcome: Parent opted for follow-up and took literature — great coaching!")
             else:
+                # Emit end marker (no outcome)
+                try:
+                    telemetry_log_event(
+                        self.logger,
+                        "aims_endgame_end",
+                        sessionId=session_id,
+                        durationMs=int((time.time() - eg_begin_time) * 1000),
+                        assistantCount=int(assistant_count or 0),
+                        outcome="none",
+                    )
+                except Exception:
+                    pass
                 return None
             
             # Add fallback bullets for end-game summary
