@@ -130,9 +130,24 @@ def vertex_call_with_fallback_text(
             _LAST_MODEL_USED = getattr(gateway, "last_model_used", primary_model)
             # Maintain existing contract for text path: return a JSON string envelope
             return json.dumps({"patient_reply": reply}, separators=(",", ":"))
-        # Record last model used and return raw result (legacy behavior)
+        # If JSON mode returned but could not be parsed, handle per-path fallback.
         _LAST_MODEL_USED = getattr(gateway, "last_model_used", primary_model)
-        return result
+        try:
+            path = (log_path or "").lower()
+            # For legacy chat, avoid returning wrapper preambles. If the result looks like a wrapper
+            # (contains code fences or mentions json), retry with plain text generation once.
+            if "legacy" in path and ("```" in result or "json" in (result or "").lower()):
+                plain = gateway.generate_text(
+                    prompt=prompt,
+                    system_instruction=system_instruction,
+                    log_fallback=_on_fallback,
+                )
+                return plain
+            # For coaching paths, return raw result and let the handler's JSON validation/retry take over.
+            return result
+        except Exception:
+            # As a last resort, return the raw result
+            return result
     except Exception:
         result = gateway.generate_text(
             prompt=prompt,
