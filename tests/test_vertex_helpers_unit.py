@@ -173,3 +173,50 @@ def test_json_wrapper_passthrough_for_generic_schema(monkeypatch):
         client_cls=object,
     )
     assert out == '{"foo":"bar","n":1}'
+
+
+
+def test_json_wrapper_empty_block_falls_back(monkeypatch):
+    # Simulate JSON-mode response with an empty fenced block. Expect fallback behavior.
+    class EmptyWrappedGateway(FakeGateway):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.text_json_return = "Here is the JSON requested:\n\n```\n\n```\n"
+            self.text_return = "plain-result"
+
+    # Patch the gateway to our empty-returning variant
+    monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", EmptyWrappedGateway)
+
+    logger = DummyLogger()
+    # Coaching path: should return the raw wrapper (handler will log invalid JSON and fallback)
+    out_coach = vh.vertex_call_with_fallback_text(
+        project="p",
+        region="r",
+        primary_model="m1",
+        fallbacks=["m2"],
+        temperature=0.1,
+        max_tokens=64,
+        prompt="hi",
+        system_instruction=None,
+        log_path="coach_reply",
+        logger=logger,
+        client_cls=object,
+    )
+    # Expect the raw wrapper text so the coaching handler can handle fallback
+    assert out_coach.startswith('Here is the JSON requested')
+
+    # Legacy path: should fall back to plain text generation result
+    out_legacy = vh.vertex_call_with_fallback_text(
+        project="p",
+        region="r",
+        primary_model="m1",
+        fallbacks=["m2"],
+        temperature=0.1,
+        max_tokens=64,
+        prompt="hello",
+        system_instruction=None,
+        log_path="legacy_chat",
+        logger=logger,
+        client_cls=object,
+    )
+    assert out_legacy == "plain-result"
