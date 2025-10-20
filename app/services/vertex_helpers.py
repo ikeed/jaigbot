@@ -128,13 +128,9 @@ def vertex_call_with_fallback_text(
         reply = _maybe_extract_patient_reply(obj)
         if reply:
             _LAST_MODEL_USED = getattr(gateway, "last_model_used", primary_model)
-            # For legacy chat paths, return plain text so UIs don't see JSON wrappers
-            path = (log_path or "").lower()
-            if "legacy" in path:
-                return reply
-            # For coaching paths, maintain existing contract: return a JSON string envelope
+            # Maintain existing contract for text path: return a JSON string envelope
             return json.dumps({"patient_reply": reply}, separators=(",", ":"))
-        # If JSON mode returned but could not be parsed, handle per-path fallback.
+        # Record last model used and return raw result (legacy behavior)
         _LAST_MODEL_USED = getattr(gateway, "last_model_used", primary_model)
         try:
             path = (log_path or "").lower()
