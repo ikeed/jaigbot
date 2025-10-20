@@ -44,29 +44,28 @@ def test_chat_missing_project_id(monkeypatch):
 
 
 def test_chat_success_with_mock(monkeypatch):
-    # Provide a fake VertexClient that returns a canned response
+    # Mock the vertex helper function used by legacy chat handler
     import app.main as m
+    from app.services import legacy_chat_handler
 
-    class FakeVertex:
-        def __init__(self, project: str, region: str, model_id: str):
-            self.project = project
-            self.region = region
-            self.model_id = model_id
-
-        def generate_text(self, prompt: str, temperature: float, max_tokens: int) -> str:
-            return f"echo: {prompt}"  # simple echo to validate integration path
+    # Mock the function that actually makes the API call
+    def fake_vertex_call(*args, **kwargs):
+        prompt = args[5] if len(args) > 5 else kwargs.get('prompt', 'ping')
+        return f"echo: {prompt}"
 
     # Ensure env values are present for route checks
     monkeypatch.setattr(m, "PROJECT_ID", "test-project")
     monkeypatch.setattr(m, "REGION", "us-central1")
-    monkeypatch.setattr(m, "MODEL_ID", "gemini-2.5-flash")
+    monkeypatch.setattr(m, "MODEL_ID", "gemini-2.5-pro")
 
-    # Inject our fake client into the module
-    monkeypatch.setattr(m, "VertexClient", FakeVertex)
+    # Mock the function in the handler's module where it's actually imported and used
+    monkeypatch.setattr(legacy_chat_handler, "vertex_call_with_fallback_text", fake_vertex_call)
 
     r = client.post("/chat", json={"message": "ping"})
     assert r.status_code == 200
     data = r.json()
-    assert data["reply"] == "echo: ping"
-    assert data["model"] == "gemini-2.5-flash"
+    # The mock should echo back the full prompt which includes system instruction + user message
+    assert data["reply"].startswith("echo: ")
+    assert "ping" in data["reply"]  # User message should be in the prompt
+    assert data["model"] == "gemini-2.5-pro"
     assert isinstance(data["latencyMs"], int)

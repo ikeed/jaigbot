@@ -1,16 +1,19 @@
-# JaigBot — Hello World: Cloud Run ↔ Vertex AI (Gemini Flash)
+# JaigBot — Hello World: Cloud Run ↔ Vertex AI (Gemini Pro)
 
-This repository contains a tiny FastAPI app that serves a minimal web UI and proxies a single message to Vertex AI (Gemini Flash), then displays the single reply.  No auth, no storage, no streaming.
+This repository contains a tiny FastAPI backend that exposes a simple /chat endpoint which proxies a single message to Vertex AI (Gemini Pro). The chat UI is provided by Chainlit (see `chainlit_app.py`).  No auth, no storage, no streaming.
 
 **TL;DR — Where things are:**
 
-- UI in the browser: **GET /** – served from `app/static/index.html`.
-- API endpoints:
-  - **POST /chat** → calls Vertex AI and returns `{ reply, model, latencyMs }`.
+- UI: Chainlit (see `chainlit_app.py`).
+- API endpoints (FastAPI backend):
+  - **POST /chat** → calls Vertex AI and returns `{ reply, model, latencyMs }`. When `AIMS_COACHING_ENABLED=true` and the request includes `coach=true`, the response may also include optional `coaching` and `session` fields (see AIMS coaching docs).
+  - **GET  /summary?sessionId=...** → returns an aggregated AIMS summary for a session (overallScore, stepCoverage, strengths, growthAreas, narrative). Present even if coaching is disabled; contents may be minimal.
   - **GET  /healthz** → simple health check.
+  - **GET  /config**, **/diagnostics**, **/models** for configuration/diagnostics.
 - Backend code: `app/main.py` and `app/vertex.py`.
 - Run/setup docs: `docs/developer-setup.md` (step‑by‑step).
 - Architecture/plan: `docs/plan.md`.
+- Note: `app/static/index.html` is deprecated and no longer served; the backend does not mount a static UI.
 
 ## Running locally
 
@@ -22,29 +25,61 @@ This repository contains a tiny FastAPI app that serves a minimal web UI and pro
    ```bash
    export PROJECT_ID=your-gcp-project-id
    export REGION=us-central1
-   export MODEL_ID=gemini-2.5-flash
+   # Optional: use global Vertex AI location for publisher models (recommended for Gemini 2.x)
+   export VERTEX_LOCATION=global
+   export MODEL_ID=gemini-2.5-pro
    ```
 3. Start the FastAPI app:
    ```bash
    uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
    ```
-4. Open http://localhost:8080/ to access the default UI, or see below for the Chainlit UI.
+4. There is no default UI served by the backend. Use the Chainlit UI described below.
 
-## Chainlit UI (New)
+## Chainlit UI
 
-This branch adds a lightweight Chainlit chat interface that replaces the static `index.html`.  Chainlit provides a ChatGPT‑like UI and forwards messages to the existing **/chat** endpoint.
+A lightweight Chainlit chat interface replaces the old static index.html. It forwards messages to the existing POST /chat endpoint.
 
-To run the Chainlit UI locally:
+- Local run:
+  ```bash
+  pip install chainlit httpx
+  BACKEND_URL=http://localhost:8080/chat chainlit run chainlit_app.py
+  ```
+- Details (session persistence, timeouts, model/transport options, auto‑continue): see docs/chainlit-ui.md
 
-1. Ensure the FastAPI backend is running as described above.
-2. Install additional dependencies:
-   ```bash
-   pip install chainlit httpx
-   ```
-3. Run Chainlit, pointing it at the backend:
-   ```bash
-   BACKEND_URL=http://localhost:8080/chat chainlit run chainlit_app.py
-   ```
-4. Open the URL shown in the terminal (usually http://localhost:8000/) to use the chat interface.
+## CLI conversation (no UI)
+If you just want to verify the service and have a quick conversation without a browser, use the helper script:
 
-When deployed, you can run Chainlit as a separate Cloud Run service by setting `BACKEND_URL` to the public URL of the FastAPI service.  See `chainlit_app.py` for implementation details.
+```bash
+# In one terminal, start the backend (or use the PyCharm Compound run config):
+./scripts/dev_run.sh
+# In another terminal, run a chat loop against POST /chat:
+python scripts/converse_cli.py --session-id localtest --coach
+```
+
+Environment overrides:
+- BACKEND_URL (default http://localhost:8080/chat)
+- SESSION_ID or FIXED_SESSION_ID (to persist memory)
+
+This script prints the model, latency, reply text, and includes coaching/session sections if the server returns them.
+
+## Cloud Run health checks
+During deploys Cloud Run may show two different but valid URLs, and hitting "/" can 404 if not served. Use the helper script to probe /healthz with backoff instead of a one‑shot curl.
+
+- See docs/health-checks.md
+
+## Conversation memory and persona
+The backend supports a session‑keyed memory with optional persona/scene, using in‑process storage or Redis/Google Memorystore. Browser flows can use a cookie‑based session id; Chainlit persists a session id on disk and sends it in each request.
+
+- See docs/memory-and-persona.md
+
+## More docs
+- Developer setup (step‑by‑step): docs/developer-setup.md
+- Architecture/plan: docs/plan.md
+- API reference: docs/api.md (and Swagger UI at GET /docs when running)
+- Terraform IaC: terraform/README.md
+- Chainlit UI details: docs/chainlit-ui.md
+- Health checks and URLs: docs/health-checks.md
+- Memory and persona: docs/memory-and-persona.md
+- MCP empowerment/readiness: docs/mcp-empowerment.md
+- Standing orders (minimize manual work via efficient tool use): docs/standing-orders.md
+- AIMS protocol mapping (reference): docs/aims/aims_mapping.json (source paper: fpubh-11-1120326.pdf)

@@ -1,0 +1,38 @@
+{
+  "names": {
+    "parents": ["Sarah Jenkins", "Michael Patel", "Alicia Gomez", "Brian Nguyen", "Emily Kim"],
+    "children_first": ["Liam", "Maya", "Noah", "Ava", "Ethan", "Sofia"],
+    "adult_first": ["Jordan", "Casey", "Taylor", "Riley", "Morgan", "Alex"],
+    "last": ["Jenkins", "Patel", "Gomez", "Nguyen", "Kim", "Lopez"]
+  },
+  "scenarios": [
+    {
+      "is_parent": true,
+      "purposes": [
+        "Two-year checkup",
+        "Flu vaccination (child)",
+        "Well-child visit",
+        "MMR vaccination visit"
+      ],
+      "notes": [
+        "Due for MMR inoculation",
+        "Mild cough reported last week",
+        "Parent has questions about vaccine schedule"
+      ]
+    },
+    {
+      "is_parent": false,
+      "purposes": [
+        "Flu vax",
+        "COVID-19 booster",
+        "Tdap update",
+        "Travel vaccines consultation"
+      ],
+      "notes": [
+        "Allergic to penicillin",
+        "Recently recovered from mild cold",
+        "Prefers evening appointments"
+      ]
+    }
+  ]
+}

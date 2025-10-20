@@ -23,7 +23,7 @@ Inputs confirmed:
   - Backend: FastAPI app with one POST endpoint /chat. Validates input, calls Vertex AI, returns JSON.
   - Vertex AI: Gemini 1.5 Flash model on Vertex AI Generative AI.
 - Regions:
-  - Default region: us-central1 (configurable). Keep Cloud Run and Vertex AI in the same region.
+  - Default region: us-west4 (configurable). Keep Cloud Run and Vertex AI in the same region.
 - Networking and CORS:
   - Same-origin by default; CORS disabled. Optional ALLOWED_ORIGINS env enables CORS for specific origins when needed (e.g., for local dev).
 
@@ -40,7 +40,7 @@ Inputs confirmed:
 - Artifact Registry:
   - Docker repository: REGION-docker.pkg.dev/PROJECT/REPO
   - Defaults (configurable):
-    - REGION: us-central1
+    - REGION: us-west4
     - REPO: cr-demo
 - Service Accounts and IAM:
   - Runtime SA (Cloud Run): cr-vertex-runtime@warm-actor-253703.iam.gserviceaccount.com
@@ -56,8 +56,8 @@ Inputs confirmed:
       - roles/iam.serviceAccountTokenCreator (commonly required for WIF)
 - Required environment variables (Cloud Run service):
   - PROJECT_ID=warm-actor-253703
-  - REGION=us-central1 (configurable)
-    - MODEL_ID=gemini-1.5-flash (configurable)
+  - REGION=us-west4 (configurable)
+    - MODEL_ID=gemini-1.5-pro (configurable)
   - PORT=8080 (Cloud Run sets this; app must bind to it)
   - Optional: MAX_TOKENS=256, TEMPERATURE=0.2, ALLOWED_ORIGINS (comma-separated), LOG_LEVEL=info
 - Credentials model:
@@ -112,8 +112,8 @@ Inputs confirmed:
 
 ## 5) Cloud Run service configuration defaults (configurable)
 
-- Service name: gemini-flash-demo
-- Region: us-central1
+- Service name: aimsbot
+- Region: us-west4
 - Resources: 0.5 vCPU, 512Mi RAM
 - Concurrency: 20
 - Max instances: 2 (cost control)
@@ -136,12 +136,12 @@ Inputs confirmed:
   6) Deploy with gcloud run deploy and set env vars (PROJECT_ID, REGION, MODEL_ID, TEMPERATURE, MAX_TOKENS)
 - Required GitHub repo secrets/variables:
   - GCP_PROJECT_ID=warm-actor-253703 (secret or variable)
-  - GCP_REGION=us-central1 (variable)
+  - GCP_REGION=us-west4 (variable)
   - GAR_REPO=cr-demo (variable)
-  - SERVICE_NAME=gemini-flash-demo (variable)
+  - SERVICE_NAME=aimsbot (variable)
   - WORKLOAD_IDP=projects/.../locations/global/workloadIdentityPools/.../providers/... (secret)
   - WORKLOAD_SA=cr-deployer@warm-actor-253703.iam.gserviceaccount.com (secret)
-  - MODEL_ID=gemini-1.5-flash (variable)
+  - MODEL_ID=gemini-1.5-pro (variable)
   - TEMPERATURE=0.2 (variable)
   - MAX_TOKENS=256 (variable)
 - IAM and trust:
@@ -149,7 +149,7 @@ Inputs confirmed:
   - Grant cr-deployer the roles above; allow it to impersonate itself and use Service Account Token Creator.
   - Grant cr-deployer roles/iam.serviceAccountUser on cr-vertex-runtime.
 - Image path example:
-  - us-central1-docker.pkg.dev/warm-actor-253703/cr-demo/gemini-flash-demo:$GIT_SHA
+  - us-west4-docker.pkg.dev/warm-actor-253703/cr-demo/aimsbot:$GIT_SHA
 
 ---
 
@@ -174,7 +174,7 @@ Inputs confirmed:
 ## 9) Assumptions, risks, and open questions
 
 - Assumptions:
-  - us-central1 supports the public alias gemini-1.5-flash for text generation.
+  - us-west4 supports the public alias gemini-1.5-pro for text generation.
   - google-cloud-aiplatform version pinned above supports GenerativeModel.generate_content.
 - Risks:
   - Quotas or 429s; set Cloud Run max instances to contain costs; consider budgets/alerts.

@@ -1,23 +1,364 @@
 import os
+import uuid
+import json
+import random
+from pathlib import Path
 import httpx
 import chainlit as cl
+from app.persona import DEFAULT_CHARACTER, DEFAULT_SCENE
+
+
+def _register_avatars_once() -> None:
+    """Register avatars globally at import time so /avatars/* resolves
+    even before the first chat starts (avoids default-cache on first load)."""
+    try:
+        root = Path(__file__).resolve().parent
+
+        def _abs_existing(path_like: str | None) -> str | None:
+            if not path_like:
+                return None
+            p = Path(path_like)
+            if not p.is_absolute():
+                p = root / p
+            return str(p.resolve()) if p.exists() else None
+
+        def _pick_avatar(name: str, env_path_var: str, defaults: list[str], env_url_var: str):
+            path = _abs_existing(os.getenv(env_path_var))
+            if not path:
+                for d in defaults:
+                    path = _abs_existing(d)
+                    if path:
+                        break
+            if path:
+                cl.Avatar(id=name, name=name, path=path).save()
+                return
+            url = os.getenv(env_url_var)
+            if url and (url.startswith("http://") or url.startswith("https://")):
+                cl.Avatar(id=name, name=name, url=url).save()
+
+        _pick_avatar("Patient", "PATIENT_AVATAR_PATH", [".chainlit/public/patient.svg", "public/patient.svg"], "PATIENT_AVATAR_URL")
+        _pick_avatar("Doctor", "DOCTOR_AVATAR_PATH", [".chainlit/public/doctor.svg", "public/doctor.svg"], "DOCTOR_AVATAR_URL")
+        _pick_avatar("Coach", "COACH_AVATAR_PATH", [".chainlit/public/coach.svg", "public/coach.svg"], "COACH_AVATAR_URL")
+    except Exception:
+        pass
+
+# Perform an early registration so avatars are ready on first render
+_register_avatars_once()
 
 # The backend URL for the FastAPI /chat endpoint. This can be overridden
 # at runtime by setting the BACKEND_URL environment variable.  For local
 # development, the FastAPI app typically runs on http://localhost:8080.
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8080/chat")
+DEBUG_MODE = os.getenv("DEBUG_MODE", "false").lower() == "true"
+# Whether Chainlit should request coaching; default to env CHAINLIT_COACH_DEFAULT, else AIMS_COACHING_ENABLED, else false
+CHAINLIT_COACH_DEFAULT = (os.getenv("CHAINLIT_COACH_DEFAULT") or os.getenv("AIMS_COACHING_ENABLED") or "false").lower() == "true"
+
+
+def _author_from_role(role: str) -> str:
+    """
+    Map our simple role string to a display author label for Chainlit.
+    We render the human as "Doctor" and the assistant as "Patient" to
+    better fit the clinical simulation. Anything else falls back to
+    the assistant label.
+    """
+    if role == "user":
+        return "Doctor"
+    if role == "assistant":
+        return "Patient"
+    return role or "Patient"
+
+
+async def _replay_history(history: list[dict]):
+    """
+    Replay all prior messages to the UI without making any backend calls.
+    Each history item is a dict like {"role": "user"|"assistant", "content": str}.
+    """
+    for item in history or []:
+        content = item.get("content", "")
+        role = item.get("role", "assistant")
+        await cl.Message(content=content, author=_author_from_role(role)).send()
+
+
+def _get_persistent_session_id() -> str:
+    """
+    Return a stable session id for Chainlit to use when calling the backend.
+    Precedence:
+    1) FIXED_SESSION_ID or SESSION_ID env vars
+    2) Value stored in .chainlit/session_id (created if missing)
+    3) Fresh UUID4 (as last resort)
+
+    Note: This persists across browser refreshes because it is stored on the
+    server filesystem. In multi-user deployments, all users will share this id
+    unless you enable auth or implement per-user ids.
+    """
+    sid = os.getenv("FIXED_SESSION_ID") or os.getenv("SESSION_ID")
+    if sid:
+        return sid
+    try:
+        # Use the project-local .chainlit folder
+        root = Path(os.getcwd())
+        store_dir = root / ".chainlit"
+        store_dir.mkdir(parents=True, exist_ok=True)
+        f = store_dir / "session_id"
+        if f.exists():
+            sid = f.read_text(encoding="utf-8").strip()
+            if sid:
+                return sid
+        sid = str(uuid.uuid4())
+        f.write_text(sid, encoding="utf-8")
+        return sid
+    except Exception:
+        return str(uuid.uuid4())
+
+
+# Chat profile: present the clinician as "Doctor" with a custom icon so their role is visible in the UI.
+@cl.set_chat_profiles
+async def chat_profiles():
+    try:
+        # Prefer public URL that Chainlit serves
+        icon = "/public/doctor.svg"
+        return [
+            cl.ChatProfile(
+                name="Doctor",
+                markdown_description="Clinician perspective",
+                icon=icon,
+                default=True,
+            )
+        ]
+    except Exception:
+        return [cl.ChatProfile(name="Doctor", markdown_description="Clinician perspective", default=True)]
+
+
+def _build_scenario_card() -> list[str]:
+    """
+    Build scenario lines from a JSON file. Falls back to a default if file is missing.
+    Environment variables:
+      - SCENARIOS_FILE: optional path to scenarios JSON file (default: app/prompts/scenarios.json)
+      - SCENARIO_INDEX: if set to an integer, picks that scenario index deterministically; otherwise random.
+    File schema (minimal):
+      {
+        "names": {
+          "parents": ["Full Name", ...],
+          "children_first": ["First", ...],
+          "adult_first": ["First", ...],
+          "last": ["Last", ...]
+        },
+        "scenarios": [
+          {"is_parent": true|false, "purposes": [...], "notes": [...]}, ...
+        ]
+      }
+    """
+    try:
+        # Resolve default path relative to this file
+        root = Path(__file__).resolve().parent
+        default_path = root / "app" / "prompts" / "scenarios.json"
+        # If running from repo root, also try that
+        if not default_path.exists():
+            default_path = root / "prompts" / "scenarios.json"
+        # Allow override via environment variable
+        path_str = os.getenv("SCENARIOS_FILE") or str(default_path)
+        p = Path(path_str)
+        if not p.is_absolute():
+            # Try relative to CWD and then relative to this module
+            p1 = Path(os.getcwd()) / p
+            p2 = root / p
+            p = p1 if p1.exists() else p2
+        data = json.loads(Path(p).read_text(encoding="utf-8"))
+        scenarios = data.get("scenarios") or []
+        names = data.get("names") or {}
+        if not scenarios:
+            raise ValueError("No scenarios in file")
+        # Pick scenario index
+        idx_env = os.getenv("SCENARIO_INDEX")
+        if idx_env is not None:
+            try:
+                idx = max(0, min(int(idx_env), len(scenarios) - 1))
+            except Exception:
+                idx = random.randrange(len(scenarios))
+        else:
+            idx = random.randrange(len(scenarios))
+        sc = scenarios[idx]
+        is_parent = bool(sc.get("is_parent", False))
+        purposes = list(sc.get("purposes") or [])
+        notes_list = list(sc.get("notes") or [])
+        purpose = purposes[0] if purposes else None
+        if purposes:
+            purpose = random.choice(purposes)
+        note = random.choice(notes_list) if notes_list else None
+
+        # Helper to split full name and extract last
+        def _split_last(full: str) -> tuple[str, str]:
+            parts = (full or "").strip().split()
+            if not parts:
+                return ("Alex", "Smith")
+            if len(parts) == 1:
+                return (parts[0], "Smith")
+            return (" ".join(parts[:-1]), parts[-1])
+
+        # Name pools
+        parent_pool = list(names.get("parents") or [])
+        child_first_pool = list(names.get("children_first") or [])
+        adult_first_pool = list(names.get("adult_first") or [])
+        last_pool = list(names.get("last") or [])
+        if not last_pool:
+            last_pool = ["Jenkins", "Patel", "Gomez", "Nguyen", "Kim", "Lopez"]
+
+        scenario_lines: list[str] = []
+        if is_parent:
+            # Parent + child
+            if parent_pool:
+                parent_full = random.choice(parent_pool)
+                parent_first, parent_last = _split_last(parent_full)
+                parent_full = f"{parent_first} {parent_last}"
+            else:
+                parent_first = random.choice(adult_first_pool or ["Jordan", "Taylor"]) 
+                parent_last = random.choice(last_pool)
+                parent_full = f"{parent_first} {parent_last}"
+            child_first = random.choice(child_first_pool or ["Liam", "Maya"]) 
+            child_full = f"{child_first} {parent_last}"
+            scenario_lines.append(f"Parent: {parent_full}")
+            scenario_lines.append(f"Patient: {child_full}")
+        else:
+            # Adult patient only
+            first = random.choice(adult_first_pool or ["Jordan", "Taylor"]) 
+            last = random.choice(last_pool)
+            scenario_lines.append(f"Patient: {first} {last}")
+
+        if purpose:
+            scenario_lines.append(f"Purpose: {purpose}")
+        if note:
+            scenario_lines.append(f"Notes: {note}")
+        return scenario_lines
+    except Exception:
+        # Fallback to prior hard-coded scenario
+        return [
+            "Parent: Sarah Jenkins",
+            "Patient: Liam Jenkins",
+            "Purpose: Two-year checkup",
+            "Notes: Due for MMR inoculation",
+        ]
+
 
 @cl.on_chat_start
 async def start_chat():
     """
-    Initialize the Chainlit chat session.  A welcome message is sent and
-    per-user session state can be initialized here if desired.
+    Initialize the Chainlit chat session. A welcome message is sent and
+    per-user session state is initialized, including a stable sessionId and
+    optional persona/scene pulled from environment variables.
     """
-    # Initialize a conversation history list.  This can be used to build
-    # contextual prompts in the future.
+    # Generate a fresh session id for each new chat
+    session_id = str(uuid.uuid4())
+    cl.user_session.set("session_id", session_id)
+
+    # Optional persona/scene from environment, with hard-coded fallbacks
+    character = os.getenv("CHARACTER_SYSTEM") or (DEFAULT_CHARACTER or None)
+    scene = os.getenv("SCENE_OBJECTIVES") or (DEFAULT_SCENE or None)
+    cl.user_session.set("character", character)
+    cl.user_session.set("scene", scene)
+
+    # Initialize fresh local history for a new chat
     cl.user_session.set("history", [])
-    await cl.Message("Hello! I'm connected to the Gemini backend. "
-                     "Send me a message to start.").send()
+    history = []
+
+    # Register custom avatars for roles in this simulation. Users can override with env URLs.
+    try:
+        root = Path(__file__).resolve().parent
+
+        def _abs_existing(path_like: str | None) -> str | None:
+            if not path_like:
+                return None
+            p = Path(path_like)
+            if not p.is_absolute():
+                p = root / p
+            return str(p.resolve()) if p.exists() else None
+
+        def _pick_avatar(name: str, env_path_var: str, defaults: list[str], env_url_var: str):
+            # Prefer a real file path (absolute) so Chainlit can serve it via /avatars/<name> reliably.
+            # Try env-provided path, then known defaults under .chainlit/public and public.
+            path = _abs_existing(os.getenv(env_path_var))
+            if not path:
+                for d in defaults:
+                    path = _abs_existing(d)
+                    if path:
+                        break
+            if path:
+                cl.Avatar(id=name, name=name, path=path).save()
+                return
+            # Fallback: if an explicit http(s) URL is provided, register it.
+            url = os.getenv(env_url_var)
+            if url and (url.startswith("http://") or url.startswith("https://")):
+                cl.Avatar(id=name, name=name, url=url).save()
+
+        _pick_avatar("Patient", "PATIENT_AVATAR_PATH", [".chainlit/public/patient.svg", "public/patient.svg"], "PATIENT_AVATAR_URL")
+        _pick_avatar("Doctor", "DOCTOR_AVATAR_PATH", [".chainlit/public/doctor.svg", "public/doctor.svg"], "DOCTOR_AVATAR_URL")
+        _pick_avatar("Coach", "COACH_AVATAR_PATH", [".chainlit/public/coach.svg", "public/coach.svg"], "COACH_AVATAR_URL")
+    except Exception:
+        # Avatars are optional; ignore any errors (e.g., file not found in dev)
+        pass
+
+    # At chat start, show a scenario card built from file-driven configuration.
+    # Do NOT call the backend here to avoid startup delays and to let the clinician lead (Announce/Inquire).
+    scenario_lines = _build_scenario_card()
+    card = "\n".join(scenario_lines)
+    # Save to client-side history (for UI replay only)
+    history = cl.user_session.get("history")
+    history.append({"role": "assistant", "content": card})
+    cl.user_session.set("history", history)
+    await cl.Message(card, author="Patient").send()
+
+    # Preflight check: verify backend is reachable and reasonably configured.
+    # This avoids confusing 500 errors later (e.g., PROJECT_ID not set).
+    try:
+        import httpx  # local import to avoid import cycles
+        base_url = BACKEND_URL[:-5] if BACKEND_URL.endswith("/chat") else BACKEND_URL
+        timeout = float(os.getenv("CHAINLIT_HTTP_TIMEOUT", "15"))
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            ok = False
+            try:
+                r = await client.get(f"{base_url}/healthz")
+                ok = r.status_code == 200
+            except Exception:
+                ok = False
+            if not ok:
+                await cl.Message(
+                    f"Backend at {base_url} is not reachable. Start it first: ./scripts/dev_run.sh or `uvicorn app.main:app --port 8080`."
+                ).send()
+                return
+            # Try to fetch /config; if it reveals a missing PROJECT_ID, warn helpfully.
+            try:
+                r2 = await client.get(f"{base_url}/config")
+                if r2.status_code == 200:
+                    data = r2.json() if r2.headers.get("content-type", "").startswith("application/json") else {}
+                    # Heuristic: look for falsy/empty project id fields
+                    proj = data.get("projectId") or data.get("project_id") or data.get("project")
+                    if proj in (None, "", "<unset>"):
+                        await cl.Message(
+                            "Warning: Backend PROJECT_ID appears unset. You may see a 500 on /chat. "
+                            "Fix by setting PROJECT_ID (and authenticating with `gcloud auth application-default login`)."
+                        ).send()
+            except Exception:
+                # /config may not exist; ignore quietly.
+                pass
+
+            # Model availability preflight: advise early if the configured model is not available in the region
+            try:
+                r3 = await client.get(f"{base_url}/modelcheck")
+                if r3.status_code == 200:
+                    mc = r3.json() if r3.headers.get("content-type", "").startswith("application/json") else {}
+                    avail = mc.get("available")
+                    mid = mc.get("modelId")
+                    reg = mc.get("region")
+                    if avail is False:
+                        await cl.Message(
+                            f"System: The configured model '{mid}' is not available in region '{reg}'. "
+                            "Open /models or /config to choose an available model, or update MODEL_ID/REGION."
+                        ).send()
+            except Exception:
+                # /modelcheck may not exist or ADC may be missing; ignore quietly.
+                pass
+    except Exception:
+        # httpx not available or some unexpected error; skip preflight.
+        pass
 
 @cl.on_message
 async def handle_message(message: cl.Message):
@@ -37,10 +378,25 @@ async def handle_message(message: cl.Message):
     cl.user_session.set("history", history)
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        # Increase timeout to avoid truncation due to client-side timeouts on longer generations
+        timeout = float(os.getenv("CHAINLIT_HTTP_TIMEOUT", "120"))
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            # Gather session and optional persona/scene to send to backend memory
+            session_id = cl.user_session.get("session_id")
+            character = cl.user_session.get("character")
+            scene = cl.user_session.get("scene")
+            payload = {"message": content}
+            if session_id:
+                payload["sessionId"] = session_id
+            if character:
+                payload["character"] = character
+            if scene:
+                payload["scene"] = scene
+            if CHAINLIT_COACH_DEFAULT:
+                payload["coach"] = True
             response = await client.post(
                 BACKEND_URL,
-                json={"message": content},
+                json=payload,
                 headers={"Content-Type": "application/json"},
             )
     except Exception as e:
@@ -49,6 +405,7 @@ async def handle_message(message: cl.Message):
 
     # Parse the response.  The backend returns { reply, model, latencyMs }
     reply = None
+    data = {}
     if response.status_code == 200:
         try:
             data = response.json()
@@ -63,10 +420,158 @@ async def handle_message(message: cl.Message):
             error_msg = data.get("error", {}).get("message")
         except Exception:
             error_msg = None
-        reply = f"Error: {error_msg or f'HTTP {response.status_code}'}"
+        # Show a concise system message and avoid polluting the conversation with diagnostics
+        msg = None
+        status = response.status_code
+        if error_msg and "project_id not set" in (error_msg or "").lower():
+            msg = (
+                "Backend misconfiguration: PROJECT_ID is not set. "
+                "Set PROJECT_ID and restart the backend (e.g., ./scripts/dev_run.sh "
+                "or export PROJECT_ID=your-gcp-project and run uvicorn)."
+            )
+        elif status == 404 and error_msg and ("model not found" in error_msg.lower() or "publisher model not found" in error_msg.lower()):
+            msg = (
+                "Assistant unavailable: configured MODEL_ID was not found or access is denied in this REGION. "
+                "Open /models or /modelcheck to see available models, then update MODEL_ID or REGION."
+            )
+        else:
+            msg = f"Backend error: HTTP {status}{(' — ' + error_msg) if error_msg else ''}"
+        # Send as a system note and return without appending an assistant turn
+        await cl.Message(msg, author="System").send()
+        return
 
-    # Append assistant reply to history.
+    # If coaching info is present, render it immediately after the user's message (before assistant reply)
+    coaching = data.get("coaching") if isinstance(data, dict) else None
+    if coaching:
+        step = coaching.get("step")
+        reasons = coaching.get("reasons") or []
+        tips = coaching.get("tips") or []
+        # Only textual feedback; omit numeric score
+        parts = []
+        if step:
+            parts.append(f"Detected step: {step}")
+        if reasons:
+            parts.append(f"Feedback: {reasons[0]}")
+        if tips:
+            parts.append(f"Tip: {tips[0]}")
+        if parts:
+                # Render a clearly differentiated coaching block using inline HTML so it does not
+                # rely on external CSS or DOM-specific selectors. This requires
+                # features.unsafe_allow_html=true in .chainlit/config.toml.
+                items_html = "".join([f"<li>{p}</li>" for p in parts])
+                html = (
+                    '<div style="background:#fff7e6;border-left:4px solid #ffb020;padding:10px 12px;'
+                    'border-radius:6px;color:#8a5a00;opacity:1;">'
+                    '<div style="font-weight:700;margin-bottom:4px;">🧭 Coaching</div>'
+                    f'<ul style="margin:4px 0 0 18px;padding:0;color:inherit;opacity:1;">{items_html}</ul>'
+                    '</div>'
+                )
+                await cl.Message(html, author="Coach").send()
+
+
+    # Append assistant reply to history and send to UI after coaching
     history.append({"role": "assistant", "content": reply})
     cl.user_session.set("history", history)
 
-    await cl.Message(reply).send()
+    await cl.Message(reply, author="Patient").send()
+
+    # If a coachPost is present (end-of-game), render a congratulatory block with summary AFTER patient reply
+    coach_post = data.get("coachPost") if isinstance(data, dict) else None
+    if coach_post:
+        title = coach_post.get("title") or "✅ Scenario complete"
+        lines = coach_post.get("lines") or []
+        items_html = "".join([f"<li>{p}</li>" for p in lines])
+        html = (
+            '<div style="background:#fff7e6;border-left:4px solid #ffb020;padding:10px 12px;'
+            'border-radius:6px;color:#8a5a00;opacity:1;">'
+            f'<div style="font-weight:700;margin-bottom:4px;">{title}</div>'
+            f'<ul style="margin:4px 0 0 18px;padding:0;color:inherit;opacity:1;">{items_html}</ul>'
+            '</div>'
+        )
+        await cl.Message(html, author="Coach").send()
+
+    # If gameOver, fetch /summary analysis and render an analysis block
+    if isinstance(data, dict) and data.get("gameOver"):
+        try:
+            base_url = BACKEND_URL[:-5] if BACKEND_URL.endswith("/chat") else BACKEND_URL
+            session_id = cl.user_session.get("session_id")
+            timeout = float(os.getenv("CHAINLIT_HTTP_TIMEOUT", "120"))
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                r = await client.get(f"{base_url}/summary", params={"sessionId": session_id, "analysis": "true"})
+                if r.status_code == 200:
+                    summ = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+                    analysis = summ.get("analysis") or []
+                    # Build a multi-line numerical breakdown using percentages
+                    step_cov = summ.get("stepCoverage") or {}
+                    running_avg = summ.get("runningAverage") or {}
+                    total_turns = summ.get("totalTurns") or 0
+                    overall = summ.get("overallScore")
+                    try:
+                        oa = float(overall) if overall is not None else 0.0
+                    except Exception:
+                        oa = 0.0
+
+                    def _pct(n: float, d: float) -> str:
+                        try:
+                            if not d:
+                                return "0%"
+                            return f"{(float(n)/float(d))*100:.0f}%"
+                        except Exception:
+                            return "0%"
+
+                    def _avg_pct(v) -> str:
+                        try:
+                            if not isinstance(v, (int, float)):
+                                return "-"
+                            return f"{(float(v)/3.0)*100:.0f}%"
+                        except Exception:
+                            return "-"
+
+                    header_items = []
+                    header_items.append("Scoring summary:")
+                    header_items.append(f"Turns: {int(total_turns or 0)}")
+                    for step in ("Announce", "Inquire", "Mirror", "Secure"):
+                        c = int(step_cov.get(step, 0) or 0)
+                        cover = _pct(c, total_turns)
+                        avgp = _avg_pct(running_avg.get(step))
+                        header_items.append(f"{step}: {c} ({cover}), average: {avgp}")
+                    # Overall as percentage of 3
+                    overall_pct = (oa/3.0)*100 if oa else 0.0
+                    header_items.append(f"Overall AIMS score: {overall_pct:.0f}%")
+
+                    items_html = "".join([f"<li>{p}</li>" for p in header_items])
+                    # Then append analysis bullets if any
+                    if analysis:
+                        items_html += "".join([f"<li>{p}</li>" for p in analysis])
+
+                    html = (
+                        '<div style="background:#fff7e6;border-left:4px solid #ffb020;padding:10px 12px;'
+                        'border-radius:6px;color:#8a5a00;opacity:1;">'
+                        '<div style="font-weight:700;margin-bottom:4px;">📊 Evaluation</div>'
+                        f'<ul style="margin:4px 0 0 18px;padding:0;color:inherit;opacity:1;">{items_html}</ul>'
+                        '</div>'
+                    )
+                    await cl.Message(html, author="Coach").send()
+        except Exception:
+            # Non-fatal: if analysis fails, skip silently.
+            pass
+
+
+@cl.on_chat_resume
+async def resume_chat():
+    """
+    When an existing session is resumed, display the entire prior conversation
+    from local history and wait for the next user input. No backend calls.
+    """
+    # Do not modify the session_id here. Each chat keeps its own unique id
+    # assigned at start_chat(). If Chainlit resumes a specific thread, the
+    # associated user_session (including session_id) should be restored.
+
+    # Do not overwrite existing persona/scene; just ensure keys exist for consistency.
+    if cl.user_session.get("character") is None:
+        cl.user_session.set("character", os.getenv("CHARACTER_SYSTEM") or (DEFAULT_CHARACTER or None))
+    if cl.user_session.get("scene") is None:
+        cl.user_session.set("scene", os.getenv("SCENE_OBJECTIVES") or (DEFAULT_SCENE or None))
+
+    history = cl.user_session.get("history") or []
+    await _replay_history(history)

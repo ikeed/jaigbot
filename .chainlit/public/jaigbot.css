@@ -1,0 +1,107 @@
+/* JaigBot custom UI tweaks for Chainlit (v2.8.x)
+   Distinct styling for coaching messages and subtle role theming.
+   The selectors below try to be resilient across Chainlit minor versions by:
+   - Targeting data-author="Coach" when available
+   - Falling back to presence of the coach avatar URL
+   - Avoiding deep, brittle class names
+*/
+
+/* Base variables for role colors */
+:root {
+  --coach-bg: #fff7e6;      /* soft amber */
+  --coach-border: #ffb020;  /* amber */
+  --coach-text: #8a5a00;
+
+  --doctor-accent: #27c499; /* teal */
+  --patient-accent: #5dadec;/* blue */
+}
+
+/* 1) Coaching message bubble highlight */
+/* Preferred: a message container annotated with data-author="Coach" */
+[data-author="Coach"] .message-content,
+.cl-message[data-author="Coach"] .message-content {
+  background: var(--coach-bg) !important;
+  border-left: 4px solid var(--coach-border) !important;
+  color: var(--coach-text) !important;  /* ensure full-contrast text */
+  opacity: 1 !important;                 /* override any dimming */
+}
+
+/* Ensure nested elements are not dimmed */
+[data-author="Coach"] .message-content p,
+[data-author="Coach"] .message-content li,
+[data-author="Coach"] .message-content span,
+.cl-message[data-author="Coach"] .message-content p,
+.cl-message[data-author="Coach"] .message-content li,
+.cl-message[data-author="Coach"] .message-content span {
+  color: var(--coach-text) !important;
+  opacity: 1 !important;
+}
+
+/* Fallback: containers that include the Coach avatar image */
+/* Using :has() for modern browsers; ignored in older browsers without harm */
+.message:has(img[src*="/public/coach.svg"]) .message-content,
+.message:has(img[alt="Coach"]) .message-content {
+  background: var(--coach-bg) !important;
+  border-left: 4px solid var(--coach-border) !important;
+}
+
+/* 2) Coaching header/icon emphasis (if the UI renders a header/author label) */
+[data-author="Coach"] .author, .cl-message[data-author="Coach"] .author {
+  color: var(--coach-text) !important;
+}
+
+/* Optional: add a subtle compass emoji before the first line in the coaching bubble */
+[data-author="Coach"] .message-content p:first-child::before,
+.cl-message[data-author="Coach"] .message-content p:first-child::before {
+  content: "🧭 ";
+}
+
+/* 3) Optional subtle accents for other roles */
+[data-author="Doctor"] .author, [data-author="You"] .author { color: var(--doctor-accent) !important; }
+[data-author="Patient"] .author { color: var(--patient-accent) !important; }
+
+/* If the bubble container is directly styleable, add a thin top border accent */
+[data-author="Doctor"] .message-content,
+[data-author="You"] .message-content { border-top: 2px solid color-mix(in srgb, var(--doctor-accent), transparent 80%); }
+
+/* User bubble enhancements when Chainlit doesn’t render a gutter avatar */
+/* High-specificity targeting of the user bubble container */
+[data-step-type="user_message"] .bg-accent,
+div[data-step-type="user_message"] div.bg-accent { position: relative !important; overflow: visible !important; z-index: 1; }
+[data-step-type="user_message"] .bg-accent::before {
+  content: "";
+  position: absolute;
+  right: 6px; /* inside the bubble to avoid clipping */
+  top: -10px;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background: url('/public/doctor.svg') center/cover no-repeat;
+  box-shadow: 0 0 0 2px var(--background, #fff); /* ring to separate from bubble */
+  pointer-events: none;
+}
+
+/* Add a subtle teal top border to the user bubble */
+[data-step-type="user_message"] .bg-accent {
+  border-top: 2px solid color-mix(in srgb, var(--doctor-accent), transparent 80%) !important;
+}
+[data-author="Patient"] .message-content { border-top: 2px solid color-mix(in srgb, var(--patient-accent), transparent 80%); }
+
+/* Replace the user (You) avatar with the Doctor icon via CSS if available */
+[data-author="You"] .cl-avatar,
+[data-author="You"] .avatar,
+[data-author="You"] .message-avatar {
+  background: url('/public/doctor.svg') center/cover no-repeat !important;
+}
+[data-author="You"] .cl-avatar img,
+[data-author="You"] .avatar img,
+[data-author="You"] .message-avatar img {
+  opacity: 0 !important;
+}
+
+/* 4) Compact the coaching lists slightly for readability */
+[data-author="Coach"] .message-content ul,
+[data-author="Coach"] .message-content ol {
+  margin: 0.25rem 0 0.5rem 1.25rem;
+}
+[data-author="Coach"] .message-content li { margin: 0.125rem 0; }

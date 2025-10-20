@@ -83,6 +83,23 @@ resource "google_project_iam_member" "deployer_ar_writer" {
   ]
 }
 
+# Allow deployer to administer Artifact Registry repositories (creation/deletion)
+resource "google_project_iam_member" "deployer_ar_admin" {
+  project = var.project_id
+  role    = "roles/artifactregistry.admin"
+  member  = "serviceAccount:${google_service_account.deployer.email}"
+  depends_on = [
+    google_project_service.artifactregistry
+  ]
+}
+
+# Allow deployer to enable/disable/list project services used by Terraform
+resource "google_project_iam_member" "deployer_serviceusage_admin" {
+  project = var.project_id
+  role    = "roles/serviceusage.serviceUsageAdmin"
+  member  = "serviceAccount:${google_service_account.deployer.email}"
+}
+
 resource "google_project_iam_member" "deployer_token_creator" {
   project = var.project_id
   role    = "roles/iam.serviceAccountTokenCreator"
@@ -124,4 +141,22 @@ resource "google_service_account_iam_member" "wif_impersonate_deployer" {
   service_account_id = google_service_account.deployer.name
   role               = "roles/iam.workloadIdentityUser"
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.pool.name}/attribute.repository/${var.github_org}/${var.github_repo}"
+}
+
+# Optional: Update Cloud Run request timeout using gcloud (keeps service managed by CI)
+# Note: Requires gcloud available where terraform apply runs and the caller to have roles/run.admin.
+resource "null_resource" "update_cloud_run_timeout" {
+  triggers = {
+    service_name = var.service_name
+    region       = var.region
+    timeout      = tostring(var.cloud_run_timeout_seconds)
+  }
+
+  provisioner "local-exec" {
+    command = "gcloud run services update ${var.service_name} --project=${var.project_id} --region=${var.region} --timeout=${var.cloud_run_timeout_seconds}"
+  }
+
+  depends_on = [
+    google_project_service.run
+  ]
 }

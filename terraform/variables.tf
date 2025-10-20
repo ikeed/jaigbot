@@ -6,14 +6,14 @@ variable "project_id" {
 
 variable "region" {
   type        = string
-  description = "Region for Cloud Run, Vertex AI, and Artifact Registry"
+  description = "Primary region for Cloud Run and Artifact Registry; CI also maps this to the app's REGION env for Vertex AI calls"
   default     = "us-central1"
 }
 
 variable "service_name" {
   type        = string
   description = "Cloud Run service name (used by CI/CD, not created by TF)"
-  default     = "gemini-flash-demo"
+  default     = "aimsbot"
 }
 
 variable "gar_repo" {
@@ -50,4 +50,10 @@ variable "wif_provider_id" {
   type        = string
   description = "Workload Identity Pool Provider ID"
   default     = "github-provider"
+}
+
+variable "cloud_run_timeout_seconds" {
+  type        = number
+  description = "Cloud Run request timeout in seconds (affects WebSocket lifetime). Max 3600."
+  default     = 1800
 }
