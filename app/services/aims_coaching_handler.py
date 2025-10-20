@@ -36,7 +36,7 @@ from app.services.vertex_helpers import vertex_call_with_fallback_text, vertex_c
 from app.prompts.aims import build_patient_reply_prompt
 from app.telemetry.events import log_event as telemetry_log_event, truncate_for_log as telemetry_truncate
 from app.vertex import VertexClient
-from app.json_schemas import REPLY_SCHEMA, CLASSIFY_SCHEMA, validate_json
+from app.json_schemas import REPLY_SCHEMA, CLASSIFY_SCHEMA, ENDGAME_DETECT_SCHEMA, validate_json
 
 
 class AimsCoachingHandler:
@@ -624,22 +624,71 @@ class AimsCoachingHandler:
                     if acc:
                         # Reverse back to chronological order and join
                         combined_reply_text = " ".join(reversed(acc)).strip()
+                    
+                    # Count total assistant replies in history for gating
+                    try:
+                        assistant_count = sum(
+                            1
+                            for it in hist
+                            if it.get("role") == "assistant" and (it.get("content") or "").strip()
+                        )
+                    except Exception:
+                        assistant_count = 0
                         
                 except Exception:
                     pass
             
-            # Detect end-game outcome
-            eg = EndGameDetector.detect(combined_reply_text)
-            if not eg:
-                return None
+            # Heuristic gates to reduce false endgame triggers in very early/short turns
+            try:
+                # 1) Require at least two assistant replies before we consider the scenario finished
+                if locals().get("assistant_count", 0) < 2:
+                    return None
+                # 2) If the combined reply is very short and lacks vaccine terms, do not trigger
+                vax_terms = (
+                    "vaccine", "vaccinate", "vaccination", "shot", "shots", "immuniz", "jab", "injection", "mmr", "flu", "booster"
+                )
+                lt_combined = (combined_reply_text or "").strip().lower()
+                if len(lt_combined) < 20 and not any(t in lt_combined for t in vax_terms):
+                    return None
+            except Exception:
+                pass
             
-            outcome = eg.get("reason")
+            # First attempt: LLM-based endgame detection (robust to phrasing differences)
+            try:
+                detect_prompt = (
+                    "You are an expert conversation evaluator for pediatric vaccination visits.\n"
+                    "Decide if the PARENT's recent replies indicate the scenario is complete.\n"
+                    "Endgame outcomes:\n"
+                    "- accepted_now: The parent clearly consented/agreed to vaccinate today (not a question).\n"
+                    "- followup_literature: The parent prefers to defer vaccination, plans a follow-up, and accepted written materials.\n"
+                    "- not_endgame: Anything else (including questions like 'I have some questions about the vaccination').\n\n"
+                    "Consider these latest parent messages (most recent last):\n"
+                    f"PARENT_RECENT=\"{combined_reply_text}\"\n\n"
+                    "Rules:\n"
+                    "- If the statement is conditional or a question (e.g., 'If we go ahead...?', 'Should we proceed?'), do NOT mark accepted_now unless an explicit consent token is present.\n"
+                    "- Do not infer acceptance from interest or readiness to discuss.\n"
+                    "- Output strict JSON: {\"outcome\": <one of: accepted_now|followup_literature|not_endgame>, \"reasons\":[<short strings>]} only. No markdown.\n"
+                )
+                raw = await self._call_vertex_json(detect_prompt, ENDGAME_DETECT_SCHEMA, log_path="endgame_detect")
+                obj = json.loads((raw or "").strip())
+                outcome = (obj.get("outcome") or "").strip()
+            except Exception:
+                outcome = None
+            
+            # Fallback: heuristic detector when LLM not confident/available
+            if not outcome or outcome == "not_endgame":
+                eg = EndGameDetector.detect(combined_reply_text)
+                if not eg:
+                    return None
+                outcome = eg.get("reason")
+            
             lines = []
-            
             if outcome == "accepted_now":
                 lines.append("Outcome: Parent agreed to vaccinate today — well done!")
             elif outcome == "followup_literature":
                 lines.append("Outcome: Parent opted for follow-up and took literature — great coaching!")
+            else:
+                return None
             
             # Add fallback bullets for end-game summary
             try:
