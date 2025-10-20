@@ -3,6 +3,7 @@ import logging
 import os
 import time
 import uuid
+import asyncio
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Request
@@ -500,13 +501,15 @@ async def summary(sessionId: Optional[str] = None, analysis: Optional[bool] = Fa
         prompt = _build_summary_analysis_prompt(metrics_blob=metrics_blob, mapping_blob=mapping_blob, transcript=transcript)
 
         from .services.vertex_helpers import vertex_call_with_fallback_text
-        narrative = vertex_call_with_fallback_text(
+        # Use Flash for summary analysis (faster, schema-light); keep Pro as fallback
+        narrative = await asyncio.to_thread(
+            vertex_call_with_fallback_text,
             project=PROJECT_ID,
             region=VERTEX_LOCATION,
-            primary_model=MODEL_ID,
-            fallbacks=MODEL_FALLBACKS,
-            temperature=TEMPERATURE,
-            max_tokens=MAX_TOKENS,
+            primary_model="gemini-2.5-flash",
+            fallbacks=[MODEL_ID] + list(MODEL_FALLBACKS or []),
+            temperature=min(TEMPERATURE, 0.2),
+            max_tokens=min(MAX_TOKENS, 384),
             prompt=prompt,
             system_instruction=None,
             log_path="summary_analysis",

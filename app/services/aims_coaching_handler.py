@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import json
 import time
+import asyncio
 import uuid
+import os
 from typing import Any, Dict
 
 from fastapi import Request
@@ -77,6 +79,13 @@ class AimsCoachingHandler:
         self.temperature = vertex_config["temperature"]
         self.max_tokens = vertex_config["max_tokens"]
         
+        # Per-call tuning (env-configurable) for latency/cost-sensitive JSON tasks
+        self.classify_temperature = float(os.getenv("AIMS_CLASSIFY_TEMPERATURE", "0.1"))
+        self.classify_max_tokens = int(os.getenv("AIMS_CLASSIFY_MAX_TOKENS", "256"))
+        self.endgame_temperature = float(os.getenv("AIMS_ENDGAME_TEMPERATURE", "0.1"))
+        self.endgame_max_tokens = int(os.getenv("AIMS_ENDGAME_MAX_TOKENS", "192"))
+        self.classify_budget_s = float(os.getenv("AIMS_CLASSIFY_BUDGET_S", "3.0"))
+        
         # Allow tests to monkeypatch the client via app.main.VertexClient
         self.client_cls = vertex_config.get("client_cls", None) or VertexClient
         
@@ -113,8 +122,10 @@ class AimsCoachingHandler:
             ctx.parent_last, body.message, mapping
         )
         
-        # Step 2: Enhanced LLM classification (emit begin/end markers)
+        # Step 2 & 5 in parallel: Enhanced LLM classification and patient reply generation
+        # Emit begin markers and start both tasks concurrently, then await both.
         cls_start = time.time()
+        reply_start = time.time()
         telemetry_log_event(
             self.logger,
             "aims_classify_begin",
@@ -122,9 +133,32 @@ class AimsCoachingHandler:
             requestId=request_id,
             modelId=self.model_id,
         )
-        cls_payload = await self._enhance_with_llm_classification(
-            cls_payload, body.message, ctx, mapping
+        telemetry_log_event(
+            self.logger,
+            "aims_reply_begin",
+            sessionId=ctx.session_id,
+            requestId=request_id,
+            modelId=self.model_id,
         )
+
+        task_cls = asyncio.create_task(
+            self._enhance_with_llm_classification(cls_payload, body.message, ctx, mapping)
+        )
+        task_reply = asyncio.create_task(
+            self._generate_patient_reply(body.message, ctx.history_text, req, ctx.session_id)
+        )
+
+        # Await classification with a time budget; on timeout, keep deterministic result
+        timed_out = False
+        try:
+            cls_payload = await asyncio.wait_for(task_cls, timeout=self.classify_budget_s)
+        except asyncio.TimeoutError:
+            timed_out = True
+            try:
+                task_cls.cancel()
+            except Exception:
+                pass
+        # Try to snapshot model used for classification (may be approximate if overwritten by parallel call)
         try:
             from app.services.vertex_helpers import get_last_model_used
             model_used_cls = get_last_model_used() or self.model_id
@@ -139,26 +173,10 @@ class AimsCoachingHandler:
             modelUsed=model_used_cls,
             step=cls_payload.get("step"),
             score=cls_payload.get("score"),
+            timedOut=timed_out,
         )
-        
-        # Step 3: Update AIMS state and provide coaching guidance
-        await self._update_aims_state(ctx.session_id, cls_payload, body.message, ctx.parent_last)
-        
-        # Step 4: Persist AIMS metrics  
-        await self._persist_aims_metrics(ctx.session_id, cls_payload)
-        
-        # Step 5: Generate patient reply (emit begin/end markers)
-        reply_start = time.time()
-        telemetry_log_event(
-            self.logger,
-            "aims_reply_begin",
-            sessionId=ctx.session_id,
-            requestId=request_id,
-            modelId=self.model_id,
-        )
-        reply_payload = await self._generate_patient_reply(
-            body.message, ctx.history_text, req, ctx.session_id
-        )
+
+        reply_payload = await task_reply
         try:
             from app.services.vertex_helpers import get_last_model_used
             model_used_reply = get_last_model_used() or self.model_id
@@ -173,6 +191,12 @@ class AimsCoachingHandler:
             modelUsed=model_used_reply,
             textLen=len((reply_payload.get("patient_reply") or "").strip()),
         )
+
+        # Step 3: Update AIMS state and provide coaching guidance (after classification completes)
+        await self._update_aims_state(ctx.session_id, cls_payload, body.message, ctx.parent_last)
+
+        # Step 4: Persist AIMS metrics (after state update)
+        await self._persist_aims_metrics(ctx.session_id, cls_payload)
 
         # If this is the first assistant turn in the session, strip any accidental
         # scenario headers from the parent reply to avoid duplicating the UI card.
@@ -309,7 +333,13 @@ class AimsCoachingHandler:
         used_llm_cls = False
         for attempt in (1, 2):
             try:
-                raw = await self._call_vertex_json(classify_prompt, CLASSIFY_SCHEMA, "coach_classify")
+                raw = await self._call_vertex_json(
+                    classify_prompt,
+                    CLASSIFY_SCHEMA,
+                    "coach_classify",
+                    temperature=self.classify_temperature,
+                    max_tokens=self.classify_max_tokens,
+                )
                 cand = json.loads((raw or "").strip())
                 validate_json(cand, CLASSIFY_SCHEMA)
                 
@@ -339,6 +369,19 @@ class AimsCoachingHandler:
                     continue
                 # On second failure, keep deterministic cls_payload
                 break
+        
+        # Apply a conservative question-guard to reduce obvious mislabels
+        if used_llm_cls:
+            try:
+                if (clinician_message or "").strip().endswith("?") and (cls_payload.get("step") in {"Announce", "Secure"}):
+                    cls_payload = dict(cls_payload)
+                    cls_payload["step"] = "Inquire"
+                    try:
+                        cls_payload["score"] = min(2, int(cls_payload.get("score", 2)))
+                    except Exception:
+                        cls_payload["score"] = 2
+            except Exception:
+                pass
         
         # Apply vaccine relevance gating if LLM was used
         if used_llm_cls:
@@ -684,12 +727,16 @@ class AimsCoachingHandler:
                     
                     # Collect last two assistant messages
                     acc = []
+                    last_user_text = ""
                     for item in reversed(hist):
-                        if item.get("role") == "assistant":
+                        role_i = item.get("role")
+                        if role_i == "assistant":
                             txt = (item.get("content") or "").strip()
                             if txt:
                                 acc.append(txt)
-                        if len(acc) >= 2:
+                        elif role_i == "user" and not last_user_text:
+                            last_user_text = (item.get("content") or "").strip()
+                        if len(acc) >= 2 and last_user_text:
                             break
                     
                     if acc:
@@ -705,6 +752,42 @@ class AimsCoachingHandler:
                         )
                     except Exception:
                         assistant_count = 0
+                    
+                    # Heuristic: if clinician explicitly offered follow-up + literature and parent acknowledged, trigger endgame
+                    try:
+                        lu = (last_user_text or "").strip().lower()
+                        pr = (combined_reply_text or "").strip().lower()
+                        if lu:
+                            followup_offer = any(c in lu for c in (
+                                "follow up", "follow-up", "another appointment", "next visit", "come back",
+                                "schedule", "set up an appointment", "later appointment", "set up",
+                                "book an appointment", "make an appointment", "schedule something", "talk again",
+                            ))
+                            literature_offer = any(c in lu for c in (
+                                "handout", "handouts", "brochure", "pamphlet", "literature", "written info",
+                                "information to take home", "take home", "materials", "resource", "printout", "printed info",
+                                "reading", "read this", "give you some literature", "leaflet", "info sheet",
+                            ))
+                            affirmative_ack = any(tok in pr for tok in (
+                                "sounds good", "that sounds good", "okay", "ok", "alright", "sure", "yes",
+                                "thank you", "thanks", "great", "works for me", "that works",
+                                "i appreciate", "let's do that", "let’s do that", "we can do that", "we'll do that",
+                            ))
+                            if followup_offer and literature_offer and affirmative_ack:
+                                # Build coach post now and return
+                                lines = [
+                                    "Outcome: Parent opted for follow-up and took literature — great coaching!",
+                                ]
+                                try:
+                                    from app.services.coach_post import build_endgame_bullets_fallback
+                                    fb_bullets = build_endgame_bullets_fallback(session_obj)
+                                    if fb_bullets:
+                                        lines.extend(fb_bullets)
+                                except Exception:
+                                    pass
+                                return {"title": "🎉 Great job!", "lines": lines}
+                    except Exception:
+                        pass
                         
                 except Exception:
                     pass
@@ -740,7 +823,13 @@ class AimsCoachingHandler:
                     "- Do not infer acceptance from interest or readiness to discuss.\n"
                     "- Output strict JSON: {\"outcome\": <one of: accepted_now|followup_literature|not_endgame>, \"reasons\":[<short strings>]} only. No markdown.\n"
                 )
-                raw = await self._call_vertex_json(detect_prompt, ENDGAME_DETECT_SCHEMA, log_path="endgame_detect")
+                raw = await self._call_vertex_json(
+                    detect_prompt,
+                    ENDGAME_DETECT_SCHEMA,
+                    log_path="endgame_detect",
+                    temperature=self.endgame_temperature,
+                    max_tokens=self.endgame_max_tokens,
+                )
                 obj = json.loads((raw or "").strip())
                 outcome = (obj.get("outcome") or "").strip()
             except Exception:
@@ -808,8 +897,9 @@ class AimsCoachingHandler:
             return None
     
     async def _call_vertex_text(self, prompt: str) -> str:
-        """Call Vertex for text generation with fallbacks."""
-        return vertex_call_with_fallback_text(
+        """Call Vertex for text generation with fallbacks (run in thread pool)."""
+        return await asyncio.to_thread(
+            vertex_call_with_fallback_text,
             project=self.project_id,
             region=self.vertex_location,
             primary_model=self.model_id,
@@ -823,19 +913,43 @@ class AimsCoachingHandler:
             client_cls=self.client_cls,
         )
     
-    async def _call_vertex_json(self, prompt: str, schema: dict, log_path: str) -> str:
-        """Call Vertex for JSON generation with fallbacks."""
-        return vertex_call_with_fallback_json(
+    def _primary_for_json(self, log_path: str) -> tuple[str, list[str]]:
+        """Select primary and fallback models for JSON tasks based on call path.
+        - coach_classify: Pro primary (better semantics), Flash as fallback(s)
+        - otherwise (e.g., endgame_detect): Flash primary, Pro as fallback
+        """
+        lp = (log_path or "").lower()
+        # Start with configured fallbacks, ensuring uniqueness and preserving order
+        pro_primary = self.model_id
+        try:
+            cfg_fallbacks = [m for m in (self.model_fallbacks or []) if m]
+        except Exception:
+            cfg_fallbacks = []
+        flash = "gemini-2.5-flash"
+        if lp == "coach_classify":
+            # Pro primary, ensure Flash is in fallbacks
+            fb = [x for x in ([flash] + cfg_fallbacks) if x]
+            return pro_primary, fb
+        # Default: Flash primary, Pro then others as fallbacks
+        fb = [x for x in ([pro_primary] + cfg_fallbacks) if x]
+        return flash, fb
+
+    async def _call_vertex_json(self, prompt: str, schema: dict, log_path: str, *, temperature: float | None = None, max_tokens: int | None = None) -> str:
+        """Call Vertex for JSON generation with fallbacks (non-blocking via thread pool)."""
+        primary, fb = self._primary_for_json(log_path)
+        # Run blocking SDK call in a worker thread to avoid blocking the event loop
+        return await asyncio.to_thread(
+            vertex_call_with_fallback_json,
             project=self.project_id,
             region=self.vertex_location,
-            primary_model=self.model_id,
-            fallbacks=self.model_fallbacks,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
+            primary_model=primary,
+            fallbacks=fb,
+            temperature=(self.temperature if temperature is None else temperature),
+            max_tokens=(self.max_tokens if max_tokens is None else max_tokens),
             prompt=prompt,
             system_instruction=None,
             schema=schema,
             log_path=log_path,
             logger=self.logger,
-            client_cls=VertexClient,
+            client_cls=self.client_cls,
         )
