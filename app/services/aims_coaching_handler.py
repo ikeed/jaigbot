@@ -807,6 +807,30 @@ class AimsCoachingHandler:
             except Exception:
                 pass
             
+            # Negative-intent override: if the latest parent replies contain strong declines, never end.
+            try:
+                lt_neg = (combined_reply_text or "").strip().lower()
+                NEGATE = (
+                    "not ready", "not today", "not now", "let's wait", "let’s wait", "prefer to wait",
+                    "hold off", "maybe later", "another time", "i’d rather wait", "i would rather wait",
+                    "i need more time", "we’re not ready", "we are not ready"
+                )
+                if any(tok in lt_neg for tok in NEGATE):
+                    try:
+                        telemetry_log_event(
+                            self.logger,
+                            "aims_endgame_end",
+                            sessionId=session_id,
+                            durationMs=int((time.time() - eg_begin_time) * 1000),
+                            assistantCount=int(assistant_count or 0),
+                            outcome="none",
+                        )
+                    except Exception:
+                        pass
+                    return None
+            except Exception:
+                pass
+
             # First attempt: LLM-based endgame detection (robust to phrasing differences)
             try:
                 detect_prompt = (
@@ -819,9 +843,10 @@ class AimsCoachingHandler:
                     "Consider these latest parent messages (most recent last):\n"
                     f"PARENT_RECENT=\"{combined_reply_text}\"\n\n"
                     "Rules:\n"
-                    "- If the statement is conditional or a question (e.g., 'If we go ahead...?', 'Should we proceed?'), do NOT mark accepted_now unless an explicit consent token is present.\n"
-                    "- Do not infer acceptance from interest or readiness to discuss.\n"
-                    "- Output strict JSON: {\"outcome\": <one of: accepted_now|followup_literature|not_endgame>, \"reasons\":[<short strings>]} only. No markdown.\n"
+                    "- If the statement is conditional or a question (e.g., 'If we go ahead...?','Should we proceed?'), do NOT mark accepted_now unless an explicit consent token is present (e.g., 'I consent', 'let's do it today').\n"
+                    "- If the parent says they are not ready or prefers to wait, you MUST output not_endgame.\n"
+                    "- Do not infer acceptance from interest or readiness to discuss; require explicit consent to vaccinate today.\n"
+                    "- Output strict JSON only: {\"outcome\": <accepted_now|followup_literature|not_endgame>, \"reasons\":[<short strings>]} with no markdown or code fences.\n"
                 )
                 raw = await self._call_vertex_json(
                     detect_prompt,
@@ -834,6 +859,15 @@ class AimsCoachingHandler:
                 outcome = (obj.get("outcome") or "").strip()
             except Exception:
                 outcome = None
+
+            # Dual-consent gating: require local heuristic confirmation for accepted_now
+            if outcome == "accepted_now":
+                try:
+                    eg_local = EndGameDetector.detect(combined_reply_text)
+                except Exception:
+                    eg_local = None
+                if not eg_local or eg_local.get("reason") != "accepted_now":
+                    outcome = None  # Treat as not decisive; fall back below
             
             # Fallback: heuristic detector when LLM not confident/available
             if not outcome or outcome == "not_endgame":
