@@ -236,12 +236,12 @@ def _build_scenario_card() -> list[str]:
 @cl.on_chat_start
 async def start_chat():
     """
-    Initialize the Chainlit chat session. A welcome message is sent and
-    per-user session state is initialized, including a stable sessionId and
-    optional persona/scene pulled from environment variables.
+    Initialize the Chainlit chat session. If a prior backend conversation exists for
+    this sessionId, replay it instead of stacking a new scenario card. Otherwise,
+    show the scenario card to seed the scene and names.
     """
-    # Generate a fresh session id for each new chat
-    session_id = str(uuid.uuid4())
+    # Use a persistent session id across UI loads so backend memory continues
+    session_id = _get_persistent_session_id()
     cl.user_session.set("session_id", session_id)
 
     # Optional persona/scene from environment, with hard-coded fallbacks
@@ -250,58 +250,56 @@ async def start_chat():
     cl.user_session.set("character", character)
     cl.user_session.set("scene", scene)
 
-    # Initialize fresh local history for a new chat
+    # Initialize fresh local history for a new chat thread in Chainlit
     cl.user_session.set("history", [])
-    history = []
 
-    # Register custom avatars for roles in this simulation. Users can override with env URLs.
+    # Helper: derive base URL from BACKEND_URL
+    def _base_url() -> str:
+        return BACKEND_URL[:-5] if BACKEND_URL.endswith("/chat") else BACKEND_URL
+
+    # Attempt to fetch existing backend history for this session
+    existing_hist = []
     try:
-        root = Path(__file__).resolve().parent
-
-        def _abs_existing(path_like: str | None) -> str | None:
-            if not path_like:
-                return None
-            p = Path(path_like)
-            if not p.is_absolute():
-                p = root / p
-            return str(p.resolve()) if p.exists() else None
-
-        def _pick_avatar(name: str, env_path_var: str, defaults: list[str], env_url_var: str):
-            # Prefer a real file path (absolute) so Chainlit can serve it via /avatars/<name> reliably.
-            # Try env-provided path, then known defaults under .chainlit/public and public.
-            path = _abs_existing(os.getenv(env_path_var))
-            if not path:
-                for d in defaults:
-                    path = _abs_existing(d)
-                    if path:
-                        break
-            if path:
-                cl.Avatar(id=name, name=name, path=path).save()
-                return
-            # Fallback: if an explicit http(s) URL is provided, register it.
-            url = os.getenv(env_url_var)
-            if url and (url.startswith("http://") or url.startswith("https://")):
-                cl.Avatar(id=name, name=name, url=url).save()
-
-        _pick_avatar("Patient", "PATIENT_AVATAR_PATH", [".chainlit/public/patient.svg", "public/patient.svg"], "PATIENT_AVATAR_URL")
-        _pick_avatar("Doctor", "DOCTOR_AVATAR_PATH", [".chainlit/public/doctor.svg", "public/doctor.svg"], "DOCTOR_AVATAR_URL")
-        _pick_avatar("Coach", "COACH_AVATAR_PATH", [".chainlit/public/coach.svg", "public/coach.svg"], "COACH_AVATAR_URL")
+        timeout = float(os.getenv("CHAINLIT_HTTP_TIMEOUT", "15"))
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            r = await client.get(f"{_base_url()}/history", params={"sessionId": session_id})
+            if r.status_code == 200 and r.headers.get("content-type", "").startswith("application/json"):
+                existing_hist = (r.json() or {}).get("history") or []
     except Exception:
-        # Avatars are optional; ignore any errors (e.g., file not found in dev)
-        pass
+        existing_hist = []
 
-    # At chat start, show a scenario card built from file-driven configuration.
-    # Do NOT call the backend here to avoid startup delays and to let the clinician lead (Announce/Inquire).
+    # If there is prior history on the backend, mirror it into the UI without sending a new scenario card
+    if existing_hist:
+        try:
+            cl.user_session.set("history", existing_hist)
+            await _replay_history(existing_hist)
+        except Exception:
+            pass
+        # Also inject the scenario lines into the scene context once if not present
+        try:
+            if "Scenario details (use these exact names; do not change them):" not in (cl.user_session.get("scene") or ""):
+                scenario_lines = _build_scenario_card()
+                card = "\n".join(scenario_lines)
+                prev_scene = cl.user_session.get("scene")
+                scenario_scene_suffix = (
+                    "\n\nScenario details (use these exact names; do not change them):\n" + card +
+                    "\n\nIf asked for names, respond naturally but keep the same parent and child names."
+                )
+                new_scene = (prev_scene + scenario_scene_suffix) if prev_scene else scenario_scene_suffix
+                cl.user_session.set("scene", new_scene)
+        except Exception:
+            pass
+        return
+
+    # Otherwise, present a single scenario card as before
     scenario_lines = _build_scenario_card()
     card = "\n".join(scenario_lines)
-    # Save to client-side history (for UI replay only)
     history = cl.user_session.get("history")
     history.append({"role": "assistant", "content": card})
     cl.user_session.set("history", history)
     await cl.Message(card, author="Patient").send()
 
-    # Inject the scenario card into the scene context that we send to the backend,
-    # so the model has the exact names/purpose/notes as grounding and does not invent new ones.
+    # Inject the scenario into the scene context for grounding
     try:
         prev_scene = cl.user_session.get("scene")
         scenario_scene_suffix = (
@@ -311,13 +309,11 @@ async def start_chat():
         new_scene = (prev_scene + scenario_scene_suffix) if prev_scene else scenario_scene_suffix
         cl.user_session.set("scene", new_scene)
     except Exception:
-        # Non-fatal if session store is unavailable
         pass
 
     # Preflight check: verify backend is reachable and reasonably configured.
     # This avoids confusing 500 errors later (e.g., PROJECT_ID not set).
     try:
-        import httpx  # local import to avoid import cycles
         base_url = BACKEND_URL[:-5] if BACKEND_URL.endswith("/chat") else BACKEND_URL
         timeout = float(os.getenv("CHAINLIT_HTTP_TIMEOUT", "15"))
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -568,18 +564,44 @@ async def handle_message(message: cl.Message):
 @cl.on_chat_resume
 async def resume_chat():
     """
-    When an existing session is resumed, display the entire prior conversation
-    from local history and wait for the next user input. No backend calls.
+    When an existing session is resumed, display the conversation. If local
+    history is empty (e.g., after a server restart), fetch it from the backend
+    using the persistent session id and replay it, avoiding duplicate scenario cards.
     """
-    # Do not modify the session_id here. Each chat keeps its own unique id
-    # assigned at start_chat(). If Chainlit resumes a specific thread, the
-    # associated user_session (including session_id) should be restored.
+    # Keep the same session id established in start_chat
+    session_id = cl.user_session.get("session_id") or _get_persistent_session_id()
+    cl.user_session.set("session_id", session_id)
 
-    # Do not overwrite existing persona/scene; just ensure keys exist for consistency.
+    # Ensure persona/scene keys exist
     if cl.user_session.get("character") is None:
         cl.user_session.set("character", os.getenv("CHARACTER_SYSTEM") or (DEFAULT_CHARACTER or None))
     if cl.user_session.get("scene") is None:
         cl.user_session.set("scene", os.getenv("SCENE_OBJECTIVES") or (DEFAULT_SCENE or None))
 
+    # If we already have local history, just replay it
     history = cl.user_session.get("history") or []
-    await _replay_history(history)
+    if history:
+        await _replay_history(history)
+        return
+
+    # Otherwise, try to fetch history from the backend for this session
+    def _base_url() -> str:
+        return BACKEND_URL[:-5] if BACKEND_URL.endswith("/chat") else BACKEND_URL
+
+    fetched = []
+    try:
+        timeout = float(os.getenv("CHAINLIT_HTTP_TIMEOUT", "15"))
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            r = await client.get(f"{_base_url()}/history", params={"sessionId": session_id})
+            if r.status_code == 200 and r.headers.get("content-type", "").startswith("application/json"):
+                fetched = (r.json() or {}).get("history") or []
+    except Exception:
+        fetched = []
+
+    if fetched:
+        cl.user_session.set("history", fetched)
+        await _replay_history(fetched)
+        return
+
+    # Nothing to replay; do nothing and wait for the next message
+    return
