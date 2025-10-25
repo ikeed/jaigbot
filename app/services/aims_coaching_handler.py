@@ -173,23 +173,6 @@ class AimsCoachingHandler:
             modelUsed=model_used_cls,
             step=cls_payload.get("step"),
             score=cls_payload.get("score"),
-            timedOut=timed_out,
-        )
-
-        reply_payload = await task_reply
-        try:
-            from app.services.vertex_helpers import get_last_model_used
-            model_used_reply = get_last_model_used() or self.model_id
-        except Exception:
-            model_used_reply = self.model_id
-        telemetry_log_event(
-            self.logger,
-            "aims_reply_end",
-            sessionId=ctx.session_id,
-            requestId=request_id,
-            durationMs=int((time.time() - reply_start) * 1000),
-            modelUsed=model_used_reply,
-            textLen=len((reply_payload.get("patient_reply") or "").strip()),
         )
 
         # Step 3: Update AIMS state and provide coaching guidance (after classification completes)
@@ -224,6 +207,12 @@ class AimsCoachingHandler:
             modelUsed=model_used_reply,
             textLen=len((reply_payload.get("patient_reply") or "").strip()),
         )
+
+        # Step 3: Update AIMS state and provide coaching guidance (after classification completes)
+        await self._update_aims_state(ctx.session_id, cls_payload, body.message, ctx.parent_last)
+
+        # Step 4: Persist AIMS metrics (after state update)
+        await self._persist_aims_metrics(ctx.session_id, cls_payload)
 
         # If this is the first assistant turn in the session, strip any accidental
         # scenario headers from the parent reply to avoid duplicating the UI card.
