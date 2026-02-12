@@ -38,12 +38,98 @@ def _register_avatars_once() -> None:
 
         _pick_avatar("Patient", "PATIENT_AVATAR_PATH", [".chainlit/public/patient.svg", "public/patient.svg"], "PATIENT_AVATAR_URL")
         _pick_avatar("Doctor", "DOCTOR_AVATAR_PATH", [".chainlit/public/doctor.svg", "public/doctor.svg"], "DOCTOR_AVATAR_URL")
-        _pick_avatar("Coach", "COACH_AVATAR_PATH", [".chainlit/public/coach.svg", "public/coach.svg"], "COACH_AVATAR_URL")
+        # Include top-level Coach.svg fallback in case assets are placed at repo root
+        _pick_avatar("Coach", "COACH_AVATAR_PATH", [".chainlit/public/coach.svg", "public/coach.svg", "Coach.svg"], "COACH_AVATAR_URL")
     except Exception:
         pass
 
 # Perform an early registration so avatars are ready on first render
 _register_avatars_once()
+
+# Inject our public CSS into the page at session start to ensure consistent styling
+async def _inject_custom_css_once() -> None:
+    try:
+        if cl.user_session.get("_css_injected"):
+            return
+        root = Path(__file__).resolve().parent
+        css_paths = [
+            root / "public" / "jaigbot.css",
+            root.parent / "public" / "jaigbot.css",
+        ]
+        css_text = None
+        for p in css_paths:
+            try:
+                if p.exists():
+                    css_text = p.read_text(encoding="utf-8")
+                    break
+            except Exception:
+                continue
+        if css_text:
+            html = f"<style>{css_text}</style>"
+            await _send_html("System", html)
+            cl.user_session.set("_css_injected", True)
+    except Exception:
+        # best-effort only
+        pass
+
+async def _send_html(author: str, html: str) -> None:
+    """
+    Try to render HTML reliably across Chainlit versions:
+    - Prefer the HTML element (cl.HTML / cl.Html) if available.
+    - Fallback to plain content rendering (which may be sanitized) as a last resort.
+    """
+    try:
+        HtmlElem = getattr(cl, "HTML", None) or getattr(cl, "Html", None)
+        if HtmlElem is not None:
+            elem = HtmlElem(name="block", content=html)
+            await cl.Message(content="", author=author, elements=[elem]).send()
+            return
+    except Exception:
+        pass
+    # Fallback: send as content (requires unsafe_allow_html=true to style)
+    try:
+        await cl.Message(html, author=author).send()
+    except Exception:
+        # Last resort: strip tags (very minimal)
+        try:
+            import re
+            text = re.sub(r"<[^>]+>", "", html)
+            await cl.Message(text, author=author).send()
+        except Exception:
+            await cl.Message(html, author=author).send()
+
+
+async def _update_message_html(message: cl.Message, author: str, html: str) -> None:
+    """Update an existing Chainlit message with HTML content in a version-resilient way.
+    We try to use the HTML element first; if not supported, fall back to setting raw
+    content; and finally to stripped text.
+    """
+    # Attempt with HTML Element
+    try:
+        HtmlElem = getattr(cl, "HTML", None) or getattr(cl, "Html", None)
+        if HtmlElem is not None:
+            elem = HtmlElem(name="block", content=html)
+            await message.update(content="", author=author, elements=[elem])
+            return
+    except Exception:
+        pass
+    # Fallback to raw HTML content update
+    try:
+        await message.update(content=html, author=author)
+        return
+    except Exception:
+        pass
+    # Final fallback: strip tags
+    try:
+        import re
+        text = re.sub(r"<[^>]+>", "", html)
+        await message.update(content=text, author=author)
+    except Exception:
+        # give up silently
+        try:
+            await message.update(author=author)
+        except Exception:
+            pass
 
 # The backend URL for the FastAPI /chat endpoint. This can be overridden
 # at runtime by setting the BACKEND_URL environment variable.  For local
@@ -56,27 +142,96 @@ CHAINLIT_COACH_DEFAULT = (os.getenv("CHAINLIT_COACH_DEFAULT") or os.getenv("AIMS
 
 def _author_from_role(role: str) -> str:
     """
-    Map our simple role string to a display author label for Chainlit.
-    We render the human as "Doctor" and the assistant as "Patient" to
-    better fit the clinical simulation. Anything else falls back to
-    the assistant label.
+    Map backend role strings to Chainlit author labels.
+    - user/doctor/clinician -> Doctor
+    - assistant/parent/model -> Patient
+    - coach/system -> Coach
+    Unknown roles fall back to 'Patient'.
     """
-    if role == "user":
+    r = (role or "").lower().strip()
+    if r in ("user", "doctor", "clinician"):
         return "Doctor"
-    if role == "assistant":
+    if r in ("assistant", "parent", "model"):
         return "Patient"
-    return role or "Patient"
+    if r in ("coach", "system"):
+        return "Coach"
+    return "Patient"
 
 
 async def _replay_history(history: list[dict]):
     """
     Replay all prior messages to the UI without making any backend calls.
-    Each history item is a dict like {"role": "user"|"assistant", "content": str}.
+    Each history item is a dict like {"role": "user"|"assistant"|"coach", "content": str}.
+    Prefer an explicit 'author' field if present, otherwise map from 'role'.
+
+    Additionally, render 'coach' entries as a styled HTML coaching block so that
+    a page refresh preserves the differentiated look (matching live rendering).
     """
+    def _strip_export_artifacts(text: str) -> str:
+        # Remove lines such as "Avatar for Doctor" that may appear if a transcript
+        # was copied/exported and accidentally persisted.
+        try:
+            lines = [ln for ln in (text or "").splitlines() if ln.strip() and not ln.strip().lower().startswith("avatar for ")]
+            return "\n".join(lines)
+        except Exception:
+            return text
+
     for item in history or []:
         content = item.get("content", "")
+        author = item.get("author")
         role = item.get("role", "assistant")
-        await cl.Message(content=content, author=_author_from_role(role)).send()
+        if not author:
+            author = _author_from_role(role)
+
+        # Coach entries: render as the same inline HTML block we use during live turns
+        if author == "Coach":
+            try:
+                txt = (content or "").strip()
+                parts: list[str] = []
+                if " | " in txt:
+                    parts = [p.strip() for p in txt.split(" | ") if p.strip()]
+                else:
+                    # Fallback: split by lines and keep common prefixes
+                    cands = [ln.strip() for ln in txt.splitlines() if ln.strip()]
+                    for ln in cands:
+                        if ln.lower().startswith(("detected step:", "feedback:", "tip:")):
+                            parts.append(ln)
+                if parts:
+                    items_html = "".join([f"<li>{p}</li>" for p in parts])
+                    html = (
+                        '<div style="background:#fff7e6;border-left:4px solid #ffb020;padding:10px 12px;'
+                        'border-radius:6px;color:#8a5a00;opacity:1;">'
+                        '<div style="display:flex;align-items:center;font-weight:700;margin-bottom:4px;">'
+                        '  <img src="/public/coach.svg" alt="Coach" style="width:16px;height:16px;margin-right:6px;" />'
+                        '  Coaching'
+                        '</div>'
+                        f'<ul style="margin:4px 0 0 18px;padding:0;color:inherit;opacity:1;">{items_html}</ul>'
+                        '</div>'
+                    )
+                    await _send_html("Coach", html)
+                    continue
+            except Exception:
+                # If anything goes wrong, fall back to plain text message
+                pass
+
+        # Non-coach (or coach fallback): strip possible export artifacts and send with basic styling.
+        content_clean = _strip_export_artifacts(content)
+
+        # For Doctor turns, emulate right-aligned bubble with inline styles so replay matches live look.
+        if author == "Doctor":
+            try:
+                html = (
+                    '<div style="display:flex; justify-content:flex-end; align-items:flex-start; gap:6px; margin:6px 0;">'
+                    '  <div style="max-width:80%; background:#e6f0ff; color:#123; padding:10px 12px; border-radius:8px;">{}</div>'
+                    '  <img src="/public/doctor.svg" alt="Doctor" style="width:18px;height:18px; border-radius:50%; box-shadow:0 0 0 2px rgba(255,255,255,0.9);" />'
+                    '</div>'
+                ).format(content_clean.replace("\n", "<br>"))
+                await _send_html(author, html)
+                continue
+            except Exception:
+                pass
+
+        await cl.Message(content=content_clean, author=author).send()
 
 
 def _get_persistent_session_id() -> str:
@@ -177,13 +332,13 @@ def _build_scenario_card() -> list[str]:
                 idx = random.randrange(len(scenarios))
         else:
             idx = random.randrange(len(scenarios))
-        sc = scenarios[idx]
-        is_parent = bool(sc.get("is_parent", False))
+        # Always assume parent + child scenario; prefer scenarios marked is_parent=true
+        # Filter scenarios for parent/child if possible; fallback to selected index
+        sc_parent_first = [s for s in scenarios if s.get("is_parent") is not False]
+        sc = sc_parent_first[idx % len(sc_parent_first)] if sc_parent_first else scenarios[idx]
         purposes = list(sc.get("purposes") or [])
         notes_list = list(sc.get("notes") or [])
-        purpose = purposes[0] if purposes else None
-        if purposes:
-            purpose = random.choice(purposes)
+        purpose = random.choice(purposes) if purposes else None
         note = random.choice(notes_list) if notes_list else None
 
         # Helper to split full name and extract last
@@ -204,25 +359,19 @@ def _build_scenario_card() -> list[str]:
             last_pool = ["Jenkins", "Patel", "Gomez", "Nguyen", "Kim", "Lopez"]
 
         scenario_lines: list[str] = []
-        if is_parent:
-            # Parent + child
-            if parent_pool:
-                parent_full = random.choice(parent_pool)
-                parent_first, parent_last = _split_last(parent_full)
-                parent_full = f"{parent_first} {parent_last}"
-            else:
-                parent_first = random.choice(adult_first_pool or ["Jordan", "Taylor"]) 
-                parent_last = random.choice(last_pool)
-                parent_full = f"{parent_first} {parent_last}"
-            child_first = random.choice(child_first_pool or ["Liam", "Maya"]) 
-            child_full = f"{child_first} {parent_last}"
-            scenario_lines.append(f"Parent: {parent_full}")
-            scenario_lines.append(f"Patient: {child_full}")
+        # Parent + child only
+        if parent_pool:
+            parent_full = random.choice(parent_pool)
+            parent_first, parent_last = _split_last(parent_full)
+            parent_full = f"{parent_first} {parent_last}"
         else:
-            # Adult patient only
-            first = random.choice(adult_first_pool or ["Jordan", "Taylor"]) 
-            last = random.choice(last_pool)
-            scenario_lines.append(f"Patient: {first} {last}")
+            parent_first = random.choice(adult_first_pool or ["Jordan", "Taylor"]) 
+            parent_last = random.choice(last_pool)
+            parent_full = f"{parent_first} {parent_last}"
+        child_first = random.choice(child_first_pool or ["Liam", "Maya"]) 
+        child_full = f"{child_first} {parent_last}"
+        scenario_lines.append(f"Parent: {parent_full}")
+        scenario_lines.append(f"Patient: {child_full}")
 
         if purpose:
             scenario_lines.append(f"Purpose: {purpose}")
@@ -242,12 +391,15 @@ def _build_scenario_card() -> list[str]:
 @cl.on_chat_start
 async def start_chat():
     """
-    Initialize the Chainlit chat session. A welcome message is sent and
-    per-user session state is initialized, including a stable sessionId and
-    optional persona/scene pulled from environment variables.
+    Initialize the Chainlit chat session. If a prior backend conversation exists for
+    this sessionId, replay it instead of stacking a new scenario card. Otherwise,
+    show the scenario card to seed the scene and names.
     """
-    # Generate a fresh session id for each new chat
-    session_id = str(uuid.uuid4())
+    # Ensure our CSS is present for consistent styling across live and replay
+    await _inject_custom_css_once()
+
+    # Use a persistent session id across UI loads so backend memory continues
+    session_id = _get_persistent_session_id()
     cl.user_session.set("session_id", session_id)
 
     # Optional persona/scene from environment, with hard-coded fallbacks
@@ -256,60 +408,77 @@ async def start_chat():
     cl.user_session.set("character", character)
     cl.user_session.set("scene", scene)
 
-    # Initialize fresh local history for a new chat
+    # Initialize fresh local history for a new chat thread in Chainlit
     cl.user_session.set("history", [])
-    history = []
 
-    # Register custom avatars for roles in this simulation. Users can override with env URLs.
+    # Helper: derive base URL from BACKEND_URL
+    def _base_url() -> str:
+        return BACKEND_URL[:-5] if BACKEND_URL.endswith("/chat") else BACKEND_URL
+
+    # Attempt to fetch existing backend history for this session
+    existing_hist = []
     try:
-        root = Path(__file__).resolve().parent
-
-        def _abs_existing(path_like: str | None) -> str | None:
-            if not path_like:
-                return None
-            p = Path(path_like)
-            if not p.is_absolute():
-                p = root / p
-            return str(p.resolve()) if p.exists() else None
-
-        def _pick_avatar(name: str, env_path_var: str, defaults: list[str], env_url_var: str):
-            # Prefer a real file path (absolute) so Chainlit can serve it via /avatars/<name> reliably.
-            # Try env-provided path, then known defaults under .chainlit/public and public.
-            path = _abs_existing(os.getenv(env_path_var))
-            if not path:
-                for d in defaults:
-                    path = _abs_existing(d)
-                    if path:
-                        break
-            if path:
-                cl.Avatar(id=name, name=name, path=path).save()
-                return
-            # Fallback: if an explicit http(s) URL is provided, register it.
-            url = os.getenv(env_url_var)
-            if url and (url.startswith("http://") or url.startswith("https://")):
-                cl.Avatar(id=name, name=name, url=url).save()
-
-        _pick_avatar("Patient", "PATIENT_AVATAR_PATH", [".chainlit/public/patient.svg", "public/patient.svg"], "PATIENT_AVATAR_URL")
-        _pick_avatar("Doctor", "DOCTOR_AVATAR_PATH", [".chainlit/public/doctor.svg", "public/doctor.svg"], "DOCTOR_AVATAR_URL")
-        _pick_avatar("Coach", "COACH_AVATAR_PATH", [".chainlit/public/coach.svg", "public/coach.svg"], "COACH_AVATAR_URL")
+        timeout = float(os.getenv("CHAINLIT_HTTP_TIMEOUT", "15"))
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            r = await client.get(f"{_base_url()}/history", params={"sessionId": session_id})
+            if r.status_code == 200 and r.headers.get("content-type", "").startswith("application/json"):
+                existing_hist = (r.json() or {}).get("history") or []
     except Exception:
-        # Avatars are optional; ignore any errors (e.g., file not found in dev)
-        pass
+        existing_hist = []
 
-    # At chat start, show a scenario card built from file-driven configuration.
-    # Do NOT call the backend here to avoid startup delays and to let the clinician lead (Announce/Inquire).
+    # If there is prior history on the backend, mirror it into the UI and prepend the scenario summary for context
+    if existing_hist:
+        try:
+            # Render a scenario summary card at the top (not persisted anew) for consistent context after refresh
+            scenario_lines = _build_scenario_card()
+            card = "\n".join(scenario_lines)
+            await cl.Message(card, author="Patient").send()
+        except Exception:
+            pass
+        try:
+            cl.user_session.set("history", existing_hist)
+            await _replay_history(existing_hist)
+        except Exception:
+            pass
+        # Also inject the scenario lines into the scene context once if not present
+        try:
+            if "Scenario details (use these exact names; do not change them):" not in (cl.user_session.get("scene") or ""):
+                scenario_lines = _build_scenario_card()
+                card = "\n".join(scenario_lines)
+                prev_scene = cl.user_session.get("scene")
+                scenario_scene_suffix = (
+                    "\n\nScenario details (use these exact names; do not change them):\n" + card +
+                    "\n\nIf asked for names, respond naturally but keep the same parent and child names."
+                )
+                new_scene = (prev_scene + scenario_scene_suffix) if prev_scene else scenario_scene_suffix
+                cl.user_session.set("scene", new_scene)
+        except Exception:
+            pass
+        return
+
+    # Otherwise, present a single scenario card as before
     scenario_lines = _build_scenario_card()
     card = "\n".join(scenario_lines)
-    # Save to client-side history (for UI replay only)
     history = cl.user_session.get("history")
     history.append({"role": "assistant", "content": card})
     cl.user_session.set("history", history)
     await cl.Message(card, author="Patient").send()
 
+    # Inject the scenario into the scene context for grounding
+    try:
+        prev_scene = cl.user_session.get("scene")
+        scenario_scene_suffix = (
+            "\n\nScenario details (use these exact names; do not change them):\n" + card +
+            "\n\nIf asked for names, respond naturally but keep the same parent and child names."
+        )
+        new_scene = (prev_scene + scenario_scene_suffix) if prev_scene else scenario_scene_suffix
+        cl.user_session.set("scene", new_scene)
+    except Exception:
+        pass
+
     # Preflight check: verify backend is reachable and reasonably configured.
     # This avoids confusing 500 errors later (e.g., PROJECT_ID not set).
     try:
-        import httpx  # local import to avoid import cycles
         base_url = BACKEND_URL[:-5] if BACKEND_URL.endswith("/chat") else BACKEND_URL
         timeout = float(os.getenv("CHAINLIT_HTTP_TIMEOUT", "15"))
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -370,6 +539,24 @@ async def handle_message(message: cl.Message):
     if not content:
         await cl.Message("Please enter a message.").send()
         return
+
+    # Update the live-rendered doctor (user) message to match the post-reload styling:
+    # right-aligned bubble with a light blue background. This keeps the "before" view
+    # consistent with the "after" replay look, including distinct Doctor avatar.
+    try:
+        doctor_html = (
+            '<div style="display:flex; justify-content:flex-end; align-items:flex-start; gap:6px; margin:6px 0;">'
+            '  <div style="max-width:80%; background:#e6f0ff; color:#123; padding:10px 12px; border-radius:8px;">{}</div>'
+            '  <img src="/public/doctor.svg" alt="Doctor" style="width:18px;height:18px; border-radius:50%; box-shadow:0 0 0 2px rgba(255,255,255,0.9);" />'
+            '</div>'
+        ).format(content.replace("\n", "<br>"))
+        await _update_message_html(message, "Doctor", doctor_html)
+    except Exception:
+        # If HTML update fails, keep the plain message but ensure author label
+        try:
+            await message.update(author="Doctor")
+        except Exception:
+            pass
 
     # Retrieve history and append the user's message.  This is not sent to
     # the backend yet but can be used to build context in the future.
@@ -455,6 +642,12 @@ async def handle_message(message: cl.Message):
         if tips:
             parts.append(f"Tip: {tips[0]}")
         if parts:
+                # Append a plain-text coaching note to local history for persistence across refresh
+                try:
+                    history.append({"role": "coach", "content": " | ".join(parts)})
+                    cl.user_session.set("history", history)
+                except Exception:
+                    pass
                 # Render a clearly differentiated coaching block using inline HTML so it does not
                 # rely on external CSS or DOM-specific selectors. This requires
                 # features.unsafe_allow_html=true in .chainlit/config.toml.
@@ -466,7 +659,7 @@ async def handle_message(message: cl.Message):
                     f'<ul style="margin:4px 0 0 18px;padding:0;color:inherit;opacity:1;">{items_html}</ul>'
                     '</div>'
                 )
-                await cl.Message(html, author="Coach").send()
+                await _send_html("Coach", html)
 
 
     # Append assistant reply to history and send to UI after coaching
@@ -484,7 +677,7 @@ async def handle_message(message: cl.Message):
         html = (
             '<div style="background:#fff7e6;border-left:4px solid #ffb020;padding:10px 12px;'
             'border-radius:6px;color:#8a5a00;opacity:1;">'
-            f'<div style="font-weight:700;margin-bottom:4px;">{title}</div>'
+            f'<div style="display:flex;align-items:center;font-weight:700;margin-bottom:4px;"><img src="/public/coach.svg" alt="Coach" style="width:16px;height:16px;margin-right:6px;" />{title}</div>'
             f'<ul style="margin:4px 0 0 18px;padding:0;color:inherit;opacity:1;">{items_html}</ul>'
             '</div>'
         )
@@ -560,18 +753,44 @@ async def handle_message(message: cl.Message):
 @cl.on_chat_resume
 async def resume_chat():
     """
-    When an existing session is resumed, display the entire prior conversation
-    from local history and wait for the next user input. No backend calls.
+    When an existing session is resumed, display the conversation. If local
+    history is empty (e.g., after a server restart), fetch it from the backend
+    using the persistent session id and replay it, avoiding duplicate scenario cards.
     """
-    # Do not modify the session_id here. Each chat keeps its own unique id
-    # assigned at start_chat(). If Chainlit resumes a specific thread, the
-    # associated user_session (including session_id) should be restored.
+    # Keep the same session id established in start_chat
+    session_id = cl.user_session.get("session_id") or _get_persistent_session_id()
+    cl.user_session.set("session_id", session_id)
 
-    # Do not overwrite existing persona/scene; just ensure keys exist for consistency.
+    # Ensure persona/scene keys exist
     if cl.user_session.get("character") is None:
         cl.user_session.set("character", os.getenv("CHARACTER_SYSTEM") or (DEFAULT_CHARACTER or None))
     if cl.user_session.get("scene") is None:
         cl.user_session.set("scene", os.getenv("SCENE_OBJECTIVES") or (DEFAULT_SCENE or None))
 
+    # If we already have local history, just replay it
     history = cl.user_session.get("history") or []
-    await _replay_history(history)
+    if history:
+        await _replay_history(history)
+        return
+
+    # Otherwise, try to fetch history from the backend for this session
+    def _base_url() -> str:
+        return BACKEND_URL[:-5] if BACKEND_URL.endswith("/chat") else BACKEND_URL
+
+    fetched = []
+    try:
+        timeout = float(os.getenv("CHAINLIT_HTTP_TIMEOUT", "15"))
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            r = await client.get(f"{_base_url()}/history", params={"sessionId": session_id})
+            if r.status_code == 200 and r.headers.get("content-type", "").startswith("application/json"):
+                fetched = (r.json() or {}).get("history") or []
+    except Exception:
+        fetched = []
+
+    if fetched:
+        cl.user_session.set("history", fetched)
+        await _replay_history(fetched)
+        return
+
+    # Nothing to replay; do nothing and wait for the next message
+    return

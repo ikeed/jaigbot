@@ -129,6 +129,30 @@ class AimsPostProcessor:
     def post_process(cls_payload: Dict, clinician_text: str) -> Dict:
         cls_payload = AimsPostProcessor.correct_inquire_to_secure(cls_payload, clinician_text)
         cls_payload = AimsPostProcessor.normalize_score(cls_payload)
+        # Soften overly harsh feedback when autonomy-respecting language is present
+        try:
+            lt = (clinician_text or "").lower()
+            autonomy_cues = (
+                "no pressure",
+                "it’s your choice",
+                "it's your choice",
+                "up to you",
+                "your decision",
+                "happy to answer",
+                "any questions",
+                "open to talking",
+            )
+            if any(c in lt for c in autonomy_cues):
+                reasons = list(cls_payload.get("reasons") or [])
+                # Remove judgmental phrasing markers if present
+                filtered = [r for r in reasons if ("judgment" not in r.lower() and "leading" not in r.lower())]
+                if not filtered and reasons:
+                    # Replace with a neutral nudge if we removed everything
+                    filtered = ["Keep framing neutral and open; invite questions."]
+                cls_payload = dict(cls_payload)
+                cls_payload["reasons"] = filtered
+        except Exception:
+            pass
         return cls_payload
 
 
@@ -158,12 +182,14 @@ class EndGameDetector:
 
     FOLLOWUP_CUES = [
         "follow up", "follow-up", "another appointment", "next visit", "come back",
-        "schedule", "set up an appointment", "later appointment",
+        "schedule", "set up an appointment", "later appointment", "set up",
+        "book an appointment", "make an appointment", "schedule something", "talk again",
     ]
 
     LITERATURE_CUES = [
         "handout", "handouts", "brochure", "pamphlet", "literature", "written info",
         "information to take home", "take home", "materials", "resource", "printout", "printed info",
+        "reading", "read this", "give you some literature", "leaflet", "info sheet",
     ]
 
     @staticmethod
@@ -242,6 +268,12 @@ def sanitize_endgame_bullets(lines: List[str]) -> List[str]:
         s = (raw or "").strip()
         if not s:
             continue
+        # Strip surrounding quotes if the whole line is quoted
+        if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
+            s = s[1:-1].strip()
+            if not s:
+                continue
+        sl = s.lower()
         # Drop obvious braces or brackets and code fences
         if s in ("{", "}", "[", "]", "```", "```json", "```md"):
             continue
@@ -252,7 +284,13 @@ def sanitize_endgame_bullets(lines: List[str]) -> List[str]:
             continue
         if '":' in s or "':" in s:
             continue
-        if s.lower().startswith("patient_reply"):
+        # Drop stray JSON fragments like patient{ or "patient{
+        if sl.startswith("patient{") or sl.startswith('"patient{'):
+            continue
+        if sl.startswith("patient_reply"):
+            continue
+        # Drop any line that is just an opening/closing brace with optional quote
+        if s.strip().strip('"\'') in ("{", "}"):
             continue
         # Remove leading bullet markers
         s = s.lstrip("-•\t ")

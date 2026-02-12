@@ -3,6 +3,7 @@ import logging
 import os
 import time
 import uuid
+import asyncio
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Request
@@ -423,6 +424,31 @@ async def healthz():
     return {"status": "ok"}
 
 
+@app.get("/history")
+async def history(sessionId: Optional[str] = None):
+    """Return raw conversation history for a session as a list of {role, content}.
+    If the session is missing or memory disabled, return an empty list.
+    """
+    try:
+        if not (sessionId and MEMORY_ENABLED):
+            return {"history": []}
+        mem = _MEMORY_STORE.get(sessionId) or {}
+        hist = mem.get("history") or []
+        # Ensure items are objects with role/content strings
+        out = []
+        for it in hist:
+            try:
+                role = it.get("role")
+                content = it.get("content")
+                if isinstance(role, str) and isinstance(content, str):
+                    out.append({"role": role, "content": content})
+            except Exception:
+                continue
+        return {"history": out}
+    except Exception:
+        return {"history": []}
+
+
 @app.get("/summary")
 async def summary(sessionId: Optional[str] = None, analysis: Optional[bool] = False):
     """Return an aggregated AIMS summary for a session.
@@ -500,13 +526,15 @@ async def summary(sessionId: Optional[str] = None, analysis: Optional[bool] = Fa
         prompt = _build_summary_analysis_prompt(metrics_blob=metrics_blob, mapping_blob=mapping_blob, transcript=transcript)
 
         from .services.vertex_helpers import vertex_call_with_fallback_text
-        narrative = vertex_call_with_fallback_text(
+        # Use Flash for summary analysis (faster, schema-light); keep Pro as fallback
+        narrative = await asyncio.to_thread(
+            vertex_call_with_fallback_text,
             project=PROJECT_ID,
             region=VERTEX_LOCATION,
-            primary_model=MODEL_ID,
-            fallbacks=MODEL_FALLBACKS,
-            temperature=TEMPERATURE,
-            max_tokens=MAX_TOKENS,
+            primary_model="gemini-2.5-flash",
+            fallbacks=[MODEL_ID] + list(MODEL_FALLBACKS or []),
+            temperature=min(TEMPERATURE, 0.2),
+            max_tokens=min(MAX_TOKENS, 384),
             prompt=prompt,
             system_instruction=None,
             log_path="summary_analysis",
@@ -612,6 +640,7 @@ async def chat(req: Request, body: ChatRequest):
     
     aims_config = {
         "enabled": AIMS_COACHING_ENABLED,
+        "force_default": (os.getenv("AIMS_COACHING_DEFAULT", "false").lower() == "true"),
     }
     
     debug_config = {
@@ -658,6 +687,9 @@ async def config():
         "autoContinueOnMaxTokens": AUTO_CONTINUE_ON_MAX_TOKENS,
         "maxContinuations": MAX_CONTINUATIONS,
         "suppressVertexAIDeprecation": SUPPRESS_VERTEXAI_DEPRECATION,
+        # Coaching toggles
+        "aimsCoachingEnabled": AIMS_COACHING_ENABLED,
+        "aimsCoachingDefault": (os.getenv("AIMS_COACHING_DEFAULT", "false").lower() == "true"),
         # Reflect effective default here (Vertex client defaults to true now)
         "useVertexRest": os.getenv("USE_VERTEX_REST", "true").lower() == "true",
         "continueTailChars": int(os.getenv("CONTINUE_TAIL_CHARS", "500")),

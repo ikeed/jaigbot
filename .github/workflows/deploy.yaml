@@ -17,6 +17,9 @@ env:
   MODEL_ID: ${{ vars.MODEL_ID }}
   TEMPERATURE: ${{ vars.TEMPERATURE }}
   MAX_TOKENS: ${{ vars.MAX_TOKENS }}
+  # Optional runtime tuning and memory settings
+  MEMORY_BACKEND: ${{ vars.MEMORY_BACKEND }}
+  REDIS_URL: ${{ vars.REDIS_URL }}
   # Optional: for Terraform backend initialization (trimmed in script)
   TF_BACKEND_BUCKET: ${{ vars.TF_BACKEND_BUCKET }}
   TF_BACKEND_PREFIX: ${{ vars.TF_BACKEND_PREFIX }}
@@ -143,8 +146,8 @@ jobs:
             --region "$REGION" \
             --allow-unauthenticated \
             --service-account "cr-vertex-runtime@${PROJECT_ID}.iam.gserviceaccount.com" \
-            --set-env-vars "PROJECT_ID=${PROJECT_ID},REGION=${REGION},MODEL_ID=${MODEL_ID:-gemini-2.5-pro},TEMPERATURE=${TEMPERATURE:-0.2},MAX_TOKENS=${MAX_TOKENS:-256}" \
-            --memory=512Mi --cpu=1 --concurrency=20 --max-instances=2 --timeout=3600
+            --set-env-vars "PROJECT_ID=${PROJECT_ID},REGION=${REGION},MODEL_ID=${MODEL_ID:-gemini-2.5-pro},TEMPERATURE=${TEMPERATURE:-0.2},MAX_TOKENS=${MAX_TOKENS:-768},AIMS_COACHING_ENABLED=true,AIMS_COACHING_DEFAULT=true,MEMORY_BACKEND=${MEMORY_BACKEND:-memory},REDIS_URL=${REDIS_URL:-}" \
+            --memory=512Mi --cpu=1 --concurrency=20 --max-instances=2 --min-instances=1 --timeout=3600
 
       - name: Show service URL and health check
         run: |

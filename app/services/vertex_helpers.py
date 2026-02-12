@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Callable, Optional
 
 from ..vertex import VertexClient
@@ -6,8 +7,60 @@ from ..vertex import VertexClient
 # Track last model used by the most recent gateway call for tests/telemetry
 _LAST_MODEL_USED: Optional[str] = None
 
+
 def get_last_model_used() -> Optional[str]:
     return _LAST_MODEL_USED
+
+
+def _extract_json_payload(text: str) -> Optional[object]:
+    """Extract a JSON value from a model response without manual brace scanning.
+
+    Strategy (stable and maintainable):
+    1) Prefer fenced code blocks labeled as JSON: ```json ... ``` (case-insensitive).
+       Try each block body with json.loads in order. If none parse, try unlabeled fences.
+    2) Minimal cleanup fallback: strip raw fence markers/backticks and attempt a single
+       json.loads on the entire cleaned string.
+
+    Returns a Python object (dict/list/str/number/bool/null) or None.
+    """
+    if not text:
+        return None
+
+    s = text.strip()
+
+    # 1) Extract from fenced ```json blocks first (prefer explicit json/json5)
+    FENCE_RE = re.compile(r"```\s*(json5?|json)?\s*\n(.*?)\n```", re.IGNORECASE | re.DOTALL)
+    matches = FENCE_RE.findall(s)
+    # First pass: explicitly labeled json/json5
+    for lang, body in matches:
+        if lang and lang.lower() not in {"json", "json5"}:
+            continue
+        try:
+            return json.loads(body)
+        except Exception:
+            pass
+    # Second pass: unlabeled fences
+    for _, body in matches:
+        try:
+            return json.loads(body)
+        except Exception:
+            pass
+
+    # 2) Minimal cleanup fallback: remove raw fence markers/backticks and try once
+    cleaned = s.replace("```", "").strip()
+    try:
+        return json.loads(cleaned)
+    except Exception:
+        return None
+
+
+def _maybe_extract_patient_reply(obj: Optional[dict]) -> Optional[str]:
+    """If obj looks like our REPLY_SCHEMA, return the patient_reply string."""
+    if isinstance(obj, dict):
+        val = obj.get("patient_reply")
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    return None
 
 
 def vertex_call_with_fallback_text(
@@ -70,9 +123,35 @@ def vertex_call_with_fallback_text(
             system_instruction=system_instruction,
             log_fallback=_on_fallback,
         )
-        # Record last model used
+        # If the model wrapped the JSON in prose/fences, extract the JSON and return patient_reply
+        obj = _extract_json_payload(result)
+        reply = _maybe_extract_patient_reply(obj)
+        if reply:
+            _LAST_MODEL_USED = getattr(gateway, "last_model_used", primary_model)
+            # For legacy chat paths, return plain text so UIs don't see JSON wrappers
+            path = (log_path or "").lower()
+            if "legacy" in path:
+                return reply
+            # For coaching paths, maintain existing contract: return a JSON string envelope
+            return json.dumps({"patient_reply": reply}, separators=(",", ":"))
+        # If JSON mode returned but could not be parsed, handle per-path fallback.
         _LAST_MODEL_USED = getattr(gateway, "last_model_used", primary_model)
-        return result
+        try:
+            path = (log_path or "").lower()
+            # For legacy chat, avoid returning wrapper preambles. If the result looks like a wrapper
+            # (contains code fences or mentions json), retry with plain text generation once.
+            if "legacy" in path and ("```" in result or "json" in (result or "").lower()):
+                plain = gateway.generate_text(
+                    prompt=prompt,
+                    system_instruction=system_instruction,
+                    log_fallback=_on_fallback,
+                )
+                return plain
+            # For coaching paths, return raw result and let the handler's JSON validation/retry take over.
+            return result
+        except Exception:
+            # As a last resort, return the raw result
+            return result
     except Exception:
         result = gateway.generate_text(
             prompt=prompt,
@@ -137,4 +216,15 @@ def vertex_call_with_fallback_json(
         log_fallback=_on_fallback,
     )
     _LAST_MODEL_USED = getattr(gateway, "last_model_used", primary_model)
+    # If JSON is wrapped, extract and re-serialize compactly for consumers that expect raw JSON
+    obj = _extract_json_payload(result)
+    if obj is not None:
+        try:
+            # If it's our REPLY-like schema, prefer returning the patient_reply scalar for compatibility
+            reply = _maybe_extract_patient_reply(obj)  # type: ignore[arg-type]
+            if reply:
+                return json.dumps({"patient_reply": reply}, separators=(",", ":"))
+            return json.dumps(obj, separators=(",", ":"))
+        except Exception:
+            pass
     return result

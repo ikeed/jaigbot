@@ -37,6 +37,21 @@ REPLY_SCHEMA: Dict[str, Any] = {
     "additionalProperties": False,
 }
 
+# LLM-based endgame detection schema
+ENDGAME_DETECT_SCHEMA: Dict[str, Any] = {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+        "outcome": {
+            "type": "string",
+            "enum": ["accepted_now", "followup_literature", "not_endgame"],
+        },
+        "reasons": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["outcome"],
+    "additionalProperties": False,
+}
+
 SUMMARY_SCHEMA: Dict[str, Any] = {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "type": "object",
