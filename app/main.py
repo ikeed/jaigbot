@@ -424,6 +424,31 @@ async def healthz():
     return {"status": "ok"}
 
 
+@app.get("/history")
+async def history(sessionId: Optional[str] = None):
+    """Return raw conversation history for a session as a list of {role, content}.
+    If the session is missing or memory disabled, return an empty list.
+    """
+    try:
+        if not (sessionId and MEMORY_ENABLED):
+            return {"history": []}
+        mem = _MEMORY_STORE.get(sessionId) or {}
+        hist = mem.get("history") or []
+        # Ensure items are objects with role/content strings
+        out = []
+        for it in hist:
+            try:
+                role = it.get("role")
+                content = it.get("content")
+                if isinstance(role, str) and isinstance(content, str):
+                    out.append({"role": role, "content": content})
+            except Exception:
+                continue
+        return {"history": out}
+    except Exception:
+        return {"history": []}
+
+
 @app.get("/summary")
 async def summary(sessionId: Optional[str] = None, analysis: Optional[bool] = False):
     """Return an aggregated AIMS summary for a session.

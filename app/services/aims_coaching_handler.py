@@ -145,7 +145,14 @@ class AimsCoachingHandler:
             self._enhance_with_llm_classification(cls_payload, body.message, ctx, mapping)
         )
         task_reply = asyncio.create_task(
-            self._generate_patient_reply(body.message, ctx.history_text, req, ctx.session_id)
+            self._generate_patient_reply(
+                body.message,
+                ctx.history_text,
+                req,
+                ctx.session_id,
+                character=ctx.effective_character,
+                scene=ctx.effective_scene,
+            )
         )
 
         # Await classification with a time budget; on timeout, keep deterministic result
@@ -180,6 +187,31 @@ class AimsCoachingHandler:
 
         # Step 4: Persist AIMS metrics (after state update)
         await self._persist_aims_metrics(ctx.session_id, cls_payload)
+
+        # Persist a compact coaching note into conversation history before assistant reply,
+        # so the order is: user -> coach -> assistant. This helps the UI retain coaching on refresh.
+        try:
+            if self.memory_enabled and ctx.session_id:
+                mem = self.memory_store.get(ctx.session_id) or {
+                    "history": [], "character": None, "scene": None, "updated": time.time()
+                }
+                parts: list[str] = []
+                step = cls_payload.get("step")
+                reasons = cls_payload.get("reasons") or []
+                tips = cls_payload.get("tips") or []
+                if step:
+                    parts.append(f"Detected step: {step}")
+                if reasons:
+                    parts.append(f"Feedback: {reasons[0]}")
+                if tips:
+                    parts.append(f"Tip: {tips[0]}")
+                coach_text = " | ".join(parts)
+                if coach_text:
+                    mem.setdefault("history", []).append({"role": "coach", "content": coach_text})
+                    mem["updated"] = time.time()
+                    self.memory_store[ctx.session_id] = mem
+        except Exception:
+            pass
 
         # Step 5: Generate patient reply (complete the previously started parallel task)
         reply_payload = await task_reply
@@ -564,7 +596,7 @@ class AimsCoachingHandler:
             self.logger.debug("AIMS metrics persistence failed for session %s", session_id)
     
     async def _generate_patient_reply(
-        self, clinician_message: str, history_text: str, req: Request, session_id: str
+        self, clinician_message: str, history_text: str, req: Request, session_id: str, *, character: str | None = None, scene: str | None = None
     ) -> Dict[str, Any]:
         """Generate patient reply with safety checks and jailbreak detection."""
         # Check for jailbreak attempts first
@@ -590,6 +622,8 @@ class AimsCoachingHandler:
         reply_prompt = build_patient_reply_prompt(
             history_text=history_text,
             clinician_last=clinician_message,
+            character=character,
+            scene=scene,
         )
         
         # Attempt to generate reply with retry and safety checks

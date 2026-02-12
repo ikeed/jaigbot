@@ -5,13 +5,18 @@ from typing import List
 from .loader import load_and_render
 
 
-def build_patient_reply_prompt(*, history_text: str, clinician_last: str) -> str:
+def build_patient_reply_prompt(*, history_text: str, clinician_last: str, character: str | None = None, scene: str | None = None) -> str:
     """Render the AIMS patient reply prompt from the template.
 
     This is behavior-preserving relative to the previous inline string in main.py.
     """
     return load_and_render(
-        "app.prompts", "aims_patient_reply.txt", history_text=history_text, clinician_last=clinician_last
+        "app.prompts",
+        "aims_patient_reply.txt",
+        history_text=history_text,
+        clinician_last=clinician_last,
+        character_section=(character or ""),
+        scene_section=(scene or ""),
     )
 
 
