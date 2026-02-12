@@ -54,7 +54,15 @@
 /* User bubble enhancements when Chainlit doesn’t render a gutter avatar */
 /* High-specificity targeting of the user bubble container */
 [data-step-type="user_message"] .bg-accent,
-div[data-step-type="user_message"] div.bg-accent { position: relative !important; overflow: visible !important; z-index: 1; }
+div[data-step-type="user_message"] div.bg-accent {
+  position: relative !important;
+  overflow: visible !important;
+  z-index: 1;
+  /* Force right alignment and blue background akin to live styled bubble */
+  margin-left: auto !important;
+  background: #e6f0ff !important;
+  color: #123 !important;
+}
 [data-step-type="user_message"] .bg-accent::before {
   content: "";
   position: absolute;
@@ -92,3 +100,35 @@ div[data-step-type="user_message"] div.bg-accent { position: relative !important
   margin: 0.25rem 0 0.5rem 1.25rem;
 }
 [data-author="Coach"] .message-content li { margin: 0.125rem 0; }
+
+
+/* 3b) Force distinct avatars by author even if Chainlit doesn't apply custom avatars */
+/* Doctor avatar */
+[data-author="Doctor"] .cl-avatar,
+[data-author="Doctor"] .avatar,
+[data-author="Doctor"] .message-avatar { background: url('/public/doctor.svg') center/cover no-repeat !important; }
+[data-author="Doctor"] .cl-avatar img,
+[data-author="Doctor"] .avatar img,
+[data-author="Doctor"] .message-avatar img { opacity: 0 !important; }
+
+/* Patient avatar */
+[data-author="Patient"] .cl-avatar,
+[data-author="Patient"] .avatar,
+[data-author="Patient"] .message-avatar { background: url('/public/patient.svg') center/cover no-repeat !important; }
+[data-author="Patient"] .cl-avatar img,
+[data-author="Patient"] .avatar img,
+[data-author="Patient"] .message-avatar img { opacity: 0 !important; }
+
+/* Coach avatar */
+[data-author="Coach"] .cl-avatar,
+[data-author="Coach"] .avatar,
+[data-author="Coach"] .message-avatar { background: url('/public/coach.svg') center/cover no-repeat !important; }
+[data-author="Coach"] .cl-avatar img,
+[data-author="Coach"] .avatar img,
+[data-author="Coach"] .message-avatar img { opacity: 0 !important; }
+
+/* Fallback: treat user_message bubbles as Doctor when author annotation missing */
+.step[data-step-type="user_message"] .message-avatar,
+[data-step-type="user_message"] .message-avatar { background: url('/public/doctor.svg') center/cover no-repeat !important; }
+.step[data-step-type="user_message"] .message-avatar img,
+[data-step-type="user_message"] .message-avatar img { opacity: 0 !important; }

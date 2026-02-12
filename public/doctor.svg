@@ -1,7 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg width="96" height="96" viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="96" height="96" rx="16" fill="#E8FFF5"/>
-  <circle cx="48" cy="36" r="16" fill="#27C499"/>
-  <rect x="20" y="56" width="56" height="24" rx="12" fill="#27C499"/>
-  <text x="48" y="64" text-anchor="middle" fill="#FFFFFF" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="14">Doctor</text>
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Doctor (caduceus)">
+  <defs>
+    <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#27c499"/>
+      <stop offset="100%" stop-color="#0ea37e"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="120" height="120" rx="24" fill="url(#grad)"/>
+  <g fill="#ffffff" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" transform="translate(0,2)">
+    <!-- Wings -->
+    <path d="M38 40c10 0 16 8 26 8s16-8 26-8c-6 8-14 14-26 14s-20-6-26-14z" fill="#e6fff7" stroke="none"/>
+    <path d="M38 40c8 2 14 8 26 8" opacity=".5"/>
+    <path d="M90 40c-8 2-14 8-26 8" opacity=".5"/>
+    <!-- Staff -->
+    <path d="M64 32v64"/>
+    <!-- Snakes (simple curves) -->
+    <path d="M52 54c6-6 18-6 24 0M52 70c6 6 18 6 24 0"/>
+    <circle cx="64" cy="28" r="5"/>
+  </g>
+  <!-- subtle inner shadow border -->
+  <rect x="4" y="4" width="120" height="120" rx="24" fill="none" stroke="#0b7f64" stroke-width="2" opacity=".3"/>
 </svg>
