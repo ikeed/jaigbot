@@ -279,8 +279,9 @@ def sanitize_endgame_bullets(lines: List[str]) -> List[str]:
             continue
         if s.startswith("```") or s.endswith("```"):
             continue
-        # Drop common JSON key/value looking lines
-        if re.match(r'^\s*[\"\']?[A-Za-z0-9_][A-Za-z0-9 _\-]*[\"\']?\s*:', s):
+        # Drop common JSON key/value looking lines (require quoted keys to avoid
+        # false-positives on legitimate bullets like "Example: ...")
+        if re.match(r'^\s*["\']+[A-Za-z0-9_][A-Za-z0-9 _\-]*["\']+\s*:', s):
             continue
         if '":' in s or "':" in s:
             continue

@@ -24,6 +24,7 @@ from fastapi import Request
 
 from app.models import ChatRequest
 from app.services.chat_context import ChatContext
+from app.services.classifier_service import ClassifierService
 from app.services.coach_post import VaccineRelevanceGate, AimsPostProcessor, EndGameDetector
 from app.services.coach_safety import detect_advice_patterns
 from app.services.conversation_service import (
@@ -84,7 +85,7 @@ class AimsCoachingHandler:
         self.classify_max_tokens = int(os.getenv("AIMS_CLASSIFY_MAX_TOKENS", "256"))
         self.endgame_temperature = float(os.getenv("AIMS_ENDGAME_TEMPERATURE", "0.1"))
         self.endgame_max_tokens = int(os.getenv("AIMS_ENDGAME_MAX_TOKENS", "192"))
-        self.classify_budget_s = float(os.getenv("AIMS_CLASSIFY_BUDGET_S", "3.0"))
+        self.classify_budget_s = float(os.getenv("AIMS_CLASSIFY_BUDGET_S", "10.0"))
 
         # Allow tests to monkeypatch the client via app.main.VertexClient
         self.client_cls = vertex_config.get("client_cls", None) or VertexClient
@@ -94,6 +95,15 @@ class AimsCoachingHandler:
         
         # Initialize helper services
         self.jailbreak_guard = JailbreakGuard()
+        self.classifier_service = ClassifierService(
+            project_id=self.project_id,
+            location=self.vertex_location,
+            model_id=self.model_id,
+            logger=self.logger,
+            temperature=self.classify_temperature,
+            max_tokens=self.classify_max_tokens,
+            client_cls=self.client_cls,
+        )
     
     async def handle(
         self, req: Request, body: ChatRequest, ctx: ChatContext
@@ -117,13 +127,7 @@ class AimsCoachingHandler:
         # Load AIMS mapping (cached at app level)
         mapping = await self._load_aims_mapping()
         
-        # Step 1: Deterministic classification/scoring
-        cls_payload = self._get_deterministic_classification(
-            ctx.parent_last, body.message, mapping
-        )
-        
-        # Step 2 & 5 in parallel: Enhanced LLM classification and patient reply generation
-        # Emit begin markers and start both tasks concurrently, then await both.
+        # Step 1 & 2: Unified Classification (LLM with deterministic fallback)
         cls_start = time.time()
         reply_start = time.time()
         telemetry_log_event(
@@ -141,8 +145,24 @@ class AimsCoachingHandler:
             modelId=self.model_id,
         )
 
+        # Get prior state for context
+        prior_state = await self._get_prior_state(ctx.session_id) if self.memory_enabled else None
+        prior_announced = bool((prior_state or {}).get("announced", False))
+        prior_phase = (prior_state or {}).get("phase", "PreAnnounce")
+
+        from app.main import AIMS_CLASSIFIER_MODE, AIMS_CLASSIFY_CONTEXT_TURNS, AIMS_CLASSIFY_MAX_CONCERNS
+
         task_cls = asyncio.create_task(
-            self._enhance_with_llm_classification(cls_payload, body.message, ctx, mapping)
+            self.classifier_service.classify_turn(
+                clinician_message=body.message,
+                parent_last=ctx.parent_last,
+                history=ctx.mem.get("history", []) if ctx.mem else [],
+                prior_announced=prior_announced,
+                prior_phase=prior_phase,
+                mapping=mapping,
+                context_turns=AIMS_CLASSIFY_CONTEXT_TURNS,
+                max_concerns=AIMS_CLASSIFY_MAX_CONCERNS,
+            )
         )
         task_reply = asyncio.create_task(
             self._generate_patient_reply(
@@ -155,16 +175,72 @@ class AimsCoachingHandler:
             )
         )
 
-        # Await classification with a time budget; on timeout, keep deterministic result
+        # Initialize variables before try-except to avoid UnboundLocalError
+        is_vax = True
+        is_small_talk = False
+        classification_result = None
         timed_out = False
         try:
-            cls_payload = await asyncio.wait_for(task_cls, timeout=self.classify_budget_s)
+            classification_result = await asyncio.wait_for(task_cls, timeout=self.classify_budget_s)
         except asyncio.TimeoutError:
             timed_out = True
             try:
                 task_cls.cancel()
             except Exception:
                 pass
+            self.logger.warning("Classification timed out after %s s, falling back", self.classify_budget_s)
+        except Exception as e:
+            # Propagate special exceptions (404/403/429) if they emerged from the task
+            # Unwrap if it's a CancelledError wrapping another one
+            self.logger.exception("Classification task failed in handler")
+            status_code = getattr(e, "status_code", None)
+            if status_code and status_code in {403, 404, 429}:
+                raise e
+
+        if classification_result:
+            # Use dictionary for compatibility with legacy post-processors
+            cls_payload = classification_result.aims.dict()
+            is_vax = classification_result.is_vaccine_relevant
+            is_small_talk = classification_result.is_small_talk
+        else:
+            # If we timed out or failed, use the deterministic fallback immediately
+            from app.aims_engine import evaluate_turn
+            fb = evaluate_turn(ctx.parent_last, body.message, mapping)
+            cls_payload = {
+                "step": fb.get("step"),
+                "score": fb.get("score", 2),
+                "reasons": fb.get("reasons", []) + ["fallback"],
+                "tips": fb.get("tips", [])
+            }
+            # Fallback doesn't explicitly detect these well, but we can assume normal for now
+            is_vax = True
+            is_small_talk = False
+
+        # Apply post-processors to BOTH LLM and fallback results
+        from app.services.coach_post import VaccineRelevanceGate, AimsPostProcessor
+        
+        # Vaccine relevance gate
+        mem = ctx.mem or {}
+        aims_state = mem.get("aims_state", {}) or {}
+        parent_concerns = aims_state.get("parent_concerns", [])
+        recent_concerns_texts = [c["desc"] for c in parent_concerns] if parent_concerns else []
+        
+        cls_payload = VaccineRelevanceGate.gate(
+            cls_payload=cls_payload,
+            clinician_text=body.message,
+            parent_last=ctx.parent_last,
+            parent_recent_concerns=recent_concerns_texts,
+            prior_announced=prior_announced
+        )
+        
+        # Additional logic: if the LLM says it's small talk, we override step to None
+        if is_small_talk:
+            cls_payload["step"] = None
+            cls_payload["score"] = 0
+            
+        # Legacy AimsPostProcessor (score normalization, inquire->secure, score capping)
+        cls_payload = AimsPostProcessor.post_process(cls_payload, body.message)
+        
         # Try to snapshot model used for classification (may be approximate if overwritten by parallel call)
         try:
             from app.services.vertex_helpers import get_last_model_used
@@ -229,12 +305,6 @@ class AimsCoachingHandler:
             modelUsed=model_used_reply,
             textLen=len((reply_payload.get("patient_reply") or "").strip()),
         )
-
-        # Step 3: Update AIMS state and provide coaching guidance (after classification completes)
-        await self._update_aims_state(ctx.session_id, cls_payload, body.message, ctx.parent_last)
-
-        # Step 4: Persist AIMS metrics (after state update)
-        await self._persist_aims_metrics(ctx.session_id, cls_payload)
 
         # If this is the first assistant turn in the session, strip any accidental
         # scenario headers from the parent reply to avoid duplicating the UI card.
@@ -318,9 +388,9 @@ class AimsCoachingHandler:
     def _get_deterministic_classification(
         self, parent_last: str, clinician_message: str, mapping: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Get deterministic AIMS classification as fallback."""
+        """Legacy helper for deterministic classification."""
         from app.aims_engine import evaluate_turn
-        
+
         fb = evaluate_turn(parent_last, clinician_message, mapping)
         return {
             "step": fb.get("step"),
@@ -408,32 +478,6 @@ class AimsCoachingHandler:
                 # On second failure, keep deterministic cls_payload
                 break
         
-        # Apply a conservative question-guard to reduce obvious mislabels
-        if used_llm_cls:
-            try:
-                if (clinician_message or "").strip().endswith("?") and (cls_payload.get("step") in {"Announce", "Secure"}):
-                    cls_payload = dict(cls_payload)
-                    cls_payload["step"] = "Inquire"
-                    try:
-                        cls_payload["score"] = min(2, int(cls_payload.get("score", 2)))
-                    except Exception:
-                        cls_payload["score"] = 2
-            except Exception:
-                pass
-
-        # Apply vaccine relevance gating if LLM was used
-        if used_llm_cls:
-            cls_payload = VaccineRelevanceGate.gate(
-                cls_payload=cls_payload,
-                clinician_text=clinician_message,
-                parent_last=ctx.parent_last,
-                parent_recent_concerns=parent_recent_concerns,
-                prior_announced=prior_announced,
-            )
-            
-            # Post-hoc corrections and score normalization
-            cls_payload = AimsPostProcessor.post_process(cls_payload, clinician_message)
-        
         return cls_payload
     
     async def _update_aims_state(
@@ -496,17 +540,15 @@ class AimsCoachingHandler:
                         cls_payload["tips"] = []
         
         # Handle Announce after inquiry
-        if step_current == "Announce" and state.get("first_inquire_done", False):
-            cls_payload["reasons"] = [
-                "Announce after inquiry is allowed, but it can feel abrupt at this point"
-            ] + (cls_payload.get("reasons") or [])
+        if step_current == "Announce" and state.get("phase") == "InquireMirror":
+            reasons = list(cls_payload.get("reasons") or [])
+            if not any("announce after inquiry" in s.lower() for s in reasons):
+                reasons.insert(0, "Avoid moving to Announce after inquiry before all concerns are mirrored.")
+            cls_payload["reasons"] = reasons
+            cls_payload["score"] = 2
             cls_payload.setdefault("tips", []).append(
                 "Keep it brief and invite input (e.g., 'How does that sound?')."
             )
-            try:
-                cls_payload["score"] = min(2, int(cls_payload.get("score", 2)))
-            except Exception:
-                cls_payload["score"] = 2
         
         # Handle mirroring
         if step_current in ("Mirror", "Mirror+Inquire"):

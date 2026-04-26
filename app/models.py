@@ -21,6 +21,30 @@ class Coaching(BaseModel):
     tips: list[str] = Field(default_factory=list, description="Coaching tips")
 
 
+class ClassifierResult(BaseModel):
+    """Unified result for the ClassifierService including AIMS and metadata.
+
+    This replaces multiple deterministic and LLM-based flags with a single
+    structured response from Gemini.
+    """
+
+    is_small_talk: bool = Field(
+        default=False, description="True if the turn is generic small talk/rapport only"
+    )
+    is_vaccine_relevant: bool = Field(
+        default=True, description="True if the turn relates to vaccines or the clinical goal"
+    )
+    aims: Coaching = Field(
+        default_factory=Coaching, description="Detailed AIMS classification result"
+    )
+    safety_flags: list[str] = Field(
+        default_factory=list, description="List of detected safety or advice patterns"
+    )
+    reasoning: Optional[str] = Field(
+        default=None, description="Brief internal chain-of-thought for the classification"
+    )
+
+
 class SessionMetrics(BaseModel):
     """Per-session counters and averages used by the AIMS summary endpoint."""
 
@@ -63,4 +87,4 @@ class ChatRequest(BaseModel):
     )
 
 
-__all__ = ["Coaching", "SessionMetrics", "ChatRequest"]
+__all__ = ["Coaching", "ClassifierResult", "SessionMetrics", "ChatRequest"]

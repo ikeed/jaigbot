@@ -140,6 +140,30 @@ class VertexClient:
         self.logger.debug("vertex_init(project=%s, region=%s)", self.project, self.region)
         vertex_init(project=self.project, location=self.region)
 
+    async def generate_text_async(
+        self,
+        prompt: str,
+        temperature: float = 0.2,
+        max_tokens: int = 1024,
+        system_instruction: Optional[str] = None,
+        response_mime_type: Optional[str] = None,
+        response_schema: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """Async wrapper for generate_text (text-only return)."""
+        import asyncio
+        loop = asyncio.get_event_loop()
+        txt, _ = await loop.run_in_executor(
+            None,
+            self.generate_text,
+            prompt,
+            temperature,
+            max_tokens,
+            system_instruction,
+            response_mime_type,
+            response_schema
+        )
+        return txt
+
     def generate_text(
         self,
         prompt: str,
