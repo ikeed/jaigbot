@@ -12,7 +12,7 @@ class Coaching(BaseModel):
     """
 
     step: Optional[str] = Field(
-        default=None, description="Detected AIMS step: Announce|Inquire|Mirror|Secure"
+        default=None, description="Detected AIMS step: Announce|Inquire|Mirror|Secure|Mirror+Inquire"
     )
     score: Optional[int] = Field(default=None, description="0–3 per-step score")
     reasons: list[str] = Field(
@@ -55,6 +55,7 @@ class SessionMetrics(BaseModel):
             "Inquire": 0,
             "Mirror": 0,
             "Secure": 0,
+            "Mirror+Inquire": 0,
         }
     )
     runningAverage: dict[str, float] = Field(default_factory=dict)

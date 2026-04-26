@@ -599,8 +599,8 @@ class AimsCoachingHandler:
                 "history": [], "character": None, "scene": None, "updated": time.time()
             }
             aims = mem.setdefault("aims", {
-                "perStepCounts": {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0},
-                "scores": {"Announce": [], "Inquire": [], "Mirror": [], "Secure": []},
+                "perStepCounts": {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0, "Mirror+Inquire": 0},
+                "scores": {"Announce": [], "Inquire": [], "Mirror": [], "Secure": [], "Mirror+Inquire": []},
                 "totalTurns": 0
             })
             
@@ -610,15 +610,16 @@ class AimsCoachingHandler:
             
             if step in {"Announce", "Inquire", "Mirror", "Secure", "Mirror+Inquire"}:
                 score_val = int(cls_payload.get("score", 2))
+                aims["perStepCounts"][step] = aims["perStepCounts"].get(step, 0) + 1
+                aims["scores"].setdefault(step, []).append(score_val)
+                
                 if step == "Mirror+Inquire":
-                    # Expand into both Mirror and Inquire for metrics
+                    # Also expand into Mirror and Inquire for underlying coverage metrics
+                    # so that we don't break logic expecting individual counts
                     aims["perStepCounts"]["Mirror"] = aims["perStepCounts"].get("Mirror", 0) + 1
                     aims["perStepCounts"]["Inquire"] = aims["perStepCounts"].get("Inquire", 0) + 1
                     aims["scores"].setdefault("Mirror", []).append(score_val)
                     aims["scores"].setdefault("Inquire", []).append(score_val)
-                else:
-                    aims["perStepCounts"][step] = aims["perStepCounts"].get(step, 0) + 1
-                    aims["scores"].setdefault(step, []).append(score_val)
                 
                 # Maintain running averages per step for quick snapshot reads
                 ra: dict[str, float] = {}
@@ -768,7 +769,7 @@ class AimsCoachingHandler:
         
         try:
             aims = (self.memory_store.get(session_id) or {}).get("aims") or {}
-            counts = {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0}
+            counts = {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0, "Mirror+Inquire": 0}
             counts.update(aims.get("perStepCounts", {}))
             
             # Prefer precomputed runningAverage if available

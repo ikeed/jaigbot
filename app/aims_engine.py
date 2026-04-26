@@ -139,19 +139,27 @@ def classify_step(parent_last: str, clinician_last: str, mapping: Dict[str, Any]
     pt = (parent_last or "").strip().lower()
     lt = text.lower()
 
-    # Heuristic checks per step (stages take precedence; small-talk is fallback only)
-    mirror_match = _starts_with_any(lt, [
-        "it sounds like", "you're worried", "you are worried", "i'm hearing", "you feel", "you want",
+    mirror_stems = [
+        "it sounds like", "sounds like", "you're worried", "you are worried", "i'm hearing", "you feel", "you want",
         "i get you're", "i get that you're", "i hear you're", "i hear that you're", "i hear you", "i hear that",
         "i understand", "it seems like", "it feels like", "that feels like", "that sounds like"
-    ]) or _stem_match(lt, (markers.get("Mirror", {}).get("linguistic", [])))
+    ]
 
+    # Heuristic checks per step (stages take precedence; small-talk is fallback only)
     inquire_match = lt.endswith("?") or _starts_with_any(lt, ["what ", "how "]) or _stem_match(
         lt, (markers.get("Inquire", {}).get("linguistic", []))
     )
     # Do not treat generic well-being/small-talk questions as Inquire; let them fall back to small-talk
     if inquire_match and _is_small_talk(lt):
         inquire_match = False
+
+    # Mirror match should EXCLUDE things that are clearly just Inquire markers
+    inquire_stems_from_mapping = markers.get("Inquire", {}).get("linguistic", [])
+    mirror_match = (_starts_with_any(lt, mirror_stems) or _stem_match(lt, (markers.get("Mirror", {}).get("linguistic", []))))
+    if mirror_match and not _starts_with_any(lt, mirror_stems):
+        # if it only matched via linguistic markers, check if it's actually an Inquire marker
+        if _stem_match(lt, inquire_stems_from_mapping):
+             mirror_match = False
 
     # Strengthened Secure detection: autonomy + (option or safety) OR option + safety
     autonomy_cues = [
@@ -204,7 +212,9 @@ def classify_step(parent_last: str, clinician_last: str, mapping: Dict[str, Any]
 
     # Primary classification with tie-breakers
     # Compound: Mirror + Inquire
-    if mirror_match and inquire_match:
+    # Use strong mirror stems for the compound to avoid accidental overlaps
+    strong_mirror_match = _starts_with_any(lt, mirror_stems)
+    if strong_mirror_match and inquire_match:
         # If it's just a reflection check (e.g. "Did I get that right?"), it's still just Mirror
         _REFLECTION_CHECK_RE = re.compile(r"\b(did i get that right|do i have that right|did i capture (that|what you said)|is that right)\b")
         if not _REFLECTION_CHECK_RE.search(lt):
@@ -216,8 +226,12 @@ def classify_step(parent_last: str, clinician_last: str, mapping: Dict[str, Any]
 
     # Priority order if not compound: Mirror > Secure > Announce > Inquire (unless tie-breakers apply)
     elif mirror_match:
+        # Check if mirror is really primary or just a fragment in a larger turn
+        is_primary_mirror = _starts_with_any(lt, mirror_stems)
         step = "Mirror"
-        if _introduces_new_info(lt):
+        if not is_primary_mirror:
+            reasons.append("Detected mirror-like stem from markers")
+        elif _introduces_new_info(lt):
             reasons.append("Reflective stem detected but includes rebuttal/new info")
         else:
             reasons.append("Detected reflective stem; no new information added")
