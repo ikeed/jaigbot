@@ -21,7 +21,7 @@ This repository contains a tiny FastAPI backend that exposes a simple /chat endp
    ```bash
    pip install -r requirements.txt
    ```
-2. Set up environment variables:
+2. Set up environment variables (supports GCP_PROJECT_ID and GCP_REGION fallbacks):
    ```bash
    export PROJECT_ID=your-gcp-project-id
    export REGION=us-central1

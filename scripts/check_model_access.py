@@ -65,10 +65,10 @@ def try_generate(model_id: str) -> str:
 
 
 def main() -> int:
-    project = os.getenv("PROJECT_ID")
-    region = os.getenv("REGION", "us-west4")
+    project = os.getenv("PROJECT_ID") or os.getenv("GCP_PROJECT_ID")
+    region = os.getenv("REGION") or os.getenv("GCP_REGION") or "us-west4"
     if not project:
-        print("[check] PROJECT_ID is not set. export PROJECT_ID and retry.", file=sys.stderr)
+        print("[check] PROJECT_ID (or GCP_PROJECT_ID) is not set. export PROJECT_ID and retry.", file=sys.stderr)
         return 2
 
     # Acquire ADC and an authorized session
