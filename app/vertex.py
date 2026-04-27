@@ -8,6 +8,7 @@ from google.api_core import exceptions as gax_exceptions
 from google.cloud import aiplatform
 import google.auth
 from google.auth.transport.requests import AuthorizedSession
+import requests
 from vertexai import init as vertex_init
 from vertexai.generative_models import GenerativeModel, GenerationConfig
 
@@ -396,12 +397,29 @@ class VertexClient:
                         body["generationConfig"]["responseSchema"] = _san_schema
                 if system_instruction:
                     body["systemInstruction"] = {"role": "system", "parts": [{"text": system_instruction}]}
-                r = session.post(base_url, json=body)
-                if r.status_code == 404:
-                    raise VertexAIError("Model not found: HTTP 404", status_code=404)
-                if r.status_code >= 400:
-                    raise VertexAIError(f"Vertex REST error HTTP {r.status_code}: {r.text}", status_code=r.status_code)
-                return r.json()
+                
+                # Retry on ReadTimeout to handle transient network issues gracefully
+                max_retries = 1
+                for attempt in range(max_retries + 1):
+                    try:
+                        r = session.post(base_url, json=body)
+                        if r.status_code == 404:
+                            raise VertexAIError("Model not found: HTTP 404", status_code=404)
+                        if r.status_code >= 400:
+                            raise VertexAIError(f"Vertex REST error HTTP {r.status_code}: {r.text}", status_code=r.status_code)
+                        return r.json()
+                    except (requests.exceptions.ReadTimeout, requests.exceptions.ConnectionError) as e:
+                        if attempt < max_retries:
+                            self.logger.warning(
+                                json.dumps({
+                                    "event": "vertex_rest_retry",
+                                    "attempt": attempt + 1,
+                                    "error": str(e),
+                                    "modelId": self.model_id
+                                })
+                            )
+                            continue
+                        raise
 
             # Initial request
             contents: List[Dict[str, Any]] = [

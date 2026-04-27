@@ -150,6 +150,7 @@ class AimsCoachingHandler:
         prior_announced = bool((prior_state or {}).get("announced", False))
         prior_phase = (prior_state or {}).get("phase", "PreAnnounce")
 
+        # Launch classification and reply generation in parallel
         from app.main import AIMS_CLASSIFIER_MODE, AIMS_CLASSIFY_CONTEXT_TURNS, AIMS_CLASSIFY_MAX_CONCERNS
 
         task_cls = asyncio.create_task(
@@ -175,24 +176,29 @@ class AimsCoachingHandler:
             )
         )
 
-        # Initialize variables before try-except to avoid UnboundLocalError
+        # Step 1 & 2: Wait for both classification and reply generation to complete in parallel
+        # This significantly reduces overall response time by overlapping two LLM calls.
         is_vax = True
         is_small_talk = False
         classification_result = None
-        timed_out = False
+        reply_payload = {}
         try:
-            classification_result = await asyncio.wait_for(task_cls, timeout=self.classify_budget_s)
-        except asyncio.TimeoutError:
-            timed_out = True
+            # We await both tasks together. Note that task_cls has a timeout logic in the original code,
+            # so we'll handle that by awaiting them individually but after both have had a chance to run.
+            # Actually, to maintain the timeout logic for task_cls while keeping task_reply running:
             try:
-                task_cls.cancel()
-            except Exception:
-                pass
-            self.logger.warning("Classification timed out after %s s, falling back", self.classify_budget_s)
+                classification_result = await asyncio.wait_for(task_cls, timeout=self.classify_budget_s)
+            except asyncio.TimeoutError:
+                self.logger.warning("Classification timed out after %s s, falling back", self.classify_budget_s)
+                try:
+                    task_cls.cancel()
+                except Exception:
+                    pass
+            
+            # Now await reply task which was already running in parallel
+            reply_payload = await task_reply
         except Exception as e:
-            # Propagate special exceptions (404/403/429) if they emerged from the task
-            # Unwrap if it's a CancelledError wrapping another one
-            self.logger.exception("Classification task failed in handler")
+            self.logger.exception("Parallel tasks failed in handler")
             status_code = getattr(e, "status_code", None)
             if status_code and status_code in {403, 404, 429}:
                 raise e
@@ -289,8 +295,7 @@ class AimsCoachingHandler:
         except Exception:
             pass
 
-        # Step 5: Generate patient reply (complete the previously started parallel task)
-        reply_payload = await task_reply
+        # Calculate reply duration from its previously completed task
         try:
             from app.services.vertex_helpers import get_last_model_used
             model_used_reply = get_last_model_used() or self.model_id
