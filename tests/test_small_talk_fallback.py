@@ -51,6 +51,10 @@ def enable_coaching(monkeypatch):
         def __init__(self, *args, **kwargs):
             pass
         
+        async def generate_text_async(self, prompt: str, **kwargs) -> str:
+            # Force invalid JSON to trigger retry -> fallback
+            return "not-json"
+        
         def generate_text(self, *args, **kwargs):
             # Force invalid JSON to trigger retry -> fallback
             return "not-json"
@@ -59,6 +63,7 @@ def enable_coaching(monkeypatch):
             return "not-json"
     
     monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", FakeGatewayInvalidJSON)
+    monkeypatch.setattr(m, "VertexClient", FakeGatewayInvalidJSON)
     yield
 
 

@@ -32,6 +32,40 @@ class FakeVertexAimsJSON:
     def __init__(self, project: str, region: str, model_id: str):
         self.calls = 0
 
+    async def generate_text_async(self, prompt: str, **kwargs) -> str:
+        prompt = prompt or ""
+        if "unified" in prompt.lower():
+            # ClassifierService's unified prompt
+            aims_payload = {"step": None, "score": 0, "reasons": ["test: default"], "tips": []}
+            # Simple rules for the test
+            if "mmr" in prompt.lower() or "it's time for" in prompt.lower():
+                aims_payload = {
+                    "step": "Announce",
+                    "score": 3,
+                    "reasons": ["test: announce"],
+                    "tips": []
+                }
+            # Mirror + Inquire case without explicit vaccine token in clinician text
+            elif "is there anything else on your mind?" in prompt.lower() or "what's on your mind" in prompt.lower():
+                aims_payload = {
+                    "step": "Mirror+Inquire",
+                    "score": 3,
+                    "reasons": ["test: mirror+inquire"],
+                    "tips": []
+                }
+            
+            payload = {
+                "is_small_talk": False,
+                "is_vaccine_relevant": True,
+                "aims": aims_payload,
+                "safety_flags": [],
+                "reasoning": "mock"
+            }
+            return json.dumps(payload)
+        
+        # Patient reply path
+        return json.dumps({"patient_reply": "Okay, thanks for explaining."})
+
     def generate_text(self, *args, **kwargs):
         prompt = args[0] if args else kwargs.get("prompt", "")
         self.calls += 1

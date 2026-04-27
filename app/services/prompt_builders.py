@@ -50,3 +50,34 @@ class AimsPromptBuilder:
             prior_phase=prior_phase,
             context_turns=context_turns,
         )
+
+    @staticmethod
+    def build_unified_classify_prompt(
+        *,
+        mapping_markers_text: str,
+        recent_ctx: str,
+        parent_recent_concerns: list[str],
+        parent_last: str,
+        clinician_last: str,
+        prior_announced: bool,
+        prior_phase: str,
+        context_turns: int,
+        safety_hints: list[str],
+    ) -> str:
+        """Render unified classify prompt via external template.
+
+        Combines AIMS, small talk, relevance, and safety.
+        """
+        from app.prompts.aims import build_unified_classify_prompt as _build
+
+        return _build(
+            mapping_markers_text=mapping_markers_text,
+            recent_ctx=recent_ctx,
+            parent_recent_concerns=parent_recent_concerns,
+            parent_last=parent_last,
+            clinician_last=clinician_last,
+            prior_announced=prior_announced,
+            prior_phase=prior_phase,
+            context_turns=context_turns,
+            safety_hints=safety_hints,
+        )

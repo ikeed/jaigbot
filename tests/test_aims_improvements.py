@@ -19,7 +19,7 @@ def test_bare_we_can_talk_is_not_secure(aims_mapping):
     parent = "I'm a bit hesitant."
     clinician = "I hear you. We can definitely talk about that. Was there anything else on your mind?"
     cls = classify_step(parent, clinician, aims_mapping)
-    assert cls.step in ("Inquire", "Mirror")  # but not Secure
+    assert cls.step in ("Inquire", "Mirror", "Mirror+Inquire")  # Allow combined steps
 
 
 def test_options_safety_preference_is_secure(aims_mapping):

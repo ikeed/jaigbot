@@ -47,6 +47,14 @@ def test_maybe_add_parent_concern_adds_and_trims():
     assert st["parent_concerns"][0]["topic"] == "sleep"
 
 
+def test_maybe_add_parent_concern_uses_llm_topic():
+    st = {}
+    # text doesn't contain keyword for 'diet', but we pass it as llm_topic
+    maybe_add_parent_concern(st, "I'm worried about what he eats.", TOPICAL_CUES, llm_topic="diet")
+    assert st["parent_concerns"][0]["topic"] == "diet"
+    assert st["parent_concerns"][0]["desc"] == "I'm worried about what he eats."
+
+
 def test_maybe_add_parent_concern_skips_when_no_topic():
     st = {"parent_concerns": []}
     maybe_add_parent_concern(st, "this is unrelated chit chat", TOPICAL_CUES)

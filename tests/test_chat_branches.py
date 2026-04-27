@@ -24,6 +24,28 @@ class GWStub:
     def __init__(self, *args, **kwargs):
         pass
 
+    async def generate_text_async(self, prompt: str, **kwargs) -> str:
+        if "unified" in (prompt or "").lower():
+            if GWStub.classify_raises:
+                raise GWStub.classify_raises
+            aims_payload = GWStub.classify_payload or {"step": "None", "score": 0, "reasons": [], "tips": []}
+            payload = {
+                "is_small_talk": False,
+                "is_vaccine_relevant": True,
+                "aims": aims_payload,
+                "safety_flags": [],
+                "reasoning": "mock"
+            }
+            return json.dumps(payload)
+        
+        if GWStub.reply_json_raises:
+            raise GWStub.reply_json_raises
+        if GWStub.reply_json_invalid_times > 0:
+            GWStub.reply_json_invalid_times -= 1
+            return "{"  # invalid JSON
+        payload = GWStub.reply_json_payload or {"patient_reply": "ok"}
+        return json.dumps(payload)
+
     def generate_text_json(self, *, prompt: str, response_schema: dict, system_instruction=None, log_fallback=None) -> str:  # noqa: D401
         # Heuristic: detect reply schema vs classifier schema
         props = (response_schema or {}).get("properties", {}) if isinstance(response_schema, dict) else {}
@@ -52,6 +74,8 @@ class GWStub:
 def reset_gw(monkeypatch):
     # Patch the VertexGateway used inside main._vertex_call / _vertex_call_json
     monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", GWStub)
+    # Patch VertexClient so ClassifierService (which uses client_cls directly) also uses the stub
+    monkeypatch.setattr(m, "VertexClient", GWStub)
     # Sensible defaults for env flags
     monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", True, raising=False)
     monkeypatch.setattr(m, "MEMORY_ENABLED", True, raising=False)

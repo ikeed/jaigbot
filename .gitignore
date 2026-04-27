@@ -41,3 +41,4 @@ __pycache__/
 
 # macOS Finder metadata
 .DS_Store
+/docs/aims_videos/

@@ -12,13 +12,40 @@ class Coaching(BaseModel):
     """
 
     step: Optional[str] = Field(
-        default=None, description="Detected AIMS step: Announce|Inquire|Mirror|Secure"
+        default=None, description="Detected AIMS step: Announce|Inquire|Mirror|Secure|Mirror+Inquire"
     )
     score: Optional[int] = Field(default=None, description="0–3 per-step score")
     reasons: list[str] = Field(
         default_factory=list, description="Brief reasons supporting the score"
     )
     tips: list[str] = Field(default_factory=list, description="Coaching tips")
+
+
+class ClassifierResult(BaseModel):
+    """Unified result for the ClassifierService including AIMS and metadata.
+
+    This replaces multiple deterministic and LLM-based flags with a single
+    structured response from Gemini.
+    """
+
+    is_small_talk: bool = Field(
+        default=False, description="True if the turn is generic small talk/rapport only"
+    )
+    is_vaccine_relevant: bool = Field(
+        default=True, description="True if the turn relates to vaccines or the clinical goal"
+    )
+    aims: Coaching = Field(
+        default_factory=Coaching, description="Detailed AIMS classification result"
+    )
+    safety_flags: list[str] = Field(
+        default_factory=list, description="List of detected safety or advice patterns"
+    )
+    parent_topic: Optional[str] = Field(
+        default=None, description="Detected topic of the parent's message if any"
+    )
+    reasoning: Optional[str] = Field(
+        default=None, description="Brief internal chain-of-thought for the classification"
+    )
 
 
 class SessionMetrics(BaseModel):
@@ -31,6 +58,7 @@ class SessionMetrics(BaseModel):
             "Inquire": 0,
             "Mirror": 0,
             "Secure": 0,
+            "Mirror+Inquire": 0,
         }
     )
     runningAverage: dict[str, float] = Field(default_factory=dict)
@@ -63,4 +91,4 @@ class ChatRequest(BaseModel):
     )
 
 
-__all__ = ["Coaching", "SessionMetrics", "ChatRequest"]
+__all__ = ["Coaching", "ClassifierResult", "SessionMetrics", "ChatRequest"]

@@ -137,6 +137,54 @@ def aims_mapping_mock():
 
 
 @pytest.fixture(autouse=True)
+def vertex_client_mock(monkeypatch):
+    """
+    Function-scoped auto-use fixture that mocks VertexClient globally.
+    This ensures that ClassifierService and other LLM callers use a safe mock
+    instead of making real REST calls (which fail with 403 in tests).
+    """
+    import json
+    from app.vertex import VertexClient
+
+    class MockVertexClient:
+        def __init__(self, *args, **kwargs):
+            self.project = kwargs.get("project")
+            self.region = kwargs.get("region")
+            self.model_id = kwargs.get("model_id")
+
+        async def generate_text_async(self, prompt: str, **kwargs) -> str:
+            # Detect if this is a unified classification prompt
+            if "unified" in (prompt or "").lower():
+                # Provide a generic but valid unified classification response
+                payload = {
+                    "is_small_talk": False,
+                    "is_vaccine_relevant": True,
+                    "aims": {"step": "Inquire", "score": 3, "reasons": ["mock"], "tips": []},
+                    "safety_flags": [],
+                    "reasoning": "mock"
+                }
+                # Allow specific tests to override via monkeypatching or prompt-based heuristics
+                if "day going" in (prompt or "").lower():
+                    payload["is_vaccine_relevant"] = False
+                
+                return json.dumps(payload)
+            
+            # Default for patient reply or other prompts
+            return json.dumps({"patient_reply": "Mock reply from VertexClient."})
+
+        def generate_text(self, *args, **kwargs):
+            return "Mock text", {}
+
+        def generate_text_json(self, *args, **kwargs):
+            return json.dumps({"patient_reply": "Mock reply"})
+
+    monkeypatch.setattr("app.vertex.VertexClient", MockVertexClient)
+    monkeypatch.setattr("app.services.classifier_service.VertexClient", MockVertexClient)
+    monkeypatch.setattr("app.services.vertex_helpers.VertexClient", MockVertexClient)
+    return MockVertexClient
+
+
+@pytest.fixture(autouse=True)
 def clean_app_state():
     """
     Function-scoped auto-use fixture to clean up app.state.aims_mapping after each test

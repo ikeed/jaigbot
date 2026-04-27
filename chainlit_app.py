@@ -284,108 +284,56 @@ async def chat_profiles():
         return [cl.ChatProfile(name="Doctor", markdown_description="Clinician perspective", default=True)]
 
 
-def _build_scenario_card() -> list[str]:
+def _load_robust_persona() -> dict:
     """
-    Build scenario lines from a JSON file. Falls back to a default if file is missing.
-    Environment variables:
-      - SCENARIOS_FILE: optional path to scenarios JSON file (default: app/prompts/scenarios.json)
-      - SCENARIO_INDEX: if set to an integer, picks that scenario index deterministically; otherwise random.
-    File schema (minimal):
-      {
-        "names": {
-          "parents": ["Full Name", ...],
-          "children_first": ["First", ...],
-          "adult_first": ["First", ...],
-          "last": ["Last", ...]
-        },
-        "scenarios": [
-          {"is_parent": true|false, "purposes": [...], "notes": [...]}, ...
-        ]
-      }
+    Load a persona from app/prompts/personas.json.
     """
     try:
-        # Resolve default path relative to this file
         root = Path(__file__).resolve().parent
-        default_path = root / "app" / "prompts" / "scenarios.json"
-        # If running from repo root, also try that
-        if not default_path.exists():
-            default_path = root / "prompts" / "scenarios.json"
-        # Allow override via environment variable
-        path_str = os.getenv("SCENARIOS_FILE") or str(default_path)
-        p = Path(path_str)
-        if not p.is_absolute():
-            # Try relative to CWD and then relative to this module
-            p1 = Path(os.getcwd()) / p
-            p2 = root / p
-            p = p1 if p1.exists() else p2
-        data = json.loads(Path(p).read_text(encoding="utf-8"))
-        scenarios = data.get("scenarios") or []
-        names = data.get("names") or {}
-        if not scenarios:
-            raise ValueError("No scenarios in file")
-        # Pick scenario index
-        idx_env = os.getenv("SCENARIO_INDEX")
+        path = root / "app" / "prompts" / "personas.json"
+        if not path.exists():
+            path = root / "prompts" / "personas.json"
+        
+        data = json.loads(path.read_text(encoding="utf-8"))
+        personas = data.get("personas") or []
+        
+        # Pick persona index
+        idx_env = os.getenv("PERSONA_INDEX")
         if idx_env is not None:
-            try:
-                idx = max(0, min(int(idx_env), len(scenarios) - 1))
-            except Exception:
-                idx = random.randrange(len(scenarios))
+            idx = max(0, min(int(idx_env), len(personas) - 1))
         else:
-            idx = random.randrange(len(scenarios))
-        # Always assume parent + child scenario; prefer scenarios marked is_parent=true
-        # Filter scenarios for parent/child if possible; fallback to selected index
-        sc_parent_first = [s for s in scenarios if s.get("is_parent") is not False]
-        sc = sc_parent_first[idx % len(sc_parent_first)] if sc_parent_first else scenarios[idx]
-        purposes = list(sc.get("purposes") or [])
-        notes_list = list(sc.get("notes") or [])
-        purpose = random.choice(purposes) if purposes else None
-        note = random.choice(notes_list) if notes_list else None
-
-        # Helper to split full name and extract last
-        def _split_last(full: str) -> tuple[str, str]:
-            parts = (full or "").strip().split()
-            if not parts:
-                return ("Alex", "Smith")
-            if len(parts) == 1:
-                return (parts[0], "Smith")
-            return (" ".join(parts[:-1]), parts[-1])
-
-        # Name pools
-        parent_pool = list(names.get("parents") or [])
-        child_first_pool = list(names.get("children_first") or [])
-        adult_first_pool = list(names.get("adult_first") or [])
-        last_pool = list(names.get("last") or [])
-        if not last_pool:
-            last_pool = ["Jenkins", "Patel", "Gomez", "Nguyen", "Kim", "Lopez"]
-
-        scenario_lines: list[str] = []
-        # Parent + child only
-        if parent_pool:
-            parent_full = random.choice(parent_pool)
-            parent_first, parent_last = _split_last(parent_full)
-            parent_full = f"{parent_first} {parent_last}"
-        else:
-            parent_first = random.choice(adult_first_pool or ["Jordan", "Taylor"]) 
-            parent_last = random.choice(last_pool)
-            parent_full = f"{parent_first} {parent_last}"
-        child_first = random.choice(child_first_pool or ["Liam", "Maya"]) 
-        child_full = f"{child_first} {parent_last}"
-        scenario_lines.append(f"Parent: {parent_full}")
-        scenario_lines.append(f"Patient: {child_full}")
-
-        if purpose:
-            scenario_lines.append(f"Purpose: {purpose}")
-        if note:
-            scenario_lines.append(f"Notes: {note}")
-        return scenario_lines
+            idx = random.randrange(len(personas))
+        
+        return personas[idx]
     except Exception:
-        # Fallback to prior hard-coded scenario
-        return [
-            "Parent: Sarah Jenkins",
-            "Patient: Liam Jenkins",
-            "Purpose: Two-year checkup",
-            "Notes: Due for MMR inoculation",
-        ]
+        # Minimum fallback
+        return {
+            "name": "Jasmine",
+            "brief": "A nervous first-time parent.",
+            "detailed": "Jasmine is a nervous first-time parent worried about vaccine risks.",
+            "scenario": {
+                "visit_reason": "Well-baby check",
+                "detailed_instructions": "Assure her of vaccine safety.",
+                "user_sketch": "You are at the clinic for a well-baby checkup.",
+                "vaccine_related": true
+            }
+        }
+
+
+def _build_scenario_card() -> list[str]:
+    """
+    Deprecated in favor of robust persona logic in on_chat_start,
+    but kept for minimal compatibility if called elsewhere.
+    """
+    persona = _load_robust_persona()
+    lines = [
+        f"Parent/Patient: {persona['name']}",
+        f"Background: {persona['brief']}",
+        f"Reason for visit: {persona['scenario']['user_sketch']}"
+    ]
+    if not persona['scenario'].get('vaccine_related'):
+        lines.append("Note: You may want to mention vaccines during the visit.")
+    return lines
 
 
 @cl.on_chat_start
@@ -402,11 +350,43 @@ async def start_chat():
     session_id = _get_persistent_session_id()
     cl.user_session.set("session_id", session_id)
 
-    # Optional persona/scene from environment, with hard-coded fallbacks
-    character = os.getenv("CHARACTER_SYSTEM") or (DEFAULT_CHARACTER or None)
-    scene = os.getenv("SCENE_OBJECTIVES") or (DEFAULT_SCENE or None)
-    cl.user_session.set("character", character)
-    cl.user_session.set("scene", scene)
+    # Robust Persona Loading
+    persona_data = _load_robust_persona()
+    
+    # Detailed information passed to the role-playing LLM
+    # We combine with DEFAULT_CHARACTER/SCENE to preserve core guardrails if not overridden by ENV
+    base_char = os.getenv("CHARACTER_SYSTEM") or DEFAULT_CHARACTER
+    base_scene = os.getenv("SCENE_OBJECTIVES") or DEFAULT_SCENE
+    
+    character_detailed = (
+        f"{base_char}\n\n"
+        f"Specific Persona: {persona_data['name']}\n"
+        f"Detailed Biography and Motivations: {persona_data['detailed']}"
+    )
+    scene_detailed = (
+        f"{base_scene}\n\n"
+        f"Current Scenario: {persona_data['scenario']['visit_reason']}\n"
+        f"Scenario Objectives: {persona_data['scenario']['detailed_instructions']}"
+    )
+    
+    # Information displayed to the user: basic biographical and sparse personality/motivation
+    # User Scenario: just a sketch of the reason for the visit.
+    user_card_lines = [
+        f"Persona: {persona_data['name']}",
+        f"Background: {persona_data['brief']}",
+        f"Reason for visit: {persona_data['scenario']['user_sketch']}"
+    ]
+    # If the reason for the visit is unrelated to vaccines, hint that the user mention vaccines.
+    # We don't need to hint for pediatric visits (parent/child) as it's natural for the doctor.
+    is_pediatric = any(k in persona_data['brief'].lower() for k in ["parent", "child", "son", "daughter"])
+    if not persona_data['scenario'].get('vaccine_related') and not is_pediatric:
+        user_card_lines.append("\n(Note: You might want to mention vaccines during this visit.)")
+    
+    user_card = "\n".join(user_card_lines)
+
+    # Set detailed persona/scene for the backend orchestration
+    cl.user_session.set("character", character_detailed)
+    cl.user_session.set("scene", scene_detailed)
 
     # Initialize fresh local history for a new chat thread in Chainlit
     cl.user_session.set("history", [])
@@ -428,10 +408,23 @@ async def start_chat():
 
     # If there is prior history on the backend, mirror it into the UI and prepend the scenario summary for context
     if existing_hist:
+        card = None
+        # Try to find the original scenario card in the history
+        for msg in existing_hist:
+            content = msg.get("content") or ""
+            if msg.get("role") == "assistant" and ("Persona: " in content or "Parent: " in content):
+                card = content
+                break
+
+        # Fallback to a new card only if none found in history
+        if not card:
+            try:
+                card = user_card
+            except Exception:
+                card = "Scenario: Pediatric visit"
+
         try:
             # Render a scenario summary card at the top (not persisted anew) for consistent context after refresh
-            scenario_lines = _build_scenario_card()
-            card = "\n".join(scenario_lines)
             await cl.Message(card, author="Patient").send()
         except Exception:
             pass
@@ -443,8 +436,6 @@ async def start_chat():
         # Also inject the scenario lines into the scene context once if not present
         try:
             if "Scenario details (use these exact names; do not change them):" not in (cl.user_session.get("scene") or ""):
-                scenario_lines = _build_scenario_card()
-                card = "\n".join(scenario_lines)
                 prev_scene = cl.user_session.get("scene")
                 scenario_scene_suffix = (
                     "\n\nScenario details (use these exact names; do not change them):\n" + card +
@@ -457,8 +448,7 @@ async def start_chat():
         return
 
     # Otherwise, present a single scenario card as before
-    scenario_lines = _build_scenario_card()
-    card = "\n".join(scenario_lines)
+    card = user_card
     history = cl.user_session.get("history")
     history.append({"role": "assistant", "content": card})
     cl.user_session.set("history", history)
@@ -469,7 +459,7 @@ async def start_chat():
         prev_scene = cl.user_session.get("scene")
         scenario_scene_suffix = (
             "\n\nScenario details (use these exact names; do not change them):\n" + card +
-            "\n\nIf asked for names, respond naturally but keep the same parent and child names."
+            "\n\nIf asked for names, respond naturally but keep the same names."
         )
         new_scene = (prev_scene + scenario_scene_suffix) if prev_scene else scenario_scene_suffix
         cl.user_session.set("scene", new_scene)

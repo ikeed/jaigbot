@@ -58,6 +58,7 @@ class ChatOrchestrator:
         self.model_fallbacks = vertex_config["model_fallbacks"]
         self.temperature = vertex_config["temperature"]
         self.max_tokens = vertex_config["max_tokens"]
+        self.client_cls = vertex_config.get("client_cls")
         
         self.expose_upstream_error = debug_config["expose_upstream_error"]
         self.log_response_preview_max = debug_config["log_response_preview_max"]
@@ -142,7 +143,7 @@ class ChatOrchestrator:
                 "model_fallbacks": self.model_fallbacks,
                 "temperature": self.temperature,
                 "max_tokens": self.max_tokens,
-                "client_cls": getattr(self, "_client_cls", None),
+                "client_cls": self.client_cls,
             },
             memory_config={
                 "enabled": self.memory_enabled,
@@ -207,7 +208,7 @@ class ChatOrchestrator:
                 "model_fallbacks": self.model_fallbacks,
                 "temperature": self.temperature,
                 "max_tokens": self.max_tokens,
-                "client_cls": getattr(self, "_client_cls", None),
+                "client_cls": self.client_cls,
             },
             memory_config={
                 "enabled": self.memory_enabled,

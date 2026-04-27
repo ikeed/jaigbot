@@ -43,7 +43,7 @@ class TestClassification:
         parent = "I worry she'll have a bad reaction."
         clinician = "You're worried about side effects. What have you heard so far?"
         cls = classify_step(parent, clinician, aims_mapping)
-        assert cls.step == "Mirror"
+        assert cls.step == "Mirror+Inquire"
 
     def test_inquire_leading_M4(self, aims_mapping):
         parent = "My friend said vaccines can cause autism."

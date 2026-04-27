@@ -60,6 +60,47 @@ def build_classify_prompt(
     )
 
 
+def build_unified_classify_prompt(
+    *,
+    mapping_markers_text: str,
+    recent_ctx: str,
+    parent_recent_concerns: List[str],
+    parent_last: str,
+    clinician_last: str,
+    prior_announced: bool,
+    prior_phase: str,
+    context_turns: int,
+    safety_hints: List[str],
+) -> str:
+    """Render the unified classification prompt from the template.
+
+    Combines AIMS, small talk, relevance, and safety signals.
+    """
+    mapping_markers_section = (
+        "AIMS markers (from mapping):\n" + mapping_markers_text + "\n" if mapping_markers_text else ""
+    )
+    recent_ctx_section = (
+        f"Recent context (last {context_turns} turns):\n{recent_ctx}\n\n" if recent_ctx else ""
+    )
+    parent_recent_concerns_section = (
+        "Parent_recent_concerns:\n- " + "\n- ".join(parent_recent_concerns) + "\n\n"
+        if parent_recent_concerns
+        else ""
+    )
+    return load_and_render(
+        "app.prompts",
+        "unified_classify.txt",
+        mapping_markers_section=mapping_markers_section,
+        recent_ctx_section=recent_ctx_section,
+        parent_recent_concerns_section=parent_recent_concerns_section,
+        parent_last=parent_last,
+        clinician_last=clinician_last,
+        prior_announced=str(prior_announced).lower(),
+        prior_phase=prior_phase,
+        safety_hints=", ".join(safety_hints) if safety_hints else "none",
+    )
+
+
 def build_endgame_summary_prompt(*, metrics_blob: str, transcript: str) -> str:
     """Render the end-of-game coaching summary prompt from the template file.
 

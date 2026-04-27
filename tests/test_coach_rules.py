@@ -10,6 +10,29 @@ class GWStub:
     def __init__(self, *args, **kwargs):
         pass
 
+    async def generate_text_async(self, prompt: str, **kwargs) -> str:
+        if "unified" in (prompt or "").lower():
+            # ClassifierService's unified prompt
+            aims_payload = GWStub.classify_payload or {"step": "None", "score": 2, "reasons": ["det"], "tips": []}
+            # Special logic for test_non_vax_gating_sets_null_step: 
+            # if we see a non-vax looking prompt, we return is_vaccine_relevant=False
+            is_vax = True
+            if "day going" in (prompt or "").lower():
+                is_vax = False
+            
+            payload = {
+                "is_small_talk": False,
+                "is_vaccine_relevant": is_vax,
+                "aims": aims_payload,
+                "safety_flags": [],
+                "reasoning": "mock"
+            }
+            return json.dumps(payload)
+        
+        # Standard reply payload
+        payload = GWStub.reply_json_payload or {"patient_reply": "ok"}
+        return json.dumps(payload)
+
     def generate_text_json(self, *, prompt: str, response_schema: dict, system_instruction=None, log_fallback=None) -> str:
         props = (response_schema or {}).get("properties", {}) if isinstance(response_schema, dict) else {}
         is_reply = isinstance(props, dict) and ("patient_reply" in props)
@@ -26,6 +49,7 @@ class GWStub:
 
 def setup_env(monkeypatch):
     monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", GWStub)
+    monkeypatch.setattr(m, "VertexClient", GWStub)
     monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", True, raising=False)
     monkeypatch.setattr(m, "MEMORY_ENABLED", True, raising=False)
     monkeypatch.setattr(m, "PROJECT_ID", "p", raising=False)

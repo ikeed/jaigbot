@@ -184,12 +184,14 @@ class EndGameDetector:
         "follow up", "follow-up", "another appointment", "next visit", "come back",
         "schedule", "set up an appointment", "later appointment", "set up",
         "book an appointment", "make an appointment", "schedule something", "talk again",
+        "talk it over", "think it over", "decide later",
     ]
 
     LITERATURE_CUES = [
         "handout", "handouts", "brochure", "pamphlet", "literature", "written info",
         "information to take home", "take home", "materials", "resource", "printout", "printed info",
         "reading", "read this", "give you some literature", "leaflet", "info sheet",
+        "look over", "at home", "appreciate that", "read over",
     ]
 
     @staticmethod
@@ -245,9 +247,17 @@ class EndGameDetector:
             if any(cue in lt for cue in EndGameDetector.ACCEPT_NOW_CUES):
                 return {"reason": "accepted_now"}
 
-        # Follow-up AND literature
-        if any(c in lt for c in EndGameDetector.FOLLOWUP_CUES) and any(c in lt for c in EndGameDetector.LITERATURE_CUES):
+        # Follow-up AND literature (or just one if it strongly implies deferral)
+        has_followup = any(c in lt for c in EndGameDetector.FOLLOWUP_CUES)
+        has_literature = any(c in lt for c in EndGameDetector.LITERATURE_CUES)
+
+        if has_followup and has_literature:
             return {"reason": "followup_literature"}
+
+        # Heuristic: if they clearly say "talk it over" or "think it over" AND "appreciate that/home", it's endgame
+        if has_literature and ("appreciate" in lt or "home" in lt or "thanks" in lt or "thank you" in lt):
+             return {"reason": "followup_literature"}
+
         return None
 
 
@@ -279,8 +289,9 @@ def sanitize_endgame_bullets(lines: List[str]) -> List[str]:
             continue
         if s.startswith("```") or s.endswith("```"):
             continue
-        # Drop common JSON key/value looking lines
-        if re.match(r'^\s*[\"\']?[A-Za-z0-9_][A-Za-z0-9 _\-]*[\"\']?\s*:', s):
+        # Drop common JSON key/value looking lines (require quoted keys to avoid
+        # false-positives on legitimate bullets like "Example: ...")
+        if re.match(r'^\s*["\']+[A-Za-z0-9_][A-Za-z0-9 _\-]*["\']+\s*:', s):
             continue
         if '":' in s or "':" in s:
             continue
