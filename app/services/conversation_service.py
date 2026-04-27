@@ -55,17 +55,25 @@ def is_duplicate_concern(concerns: List[Concern], desc: str, topic: Optional[str
     return False
 
 
-def maybe_add_parent_concern(state: dict, parent_text: str, topical_cues: TopicalCues) -> None:
+def maybe_add_parent_concern(
+    state: dict, 
+    parent_text: str, 
+    topical_cues: TopicalCues, 
+    llm_topic: Optional[str] = None
+) -> None:
     """If `parent_text` contains a topical mention, append a concern item if not duplicate.
 
     - Trims desc to ~240 chars (parity with existing behavior in main.py).
     - Skips affect-only mentions if no topic is detected.
+    - Uses `llm_topic` if provided, otherwise falls back to `concern_topic` (keyword matching).
     """
     if not parent_text:
         return
-    topic = concern_topic(parent_text, topical_cues)
+    
+    topic = llm_topic or concern_topic(parent_text, topical_cues)
     if not topic:
         return
+        
     concerns: List[Concern] = state.setdefault("parent_concerns", [])  # type: ignore[assignment]
     desc = parent_text.strip()[:240]
     if not is_duplicate_concern(concerns, desc, topic):

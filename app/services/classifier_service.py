@@ -50,7 +50,7 @@ class ClassifierService:
     ) -> ClassifierResult:
         """Perform unified classification for a clinician turn."""
         
-        # 1. Pre-filter with deterministic hints
+        # 1. Pre-filter with deterministic hints (optional, used as context)
         from app.services.coach_safety import detect_advice_patterns
         safety_hints = detect_advice_patterns(clinician_message)
 
@@ -91,6 +91,7 @@ class ClassifierService:
                 is_vaccine_relevant=data.get("is_vaccine_relevant", True),
                 aims=aims_coaching,
                 safety_flags=data.get("safety_flags") or [],
+                parent_topic=data.get("parent_topic"),
                 reasoning=data.get("reasoning")
             )
             

@@ -10,7 +10,16 @@ You are an expert clinical communication evaluator. Your task is to analyze a cl
    - **Mirror**: Reflecting the parent's specific emotions or concerns.
    - **Mirror+Inquire**: A reflection followed immediately by a question.
    - **Secure**: Providing options, autonomy-supportive language, or evidence/education.
-4. **Detect Safety/Advice**: Identify if the clinician is providing specific clinical advice or medication dosages (e.g., Tylenol doses).
+4. **Identify Parent Topic**: Classify the parent's message (Parent_last) into one of these categories if a specific concern is expressed:
+   - "autism"
+   - "immune_load"
+   - "side_effects"
+   - "ingredients"
+   - "schedule_timing"
+   - "effectiveness"
+   - "trust"
+   - null (if no specific concern from this list is identified)
+5. **Detect Safety/Advice**: Identify if the clinician is providing specific clinical advice or medication dosages (e.g., Tylenol doses).
 
 ### AIMS MAPPING CONTEXT
 {mapping_markers_section}
@@ -27,6 +36,7 @@ Safety_hints: {safety_hints}
 Return ONLY valid JSON with these keys:
 - "is_small_talk": (boolean)
 - "is_vaccine_relevant": (boolean)
+- "parent_topic": (string from the list above or null)
 - "aims": {{
     "step": "Announce" | "Inquire" | "Mirror" | "Mirror+Inquire" | "Secure" | null,
     "score": (integer 0-3),

@@ -428,10 +428,23 @@ async def start_chat():
 
     # If there is prior history on the backend, mirror it into the UI and prepend the scenario summary for context
     if existing_hist:
+        card = None
+        # Try to find the original scenario card in the history
+        for msg in existing_hist:
+            if msg.get("role") == "assistant" and "Parent: " in (msg.get("content") or ""):
+                card = msg.get("content")
+                break
+
+        # Fallback to a new card only if none found in history
+        if not card:
+            try:
+                scenario_lines = _build_scenario_card()
+                card = "\n".join(scenario_lines)
+            except Exception:
+                card = "Scenario: Pediatric visit"
+
         try:
             # Render a scenario summary card at the top (not persisted anew) for consistent context after refresh
-            scenario_lines = _build_scenario_card()
-            card = "\n".join(scenario_lines)
             await cl.Message(card, author="Patient").send()
         except Exception:
             pass
@@ -443,8 +456,6 @@ async def start_chat():
         # Also inject the scenario lines into the scene context once if not present
         try:
             if "Scenario details (use these exact names; do not change them):" not in (cl.user_session.get("scene") or ""):
-                scenario_lines = _build_scenario_card()
-                card = "\n".join(scenario_lines)
                 prev_scene = cl.user_session.get("scene")
                 scenario_scene_suffix = (
                     "\n\nScenario details (use these exact names; do not change them):\n" + card +

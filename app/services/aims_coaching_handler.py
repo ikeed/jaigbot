@@ -265,7 +265,10 @@ class AimsCoachingHandler:
         )
 
         # Step 3: Update AIMS state and provide coaching guidance (after classification completes)
-        await self._update_aims_state(ctx.session_id, cls_payload, body.message, ctx.parent_last)
+        llm_topic = classification_result.parent_topic if classification_result else None
+        await self._update_aims_state(
+            ctx.session_id, cls_payload, body.message, ctx.parent_last, llm_topic
+        )
 
         # Step 4: Persist AIMS metrics (after state update)
         await self._persist_aims_metrics(ctx.session_id, cls_payload)
@@ -487,7 +490,8 @@ class AimsCoachingHandler:
     
     async def _update_aims_state(
         self, session_id: str, cls_payload: Dict[str, Any], 
-        clinician_message: str, parent_last: str
+        clinician_message: str, parent_last: str,
+        llm_topic: Optional[str] = None
     ) -> None:
         """Update AIMS state and provide coaching guidance."""
         if not (self.memory_enabled and session_id):
@@ -507,10 +511,8 @@ class AimsCoachingHandler:
             
             # Add latest parent concern if any, avoiding duplicates by topic
             if parent_last:
-                pt_topic = svc_concern_topic(parent_last, self._TOPICAL_CUES)
-                existing = state.get("parent_concerns") or []
-                if pt_topic is None or not any(c.get("topic") == pt_topic for c in existing):
-                    svc_maybe_add_parent_concern(state, parent_last, self._TOPICAL_CUES)
+                # Use LLM topic if available, otherwise fall back to static cues
+                svc_maybe_add_parent_concern(state, parent_last, self._TOPICAL_CUES, llm_topic)
             
             # Apply coaching guidance rules
             self._apply_coaching_guidance(cls_payload, step_current, state, clinician_message, parent_last)
@@ -866,14 +868,17 @@ class AimsCoachingHandler:
                         concerns_list = aims_state.get("parent_concerns") or []
                         has_concerns = bool(concerns_list)
                         all_mirrored = has_concerns and all(bool(c.get("is_mirrored")) for c in concerns_list)
-                        block_endgame_due_to_mirroring = not (has_concerns and all_mirrored)
+                        all_secured = has_concerns and all(bool(c.get("is_secured")) for c in concerns_list)
+                        block_endgame_state_requirements = not (has_concerns and all_mirrored and all_secured)
                         # Also compute counts for hints
                         concerns_count = len(concerns_list)
                         mirrored_count = sum(1 for c in concerns_list if c.get("is_mirrored"))
+                        secured_count = sum(1 for c in concerns_list if c.get("is_secured"))
                     except Exception:
-                        block_endgame_due_to_mirroring = True
+                        block_endgame_state_requirements = True
                         concerns_count = 0
                         mirrored_count = 0
+                        secured_count = 0
 
                     # Aggregate acknowledgements across recent parent replies
                     try:
@@ -926,7 +931,7 @@ class AimsCoachingHandler:
                         if (
                             followup_offer and literature_offer and followup_ack_any and literature_ack_any
                             and (not has_more_questions_latest) and (not pushback_latest)
-                            and (not block_endgame_due_to_mirroring)
+                            and (not block_endgame_state_requirements)
                         ):
                             lines = [
                                 "Outcome: Parent opted for follow-up and took literature — great coaching!",
@@ -994,6 +999,7 @@ class AimsCoachingHandler:
                 _assistant_count = locals().get("assistant_count", 0)
                 _concerns_count = locals().get("concerns_count", 0)
                 _mirrored_count = locals().get("mirrored_count", 0)
+                _secured_count = locals().get("secured_count", 0)
                 _followup_ack_any = locals().get("followup_ack_any", False)
                 _literature_ack_any = locals().get("literature_ack_any", False)
                 _has_more_questions_latest = locals().get("has_more_questions_latest", False)
@@ -1012,7 +1018,7 @@ class AimsCoachingHandler:
                     "Recent condensed transcript (last few turns, newest last):\n"
                     f"TRANSCRIPT=\n{_recent_transcript}\n\n"
                     "Heuristic hints (may be approximate):\n"
-                    f"assistant_count={_assistant_count}, concerns_count={_concerns_count}, mirrored_count={_mirrored_count}\n"
+                    f"assistant_count={_assistant_count}, concerns_count={_concerns_count}, mirrored_count={_mirrored_count}, secured_count={_secured_count}\n"
                     f"parent_ack_followup_any={_followup_ack_any}, parent_ack_literature_any={_literature_ack_any}\n"
                     f"parent_has_more_questions_latest={_has_more_questions_latest}, parent_pushback_latest={_pushback_latest}\n\n"
                     "Rules:\n"
@@ -1020,6 +1026,7 @@ class AimsCoachingHandler:
                     "- If the parent says they are not ready or prefers to wait, you MUST output not_endgame.\n"
                     "- Do not infer acceptance from interest or readiness to discuss; require explicit consent to vaccinate today.\n"
                     "- If hints show questions/pushback on the latest message, prefer not_endgame.\n"
+                    "- Only mark an endgame outcome if ALL concerns have been mirrored (mirrored_count == concerns_count) AND all concerns have been secured (secured_count == concerns_count).\n"
                     "- Output strict JSON only: {\"outcome\": <accepted_now|followup_literature|not_endgame>, \"reasons\":[<short strings>]} with no markdown or code fences.\n"
                 )
                 raw = await self._call_vertex_json(
@@ -1036,12 +1043,15 @@ class AimsCoachingHandler:
 
             # Dual-consent gating: require local heuristic confirmation for accepted_now
             if outcome == "accepted_now":
-                try:
-                    eg_local = EndGameDetector.detect(combined_reply_text)
-                except Exception:
-                    eg_local = None
-                if not eg_local or eg_local.get("reason") != "accepted_now":
-                    outcome = None  # Treat as not decisive; fall back below
+                if block_endgame_state_requirements:
+                    outcome = None
+                else:
+                    try:
+                        eg_local = EndGameDetector.detect(combined_reply_text)
+                    except Exception:
+                        eg_local = None
+                    if not eg_local or eg_local.get("reason") != "accepted_now":
+                        outcome = None  # Treat as not decisive; fall back below
 
             # Additional gating for followup_literature: require explicit parent ack and no new questions/pushback
             if outcome == "followup_literature":
@@ -1063,29 +1073,32 @@ class AimsCoachingHandler:
                         "not sure another appointment", "don’t need another appointment", "don't need another appointment",
                         "not what we need right now", "we want to discuss now",
                     ))
-                    if (not (followup_ack_parent and literature_ack_parent)) or has_more_questions or pushback or block_endgame_due_to_mirroring:
+                    if (not (followup_ack_parent and literature_ack_parent)) or has_more_questions or pushback or block_endgame_state_requirements:
                         outcome = None
                 except Exception:
                     outcome = None
 
             # Fallback: heuristic detector when LLM not confident/available
             if not outcome or outcome == "not_endgame":
-                eg = EndGameDetector.detect(combined_reply_text)
-                if not eg:
-                    # Emit end marker (no outcome)
-                    try:
-                        telemetry_log_event(
-                            self.logger,
-                            "aims_endgame_end",
-                            sessionId=session_id,
-                            durationMs=int((time.time() - eg_begin_time) * 1000),
-                            assistantCount=int(assistant_count or 0),
-                            outcome="none",
-                        )
-                    except Exception:
-                        pass
-                    return None
-                outcome = eg.get("reason")
+                if block_endgame_state_requirements:
+                    outcome = "not_endgame"
+                else:
+                    eg = EndGameDetector.detect(combined_reply_text)
+                    if not eg:
+                        # Emit end marker (no outcome)
+                        try:
+                            telemetry_log_event(
+                                self.logger,
+                                "aims_endgame_end",
+                                sessionId=session_id,
+                                durationMs=int((time.time() - eg_begin_time) * 1000),
+                                assistantCount=int(assistant_count or 0),
+                                outcome="none",
+                            )
+                        except Exception:
+                            pass
+                        return None
+                    outcome = eg.get("reason")
 
             lines = []
             if outcome == "accepted_now":

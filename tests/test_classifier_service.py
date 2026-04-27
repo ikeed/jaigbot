@@ -53,6 +53,35 @@ async def test_classify_turn_success(classifier_service, mock_vertex_client):
     assert "Reflected concern well" in result.aims.reasons
 
 @pytest.mark.asyncio
+async def test_classify_turn_with_parent_topic(classifier_service, mock_vertex_client):
+    # Mock successful JSON response with parent_topic
+    mock_response = {
+        "is_small_talk": False,
+        "is_vaccine_relevant": True,
+        "parent_topic": "side_effects",
+        "aims": {
+            "step": "Mirror",
+            "score": 3,
+            "reasons": ["Reflected concern well"],
+            "tips": ["Good job"]
+        },
+        "safety_flags": [],
+        "reasoning": "Parent mentioned side effects."
+    }
+    mock_vertex_client.generate_text_async.return_value = json.dumps(mock_response)
+
+    result = await classifier_service.classify_turn(
+        clinician_message="I hear you're worried about side effects.",
+        parent_last="I'm scared of the shots causing a fever.",
+        history=[],
+        prior_announced=False,
+        prior_phase="PreAnnounce",
+        mapping={}
+    )
+
+    assert result.parent_topic == "side_effects"
+
+@pytest.mark.asyncio
 async def test_classify_turn_fallback_on_error(classifier_service, mock_vertex_client):
     # Mock error from Gemini
     mock_vertex_client.generate_text_async.side_effect = Exception("Gemini down")
