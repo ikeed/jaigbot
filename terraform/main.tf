@@ -202,12 +202,13 @@ resource "google_compute_network" "main" {
 }
 
 resource "google_vpc_access_connector" "connector" {
-  count         = var.enable_redis ? 1 : 0
-  name          = "${var.service_name}-vpc-conn"
-  region        = var.region
-  ip_cidr_range = var.vpc_connector_range
-  network       = google_compute_network.main[0].name
-  depends_on    = [google_project_service.vpcaccess]
+  count          = var.enable_redis ? 1 : 0
+  name           = "${var.service_name}-vpc-conn"
+  region         = var.region
+  ip_cidr_range  = var.vpc_connector_range
+  network        = google_compute_network.main[0].name
+  max_throughput = 300
+  depends_on     = [google_project_service.vpcaccess]
 }
 
 resource "google_redis_instance" "cache" {
