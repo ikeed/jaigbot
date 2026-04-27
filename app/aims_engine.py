@@ -28,7 +28,7 @@ _CLINICAL_TOKENS = re.compile(
 )
 
 
-AIMS_STEPS = ("Announce", "Inquire", "Mirror", "Secure")
+AIMS_STEPS = ("Announce", "Inquire", "Mirror", "Secure", "Mirror+Inquire")
 
 
 @dataclass
@@ -139,19 +139,27 @@ def classify_step(parent_last: str, clinician_last: str, mapping: Dict[str, Any]
     pt = (parent_last or "").strip().lower()
     lt = text.lower()
 
-    # Heuristic checks per step (stages take precedence; small-talk is fallback only)
-    mirror_match = _starts_with_any(lt, [
-        "it sounds like", "you're worried", "you are worried", "i'm hearing", "you feel", "you want",
+    mirror_stems = [
+        "it sounds like", "sounds like", "you're worried", "you are worried", "i'm hearing", "you feel", "you want",
         "i get you're", "i get that you're", "i hear you're", "i hear that you're", "i hear you", "i hear that",
         "i understand", "it seems like", "it feels like", "that feels like", "that sounds like"
-    ]) or _stem_match(lt, (markers.get("Mirror", {}).get("linguistic", [])))
+    ]
 
+    # Heuristic checks per step (stages take precedence; small-talk is fallback only)
     inquire_match = lt.endswith("?") or _starts_with_any(lt, ["what ", "how "]) or _stem_match(
         lt, (markers.get("Inquire", {}).get("linguistic", []))
     )
     # Do not treat generic well-being/small-talk questions as Inquire; let them fall back to small-talk
     if inquire_match and _is_small_talk(lt):
         inquire_match = False
+
+    # Mirror match should EXCLUDE things that are clearly just Inquire markers
+    inquire_stems_from_mapping = markers.get("Inquire", {}).get("linguistic", [])
+    mirror_match = (_starts_with_any(lt, mirror_stems) or _stem_match(lt, (markers.get("Mirror", {}).get("linguistic", []))))
+    if mirror_match and not _starts_with_any(lt, mirror_stems):
+        # if it only matched via linguistic markers, check if it's actually an Inquire marker
+        if _stem_match(lt, inquire_stems_from_mapping):
+             mirror_match = False
 
     # Strengthened Secure detection: autonomy + (option or safety) OR option + safety
     autonomy_cues = [
@@ -203,15 +211,27 @@ def classify_step(parent_last: str, clinician_last: str, mapping: Dict[str, Any]
     didactic_secure = (not inquire_match) and bool(didactic_re.search(lt))
 
     # Primary classification with tie-breakers
-    # Prefer Mirror > Inquire > Secure > Announce when parent expresses emotion/concern
-    parent_expressed_emotion = bool(re.search(r"\b(worried|scared|afraid|anxious|concern|don't trust|angry|nervous)\b", pt))
+    # Compound: Mirror + Inquire
+    # Use strong mirror stems for the compound to avoid accidental overlaps
+    strong_mirror_match = _starts_with_any(lt, mirror_stems)
+    if strong_mirror_match and inquire_match:
+        # If it's just a reflection check (e.g. "Did I get that right?"), it's still just Mirror
+        _REFLECTION_CHECK_RE = re.compile(r"\b(did i get that right|do i have that right|did i capture (that|what you said)|is that right)\b")
+        if not _REFLECTION_CHECK_RE.search(lt):
+            step = "Mirror+Inquire"
+            reasons.append("Detected both reflection and open question → Mirror+Inquire")
+        else:
+            step = "Mirror"
+            reasons.append("Detected reflection and accuracy check → Mirror")
 
-    step = None
-
-    # Priority order: Mirror > Secure > Announce > Inquire (unless tie-breakers apply)
-    if mirror_match:
+    # Priority order if not compound: Mirror > Secure > Announce > Inquire (unless tie-breakers apply)
+    elif mirror_match:
+        # Check if mirror is really primary or just a fragment in a larger turn
+        is_primary_mirror = _starts_with_any(lt, mirror_stems)
         step = "Mirror"
-        if _introduces_new_info(lt):
+        if not is_primary_mirror:
+            reasons.append("Detected mirror-like stem from markers")
+        elif _introduces_new_info(lt):
             reasons.append("Reflective stem detected but includes rebuttal/new info")
         else:
             reasons.append("Detected reflective stem; no new information added")
@@ -243,16 +263,9 @@ def classify_step(parent_last: str, clinician_last: str, mapping: Dict[str, Any]
             step = "Announce"
             reasons.append("Defaulted to Announce (no markers and no open question)")
 
-    # Tie-breaker: reflection then a question → Mirror if reflection is primary
-    if mirror_match and inquire_match:
-        # consider first sentence dominance
-        first_sentence = lt.split("?")[0].split(".")[0]
-        if _starts_with_any(first_sentence, ["it sounds like", "you're", "you are", "i'm hearing", "you feel", "you want", "i hear you", "i hear that", "i hear you're", "i hear that you're"]):
-            step = "Mirror"
-            reasons.append("Tie-breaker: reflection preceded question → Mirror")
-        else:
-            step = "Inquire"
-            reasons.append("Tie-breaker: question primary → Inquire")
+    # Removed single-choice tie-breaker in favor of Mirror+Inquire compound step
+    # if mirror_match and inquire_match:
+    #     ...
 
     # Tie-breaker refinement: distinguish reflection vs comprehension checks vs open inquiry
     if inquire_match and secure_match:
@@ -303,7 +316,15 @@ def score_step(step: str, parent_last: str, clinician_last: str, mapping: Dict[s
     reasons: List[str] = []
     score = 2  # start at 2 as 'decent', then adjust
 
-    if step == "Mirror":
+    if step == "Mirror+Inquire":
+        # Score as Mirror + Inquire combo
+        mir_scr = score_step("Mirror", parent_last, clinician_last, mapping)
+        inq_scr = score_step("Inquire", parent_last, clinician_last, mapping)
+        score = (mir_scr.score + inq_scr.score) // 2
+        reasons.extend(mir_scr.reasons)
+        reasons.extend(inq_scr.reasons)
+
+    elif step == "Mirror":
         # Penalize if introduces new info or rebuttal
         if _introduces_new_info(lt):
             score = 1
@@ -427,6 +448,12 @@ def evaluate_turn(parent_last: str, clinician_last: str, mapping: Dict[str, Any]
             else:
                 # They asked a decent open question but weren't perfect — suggest a next-level skill
                 tips.append("Ask, then pause. Silence helps.")
+        elif cls.step == "Mirror+Inquire":
+            # Just ensure no 'but' used as a pivot
+            if " but " in lt:
+                tips.append("Avoid 'but' between the mirror and the question.")
+            else:
+                tips.append("Excellent use of Mirror+Inquire to build trust before exploring.")
         elif cls.step == "Mirror":
             if _introduces_new_info(lt):
                 tips.append("Reflect without adding new information or rebuttal; keep it brief and nonjudgmental.")

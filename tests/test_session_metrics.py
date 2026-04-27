@@ -29,6 +29,23 @@ class GWStub2:
     def __init__(self, *args, **kwargs):
         pass
 
+    async def generate_text_async(self, prompt: str, **kwargs) -> str:
+        if "unified" in (prompt or "").lower():
+            # ClassifierService's unified prompt
+            aims_payload = GWStub2.classify_payload or {"step": "None", "score": 2, "reasons": ["det"], "tips": []}
+            payload = {
+                "is_small_talk": False,
+                "is_vaccine_relevant": True,
+                "aims": aims_payload,
+                "safety_flags": [],
+                "reasoning": "mock"
+            }
+            return json.dumps(payload)
+        
+        # Standard reply payload
+        payload = GWStub2.reply_json_payload or {"patient_reply": "ok"}
+        return json.dumps(payload)
+
     def generate_text_json(self, *, prompt: str, response_schema: dict, system_instruction=None, log_fallback=None) -> str:
         props = (response_schema or {}).get("properties", {}) if isinstance(response_schema, dict) else {}
         is_reply = isinstance(props, dict) and ("patient_reply" in props)
@@ -46,6 +63,7 @@ class GWStub2:
 def test_session_metrics_counts_and_snapshot(monkeypatch):
     # Patch gateway and basic settings
     monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", GWStub2)
+    monkeypatch.setattr(m, "VertexClient", GWStub2)
     monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", True, raising=False)
     monkeypatch.setattr(m, "MEMORY_ENABLED", True, raising=False)
     monkeypatch.setattr(m, "PROJECT_ID", "p", raising=False)

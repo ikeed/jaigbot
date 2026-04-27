@@ -24,6 +24,7 @@ from fastapi import Request
 
 from app.models import ChatRequest
 from app.services.chat_context import ChatContext
+from app.services.classifier_service import ClassifierService
 from app.services.coach_post import VaccineRelevanceGate, AimsPostProcessor, EndGameDetector
 from app.services.coach_safety import detect_advice_patterns
 from app.services.conversation_service import (
@@ -84,7 +85,7 @@ class AimsCoachingHandler:
         self.classify_max_tokens = int(os.getenv("AIMS_CLASSIFY_MAX_TOKENS", "256"))
         self.endgame_temperature = float(os.getenv("AIMS_ENDGAME_TEMPERATURE", "0.1"))
         self.endgame_max_tokens = int(os.getenv("AIMS_ENDGAME_MAX_TOKENS", "192"))
-        self.classify_budget_s = float(os.getenv("AIMS_CLASSIFY_BUDGET_S", "3.0"))
+        self.classify_budget_s = float(os.getenv("AIMS_CLASSIFY_BUDGET_S", "10.0"))
 
         # Allow tests to monkeypatch the client via app.main.VertexClient
         self.client_cls = vertex_config.get("client_cls", None) or VertexClient
@@ -94,6 +95,15 @@ class AimsCoachingHandler:
         
         # Initialize helper services
         self.jailbreak_guard = JailbreakGuard()
+        self.classifier_service = ClassifierService(
+            project_id=self.project_id,
+            location=self.vertex_location,
+            model_id=self.model_id,
+            logger=self.logger,
+            temperature=self.classify_temperature,
+            max_tokens=self.classify_max_tokens,
+            client_cls=self.client_cls,
+        )
     
     async def handle(
         self, req: Request, body: ChatRequest, ctx: ChatContext
@@ -117,13 +127,7 @@ class AimsCoachingHandler:
         # Load AIMS mapping (cached at app level)
         mapping = await self._load_aims_mapping()
         
-        # Step 1: Deterministic classification/scoring
-        cls_payload = self._get_deterministic_classification(
-            ctx.parent_last, body.message, mapping
-        )
-        
-        # Step 2 & 5 in parallel: Enhanced LLM classification and patient reply generation
-        # Emit begin markers and start both tasks concurrently, then await both.
+        # Step 1 & 2: Unified Classification (LLM with deterministic fallback)
         cls_start = time.time()
         reply_start = time.time()
         telemetry_log_event(
@@ -141,8 +145,25 @@ class AimsCoachingHandler:
             modelId=self.model_id,
         )
 
+        # Get prior state for context
+        prior_state = await self._get_prior_state(ctx.session_id) if self.memory_enabled else None
+        prior_announced = bool((prior_state or {}).get("announced", False))
+        prior_phase = (prior_state or {}).get("phase", "PreAnnounce")
+
+        # Launch classification and reply generation in parallel
+        from app.main import AIMS_CLASSIFIER_MODE, AIMS_CLASSIFY_CONTEXT_TURNS, AIMS_CLASSIFY_MAX_CONCERNS
+
         task_cls = asyncio.create_task(
-            self._enhance_with_llm_classification(cls_payload, body.message, ctx, mapping)
+            self.classifier_service.classify_turn(
+                clinician_message=body.message,
+                parent_last=ctx.parent_last,
+                history=ctx.mem.get("history", []) if ctx.mem else [],
+                prior_announced=prior_announced,
+                prior_phase=prior_phase,
+                mapping=mapping,
+                context_turns=AIMS_CLASSIFY_CONTEXT_TURNS,
+                max_concerns=AIMS_CLASSIFY_MAX_CONCERNS,
+            )
         )
         task_reply = asyncio.create_task(
             self._generate_patient_reply(
@@ -155,16 +176,77 @@ class AimsCoachingHandler:
             )
         )
 
-        # Await classification with a time budget; on timeout, keep deterministic result
-        timed_out = False
+        # Step 1 & 2: Wait for both classification and reply generation to complete in parallel
+        # This significantly reduces overall response time by overlapping two LLM calls.
+        is_vax = True
+        is_small_talk = False
+        classification_result = None
+        reply_payload = {}
         try:
-            cls_payload = await asyncio.wait_for(task_cls, timeout=self.classify_budget_s)
-        except asyncio.TimeoutError:
-            timed_out = True
+            # We await both tasks together. Note that task_cls has a timeout logic in the original code,
+            # so we'll handle that by awaiting them individually but after both have had a chance to run.
+            # Actually, to maintain the timeout logic for task_cls while keeping task_reply running:
             try:
-                task_cls.cancel()
-            except Exception:
-                pass
+                classification_result = await asyncio.wait_for(task_cls, timeout=self.classify_budget_s)
+            except asyncio.TimeoutError:
+                self.logger.warning("Classification timed out after %s s, falling back", self.classify_budget_s)
+                try:
+                    task_cls.cancel()
+                except Exception:
+                    pass
+            
+            # Now await reply task which was already running in parallel
+            reply_payload = await task_reply
+        except Exception as e:
+            self.logger.exception("Parallel tasks failed in handler")
+            status_code = getattr(e, "status_code", None)
+            if status_code and status_code in {403, 404, 429}:
+                raise e
+
+        if classification_result:
+            # Use dictionary for compatibility with legacy post-processors
+            cls_payload = classification_result.aims.dict()
+            is_vax = classification_result.is_vaccine_relevant
+            is_small_talk = classification_result.is_small_talk
+        else:
+            # If we timed out or failed, use the deterministic fallback immediately
+            from app.aims_engine import evaluate_turn
+            fb = evaluate_turn(ctx.parent_last, body.message, mapping)
+            cls_payload = {
+                "step": fb.get("step"),
+                "score": fb.get("score", 2),
+                "reasons": fb.get("reasons", []) + ["fallback"],
+                "tips": fb.get("tips", [])
+            }
+            # Fallback doesn't explicitly detect these well, but we can assume normal for now
+            is_vax = True
+            is_small_talk = False
+
+        # Apply post-processors to BOTH LLM and fallback results
+        from app.services.coach_post import VaccineRelevanceGate, AimsPostProcessor
+        
+        # Vaccine relevance gate
+        mem = ctx.mem or {}
+        aims_state = mem.get("aims_state", {}) or {}
+        parent_concerns = aims_state.get("parent_concerns", [])
+        recent_concerns_texts = [c["desc"] for c in parent_concerns] if parent_concerns else []
+        
+        cls_payload = VaccineRelevanceGate.gate(
+            cls_payload=cls_payload,
+            clinician_text=body.message,
+            parent_last=ctx.parent_last,
+            parent_recent_concerns=recent_concerns_texts,
+            prior_announced=prior_announced
+        )
+        
+        # Additional logic: if the LLM says it's small talk, we override step to None
+        if is_small_talk:
+            cls_payload["step"] = None
+            cls_payload["score"] = 0
+            
+        # Legacy AimsPostProcessor (score normalization, inquire->secure, score capping)
+        cls_payload = AimsPostProcessor.post_process(cls_payload, body.message)
+        
         # Try to snapshot model used for classification (may be approximate if overwritten by parallel call)
         try:
             from app.services.vertex_helpers import get_last_model_used
@@ -183,7 +265,10 @@ class AimsCoachingHandler:
         )
 
         # Step 3: Update AIMS state and provide coaching guidance (after classification completes)
-        await self._update_aims_state(ctx.session_id, cls_payload, body.message, ctx.parent_last)
+        llm_topic = classification_result.parent_topic if classification_result else None
+        await self._update_aims_state(
+            ctx.session_id, cls_payload, body.message, ctx.parent_last, llm_topic
+        )
 
         # Step 4: Persist AIMS metrics (after state update)
         await self._persist_aims_metrics(ctx.session_id, cls_payload)
@@ -213,8 +298,7 @@ class AimsCoachingHandler:
         except Exception:
             pass
 
-        # Step 5: Generate patient reply (complete the previously started parallel task)
-        reply_payload = await task_reply
+        # Calculate reply duration from its previously completed task
         try:
             from app.services.vertex_helpers import get_last_model_used
             model_used_reply = get_last_model_used() or self.model_id
@@ -229,12 +313,6 @@ class AimsCoachingHandler:
             modelUsed=model_used_reply,
             textLen=len((reply_payload.get("patient_reply") or "").strip()),
         )
-
-        # Step 3: Update AIMS state and provide coaching guidance (after classification completes)
-        await self._update_aims_state(ctx.session_id, cls_payload, body.message, ctx.parent_last)
-
-        # Step 4: Persist AIMS metrics (after state update)
-        await self._persist_aims_metrics(ctx.session_id, cls_payload)
 
         # If this is the first assistant turn in the session, strip any accidental
         # scenario headers from the parent reply to avoid duplicating the UI card.
@@ -318,9 +396,9 @@ class AimsCoachingHandler:
     def _get_deterministic_classification(
         self, parent_last: str, clinician_message: str, mapping: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Get deterministic AIMS classification as fallback."""
+        """Legacy helper for deterministic classification."""
         from app.aims_engine import evaluate_turn
-        
+
         fb = evaluate_turn(parent_last, clinician_message, mapping)
         return {
             "step": fb.get("step"),
@@ -408,37 +486,12 @@ class AimsCoachingHandler:
                 # On second failure, keep deterministic cls_payload
                 break
         
-        # Apply a conservative question-guard to reduce obvious mislabels
-        if used_llm_cls:
-            try:
-                if (clinician_message or "").strip().endswith("?") and (cls_payload.get("step") in {"Announce", "Secure"}):
-                    cls_payload = dict(cls_payload)
-                    cls_payload["step"] = "Inquire"
-                    try:
-                        cls_payload["score"] = min(2, int(cls_payload.get("score", 2)))
-                    except Exception:
-                        cls_payload["score"] = 2
-            except Exception:
-                pass
-
-        # Apply vaccine relevance gating if LLM was used
-        if used_llm_cls:
-            cls_payload = VaccineRelevanceGate.gate(
-                cls_payload=cls_payload,
-                clinician_text=clinician_message,
-                parent_last=ctx.parent_last,
-                parent_recent_concerns=parent_recent_concerns,
-                prior_announced=prior_announced,
-            )
-            
-            # Post-hoc corrections and score normalization
-            cls_payload = AimsPostProcessor.post_process(cls_payload, clinician_message)
-        
         return cls_payload
     
     async def _update_aims_state(
         self, session_id: str, cls_payload: Dict[str, Any], 
-        clinician_message: str, parent_last: str
+        clinician_message: str, parent_last: str,
+        llm_topic: Optional[str] = None
     ) -> None:
         """Update AIMS state and provide coaching guidance."""
         if not (self.memory_enabled and session_id):
@@ -458,10 +511,8 @@ class AimsCoachingHandler:
             
             # Add latest parent concern if any, avoiding duplicates by topic
             if parent_last:
-                pt_topic = svc_concern_topic(parent_last, self._TOPICAL_CUES)
-                existing = state.get("parent_concerns") or []
-                if pt_topic is None or not any(c.get("topic") == pt_topic for c in existing):
-                    svc_maybe_add_parent_concern(state, parent_last, self._TOPICAL_CUES)
+                # Use LLM topic if available, otherwise fall back to static cues
+                svc_maybe_add_parent_concern(state, parent_last, self._TOPICAL_CUES, llm_topic)
             
             # Apply coaching guidance rules
             self._apply_coaching_guidance(cls_payload, step_current, state, clinician_message, parent_last)
@@ -482,31 +533,40 @@ class AimsCoachingHandler:
         clinician_message: str, parent_last: str
     ) -> None:
         """Apply coaching-specific guidance rules."""
-        # Suppress 'what else' caution tip if all known concerns have been mirrored
-        if step_current in ("Inquire", "Mirror+Inquire"):
-            concerns_list = state.get("parent_concerns") or []
-            has_unmirrored = any(not c.get("is_mirrored") for c in concerns_list)
-            if not has_unmirrored:
+        # Suppress tips about mirroring or 'what else' if all known concerns have been mirrored
+        concerns_list = state.get("parent_concerns") or []
+        if concerns_list:
+            # Group by topic and check if all topics have at least one mirrored concern
+            topics: Dict[str, bool] = {}
+            for c in concerns_list:
+                t = str(c.get("topic", "unknown"))
+                m = bool(c.get("is_mirrored"))
+                topics[t] = topics.get(t, False) or m
+            
+            all_topics_mirrored = all(topics.values())
+            if all_topics_mirrored:
                 tip_list = cls_payload.get("tips") or []
-                if tip_list:
-                    tip0 = (tip_list[0] or "")
-                    tip0_l = tip0.lower()
-                    if ("what else" in tip0_l) or ("before asking" in tip0_l and 
-                                                  ("what else" in tip0_l or "explore and address" in tip0_l)):
-                        cls_payload["tips"] = []
+                filtered_tips = []
+                for tip in tip_list:
+                    tip_l = (tip or "").lower()
+                    # Check if tip suggests asking "what else" or mirroring
+                    is_mirror_tip = "mirror" in tip_l
+                    is_what_else_tip = "what else" in tip_l
+                    
+                    if not (is_mirror_tip or is_what_else_tip):
+                        filtered_tips.append(tip)
+                cls_payload["tips"] = filtered_tips
         
         # Handle Announce after inquiry
-        if step_current == "Announce" and state.get("first_inquire_done", False):
-            cls_payload["reasons"] = [
-                "Announce after inquiry is allowed, but it can feel abrupt at this point"
-            ] + (cls_payload.get("reasons") or [])
+        if step_current == "Announce" and state.get("phase") == "InquireMirror":
+            reasons = list(cls_payload.get("reasons") or [])
+            if not any("announce after inquiry" in s.lower() for s in reasons):
+                reasons.insert(0, "Avoid moving to Announce after inquiry before all concerns are mirrored.")
+            cls_payload["reasons"] = reasons
+            cls_payload["score"] = 2
             cls_payload.setdefault("tips", []).append(
                 "Keep it brief and invite input (e.g., 'How does that sound?')."
             )
-            try:
-                cls_payload["score"] = min(2, int(cls_payload.get("score", 2)))
-            except Exception:
-                cls_payload["score"] = 2
         
         # Handle mirroring
         if step_current in ("Mirror", "Mirror+Inquire"):
@@ -557,8 +617,8 @@ class AimsCoachingHandler:
                 "history": [], "character": None, "scene": None, "updated": time.time()
             }
             aims = mem.setdefault("aims", {
-                "perStepCounts": {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0},
-                "scores": {"Announce": [], "Inquire": [], "Mirror": [], "Secure": []},
+                "perStepCounts": {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0, "Mirror+Inquire": 0},
+                "scores": {"Announce": [], "Inquire": [], "Mirror": [], "Secure": [], "Mirror+Inquire": []},
                 "totalTurns": 0
             })
             
@@ -568,15 +628,16 @@ class AimsCoachingHandler:
             
             if step in {"Announce", "Inquire", "Mirror", "Secure", "Mirror+Inquire"}:
                 score_val = int(cls_payload.get("score", 2))
+                aims["perStepCounts"][step] = aims["perStepCounts"].get(step, 0) + 1
+                aims["scores"].setdefault(step, []).append(score_val)
+                
                 if step == "Mirror+Inquire":
-                    # Expand into both Mirror and Inquire for metrics
+                    # Also expand into Mirror and Inquire for underlying coverage metrics
+                    # so that we don't break logic expecting individual counts
                     aims["perStepCounts"]["Mirror"] = aims["perStepCounts"].get("Mirror", 0) + 1
                     aims["perStepCounts"]["Inquire"] = aims["perStepCounts"].get("Inquire", 0) + 1
                     aims["scores"].setdefault("Mirror", []).append(score_val)
                     aims["scores"].setdefault("Inquire", []).append(score_val)
-                else:
-                    aims["perStepCounts"][step] = aims["perStepCounts"].get(step, 0) + 1
-                    aims["scores"].setdefault(step, []).append(score_val)
                 
                 # Maintain running averages per step for quick snapshot reads
                 ra: dict[str, float] = {}
@@ -726,7 +787,7 @@ class AimsCoachingHandler:
         
         try:
             aims = (self.memory_store.get(session_id) or {}).get("aims") or {}
-            counts = {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0}
+            counts = {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0, "Mirror+Inquire": 0}
             counts.update(aims.get("perStepCounts", {}))
             
             # Prefer precomputed runningAverage if available
@@ -818,14 +879,17 @@ class AimsCoachingHandler:
                         concerns_list = aims_state.get("parent_concerns") or []
                         has_concerns = bool(concerns_list)
                         all_mirrored = has_concerns and all(bool(c.get("is_mirrored")) for c in concerns_list)
-                        block_endgame_due_to_mirroring = not (has_concerns and all_mirrored)
+                        all_secured = has_concerns and all(bool(c.get("is_secured")) for c in concerns_list)
+                        block_endgame_state_requirements = not (has_concerns and all_mirrored and all_secured)
                         # Also compute counts for hints
                         concerns_count = len(concerns_list)
                         mirrored_count = sum(1 for c in concerns_list if c.get("is_mirrored"))
+                        secured_count = sum(1 for c in concerns_list if c.get("is_secured"))
                     except Exception:
-                        block_endgame_due_to_mirroring = True
+                        block_endgame_state_requirements = True
                         concerns_count = 0
                         mirrored_count = 0
+                        secured_count = 0
 
                     # Aggregate acknowledgements across recent parent replies
                     try:
@@ -836,19 +900,23 @@ class AimsCoachingHandler:
                             "follow up", "follow-up", "another appointment", "next visit", "come back",
                             "schedule", "set up an appointment", "later appointment", "set up",
                             "book an appointment", "make an appointment", "schedule something", "talk again",
+                            "talk it over", "think it over", "decide later",
                         ))
                         literature_offer = any(c in lu for c in (
                             "handout", "handouts", "brochure", "pamphlet", "literature", "written info",
                             "information to take home", "take home", "materials", "resource", "printout", "printed info",
                             "reading", "read this", "give you some literature", "leaflet", "info sheet",
+                            "look over", "something to take",
                         ))
                         # Acks anywhere in recent parent replies
                         followup_ack_any = any(tok in parent_all for tok in (
                             "book", "schedule", "set up", "come back", "next visit", "follow up", "follow-up", "make an appointment",
+                            "talk it over", "think it over", "decide later",
                         ))
                         literature_ack_any = any(tok in parent_all for tok in (
                             "handout", "brochure", "pamphlet", "literature", "reading", "i'll read", "i will read", "i’ll read",
                             "info sheet", "materials", "resource", "printout", "printed info", "take home",
+                            "look over", "at home", "appreciate that",
                         ))
                         # If the latest parent text negates follow-up, treat ack as false
                         negates_followup_latest = any(neg in pr_latest for neg in (
@@ -874,7 +942,7 @@ class AimsCoachingHandler:
                         if (
                             followup_offer and literature_offer and followup_ack_any and literature_ack_any
                             and (not has_more_questions_latest) and (not pushback_latest)
-                            and (not block_endgame_due_to_mirroring)
+                            and (not block_endgame_state_requirements)
                         ):
                             lines = [
                                 "Outcome: Parent opted for follow-up and took literature — great coaching!",
@@ -942,6 +1010,7 @@ class AimsCoachingHandler:
                 _assistant_count = locals().get("assistant_count", 0)
                 _concerns_count = locals().get("concerns_count", 0)
                 _mirrored_count = locals().get("mirrored_count", 0)
+                _secured_count = locals().get("secured_count", 0)
                 _followup_ack_any = locals().get("followup_ack_any", False)
                 _literature_ack_any = locals().get("literature_ack_any", False)
                 _has_more_questions_latest = locals().get("has_more_questions_latest", False)
@@ -960,7 +1029,7 @@ class AimsCoachingHandler:
                     "Recent condensed transcript (last few turns, newest last):\n"
                     f"TRANSCRIPT=\n{_recent_transcript}\n\n"
                     "Heuristic hints (may be approximate):\n"
-                    f"assistant_count={_assistant_count}, concerns_count={_concerns_count}, mirrored_count={_mirrored_count}\n"
+                    f"assistant_count={_assistant_count}, concerns_count={_concerns_count}, mirrored_count={_mirrored_count}, secured_count={_secured_count}\n"
                     f"parent_ack_followup_any={_followup_ack_any}, parent_ack_literature_any={_literature_ack_any}\n"
                     f"parent_has_more_questions_latest={_has_more_questions_latest}, parent_pushback_latest={_pushback_latest}\n\n"
                     "Rules:\n"
@@ -968,6 +1037,7 @@ class AimsCoachingHandler:
                     "- If the parent says they are not ready or prefers to wait, you MUST output not_endgame.\n"
                     "- Do not infer acceptance from interest or readiness to discuss; require explicit consent to vaccinate today.\n"
                     "- If hints show questions/pushback on the latest message, prefer not_endgame.\n"
+                    "- Only mark an endgame outcome if ALL concerns have been mirrored (mirrored_count == concerns_count) AND all concerns have been secured (secured_count == concerns_count).\n"
                     "- Output strict JSON only: {\"outcome\": <accepted_now|followup_literature|not_endgame>, \"reasons\":[<short strings>]} with no markdown or code fences.\n"
                 )
                 raw = await self._call_vertex_json(
@@ -984,12 +1054,15 @@ class AimsCoachingHandler:
 
             # Dual-consent gating: require local heuristic confirmation for accepted_now
             if outcome == "accepted_now":
-                try:
-                    eg_local = EndGameDetector.detect(combined_reply_text)
-                except Exception:
-                    eg_local = None
-                if not eg_local or eg_local.get("reason") != "accepted_now":
-                    outcome = None  # Treat as not decisive; fall back below
+                if block_endgame_state_requirements:
+                    outcome = None
+                else:
+                    try:
+                        eg_local = EndGameDetector.detect(combined_reply_text)
+                    except Exception:
+                        eg_local = None
+                    if not eg_local or eg_local.get("reason") != "accepted_now":
+                        outcome = None  # Treat as not decisive; fall back below
 
             # Additional gating for followup_literature: require explicit parent ack and no new questions/pushback
             if outcome == "followup_literature":
@@ -1011,29 +1084,32 @@ class AimsCoachingHandler:
                         "not sure another appointment", "don’t need another appointment", "don't need another appointment",
                         "not what we need right now", "we want to discuss now",
                     ))
-                    if (not (followup_ack_parent and literature_ack_parent)) or has_more_questions or pushback or block_endgame_due_to_mirroring:
+                    if (not (followup_ack_parent and literature_ack_parent)) or has_more_questions or pushback or block_endgame_state_requirements:
                         outcome = None
                 except Exception:
                     outcome = None
 
             # Fallback: heuristic detector when LLM not confident/available
             if not outcome or outcome == "not_endgame":
-                eg = EndGameDetector.detect(combined_reply_text)
-                if not eg:
-                    # Emit end marker (no outcome)
-                    try:
-                        telemetry_log_event(
-                            self.logger,
-                            "aims_endgame_end",
-                            sessionId=session_id,
-                            durationMs=int((time.time() - eg_begin_time) * 1000),
-                            assistantCount=int(assistant_count or 0),
-                            outcome="none",
-                        )
-                    except Exception:
-                        pass
-                    return None
-                outcome = eg.get("reason")
+                if block_endgame_state_requirements:
+                    outcome = "not_endgame"
+                else:
+                    eg = EndGameDetector.detect(combined_reply_text)
+                    if not eg:
+                        # Emit end marker (no outcome)
+                        try:
+                            telemetry_log_event(
+                                self.logger,
+                                "aims_endgame_end",
+                                sessionId=session_id,
+                                durationMs=int((time.time() - eg_begin_time) * 1000),
+                                assistantCount=int(assistant_count or 0),
+                                outcome="none",
+                            )
+                        except Exception:
+                            pass
+                        return None
+                    outcome = eg.get("reason")
 
             lines = []
             if outcome == "accepted_now":
