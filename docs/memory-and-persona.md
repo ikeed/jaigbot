@@ -21,20 +21,36 @@ Notes:
 - For cross‑origin browser calls, configure CORS and include credentials. You may need `SESSION_COOKIE_SAMESITE=none` and `SESSION_COOKIE_SECURE=true` to allow third‑party cookies.
 
 ## Redis / Google Memorystore (shared memory)
-On Cloud Run, instances scale to zero and may reset in‑process memory. To persist memory across instances, enable the Redis backend.
+On Cloud Run, instances scale up/down and are reaped, which resets the default in‑process memory. To persist conversation history across instances and avoid duplicate scenario initialization, use the Redis backend (Google Memorystore).
 
-1. Provision Memorystore (Redis) in the same VPC/region as your Cloud Run service.
-2. Grant your Cloud Run service access to the VPC connector (if using Serverless VPC Access).
-3. Set env vars for the FastAPI service:
-   - `MEMORY_ENABLED=true` (default)
+**Note on Duplicate Scenarios:** If using the default in-memory storage, a new Cloud Run instance will not know about the history of an existing session. When the Chainlit UI checks for history upon a reconnect/redeploy, the new instance returns empty, causing the UI to re-send the scenario card. While the UI now includes defensive logic to prevent display duplication, the underlying history state will still be reset unless Redis is used.
+
+### Production Setup (GCP Memorystore)
+To use Redis in production:
+1. In `terraform/variables.tf`, set `enable_redis = true`.
+2. Run `terraform apply`. This will:
+   - Enable `redis.googleapis.com` and `vpcaccess.googleapis.com`.
+   - Create a VPC network and a Serverless VPC Access connector.
+   - Provision a Google Cloud Memorystore (Redis) instance.
+   - Update the Cloud Run service to use the Redis instance via the VPC connector.
+3. The following environment variables will be automatically configured on Cloud Run by Terraform:
    - `MEMORY_BACKEND=redis`
-   - Either `REDIS_URL=redis://:<password>@<host>:<port>/<db>` or provide fields separately:
-     - `REDIS_HOST=<memorystore-ip-or-hostname>`
-     - `REDIS_PORT=6379`
-     - `REDIS_DB=0`
-     - `REDIS_PASSWORD=` (if applicable)
-   - Optional: `REDIS_PREFIX=jaig:session:` to namespace keys
-   - Optional: `MEMORY_TTL_SECONDS=3600` to control session expiration
+   - `REDIS_HOST=<internal-redis-ip>`
+   - `REDIS_PORT=6379`
+
+### Local Redis for Testing
+To test Redis persistence locally:
+1. Set the following environment variables for the backend:
+   ```bash
+   export MEMORY_BACKEND=redis
+   export REDIS_HOST=localhost
+   export REDIS_PORT=6379
+   ```
+2. Start the app using `scripts/dev_run.sh` or `scripts/dev_run.py` (or the `JaigBot` PyCharm run configuration). 
+   - These scripts will automatically attempt to start a Redis container named `jaigbot-redis` via Docker if `MEMORY_BACKEND=redis` is detected.
+3. If you are not using the helper scripts, you can run Redis manually via Docker: `docker run -d --name jaigbot-redis -p 6379:6379 redis`
+
+You can verify the connection via `GET /config` when the backend is running.
 
 Behavior and diagnostics:
 - If Redis is unavailable at startup, the app falls back to in‑memory storage and logs a warning.
@@ -58,6 +74,13 @@ Precedence (highest to lowest):
 2. Session memory: previously set for that `sessionId`
 3. Environment via Chainlit: `CHARACTER_SYSTEM`, `SCENE_OBJECTIVES`
 4. Hard‑coded defaults: `app/persona.py` `DEFAULT_CHARACTER` / `DEFAULT_SCENE`
+
+### Persona Consistency on Refresh
+In the Chainlit UI, the `sessionId` is persisted. On a page refresh:
+1. The UI fetches existing history for that `sessionId` from the backend.
+2. If history is found, it recovers the original persona name from the scenario card.
+3. It then re-initializes the session with the *correct* detailed instructions for that persona.
+4. This ensures that even if the backend instance was replaced, the conversation continues with the same patient persona and historical context.
 
 To disable hard‑coded defaults, set the strings to empty in `app/persona.py`.
 
