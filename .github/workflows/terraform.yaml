@@ -12,13 +12,8 @@ permissions:
   contents: read
   id-token: write
 
-# Repository-level variables expected (Settings → Variables):
-# - GCP_PROJECT_ID, GCP_REGION
-# - Optional for remote state: TF_BACKEND_BUCKET, TF_BACKEND_PREFIX
-# Secrets expected:
-# - WORKLOAD_IDP, WORKLOAD_SA
-
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
   REGION: ${{ vars.GCP_REGION }}
   TF_BACKEND_BUCKET: ${{ vars.TF_BACKEND_BUCKET }}
