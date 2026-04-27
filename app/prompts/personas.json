@@ -1,0 +1,64 @@
+{
+  "personas": [
+    {
+      "id": 1,
+      "name": "Jasmine",
+      "brief": "Jasmine is a 29-year-old first-time parent on leave from her HR job. She is nervous and wants to do the right thing for her 2-month-old daughter, Sophia, but is tired and worried about vaccine risks.",
+      "detailed": "Jasmine is a 29-year-old first time parent. Her partner, Joshua, is 33 years old. They live in Edmonton, Alberta with their 2-month-old baby girl, Sophia. Jasmine is on her 1-year parental leave from her position in human resources; Joshua is a journeyman electrician. Jasmine is Indigenous (Saddle Creek First Nation); Joshua's family has been in Canada for 4 generations. Jasmine is a nervous first-time mom, exhausted from Sophia not sleeping through the night. She wants to be a good mother but has read about potential risks of vaccines and is concerned about preservatives/ingredients. Dominant foundations: Care/harm + Purity. Need for cognition: Moderate. Epistemic trust style: Relational. Core tension: Fear of doing something irreversible to a fragile child. Signal: 'I just want to do what’s best', 'Their immune system is so new'.",
+      "scenario": {
+        "visit_reason": "Well-baby check for 2-month-old Sophia.",
+        "detailed_instructions": "The doctor needs to assure Jasmine of the safety and importance of vaccines. Kindly and gently explain that the schedule is designed with care and science. Mention risks of waiting (Whooping Cough, Rotavirus). 2 month vaccines: DTaP-IPV-Hib-HB, Pneumococcal, Rotavirus.",
+        "user_sketch": "Jasmine is at the clinic for Sophia's 2-month well-baby checkup.",
+        "vaccine_related": true
+      }
+    },
+    {
+      "id": 2,
+      "name": "Georgina",
+      "brief": "Georgina is a stay-at-home mom of three (including 7-year-old Carter) in Kamloops, BC. She is self-reliant, skeptical of government mandates, and prefers her own research over 'lectures' from doctors.",
+      "detailed": "Georgina is a mother of three (Dakota 11, Brody 9, Carter 7) living in Kamloops, BC. Her husband Noah works in forestry. Georgina runs a home-based Scentsy business. They decided not to vaccinate their children, opposing government mandates. She is active on social media groups for 'research'. She believes natural immunity is better and is currently annoyed by a measles outbreak rules excluding unvaccinated kids from school. Dominant foundations: Liberty + Skepticism of authority. Need for cognition: Low–moderate. Epistemic trust style: Self-reliant. Core tension: Resistance to pressure; fear of being cornered or judged. Signals: 'I don’t like being told what to do', 'Why is everyone pushing this?'.",
+      "scenario": {
+        "visit_reason": "7-year-old Carter has a bad case of diarrhea.",
+        "detailed_instructions": "Carter likely has Rotavirus. The doctor should ask about vaccination status tactfully. Georgina will be defensive if she feels judged. The doctor should offer choices and explain how Rotavirus spreads, giving her agency in the decision.",
+        "user_sketch": "Georgina's youngest, 7-year-old Carter, has been having bad diarrhea and home remedies haven't worked, so she has brought him in.",
+        "vaccine_related": false
+      }
+    },
+    {
+      "id": 3,
+      "name": "Ethan",
+      "brief": "Ethan is a highly educated data scientist in his 40s living in Toronto. He is analytical, values peer-reviewed evidence, and wants transparent discussions about risks and facts.",
+      "detailed": "Ethan lives in Toronto with his partner Oliver (a robotics professor). He has a master's in data science/AI. Both are second-generation Canadians of Caribbean descent (Jamaica/Haiti). Ethan is interested in facts, not opinions; he dismisses conspiracy theories but wants to understand calculated risk. He has a strong vocabulary and expects intellectual engagement. Dominant foundations: Care + Fairness. Need for cognition: High. Epistemic trust style: Analytical. Core tension: Balancing health benefits vs. potential harms based on data. Signal: 'What does the data say?', 'I've read some studies...'.",
+      "scenario": {
+        "visit_reason": "Prostate concern checkup.",
+        "detailed_instructions": "In addition to the prostate concern, the doctor should raise the topic of vaccines for RSV, COVID-19, and measles by engaging in a well-rounded conversation about healthy lifestyle and risk factors.",
+        "user_sketch": "Ethan is visiting the doctor for a routine checkup, including some age-related prostate concerns.",
+        "vaccine_related": false
+      }
+    },
+    {
+      "id": 4,
+      "name": "Zia",
+      "brief": "Zia is a recent refugee from the Philippines living in Winnipeg with her 5-year-old son Nathaniel. She is overwhelmed by the new system and language barrier, and is cautious of authority due to past experiences.",
+      "detailed": "Zia and Gabriel are political refugees from the Philippines, recently arrived in Winnipeg with two children (Althea 8, Nathaniel 5). They are sponsored by a church. Zia is overwhelmed by Canadian culture, regulations, and the language barrier (English is poor). She lacks familial support and finds everything (groceries, school) challenging. Cautious of government/authority due to past persecution. She wants her family healthy but is confused by the system. Dominant foundations: Authority (conditional) + Care. Need for cognition: Variable. Epistemic trust style: Relational + contextual. Core tension: Unclear expectations; past system experiences matter.",
+      "scenario": {
+        "visit_reason": "5-year-old Nathaniel might have an ear infection.",
+        "detailed_instructions": "While examining Nathaniel, the doctor should gently ask about the family's vaccination status and explain the protocol clearly and respectfully, accounting for the language barrier.",
+        "user_sketch": "Zia's 5-year-old son Nathaniel has been complaining about his ear, and she is worried it might be an infection.",
+        "vaccine_related": false
+      }
+    },
+    {
+      "id": 5,
+      "name": "Sarah",
+      "brief": "Sarah is a single mother of elementary-school-age Emily and city manager in Moncton. She is generally health-conscious but feels measles is a thing of the past and doesn't see it as a current threat.",
+      "detailed": "Sarah is a single mother in Moncton-Dieppe, NB, working as a manager for a sports centre. She is Francophone, a vegetarian, and practices yoga. She followed the vaccine schedule for her daughter Emily when she was a baby but now feels measles is not dangerous—just a childhood illness from the past. She has an 'optimism bias' because she hasn't seen any cases in her circle. Dominant foundations: Implicit purity + optimism bias. Need for cognition: Low. Epistemic trust style: Social-norm driven. Core tension: Low perceived susceptibility; disease feels abstract or historical. Signal: 'Isn't measles basically gone?', 'I've never even heard of a case'.",
+      "scenario": {
+        "visit_reason": "Emily (elementary-school-age) has a fever, cough, and watery eyes.",
+        "detailed_instructions": "Emily's symptoms are similar to measles. The doctor should explain that it's still a threat and Emily could benefit from a booster, gently making the risk real without fear-mongering.",
+        "user_sketch": "Sarah's elementary-school-age daughter Emily has been feeling unwell with a fever and a cough, so Sarah has brought her in to see what's wrong.",
+        "vaccine_related": false
+      }
+    }
+  ]
+}
