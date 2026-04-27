@@ -23,6 +23,12 @@ resource "google_project_service" "iamcredentials" {
   disable_on_destroy = false
 }
 
+resource "google_project_service" "compute" {
+  project            = var.project_id
+  service            = "compute.googleapis.com"
+  disable_on_destroy = false
+}
+
 resource "google_project_service" "redis" {
   count              = var.enable_redis ? 1 : 0
   project            = var.project_id
