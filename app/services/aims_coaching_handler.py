@@ -884,19 +884,23 @@ class AimsCoachingHandler:
                             "follow up", "follow-up", "another appointment", "next visit", "come back",
                             "schedule", "set up an appointment", "later appointment", "set up",
                             "book an appointment", "make an appointment", "schedule something", "talk again",
+                            "talk it over", "think it over", "decide later",
                         ))
                         literature_offer = any(c in lu for c in (
                             "handout", "handouts", "brochure", "pamphlet", "literature", "written info",
                             "information to take home", "take home", "materials", "resource", "printout", "printed info",
                             "reading", "read this", "give you some literature", "leaflet", "info sheet",
+                            "look over", "something to take",
                         ))
                         # Acks anywhere in recent parent replies
                         followup_ack_any = any(tok in parent_all for tok in (
                             "book", "schedule", "set up", "come back", "next visit", "follow up", "follow-up", "make an appointment",
+                            "talk it over", "think it over", "decide later",
                         ))
                         literature_ack_any = any(tok in parent_all for tok in (
                             "handout", "brochure", "pamphlet", "literature", "reading", "i'll read", "i will read", "i’ll read",
                             "info sheet", "materials", "resource", "printout", "printed info", "take home",
+                            "look over", "at home", "appreciate that",
                         ))
                         # If the latest parent text negates follow-up, treat ack as false
                         negates_followup_latest = any(neg in pr_latest for neg in (
