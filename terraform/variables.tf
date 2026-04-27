@@ -57,3 +57,39 @@ variable "cloud_run_timeout_seconds" {
   description = "Cloud Run request timeout in seconds (affects WebSocket lifetime). Max 3600."
   default     = 1800
 }
+
+variable "cloud_run_max_instances" {
+  type        = number
+  description = "Maximum number of Cloud Run instances. Set to 1 to prevent duplicate scenario cards if using InMemoryStore."
+  default     = 1
+}
+
+variable "cloud_run_min_instances" {
+  type        = number
+  description = "Minimum number of Cloud Run instances. Set to 1 to avoid cold starts and reaping."
+  default     = 0
+}
+
+variable "enable_redis" {
+  type        = bool
+  description = "Whether to enable Google Cloud Memorystore (Redis) for session persistence."
+  default     = false
+}
+
+variable "redis_tier" {
+  type        = string
+  description = "The service tier of the Redis instance. BASIC or STANDARD_HA."
+  default     = "BASIC"
+}
+
+variable "redis_memory_size_gb" {
+  type        = number
+  description = "Redis memory size in GiB."
+  default     = 1
+}
+
+variable "vpc_connector_range" {
+  type        = string
+  description = "The IP range for the Serverless VPC Access connector. Must be a /28."
+  default     = "10.8.0.0/28"
+}

@@ -284,9 +284,10 @@ async def chat_profiles():
         return [cl.ChatProfile(name="Doctor", markdown_description="Clinician perspective", default=True)]
 
 
-def _load_robust_persona() -> dict:
+def _load_robust_persona(name: str | None = None) -> dict:
     """
     Load a persona from app/prompts/personas.json.
+    If name is provided, try to find that specific persona.
     """
     try:
         root = Path(__file__).resolve().parent
@@ -297,6 +298,11 @@ def _load_robust_persona() -> dict:
         data = json.loads(path.read_text(encoding="utf-8"))
         personas = data.get("personas") or []
         
+        if name:
+            for p in personas:
+                if p.get("name") == name:
+                    return p
+
         # Pick persona index
         idx_env = os.getenv("PERSONA_INDEX")
         if idx_env is not None:
@@ -346,12 +352,47 @@ async def start_chat():
     # Ensure our CSS is present for consistent styling across live and replay
     await _inject_custom_css_once()
 
-    # Use a persistent session id across UI loads so backend memory continues
+    # Helper: derive base URL from BACKEND_URL
+    def _base_url() -> str:
+        return BACKEND_URL[:-5] if BACKEND_URL.endswith("/chat") else BACKEND_URL
+
+    # 1. Resolve Session ID
     session_id = _get_persistent_session_id()
     cl.user_session.set("session_id", session_id)
 
-    # Robust Persona Loading
-    persona_data = _load_robust_persona()
+    # 2. Attempt to fetch existing backend history for this session
+    existing_hist = []
+    try:
+        timeout = float(os.getenv("CHAINLIT_HTTP_TIMEOUT", "15"))
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            r = await client.get(f"{_base_url()}/history", params={"sessionId": session_id})
+            if r.status_code == 200 and r.headers.get("content-type", "").startswith("application/json"):
+                existing_hist = (r.json() or {}).get("history") or []
+    except Exception:
+        existing_hist = []
+
+    # 3. Robust Persona Selection
+    # If history exists, try to recover the persona name from the first assistant message (scenario card)
+    recovered_name = None
+    if existing_hist:
+        for msg in existing_hist:
+            content = msg.get("content") or ""
+            if msg.get("role") == "assistant" and ("Persona: " in content or "Parent: " in content):
+                # Extract name e.g. "Persona: Jasmine\nBackground: ..." or "Parent: Jasmine\n..."
+                for line in content.splitlines():
+                    if line.startswith("Persona: "):
+                        recovered_name = line.replace("Persona: ", "").strip()
+                        break
+                    if line.startswith("Parent: "):
+                        recovered_name = line.replace("Parent: ", "").strip()
+                        break
+                    if line.startswith("Parent/Patient: "):
+                        recovered_name = line.replace("Parent/Patient: ", "").strip()
+                        break
+            if recovered_name:
+                break
+    
+    persona_data = _load_robust_persona(name=recovered_name)
     
     # Detailed information passed to the role-playing LLM
     # We combine with DEFAULT_CHARACTER/SCENE to preserve core guardrails if not overridden by ENV
@@ -390,21 +431,6 @@ async def start_chat():
 
     # Initialize fresh local history for a new chat thread in Chainlit
     cl.user_session.set("history", [])
-
-    # Helper: derive base URL from BACKEND_URL
-    def _base_url() -> str:
-        return BACKEND_URL[:-5] if BACKEND_URL.endswith("/chat") else BACKEND_URL
-
-    # Attempt to fetch existing backend history for this session
-    existing_hist = []
-    try:
-        timeout = float(os.getenv("CHAINLIT_HTTP_TIMEOUT", "15"))
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            r = await client.get(f"{_base_url()}/history", params={"sessionId": session_id})
-            if r.status_code == 200 and r.headers.get("content-type", "").startswith("application/json"):
-                existing_hist = (r.json() or {}).get("history") or []
-    except Exception:
-        existing_hist = []
 
     # If there is prior history on the backend, mirror it into the UI and prepend the scenario summary for context
     if existing_hist:
@@ -449,11 +475,19 @@ async def start_chat():
 
     # Otherwise, present a single scenario card as before
     card = user_card
-    history = cl.user_session.get("history")
-    history.append({"role": "assistant", "content": card})
-    cl.user_session.set("history", history)
-    await cl.Message(card, author="Patient").send()
-
+    history = cl.user_session.get("history") or []
+    
+    # Defensive check: if the local history already contains a scenario card (even if the backend
+    # lost its state), do not append or send a new one.
+    has_card = any(
+        msg.get("role") == "assistant" and ("Persona: " in (msg.get("content") or ""))
+        for msg in history
+    )
+    if not has_card:
+        history.append({"role": "assistant", "content": card})
+        cl.user_session.set("history", history)
+        await cl.Message(card, author="Patient").send()
+    
     # Inject the scenario into the scene context for grounding
     try:
         prev_scene = cl.user_session.get("scene")

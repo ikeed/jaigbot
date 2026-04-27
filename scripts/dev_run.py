@@ -21,6 +21,46 @@ BACKEND_PORT = int(os.getenv("BACKEND_PORT", "8000"))
 PORT = int(os.getenv("PORT", "8080"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "info")
 
+def start_redis_if_needed():
+    if os.getenv("MEMORY_BACKEND") != "redis":
+        return
+    
+    redis_port = os.getenv("REDIS_PORT", "6379")
+    container_name = "jaigbot-redis"
+    
+    try:
+        # Check if container is already running
+        result = subprocess.run(
+            ["docker", "ps", "--filter", f"name={container_name}", "--format", "{{.Names}}"],
+            capture_output=True, text=True, check=True
+        )
+        if container_name in result.stdout:
+            print(f"[dev_run.py] Redis container ({container_name}) already running.")
+            return
+
+        # Check if container exists but is stopped
+        result = subprocess.run(
+            ["docker", "ps", "-a", "--filter", f"name={container_name}", "--format", "{{.Names}}"],
+            capture_output=True, text=True, check=True
+        )
+        if container_name in result.stdout:
+            print(f"[dev_run.py] Starting stopped Redis container ({container_name})...")
+            subprocess.run(["docker", "start", container_name], check=True)
+            return
+
+        # Create and start a new container
+        print(f"[dev_run.py] Starting new Redis container ({container_name}) on port {redis_port}...")
+        subprocess.run(
+            ["docker", "run", "-d", "--name", container_name, "-p", f"{redis_port}:6379", "redis"],
+            check=True
+        )
+    except subprocess.CalledProcessError as e:
+        print(f"[dev_run.py] Warning: Failed to ensure Redis is running via Docker: {e}")
+    except FileNotFoundError:
+        print("[dev_run.py] Warning: Docker not found. Cannot start Redis automatically.")
+
+start_redis_if_needed()
+
 # Ensure BACKEND_URL for Chainlit points to backend
 env = os.environ.copy()
 env.setdefault("BACKEND_URL", f"http://localhost:{BACKEND_PORT}/chat")
