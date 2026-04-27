@@ -37,8 +37,8 @@ from .telemetry.events import (
 from .services.session_service import SessionService, CookieSettings
 
 # Environment configuration with sensible defaults
-PROJECT_ID = os.getenv("PROJECT_ID")
-REGION = os.getenv("REGION", "us-west4")
+PROJECT_ID = os.getenv("PROJECT_ID") or os.getenv("GCP_PROJECT_ID")
+REGION = os.getenv("REGION") or os.getenv("GCP_REGION") or "us-west4"
 # Allow Vertex AI location to be global or decoupled from Cloud Run region
 VERTEX_LOCATION = os.getenv("VERTEX_LOCATION", REGION)
 # Use widely available defaults; override via env as needed

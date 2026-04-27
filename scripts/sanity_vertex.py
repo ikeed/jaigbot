@@ -19,10 +19,10 @@ from vertexai.generative_models import GenerativeModel
 
 
 def main():
-    project = os.getenv("PROJECT_ID")
-    region = os.getenv("REGION", "us-west4")
+    project = os.getenv("PROJECT_ID") or os.getenv("GCP_PROJECT_ID")
+    region = os.getenv("REGION") or os.getenv("GCP_REGION") or "us-west4"
     if not project:
-        print("PROJECT_ID is not set. Please export PROJECT_ID before running.", file=sys.stderr)
+        print("PROJECT_ID (or GCP_PROJECT_ID) is not set. Please export PROJECT_ID before running.", file=sys.stderr)
         sys.exit(2)
 
     print(f"[sanity] Initializing Vertex AI: project={project}, region={region}")

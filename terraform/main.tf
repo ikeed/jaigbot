@@ -23,6 +23,26 @@ resource "google_project_service" "iamcredentials" {
   disable_on_destroy = false
 }
 
+resource "google_project_service" "compute" {
+  project            = var.project_id
+  service            = "compute.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "redis" {
+  count              = var.enable_redis ? 1 : 0
+  project            = var.project_id
+  service            = "redis.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "vpcaccess" {
+  count              = var.enable_redis ? 1 : 0
+  project            = var.project_id
+  service            = "vpcaccess.googleapis.com"
+  disable_on_destroy = false
+}
+
 # Artifact Registry repository (Docker)
 resource "google_artifact_registry_repository" "docker" {
   location      = var.region
@@ -143,20 +163,64 @@ resource "google_service_account_iam_member" "wif_impersonate_deployer" {
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.pool.name}/attribute.repository/${var.github_org}/${var.github_repo}"
 }
 
-# Optional: Update Cloud Run request timeout using gcloud (keeps service managed by CI)
+# Optional: Update Cloud Run request timeout and scaling using gcloud (keeps service managed by CI)
 # Note: Requires gcloud available where terraform apply runs and the caller to have roles/run.admin.
-resource "null_resource" "update_cloud_run_timeout" {
+resource "null_resource" "update_cloud_run_config" {
   triggers = {
-    service_name = var.service_name
-    region       = var.region
-    timeout      = tostring(var.cloud_run_timeout_seconds)
+    service_name  = var.service_name
+    region        = var.region
+    timeout       = tostring(var.cloud_run_timeout_seconds)
+    max_instances = var.cloud_run_max_instances
+    min_instances = var.cloud_run_min_instances
+    enable_redis  = var.enable_redis
+    redis_host    = var.enable_redis ? google_redis_instance.cache[0].host : ""
+    vpc_connector = var.enable_redis ? google_vpc_access_connector.connector[0].name : ""
   }
 
   provisioner "local-exec" {
-    command = "gcloud run services update ${var.service_name} --project=${var.project_id} --region=${var.region} --timeout=${var.cloud_run_timeout_seconds}"
+    command = <<EOT
+      gcloud run services update ${var.service_name} \
+        --project=${var.project_id} \
+        --region=${var.region} \
+        --timeout=${var.cloud_run_timeout_seconds} \
+        --max-instances=${var.cloud_run_max_instances} \
+        --min-instances=${var.cloud_run_min_instances} \
+        ${var.enable_redis ? "--update-env-vars=MEMORY_BACKEND=redis,REDIS_HOST=${google_redis_instance.cache[0].host},REDIS_PORT=6379 --vpc-connector=${google_vpc_access_connector.connector[0].name} --vpc-egress=private-ranges-only" : "--update-env-vars=MEMORY_BACKEND=memory --clear-vpc-connector"}
+    EOT
   }
 
   depends_on = [
     google_project_service.run
   ]
+}
+
+# VPC and Redis resources
+resource "google_compute_network" "main" {
+  count                   = var.enable_redis ? 1 : 0
+  name                    = "${var.service_name}-vpc"
+  auto_create_subnetworks = true
+}
+
+resource "google_vpc_access_connector" "connector" {
+  count         = var.enable_redis ? 1 : 0
+  name          = "${var.service_name}-vpc-conn"
+  region        = var.region
+  ip_cidr_range = var.vpc_connector_range
+  network       = google_compute_network.main[0].name
+  depends_on    = [google_project_service.vpcaccess]
+}
+
+resource "google_redis_instance" "cache" {
+  count              = var.enable_redis ? 1 : 0
+  name               = "${var.service_name}-redis"
+  tier               = var.redis_tier
+  memory_size_gb     = var.redis_memory_size_gb
+  region             = var.region
+  authorized_network = google_compute_network.main[0].id
+  connect_mode       = "DIRECT_PEERING"
+  redis_version      = "REDIS_6_X"
+
+  display_name = "Redis instance for ${var.service_name}"
+
+  depends_on = [google_project_service.redis]
 }

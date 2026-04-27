@@ -17,7 +17,7 @@ For local development only:
 - Start: `uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload`
 - Optional Chainlit: `BACKEND_URL=http://localhost:8080/chat chainlit run chainlit_app.py`
 
-No code changes are required to talk to a different project; the backend reads PROJECT_ID/REGION/MODEL_ID from env.
+No code changes are required to talk to a different project; the backend reads PROJECT_ID/REGION/MODEL_ID from env (it also supports GCP_PROJECT_ID and GCP_REGION as fallbacks).
 
 ---
 
@@ -114,7 +114,7 @@ If your Actions workflow pins a container URL, update it to: `<REGION>-docker.pk
 You do not need to change runtime code to migrate. The following files reference a project ID via env, variables, or examples; update samples/defaults as desired:
 
 Runtime code reading PROJECT_ID:
-- app/main.py (reads env PROJECT_ID and uses it when calling Vertex)
+- app/main.py (reads env PROJECT_ID/GCP_PROJECT_ID and uses it when calling Vertex)
 - app/services/vertex_gateway.py (gateway code that uses project/region/model via env or injected)
 - chainlit_app.py (only surfaces warnings if PROJECT_ID missing from backend)
 
