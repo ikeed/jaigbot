@@ -533,18 +533,29 @@ class AimsCoachingHandler:
         clinician_message: str, parent_last: str
     ) -> None:
         """Apply coaching-specific guidance rules."""
-        # Suppress 'what else' caution tip if all known concerns have been mirrored
-        if step_current in ("Inquire", "Mirror+Inquire"):
-            concerns_list = state.get("parent_concerns") or []
-            has_unmirrored = any(not c.get("is_mirrored") for c in concerns_list)
-            if not has_unmirrored:
+        # Suppress tips about mirroring or 'what else' if all known concerns have been mirrored
+        concerns_list = state.get("parent_concerns") or []
+        if concerns_list:
+            # Group by topic and check if all topics have at least one mirrored concern
+            topics: Dict[str, bool] = {}
+            for c in concerns_list:
+                t = str(c.get("topic", "unknown"))
+                m = bool(c.get("is_mirrored"))
+                topics[t] = topics.get(t, False) or m
+            
+            all_topics_mirrored = all(topics.values())
+            if all_topics_mirrored:
                 tip_list = cls_payload.get("tips") or []
-                if tip_list:
-                    tip0 = (tip_list[0] or "")
-                    tip0_l = tip0.lower()
-                    if ("what else" in tip0_l) or ("before asking" in tip0_l and 
-                                                  ("what else" in tip0_l or "explore and address" in tip0_l)):
-                        cls_payload["tips"] = []
+                filtered_tips = []
+                for tip in tip_list:
+                    tip_l = (tip or "").lower()
+                    # Check if tip suggests asking "what else" or mirroring
+                    is_mirror_tip = "mirror" in tip_l
+                    is_what_else_tip = "what else" in tip_l
+                    
+                    if not (is_mirror_tip or is_what_else_tip):
+                        filtered_tips.append(tip)
+                cls_payload["tips"] = filtered_tips
         
         # Handle Announce after inquiry
         if step_current == "Announce" and state.get("phase") == "InquireMirror":
