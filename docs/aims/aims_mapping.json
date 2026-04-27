@@ -150,6 +150,50 @@
       "End with a check: Did I capture that?"
     ]
   },
+  "Mirror+Inquire": {
+    "purpose": "A powerful compound step that first validates the parent's feeling/concern (Mirror) and immediately follows with an open-ended question (Inquire). This builds trust before asking for more information.",
+    "core_principle": "Validate + Explore. The 'Mirror' part lowers defenses, and the 'Inquire' part maintains momentum and curiosity.",
+    "when_to_use": [
+      "When a parent expresses a specific concern or emotion and you need more context.",
+      "To transition from listening to deeper exploration without losing the empathetic connection."
+    ],
+    "recognition_cues": [
+      "Contains both a reflective stem (It sounds like..., I'm hearing...) and an open-ended question (What, How) in the same turn.",
+      "The reflection should be accurate and non-judgmental."
+    ],
+    "dos": [
+      "Keep the reflection brief so the turn doesn't feel like a lecture.",
+      "Ensure the question is truly open-ended.",
+      "Use a supportive, curious tone for both parts."
+    ],
+    "donts": [
+      "Do not use a 'but' between the mirror and the question (e.g., 'I hear you, BUT what about...').",
+      "Do not use a leading or judgmental question."
+    ],
+    "evaluation_heuristics": {
+      "mirror_accuracy": "The reflection part accurately captures the parent's sentiment.",
+      "inquire_openness": "The question part is broad and non-leading.",
+      "flow": "The transition between reflection and question feels natural and empathetic."
+    },
+    "scoring_rubric_0_to_3": {
+      "0": "No mirror or inquire present; or highly judgmental/dismissive.",
+      "1": "Weak reflection or a closed/leading question; 'but' used to pivot.",
+      "2": "Clear reflection and open question; minor leading or slightly clunky transition.",
+      "3": "Accurate, warm reflection followed immediately by a perfect open-ended question that invites elaboration."
+    },
+    "positive_examples": [
+      "It sounds like you're worried about how Layla might react to the shots. What have you heard about the side effects?",
+      "I'm hearing that you want to do what's best for him but the timing feels fast. What would help you feel more comfortable deciding?"
+    ],
+    "negative_examples": [
+      "I hear you're worried, but don't you think it's riskier to wait?",
+      "It sounds like you're on the fence. Are you ready now?"
+    ],
+    "coaching_tips": [
+      "Avoid 'but' between the mirror and the question.",
+      "Make sure the reflection feels authentic before moving to the question."
+    ]
+  },
   "Secure": {
     "purpose": "Affirm autonomy, safety-net the plan, and move toward a mutually acceptable next step (vaccinate now, plan to revisit, or provide resources).",
     "core_principle": "Autonomy + Partnership + Next step. Reduce pressure and maintain engagement regardless of today's decision.",

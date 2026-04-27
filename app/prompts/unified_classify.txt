@@ -1,0 +1,47 @@
+[UNIFIED_CLASSIFY]
+You are an expert clinical communication evaluator. Your task is to analyze a clinician's message during a vaccine-related consultation and provide a structured classification.
+
+### OBJECTIVES
+1. **Detect Small Talk**: Determine if the message is purely rapport-building or small talk (e.g., greetings, compliments, or non-clinical questions about well-being like "How was the weekend?").
+2. **Assess Relevance**: Determine if the message is relevant to the clinical goal of vaccine discussion. If the clinician has not yet "Announced" the vaccine and is talking about unrelated topics (like teething or daycare), mark as not relevant.
+3. **Classify AIMS Step**: 
+   - **Announce**: Direct recommendation for vaccines.
+   - **Inquire**: Open-ended questions to elicit concerns.
+   - **Mirror**: Reflecting the parent's specific emotions or concerns.
+   - **Mirror+Inquire**: A reflection followed immediately by a question.
+   - **Secure**: Providing options, autonomy-supportive language, or evidence/education.
+4. **Identify Parent Topic**: Classify the parent's message (Parent_last) into one of these categories if a specific concern is expressed:
+   - "autism"
+   - "immune_load"
+   - "side_effects"
+   - "ingredients"
+   - "schedule_timing"
+   - "effectiveness"
+   - "trust"
+   - null (if no specific concern from this list is identified)
+5. **Detect Safety/Advice**: Identify if the clinician is providing specific clinical advice or medication dosages (e.g., Tylenol doses).
+
+### AIMS MAPPING CONTEXT
+{mapping_markers_section}
+
+### CONVERSATION STATE
+{recent_ctx_section}
+{parent_recent_concerns_section}
+Parent_last: {parent_last}
+Clinician_last: {clinician_last}
+Prior_state: announced={prior_announced}, phase={prior_phase}
+Safety_hints: {safety_hints}
+
+### OUTPUT INSTRUCTIONS
+Return ONLY valid JSON with these keys:
+- "is_small_talk": (boolean)
+- "is_vaccine_relevant": (boolean)
+- "parent_topic": (string from the list above or null)
+- "aims": {{
+    "step": "Announce" | "Inquire" | "Mirror" | "Mirror+Inquire" | "Secure" | null,
+    "score": (integer 0-3),
+    "reasons": (array of strings),
+    "tips": (array of strings, max 1)
+  }}
+- "safety_flags": (array of strings, e.g., ["clinical_advice_like"])
+- "reasoning": (string, brief explanation of your decision)
