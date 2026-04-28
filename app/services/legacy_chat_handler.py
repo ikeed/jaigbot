@@ -99,6 +99,7 @@ class LegacyChatHandler:
             latencyMs=latency_ms,
             modelId=self.model_id,
             sessionId=ctx.session_id,
+            userInfo=ctx.user_info,
         )
         
         # Determine which model actually produced the response (fallback-aware)

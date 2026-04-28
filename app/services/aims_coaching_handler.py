@@ -134,6 +134,7 @@ class AimsCoachingHandler:
             self.logger,
             "aims_classify_begin",
             sessionId=ctx.session_id,
+            userInfo=ctx.user_info,
             requestId=request_id,
             modelId=self.model_id,
         )
@@ -141,6 +142,7 @@ class AimsCoachingHandler:
             self.logger,
             "aims_reply_begin",
             sessionId=ctx.session_id,
+            userInfo=ctx.user_info,
             requestId=request_id,
             modelId=self.model_id,
         )
@@ -346,6 +348,7 @@ class AimsCoachingHandler:
             latencyMs=latency_ms,
             modelId=self.model_id,
             sessionId=ctx.session_id,
+            userInfo=ctx.user_info,
             step=cls_payload.get("step"),
             score=cls_payload.get("score"),
         )

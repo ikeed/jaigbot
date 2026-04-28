@@ -27,15 +27,21 @@ def truncate_for_log(s: str, cap: int) -> str:
             return ""
 
 
-def log_event(logger, event_name: str, *, caps: Optional[Dict[str, int]] = None, **fields: Any) -> None:
+def log_event(logger, event_name: str, *, caps: Optional[Dict[str, int]] = None, sessionId: Optional[str] = None, userInfo: Optional[dict] = None, **fields: Any) -> None:
     """Emit a single JSON event line via the provided logger.
 
     - logger: a standard logging.Logger-like object with .info()
     - event_name: value for the `event` field
     - caps: optional mapping of field names -> max length (applied to str values)
+    - sessionId: session id to include in top-level
+    - userInfo: user identity metadata to include in top-level
     - **fields: arbitrary event fields
     """
     payload: Dict[str, Any] = {"event": event_name}
+    if sessionId:
+        payload["sessionId"] = sessionId
+    if userInfo:
+        payload["userInfo"] = userInfo
     payload.update(fields or {})
 
     # Apply caps to selected fields

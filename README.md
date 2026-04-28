@@ -29,11 +29,68 @@ This repository contains a tiny FastAPI backend that exposes a simple /chat endp
    export VERTEX_LOCATION=global
    export MODEL_ID=gemini-2.5-pro
    ```
-3. Start the FastAPI app:
+
+### PyCharm Run Configurations
+The project includes pre-configured PyCharm run configurations (found in `.idea/runConfigurations`):
+- **JaigBot (Unified)**: Runs `run_app.py`, which includes the FastAPI backend, the custom SSO landing page, and the Chainlit UI in a single process. **Recommended for testing SSO/Login flow.**
+- **JaigBot**: A Compound configuration that starts the Backend and Chainlit UI separately.
+- **Backend (Uvicorn)**: Runs only the FastAPI backend on port 8080.
+- **Chainlit UI**: Runs only the Chainlit interface (requires Backend to be running separately).
+
+### SSO Authentication
+JaigBot supports SSO via Chainlit's built-in OAuth or a custom FastAPI-based landing page.
+
+**Enforcement:**
+By default, the application now enforces a login screen if it detects any authentication configuration. This ensures the app is always in "private" mode when intended.
+
+**Crucial Note on Configuration:**
+For SSO to be detected, you **MUST** provide the `OAUTH_*_CLIENT_ID` environment variables.
+- If using the **JaigBot (Unified)** PyCharm configuration, fill them in the "Environment Variables" section of the Run Configuration.
+- Alternatively, copy `.env.example` to `.env` and fill in the values.
+
+**Setup:**
+1. Generate a secret: `chainlit create-secret`
+2. Set `CHAINLIT_AUTH_SECRET` in your environment (or `.env` file).
+3. Configure one or more OAuth providers:
+
+#### Google, Facebook, Apple
+```bash
+export OAUTH_GOOGLE_CLIENT_ID=your-client-id
+export OAUTH_GOOGLE_CLIENT_SECRET=your-client-secret
+
+export OAUTH_FACEBOOK_CLIENT_ID=your-client-id
+export OAUTH_FACEBOOK_CLIENT_SECRET=your-client-secret
+
+export OAUTH_APPLE_CLIENT_ID=your-client-id
+export OAUTH_APPLE_CLIENT_SECRET=your-client-secret
+```
+
+#### Other Providers
+Support is also included for OKTA, Auth0, Cognito, GitLab, Descope, and Keycloak. Set `OAUTH_<PROVIDER>_CLIENT_ID` and `OAUTH_<PROVIDER>_CLIENT_SECRET`.
+
+### Running the App with a Custom Login Page
+If you want a custom SSO login page *before* the Chainlit UI (as requested), use the new FastAPI entry point:
+
+1. Install additional dependencies: `pip install uvicorn`
+2. Run the integrated app:
+   ```bash
+   python run_app.py
+   ```
+3. Visit `http://localhost:8080`. You will see a custom landing page that shows available SSO providers and redirects you to the authenticated chat interface at `/chat`.
+
+### Standard Local Run
+1. Start the FastAPI backend:
    ```bash
    uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
    ```
-4. There is no default UI served by the backend. Use the Chainlit UI described below.
+2. Run the Chainlit UI:
+   ```bash
+   BACKEND_URL=http://localhost:8080/chat chainlit run chainlit_app.py
+   ```
+
+**Note on Local Testing:**
+- If you configure an OAuth provider, the app will **only** show the SSO sign-in options. Password login will be disabled to ensure only SSO is used.
+- If no OAuth providers are configured but `CHAINLIT_AUTH_SECRET` is set, the app will fall back to a simple password login (User: `admin` / Password: `admin`) for development convenience.
 
 ## Chainlit UI
 

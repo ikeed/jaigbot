@@ -94,7 +94,7 @@ class ChatOrchestrator:
             
             # Build chat context (session, memory, persona)
             ctx = self.context_builder.build(
-                req, body.sessionId, body.character, body.scene
+                req, body.sessionId, body.character, body.scene, body.userInfo
             )
             
             # Route to appropriate handler

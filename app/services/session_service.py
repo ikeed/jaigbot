@@ -44,7 +44,7 @@ class SessionService:
         self.memory_ttl_seconds = int(memory_ttl_seconds)
 
     # -------- Session ID handling --------
-    def ensure_session(self, request, body_session_id: Optional[str]) -> Tuple[str, bool]:
+    def ensure_session(self, request, body_session_id: Optional[str], user_info: Optional[dict] = None) -> Tuple[str, bool]:
         """Resolve or create a session id.
         Order: body.sessionId -> cookie -> generate new.
         Returns (session_id, set_cookie_flag).
@@ -59,11 +59,14 @@ class SessionService:
             now = time.time()
             mem = self._store.get(sid)
             if not mem:
-                mem = {"history": [], "character": None, "scene": None, "updated": now}
+                mem = {"history": [], "character": None, "scene": None, "updated": now, "user_info": user_info}
                 self._store[sid] = mem
             else:
                 # touch updated lazily; callers also update as needed
                 mem.setdefault("updated", now)
+                if user_info and not mem.get("user_info"):
+                    mem["user_info"] = user_info
+                    self._store[sid] = mem
         return sid, generated
 
     # -------- Memory helpers --------
