@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="Black">
-    <option name="sdkName" value="Python 3.13 (JaigBot)" />
+    <option name="sdkName" value="Python 3.13 (AIMSBot)" />
   </component>
-  <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.11 (JaigBot)" project-jdk-type="Python SDK" />
+  <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.11 (AIMSBot)" project-jdk-type="Python SDK" />
 </project>

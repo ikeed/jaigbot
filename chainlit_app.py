@@ -38,7 +38,7 @@ def _register_avatars_once() -> None:
             return str(p.resolve()) if p.exists() else None
 
         def _pick_avatar(name: str, env_path_var: str, defaults: list[str], env_url_var: str):
-            path = _abs_existing(os.getenv(env_path_var))
+            path = _abs_existing(getattr(settings, env_path_var, None))
             if not path:
                 for d in defaults:
                     path = _abs_existing(d)
@@ -47,7 +47,7 @@ def _register_avatars_once() -> None:
             if path:
                 cl.Avatar(id=name, name=name, path=path).save()
                 return
-            url = os.getenv(env_url_var)
+            url = getattr(settings, env_url_var, None)
             if url and (url.startswith("http://") or url.startswith("https://")):
                 cl.Avatar(id=name, name=name, url=url).save()
 
@@ -68,8 +68,8 @@ async def _inject_custom_css_once() -> None:
             return
         root = Path(__file__).resolve().parent
         css_paths = [
-            root / "public" / "jaigbot.css",
-            root.parent / "public" / "jaigbot.css",
+            root / "public" / "aimsbot.css",
+            root.parent / "public" / "aimsbot.css",
         ]
         css_text = None
         for p in css_paths:
@@ -146,16 +146,18 @@ async def _update_message_html(message: cl.Message, author: str, html: str) -> N
         except Exception:
             pass
 
+from app.config import settings
+
 # The backend URL for the FastAPI /chat endpoint. This can be overridden
 # at runtime by setting the BACKEND_URL environment variable.  For local
 # development, the FastAPI app typically runs on http://localhost:8080.
-BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8080/chat")
+BACKEND_URL = settings.BACKEND_URL or "http://localhost:8080/chat"
 # Heuristic: if we are running in run_app.py and BACKEND_URL wasn't explicitly set in .env
 # it might need to point to /api/chat if that's where we mounted the backend.
 # run_app.py sets BACKEND_URL=http://localhost:8080/api/chat
-DEBUG_MODE = os.getenv("DEBUG_MODE", "false").lower() == "true"
+DEBUG_MODE = settings.DEBUG_MODE
 # Whether Chainlit should request coaching; default to env CHAINLIT_COACH_DEFAULT, else AIMS_COACHING_ENABLED, else false
-CHAINLIT_COACH_DEFAULT = (os.getenv("CHAINLIT_COACH_DEFAULT") or os.getenv("AIMS_COACHING_ENABLED") or "false").lower() == "true"
+CHAINLIT_COACH_DEFAULT = settings.CHAINLIT_COACH_DEFAULT if settings.CHAINLIT_COACH_DEFAULT is not None else settings.AIMS_COACHING_ENABLED
 
 
 def _author_from_role(role: str) -> str:
@@ -264,7 +266,7 @@ def _get_persistent_session_id() -> str:
     server filesystem. In multi-user deployments, all users will share this id
     unless you enable auth or implement per-user ids.
     """
-    sid = os.getenv("FIXED_SESSION_ID") or os.getenv("SESSION_ID")
+    sid = settings.FIXED_SESSION_ID or settings.SESSION_ID
     if sid:
         return sid
     try:
@@ -322,7 +324,7 @@ def _load_robust_persona(name: str | None = None) -> dict:
                     return p
 
         # Pick persona index
-        idx_env = os.getenv("PERSONA_INDEX")
+        idx_env = settings.PERSONA_INDEX
         if idx_env is not None:
             idx = max(0, min(int(idx_env), len(personas) - 1))
         else:
@@ -388,7 +390,7 @@ async def start_chat():
     # 2. Attempt to fetch existing backend history for this session
     existing_hist = []
     try:
-        timeout = float(os.getenv("CHAINLIT_HTTP_TIMEOUT", "15"))
+        timeout = settings.CHAINLIT_HTTP_TIMEOUT
         async with httpx.AsyncClient(timeout=timeout) as client:
             r = await client.get(f"{_base_url()}/history", params={"sessionId": session_id})
             if r.status_code == 200 and r.headers.get("content-type", "").startswith("application/json"):
@@ -421,8 +423,8 @@ async def start_chat():
     
     # Detailed information passed to the role-playing LLM
     # We combine with DEFAULT_CHARACTER/SCENE to preserve core guardrails if not overridden by ENV
-    base_char = os.getenv("CHARACTER_SYSTEM") or DEFAULT_CHARACTER
-    base_scene = os.getenv("SCENE_OBJECTIVES") or DEFAULT_SCENE
+    base_char = settings.CHARACTER_SYSTEM or DEFAULT_CHARACTER
+    base_scene = settings.SCENE_OBJECTIVES or DEFAULT_SCENE
     
     character_detailed = (
         f"{base_char}\n\n"
@@ -529,7 +531,7 @@ async def start_chat():
     # This avoids confusing 500 errors later (e.g., PROJECT_ID not set).
     try:
         base_url = BACKEND_URL[:-5] if BACKEND_URL.endswith("/chat") else BACKEND_URL
-        timeout = float(os.getenv("CHAINLIT_HTTP_TIMEOUT", "15"))
+        timeout = settings.CHAINLIT_HTTP_TIMEOUT
         async with httpx.AsyncClient(timeout=timeout) as client:
             ok = False
             try:
@@ -628,9 +630,9 @@ else:
 
 # Chainlit applications are public by default. To enable authentication and make your app private,
 # you must have at least one authentication callback AND CHAINLIT_AUTH_SECRET must be set.
-has_auth_secret = is_valid_env_val(os.getenv("CHAINLIT_AUTH_SECRET"))
+has_auth_secret = is_valid_env_val(settings.CHAINLIT_AUTH_SECRET)
 
-if is_oauth_enabled or has_auth_secret or os.getenv("ENABLE_PASSWORD_AUTH", "false").lower() == "true":
+if is_oauth_enabled or has_auth_secret or settings.ENABLE_PASSWORD_AUTH:
     # Ensure a secret exists if any auth is needed, otherwise Chainlit stays public
     if not has_auth_secret:
         os.environ["CHAINLIT_AUTH_SECRET"] = "dev-secret-to-force-login-screen"
@@ -638,7 +640,7 @@ if is_oauth_enabled or has_auth_secret or os.getenv("ENABLE_PASSWORD_AUTH", "fal
 
     # Register password auth ONLY if explicitly requested or if NO OAuth is detected.
     # If OAuth is detected, we STRICTLY avoid the password form unless ENABLE_PASSWORD_AUTH is true.
-    should_enable_password = os.getenv("ENABLE_PASSWORD_AUTH", "false").lower() == "true"
+    should_enable_password = settings.ENABLE_PASSWORD_AUTH
     if not is_oauth_enabled and not should_enable_password:
         # If no SSO and no explicit password auth, we only show password auth
         # as a fallback if the user wants the app private.
@@ -759,7 +761,7 @@ async def handle_message(message: cl.Message):
 
     try:
         # Increase timeout to avoid truncation due to client-side timeouts on longer generations
-        timeout = float(os.getenv("CHAINLIT_HTTP_TIMEOUT", "120"))
+        timeout = settings.CHAINLIT_HTTP_TIMEOUT if settings.CHAINLIT_HTTP_TIMEOUT != 15.0 else 120.0
         async with httpx.AsyncClient(timeout=timeout) as client:
             # Gather session and optional persona/scene to send to backend memory
             session_id = cl.user_session.get("session_id")
@@ -898,7 +900,7 @@ async def handle_message(message: cl.Message):
         try:
             base_url = BACKEND_URL[:-5] if BACKEND_URL.endswith("/chat") else BACKEND_URL
             session_id = cl.user_session.get("session_id")
-            timeout = float(os.getenv("CHAINLIT_HTTP_TIMEOUT", "120"))
+            timeout = settings.CHAINLIT_HTTP_TIMEOUT if settings.CHAINLIT_HTTP_TIMEOUT != 15.0 else 120.0
             async with httpx.AsyncClient(timeout=timeout) as client:
                 r = await client.get(f"{base_url}/summary", params={"sessionId": session_id, "analysis": "true"})
                 if r.status_code == 200:
@@ -973,9 +975,9 @@ async def resume_chat():
 
     # Ensure persona/scene keys exist
     if cl.user_session.get("character") is None:
-        cl.user_session.set("character", os.getenv("CHARACTER_SYSTEM") or (DEFAULT_CHARACTER or None))
+        cl.user_session.set("character", settings.CHARACTER_SYSTEM or (DEFAULT_CHARACTER or None))
     if cl.user_session.get("scene") is None:
-        cl.user_session.set("scene", os.getenv("SCENE_OBJECTIVES") or (DEFAULT_SCENE or None))
+        cl.user_session.set("scene", settings.SCENE_OBJECTIVES or (DEFAULT_SCENE or None))
 
     # If we already have local history, just replay it
     history = cl.user_session.get("history") or []
@@ -989,7 +991,7 @@ async def resume_chat():
 
     fetched = []
     try:
-        timeout = float(os.getenv("CHAINLIT_HTTP_TIMEOUT", "15"))
+        timeout = settings.CHAINLIT_HTTP_TIMEOUT
         async with httpx.AsyncClient(timeout=timeout) as client:
             r = await client.get(f"{_base_url()}/history", params={"sessionId": session_id})
             if r.status_code == 200 and r.headers.get("content-type", "").startswith("application/json"):

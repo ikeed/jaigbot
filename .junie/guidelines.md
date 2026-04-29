@@ -1,6 +1,6 @@
 # Project Guidelines
 
-These guidelines tell Junie how to work with this repository (JaigBot) and what to do before submitting changes.
+These guidelines tell Junie how to work with this repository (AIMSBot) and what to do before submitting changes.
 
 Project overview
 - Purpose: Small FastAPI backend exposing a /chat endpoint that proxies to Vertex AI (Gemini Flash), plus a lightweight Chainlit UI client.
@@ -43,8 +43,8 @@ Running tests
 - For docs-only changes (e.g., README/docs), running tests is optional but recommended.
 
 Build and packaging
-- Docker: docker build -t jaigbot:local .
-- Run container locally (example): docker run -p 8080:8080 -e PROJECT_ID=your-project -e REGION=us-central1 -e MODEL_ID=gemini-2.5-pro jaigbot:local
+- Docker: docker build -t aimsbot:local .
+- Run container locally (example): docker run -p 8080:8080 -e PROJECT_ID=your-project -e REGION=us-central1 -e MODEL_ID=gemini-2.5-pro aimsbot:local
 - Cloud Run deploys are handled by CI (see terraform/README.md for required WIF/secret configuration).
 - Junie does not need to build the Docker image unless the change specifically affects container/runtime behavior.
 

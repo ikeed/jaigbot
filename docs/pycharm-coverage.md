@@ -53,8 +53,8 @@ If you run tests remotely (Docker/WSL), you may need coverage path mappings. Add
 [paths]
 source =
     app
-    /workspace/JaigBot/app
-    /home/you/JaigBot/app
+    /workspace/AIMSBot/app
+    /home/you/AIMSBot/app
 ```
 
 This tells coverage to treat those locations as the same source tree so the IDE can map results.

@@ -1,6 +1,0 @@
-<component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="JaigBot" type="CompoundRunConfigurationType">
-    <toRun name="JaigBot (Unified)" type="PythonConfigurationType" />
-    <method v="2" />
-  </configuration>
-</component>

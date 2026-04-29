@@ -1,4 +1,4 @@
-# JaigBot — Hello World: Cloud Run ↔ Vertex AI (Gemini Pro)
+# AIMSBot — Hello World: Cloud Run ↔ Vertex AI (Gemini Pro)
 
 This repository contains a tiny FastAPI backend that exposes a simple /chat endpoint which proxies a single message to Vertex AI (Gemini Pro). The chat UI is provided by Chainlit (see `chainlit_app.py`).  No auth, no storage, no streaming.
 
@@ -32,20 +32,20 @@ This repository contains a tiny FastAPI backend that exposes a simple /chat endp
 
 ### PyCharm Run Configurations
 The project includes pre-configured PyCharm run configurations (found in `.idea/runConfigurations`):
-- **JaigBot (Unified)**: Runs `run_app.py`, which includes the FastAPI backend, the custom SSO landing page, and the Chainlit UI in a single process. **Recommended for testing SSO/Login flow.**
-- **JaigBot**: A Compound configuration that starts the Backend and Chainlit UI separately.
+- **AIMSBot (Unified)**: Runs `run_app.py`, which includes the FastAPI backend, the custom SSO landing page, and the Chainlit UI in a single process. **Recommended for testing SSO/Login flow.**
+- **AIMSBot**: A Compound configuration that starts the Backend and Chainlit UI separately.
 - **Backend (Uvicorn)**: Runs only the FastAPI backend on port 8080.
 - **Chainlit UI**: Runs only the Chainlit interface (requires Backend to be running separately).
 
 ### SSO Authentication
-JaigBot supports SSO via Chainlit's built-in OAuth or a custom FastAPI-based landing page.
+AIMSBot supports SSO via Chainlit's built-in OAuth or a custom FastAPI-based landing page.
 
 **Enforcement:**
 By default, the application now enforces a login screen if it detects any authentication configuration. This ensures the app is always in "private" mode when intended.
 
 **Crucial Note on Configuration:**
 For SSO to be detected, you **MUST** provide the `OAUTH_*_CLIENT_ID` environment variables.
-- If using the **JaigBot (Unified)** PyCharm configuration, fill them in the "Environment Variables" section of the Run Configuration.
+- If using the **AIMSBot (Unified)** PyCharm configuration, fill them in the "Environment Variables" section of the Run Configuration.
 - Alternatively, copy `.env.example` to `.env` and fill in the values.
 
 **Setup:**

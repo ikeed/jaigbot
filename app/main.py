@@ -36,96 +36,41 @@ from .telemetry.events import (
 )
 from .services.session_service import SessionService, CookieSettings
 
-# Environment configuration with sensible defaults
-PROJECT_ID = os.getenv("PROJECT_ID") or os.getenv("GCP_PROJECT_ID")
-REGION = os.getenv("REGION") or os.getenv("GCP_REGION") or "us-west4"
-# Allow Vertex AI location to be global or decoupled from Cloud Run region
-VERTEX_LOCATION = os.getenv("VERTEX_LOCATION", REGION)
-# Use widely available defaults; override via env as needed
-MODEL_ID = os.getenv("MODEL_ID", "gemini-2.5-pro")
-TEMPERATURE = float(os.getenv("TEMPERATURE", "0.2"))
-# Increase default to allow longer responses; still configurable via env
-MAX_TOKENS = int(os.getenv("MAX_TOKENS", "2048"))
-ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
-model_fallbacks = os.getenv("MODEL_FALLBACKS", "gemini-2.5-pro-001,gemini-2.5-pro").split(",")
-MODEL_FALLBACKS = [m.strip() for m in model_fallbacks if m.strip()]
-LOG_LEVEL = os.getenv("LOG_LEVEL", "info").upper()
-LOG_REQUEST_BODY_MAX = int(os.getenv("LOG_REQUEST_BODY_MAX", "1024"))
-LOG_HEADERS = os.getenv("LOG_HEADERS", "false").lower() == "true"
-LOG_RESPONSE_PREVIEW_MAX = int(os.getenv("LOG_RESPONSE_PREVIEW_MAX", "512"))
-# Cap for verbose safety logs (rawModelResponse/requestBody) to avoid runaway lines
-SAFETY_LOG_CAP = int(os.getenv("SAFETY_LOG_CAP", "16384"))
-EXPOSE_UPSTREAM_ERROR = os.getenv("EXPOSE_UPSTREAM_ERROR", "false").lower() == "true"
-# Debug flag to control verbosity and revealing persona/scene in logs and UI
-DEBUG_MODE = os.getenv("DEBUG_MODE", "false").lower() == "true"
-# Additional behavior flags
-AUTO_CONTINUE_ON_MAX_TOKENS = os.getenv("AUTO_CONTINUE_ON_MAX_TOKENS", "true").lower() == "true"
-MAX_CONTINUATIONS = int(os.getenv("MAX_CONTINUATIONS", "2"))
-SUPPRESS_VERTEXAI_DEPRECATION = os.getenv("SUPPRESS_VERTEXAI_DEPRECATION", "true").lower() == "true"
-# Feature flag for AIMS coaching (backward-compatible default: disabled)
-AIMS_COACHING_ENABLED = os.getenv("AIMS_COACHING_ENABLED", "true").lower() == "true"
-# Classifier mode: hybrid (default), llm, or deterministic
-AIMS_CLASSIFIER_MODE = os.getenv("AIMS_CLASSIFIER", "hybrid").lower()
-# LLM classifier context sizing
-AIMS_CLASSIFY_CONTEXT_TURNS = int(os.getenv("AIMS_CLASSIFY_CONTEXT_TURNS", "6"))  # last N turns to include
-AIMS_CLASSIFY_MAX_CONCERNS = int(os.getenv("AIMS_CLASSIFY_MAX_CONCERNS", "3"))   # recent concern lines to include
-# Model preflight validation (diagnostics only)
-VALIDATE_MODEL_ON_STARTUP = os.getenv("VALIDATE_MODEL_ON_STARTUP", "true").lower() == "true"
-# Memory configuration
-MEMORY_ENABLED = os.getenv("MEMORY_ENABLED", "true").lower() == "true"
-MEMORY_MAX_TURNS = int(os.getenv("MEMORY_MAX_TURNS", "8"))  # number of user/assistant turns to keep
-MEMORY_TTL_SECONDS = int(os.getenv("MEMORY_TTL_SECONDS", "3600"))  # 1 hour
-# Memory backend: "memory" (default) or "redis"
-MEMORY_BACKEND = os.getenv("MEMORY_BACKEND", "memory").lower()
-REDIS_URL = os.getenv("REDIS_URL")
-REDIS_HOST = os.getenv("REDIS_HOST")
-REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
-REDIS_DB = int(os.getenv("REDIS_DB", "0"))
-REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
-REDIS_PREFIX = os.getenv("REDIS_PREFIX", "jaig:session:")
-
-# Session cookie configuration
-SESSION_COOKIE_NAME = os.getenv("SESSION_COOKIE_NAME", "sessionId")
-# Default secure true for production; allow override via env. In local dev over http, set to false.
-SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "true").lower() == "true"
-SESSION_COOKIE_SAMESITE = os.getenv("SESSION_COOKIE_SAMESITE", "lax")  # lax|strict|none
-# Default max-age aligns with memory TTL if set, else 30 days
-SESSION_COOKIE_MAX_AGE = int(os.getenv("SESSION_COOKIE_MAX_AGE", str(MEMORY_TTL_SECONDS if MEMORY_TTL_SECONDS > 0 else 30*24*60*60)))
+from .config import settings
 
 logging.basicConfig(
-    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    level=getattr(logging, settings.LOG_LEVEL, logging.INFO),
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
 logger = logging.getLogger("app")
-
-app = FastAPI(title="JaigBot (Vertex AI)", version="0.1.0")
 
 # Memory store abstraction (factored into app.memory_store for readability)
 from .memory_store import InMemoryStore, RedisStore
 
 # Instantiate store with fallback
 try:
-    if MEMORY_ENABLED and MEMORY_BACKEND == "redis":
+    if settings.MEMORY_ENABLED and settings.MEMORY_BACKEND == "redis":
         _MEMORY_STORE = RedisStore(
-            url=REDIS_URL,
-            host=REDIS_HOST,
-            port=REDIS_PORT,
-            db=REDIS_DB,
-            password=REDIS_PASSWORD,
-            prefix=REDIS_PREFIX,
-            ttl=MEMORY_TTL_SECONDS,
+            url=settings.REDIS_URL,
+            host=settings.REDIS_HOST,
+            port=settings.REDIS_PORT,
+            db=settings.REDIS_DB,
+            password=settings.REDIS_PASSWORD,
+            prefix=settings.REDIS_PREFIX,
         )
     else:
         _MEMORY_STORE = InMemoryStore()
 except Exception:
     _MEMORY_STORE = InMemoryStore()
-    MEMORY_BACKEND = "memory"
+    settings.MEMORY_BACKEND = "memory"
+
+app = FastAPI(title="AIMSBot (Vertex AI)", version="0.1.0")
 
 # Optional CORS
-if ALLOWED_ORIGINS:
+if settings.ALLOWED_ORIGINS:
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=ALLOWED_ORIGINS,
+        allow_origins=settings.ALLOWED_ORIGINS,
         allow_credentials=True,
         allow_methods=["POST", "OPTIONS"],
         allow_headers=["Content-Type"],
@@ -136,15 +81,15 @@ if ALLOWED_ORIGINS:
 # Model availability preflight (diagnostics-only)
 @app.on_event("startup")
 async def _model_preflight():
-    """Best-effort check whether the configured MODEL_ID exists in the selected Vertex location.
+    """Best-effort check whether the configured settings.MODEL_ID exists in the selected Vertex location.
     Stores tri-state availability in app.state.model_check: { available: true|false|"unknown", ... }.
     Never raises; only logs.
     """
-    app.state.model_check = {"available": "unknown", "modelId": MODEL_ID, "region": VERTEX_LOCATION}
-    if not VALIDATE_MODEL_ON_STARTUP:
+    app.state.model_check = {"available": "unknown", "modelId": settings.MODEL_ID, "region": settings.VERTEX_LOCATION}
+    if not settings.VALIDATE_MODEL_ON_STARTUP:
         app.state.model_check["reason"] = "disabled_by_env"
         return
-    if not PROJECT_ID:
+    if not settings.PROJECT_ID:
         app.state.model_check["reason"] = "no_project_id"
         return
     try:
@@ -156,11 +101,11 @@ async def _model_preflight():
         attempts: list[dict] = []
 
         def try_get(api_version: str) -> tuple[int, str]:
-            loc = VERTEX_LOCATION
+            loc = settings.VERTEX_LOCATION
             host = "aiplatform.googleapis.com" if str(loc).lower() == "global" else f"{loc}-aiplatform.googleapis.com"
             url = (
-                f"https://{host}/{api_version}/projects/{PROJECT_ID}"
-                f"/locations/{loc}/publishers/google/models/{MODEL_ID}"
+                f"https://{host}/{api_version}/projects/{settings.PROJECT_ID}"
+                f"/locations/{loc}/publishers/google/models/{settings.MODEL_ID}"
             )
             r = session.get(url)
             attempts.append({"apiVersion": api_version, "url": url, "httpStatus": r.status_code})
@@ -176,9 +121,9 @@ async def _model_preflight():
         if code == 404:
             # Default to unknown on 404; do a v1 models list to avoid false negatives
             app.state.model_check["available"] = "unknown"
-            loc = VERTEX_LOCATION
+            loc = settings.VERTEX_LOCATION
             host = "aiplatform.googleapis.com" if str(loc).lower() == "global" else f"{loc}-aiplatform.googleapis.com"
-            list_url = f"https://{host}/v1/projects/{PROJECT_ID}/locations/{loc}/publishers/google/models"
+            list_url = f"https://{host}/v1/projects/{settings.PROJECT_ID}/locations/{loc}/publishers/google/models"
             app.state.model_check["listUrl"] = list_url
             rlist = session.get(list_url)
             app.state.model_check["listHttpStatus"] = rlist.status_code
@@ -190,7 +135,7 @@ async def _model_preflight():
                     data = {}
                 models = data.get("models", []) or []
                 app.state.model_check["listCount"] = len(models)
-                matched = any(((m.get("name", "").split("/models/")[-1]) == MODEL_ID) for m in models)
+                matched = any(((m.get("name", "").split("/models/")[-1]) == settings.MODEL_ID) for m in models)
             app.state.model_check["listMatched"] = matched
             if matched:
                 app.state.model_check["available"] = True
@@ -202,10 +147,10 @@ async def _model_preflight():
         app.state.model_check["urlsTried"] = attempts
         # Precompute the generateContent base URL(s) that the Vertex client would use
         try:
-            loc = VERTEX_LOCATION
+            loc = settings.VERTEX_LOCATION
             host = "aiplatform.googleapis.com" if str(loc).lower() == "global" else f"{loc}-aiplatform.googleapis.com"
             gen_primary = "v1"
-            base_gen_url = f"https://{host}/{gen_primary}/projects/{PROJECT_ID}/locations/{loc}/publishers/google/models/{MODEL_ID}:generateContent"
+            base_gen_url = f"https://{host}/{gen_primary}/projects/{settings.PROJECT_ID}/locations/{loc}/publishers/google/models/{settings.MODEL_ID}:generateContent"
             app.state.model_check["baseGenerateUrlPrimary"] = base_gen_url
         except Exception:
             pass
@@ -217,8 +162,8 @@ async def _model_preflight():
                 "event": "model_preflight",
                 "status": "exception",
                 "error": str(e),
-                "modelId": MODEL_ID,
-                "region": VERTEX_LOCATION,
+                "modelId": settings.MODEL_ID,
+                "region": settings.VERTEX_LOCATION,
             }))
         except Exception:
             logger.info("model preflight error: %s", e)
@@ -328,13 +273,13 @@ async def log_requests(request: Request, call_next):
         pass
 
     # Prepare log details
-    body_preview = body_bytes[:LOG_REQUEST_BODY_MAX]
+    body_preview = body_bytes[:settings.LOG_REQUEST_BODY_MAX]
     body_logged = None
     if body_preview:
         try:
             body_logged = json.loads(body_preview.decode("utf-8"))
             # Redact persona/scene fields unless in debug mode
-            if not DEBUG_MODE and isinstance(body_logged, dict):
+            if not settings.DEBUG_MODE and isinstance(body_logged, dict):
                 if "character" in body_logged:
                     body_logged["character"] = "<hidden>"
                 if "scene" in body_logged:
@@ -347,7 +292,7 @@ async def log_requests(request: Request, call_next):
                 body_logged = "<binary>"
 
     headers_logged = None
-    if LOG_HEADERS:
+    if settings.LOG_HEADERS:
         # Redact common sensitive headers
         redact = {"authorization", "cookie", "set-cookie"}
         headers_logged = {k: ("<redacted>" if k.lower() in redact else v) for k, v in request.headers.items()}
@@ -430,7 +375,7 @@ async def history(sessionId: Optional[str] = None):
     If the session is missing or memory disabled, return an empty list.
     """
     try:
-        if not (sessionId and MEMORY_ENABLED):
+        if not (sessionId and settings.MEMORY_ENABLED):
             return {"history": []}
         mem = _MEMORY_STORE.get(sessionId) or {}
         hist = mem.get("history") or []
@@ -458,7 +403,7 @@ async def summary(sessionId: Optional[str] = None, analysis: Optional[bool] = Fa
     using full transcript, AIMS scores, and aims_mapping.json.
     """
     base = {"overallScore": 0.0, "stepCoverage": {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0}, "strengths": [], "growthAreas": []}
-    if not sessionId or not MEMORY_ENABLED:
+    if not sessionId or not settings.MEMORY_ENABLED:
         if analysis:
             base["analysis"] = []
         return base
@@ -529,12 +474,12 @@ async def summary(sessionId: Optional[str] = None, analysis: Optional[bool] = Fa
         # Use Flash for summary analysis (faster, schema-light); keep Pro as fallback
         narrative = await asyncio.to_thread(
             vertex_call_with_fallback_text,
-            project=PROJECT_ID,
-            region=VERTEX_LOCATION,
+            project=settings.PROJECT_ID,
+            region=settings.VERTEX_LOCATION,
             primary_model="gemini-2.5-flash",
-            fallbacks=[MODEL_ID] + list(MODEL_FALLBACKS or []),
-            temperature=min(TEMPERATURE, 0.2),
-            max_tokens=min(MAX_TOKENS, 384),
+            fallbacks=[settings.MODEL_ID] + list(settings.MODEL_FALLBACKS or []),
+            temperature=min(settings.TEMPERATURE, 0.2),
+            max_tokens=min(settings.MAX_TOKENS, 384),
             prompt=prompt,
             system_instruction=None,
             log_path="summary_analysis",
@@ -605,47 +550,47 @@ def _get_request_id(request: Request) -> Optional[str]:
 @app.post("/chat")
 async def chat(req: Request, body: ChatRequest):
     """Main chat endpoint using the new ChatOrchestrator."""
-    # Enforce PROJECT_ID presence for live calls to align with tests/contract
-    if not PROJECT_ID:
+    # Enforce settings.PROJECT_ID presence for live calls to align with tests/contract
+    if not settings.PROJECT_ID:
         # Raise HTTPException to be normalized by our exception handler
         raise HTTPException(status_code=500, detail={
-            "error": {"message": "PROJECT_ID not set — configure the PROJECT_ID environment variable.", "code": 500}
+            "error": {"message": "settings.PROJECT_ID not set — configure the settings.PROJECT_ID environment variable.", "code": 500}
         })
 
     # Build config structures for orchestrator
     vertex_config = {
-        "project_id": PROJECT_ID,
-        "region": REGION,
-        "vertex_location": VERTEX_LOCATION,
-        "model_id": MODEL_ID,
-        "model_fallbacks": MODEL_FALLBACKS,
-        "temperature": TEMPERATURE,
-        "max_tokens": MAX_TOKENS,
+        "project_id": settings.PROJECT_ID,
+        "region": settings.REGION,
+        "vertex_location": settings.VERTEX_LOCATION,
+        "model_id": settings.MODEL_ID,
+        "model_fallbacks": settings.MODEL_FALLBACKS,
+        "temperature": settings.TEMPERATURE,
+        "max_tokens": settings.MAX_TOKENS,
         # Pass client class from app.main so tests can monkeypatch m.VertexClient
         "client_cls": VertexClient,
     }
     
     memory_config = {
-        "enabled": MEMORY_ENABLED,
-        "max_turns": MEMORY_MAX_TURNS,
-        "ttl_seconds": MEMORY_TTL_SECONDS,
+        "enabled": settings.MEMORY_ENABLED,
+        "max_turns": settings.MEMORY_MAX_TURNS,
+        "ttl_seconds": settings.MEMORY_TTL_SECONDS,
     }
     
     session_cookie_settings = {
-        "name": SESSION_COOKIE_NAME,
-        "secure": SESSION_COOKIE_SECURE,
-        "samesite": SESSION_COOKIE_SAMESITE,
-        "max_age": SESSION_COOKIE_MAX_AGE,
+        "name": settings.SESSION_COOKIE_NAME,
+        "secure": settings.SESSION_COOKIE_SECURE,
+        "samesite": settings.SESSION_COOKIE_SAMESITE,
+        "max_age": settings.SESSION_COOKIE_MAX_AGE,
     }
     
     aims_config = {
-        "enabled": AIMS_COACHING_ENABLED,
+        "enabled": settings.AIMS_COACHING_ENABLED,
         "force_default": (os.getenv("AIMS_COACHING_DEFAULT", "false").lower() == "true"),
     }
     
     debug_config = {
-        "expose_upstream_error": EXPOSE_UPSTREAM_ERROR,
-        "log_response_preview_max": LOG_RESPONSE_PREVIEW_MAX,
+        "expose_upstream_error": settings.EXPOSE_UPSTREAM_ERROR,
+        "log_response_preview_max": settings.LOG_RESPONSE_PREVIEW_MAX,
     }
     
     # Initialize and run the orchestrator
@@ -668,27 +613,27 @@ async def config():
     # Pull model preflight info if available
     mc = getattr(app.state, "model_check", {"available": "unknown"})
     return {
-        "projectId": PROJECT_ID,
-        "region": REGION,
-        "vertexLocation": VERTEX_LOCATION,
-        "modelId": MODEL_ID,
-        "temperature": TEMPERATURE,
-        "maxTokens": MAX_TOKENS,
-        "logLevel": LOG_LEVEL,
-        "logHeaders": LOG_HEADERS,
-        "logRequestBodyMax": LOG_REQUEST_BODY_MAX,
-        "logResponsePreviewMax": LOG_RESPONSE_PREVIEW_MAX,
-        "allowedOrigins": ALLOWED_ORIGINS,
-        "exposeUpstreamError": EXPOSE_UPSTREAM_ERROR,
-        "debugMode": DEBUG_MODE,
-        "modelFallbacks": MODEL_FALLBACKS,
+        "projectId": settings.PROJECT_ID,
+        "region": settings.REGION,
+        "vertexLocation": settings.VERTEX_LOCATION,
+        "modelId": settings.MODEL_ID,
+        "temperature": settings.TEMPERATURE,
+        "maxTokens": settings.MAX_TOKENS,
+        "logLevel": settings.LOG_LEVEL,
+        "logHeaders": settings.LOG_HEADERS,
+        "logRequestBodyMax": settings.LOG_REQUEST_BODY_MAX,
+        "logResponsePreviewMax": settings.LOG_RESPONSE_PREVIEW_MAX,
+        "allowedOrigins": settings.ALLOWED_ORIGINS,
+        "exposeUpstreamError": settings.EXPOSE_UPSTREAM_ERROR,
+        "debugMode": settings.DEBUG_MODE,
+        "modelFallbacks": settings.MODEL_FALLBACKS,
         "modelAvailable": mc.get("available"),
         "modelCheck": mc,
-        "autoContinueOnMaxTokens": AUTO_CONTINUE_ON_MAX_TOKENS,
-        "maxContinuations": MAX_CONTINUATIONS,
-        "suppressVertexAIDeprecation": SUPPRESS_VERTEXAI_DEPRECATION,
+        "autoContinueOnMaxTokens": settings.AUTO_CONTINUE_ON_MAX_TOKENS,
+        "maxContinuations": settings.MAX_CONTINUATIONS,
+        "suppressVertexAIDeprecation": settings.SUPPRESS_VERTEXAI_DEPRECATION,
         # Coaching toggles
-        "aimsCoachingEnabled": AIMS_COACHING_ENABLED,
+        "aimsCoachingEnabled": settings.AIMS_COACHING_ENABLED,
         "aimsCoachingDefault": (os.getenv("AIMS_COACHING_DEFAULT", "false").lower() == "true"),
         # Reflect effective default here (Vertex client defaults to true now)
         "useVertexRest": os.getenv("USE_VERTEX_REST", "true").lower() == "true",
@@ -696,20 +641,20 @@ async def config():
         "continuationInstructionEnabled": os.getenv("CONTINUE_INSTRUCTION_ENABLED", "true").lower() == "true",
         "minContinueGrowth": int(os.getenv("MIN_CONTINUE_GROWTH", "10")),
         # Memory settings
-        "memoryEnabled": MEMORY_ENABLED,
-        "memoryBackend": MEMORY_BACKEND,
-        "memoryMaxTurns": MEMORY_MAX_TURNS,
-        "memoryTtlSeconds": MEMORY_TTL_SECONDS,
+        "memoryEnabled": settings.MEMORY_ENABLED,
+        "memoryBackend": settings.MEMORY_BACKEND,
+        "memoryMaxTurns": settings.MEMORY_MAX_TURNS,
+        "memoryTtlSeconds": settings.MEMORY_TTL_SECONDS,
         "memoryStoreSize": len(_MEMORY_STORE),
         # Hard-coded defaults visibility
-        "defaultCharacter": (DEFAULT_CHARACTER if DEBUG_MODE and DEFAULT_CHARACTER else None),
-        "defaultScene": (DEFAULT_SCENE if DEBUG_MODE and DEFAULT_SCENE else None),
+        "defaultCharacter": (DEFAULT_CHARACTER if settings.DEBUG_MODE and DEFAULT_CHARACTER else None),
+        "defaultScene": (DEFAULT_SCENE if settings.DEBUG_MODE and DEFAULT_SCENE else None),
         # Session cookie diagnostics
         "sessionCookie": {
-            "name": SESSION_COOKIE_NAME,
-            "secure": SESSION_COOKIE_SECURE,
-            "sameSite": SESSION_COOKIE_SAMESITE,
-            "maxAge": SESSION_COOKIE_MAX_AGE,
+            "name": settings.SESSION_COOKIE_NAME,
+            "secure": settings.SESSION_COOKIE_SECURE,
+            "sameSite": settings.SESSION_COOKIE_SAMESITE,
+            "maxAge": settings.SESSION_COOKIE_MAX_AGE,
         },
     }
 
@@ -717,7 +662,7 @@ async def config():
 @app.get("/modelcheck")
 async def modelcheck():
     mc = getattr(app.state, "model_check", {"available": "unknown"})
-    return {"modelId": MODEL_ID, "region": VERTEX_LOCATION, **mc}
+    return {"modelId": settings.MODEL_ID, "region": settings.VERTEX_LOCATION, **mc}
 
 
 @app.get("/diagnostics")
@@ -727,22 +672,22 @@ async def diagnostics():
     diag = {
         "transport": "rest" if use_rest else "sdk",
         "generationConfig": {
-            "temperature": TEMPERATURE,
-            "maxOutputTokens": MAX_TOKENS,
+            "temperature": settings.TEMPERATURE,
+            "maxOutputTokens": settings.MAX_TOKENS,
             "responseMimeType": "text/plain",
             # Note: We do not set "thinking" control in REST requests to maintain compatibility.
             "thinkingDisabled": None,
         },
-        "autoContinueOnMaxTokens": AUTO_CONTINUE_ON_MAX_TOKENS,
-        "maxContinuations": MAX_CONTINUATIONS,
+        "autoContinueOnMaxTokens": settings.AUTO_CONTINUE_ON_MAX_TOKENS,
+        "maxContinuations": settings.MAX_CONTINUATIONS,
         "continueTailChars": int(os.getenv("CONTINUE_TAIL_CHARS", "500")),
         "continuationInstructionEnabled": os.getenv("CONTINUE_INSTRUCTION_ENABLED", "true").lower() == "true",
         "minContinueGrowth": int(os.getenv("MIN_CONTINUE_GROWTH", "10")),
         "memory": {
-            "enabled": MEMORY_ENABLED,
-            "backend": MEMORY_BACKEND,
-            "maxTurns": MEMORY_MAX_TURNS,
-            "ttlSeconds": MEMORY_TTL_SECONDS,
+            "enabled": settings.MEMORY_ENABLED,
+            "backend": settings.MEMORY_BACKEND,
+            "maxTurns": settings.MEMORY_MAX_TURNS,
+            "ttlSeconds": settings.MEMORY_TTL_SECONDS,
             "storeSize": len(_MEMORY_STORE),
         },
     }
@@ -762,9 +707,9 @@ async def list_models(request: Request):
     try:
         creds, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
         session = AuthorizedSession(creds)
-        loc = VERTEX_LOCATION
+        loc = settings.VERTEX_LOCATION
         host = "aiplatform.googleapis.com" if str(loc).lower() == "global" else f"{loc}-aiplatform.googleapis.com"
-        url = f"https://{host}/v1/projects/{PROJECT_ID}/locations/{loc}/publishers/google/models"
+        url = f"https://{host}/v1/projects/{settings.PROJECT_ID}/locations/{loc}/publishers/google/models"
         r = session.get(url)
         latency_ms = int((time.time() - started) * 1000)
         if r.status_code != 200:
@@ -796,7 +741,7 @@ async def list_models(request: Request):
             "count": len(out),
             "requestId": req_id,
         }))
-        return {"models": out, "count": len(out), "region": VERTEX_LOCATION}
+        return {"models": out, "count": len(out), "region": settings.VERTEX_LOCATION}
     except Exception as e:
         latency_ms = int((time.time() - started) * 1000)
         logger.exception("/models error: %s", e)

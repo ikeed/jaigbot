@@ -31,7 +31,7 @@ variable "github_org" {
 variable "github_repo" {
   type        = string
   description = "GitHub repository name"
-  default     = "jaigbot"
+  default     = "aimsbot"
 }
 
 variable "github_branch_ref" {

@@ -1,5 +1,5 @@
 
-# Terraform IaC for JaigBot infra
+# Terraform IaC for AIMSBot infra
 
 This Terraform config provisions the minimal Google Cloud infrastructure to build and deploy the hello‑world Gemini app via Cloud Run and GitHub Actions.
 
@@ -10,7 +10,7 @@ What it creates:
   - cr-vertex-runtime: used by Cloud Run at runtime
   - cr-deployer: used by GitHub Actions via Workload Identity Federation (WIF)
 - IAM bindings (least‑privilege for hello world)
-- Workload Identity Federation pool + GitHub OIDC provider and binding allowing ikeed/jaigbot@main to impersonate cr-deployer
+- Workload Identity Federation pool + GitHub OIDC provider and binding allowing ikeed/aimsbot@main to impersonate cr-deployer
 
 What it does NOT create:
 - Cloud Run service (created/updated by GitHub Actions deploy workflow)
@@ -26,7 +26,7 @@ What it does NOT create:
 - service_name (default: aimsbot)
 - gar_repo (default: cr-demo)
 - github_org (default: ikeed)
-- github_repo (default: jaigbot)
+- github_repo (default: aimsbot)
 - github_branch_ref (default: refs/heads/main)
 - wif_pool_id (default: github-pool)
 - wif_provider_id (default: github-provider)
@@ -40,7 +40,7 @@ region            = "us-west4"
 service_name      = "aimsbot"
 gar_repo          = "cr-demo"
 github_org        = "ikeed"
-github_repo       = "jaigbot"
+github_repo       = "aimsbot"
 github_branch_ref = "refs/heads/main"
 
 ## Quickstart
@@ -81,7 +81,7 @@ Configure a GCS backend for state (create a versioned bucket first), then add to
 terraform {
   backend "gcs" {
     bucket = "tf-state-YOUR_PROJECT"
-    prefix = "jaigbot/prod"
+    prefix = "aimsbot/prod"
   }
 }
 
@@ -115,24 +115,24 @@ Most often this happens in CI when TF_BACKEND_BUCKET or TF_BACKEND_PREFIX contai
 Fixes:
 - Ensure your GitHub repo Variable values have no leading/trailing whitespace:
   - TF_BACKEND_BUCKET = tf-state-aimsbot
-  - TF_BACKEND_PREFIX = jaigbot/prod
+  - TF_BACKEND_PREFIX = aimsbot/prod
 - Prefer using the helper script which trims values and handles PR vs push: `bash scripts/terraform_init.sh`.
 - If you need to run init manually, quote the values and double-check:
-  - terraform init -backend-config="bucket=tf-state-aimsbot" -backend-config="prefix=jaigbot/prod"
+  - terraform init -backend-config="bucket=tf-state-aimsbot" -backend-config="prefix=aimsbot/prod"
 
 ### B) Why do I see two state files in my bucket?
 You might notice both of these exist and are similar size (e.g., ~21 KB):
 - gs://tf-state-aimsbot/default.tfstate
-- gs://tf-state-aimsbot/jaigbot/prod/default.tfstate
+- gs://tf-state-aimsbot/aimsbot/prod/default.tfstate
 
-Reason: at some point Terraform was initialized without a prefix (writing to the bucket root), and at other times with a prefix (writing under jaigbot/prod). The backend block in this repo allows overriding via `terraform init -backend-config=…`; if one run omitted `prefix`, Terraform defaulted to writing to `default.tfstate` at the bucket root.
+Reason: at some point Terraform was initialized without a prefix (writing to the bucket root), and at other times with a prefix (writing under aimsbot/prod). The backend block in this repo allows overriding via `terraform init -backend-config=…`; if one run omitted `prefix`, Terraform defaulted to writing to `default.tfstate` at the bucket root.
 
 What to do:
-- Pick a canonical location, ideally using a prefix, e.g., `TF_BACKEND_PREFIX=jaigbot/prod`.
+- Pick a canonical location, ideally using a prefix, e.g., `TF_BACKEND_PREFIX=aimsbot/prod`.
 - Make sure all CI and local runs initialize with that prefix (use `scripts/terraform_init.sh`).
 - Optionally migrate state if your active state is at the root:
   1. Ensure no one is running Terraform.
-  2. `terraform init -migrate-state -backend-config="bucket=tf-state-aimsbot" -backend-config="prefix=jaigbot/prod"`
+  2. `terraform init -migrate-state -backend-config="bucket=tf-state-aimsbot" -backend-config="prefix=aimsbot/prod"`
   3. Verify `terraform plan` shows no unintended changes.
 - After confirming the correct state is being used, you can delete the orphaned state file from the wrong location to avoid future confusion.
 
@@ -207,7 +207,7 @@ Once roles are fixed and resources are imported if needed:
 ## Notes
 - Ensure Artifact Registry region matches Cloud Run region for efficiency.
 - The deploy workflow maps Terraform var.region to the GitHub variable GCP_REGION and sets Cloud Run env REGION accordingly. The backend can use a separate Vertex location via VERTEX_LOCATION (recommended: global for Gemini 2.x). Ensure your chosen MODEL_ID is available in that location (e.g., set VERTEX_LOCATION=global for gemini-2.5-pro).
-- WIF attribute_condition restricts deployments to the main branch of ikeed/jaigbot by default. Override `github_branch_ref` if needed.
+- WIF attribute_condition restricts deployments to the main branch of ikeed/aimsbot by default. Override `github_branch_ref` if needed.
 - The deploy workflow expects the runtime service account to exist and will set env vars during `gcloud run deploy`.
 
 

@@ -1,3 +1,4 @@
+from app.config import settings
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app as fastapi_app
@@ -9,17 +10,13 @@ def test_chat_with_user_info(monkeypatch):
     """Verify that userInfo in ChatRequest is accepted and logged."""
     
     # Mock environment variables
-    monkeypatch.setenv("PROJECT_ID", "test-project")
-    monkeypatch.setenv("REGION", "us-central1")
-    
-    # Also monkeypatch app.main variables if they were already initialized
-    import app.main
-    monkeypatch.setattr(app.main, "PROJECT_ID", "test-project")
-    monkeypatch.setattr(app.main, "REGION", "us-central1")
+    monkeypatch.setattr(settings, "PROJECT_ID", "test-project")
+    monkeypatch.setattr(settings, "REGION", "us-central1")
     
     # Mock Vertex call to avoid real API calls
     mock_vertex = MagicMock(return_value="Hello! I am a clinical assistant.")
-    monkeypatch.setattr("app.services.vertex_helpers.vertex_call_with_fallback_text", mock_vertex)
+    monkeypatch.setattr("app.services.legacy_chat_handler.vertex_call_with_fallback_text", mock_vertex)
+    monkeypatch.setattr("app.services.aims_coaching_handler.vertex_call_with_fallback_text", mock_vertex)
     
     # Capture logs to verify userInfo is present
     # We catch logs from ALL loggers that might use telemetry

@@ -26,7 +26,7 @@ def start_redis_if_needed():
         return
     
     redis_port = os.getenv("REDIS_PORT", "6379")
-    container_name = "jaigbot-redis"
+    container_name = "aimsbot-redis"
     
     try:
         # Check if container is already running

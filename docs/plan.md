@@ -5,7 +5,7 @@ This plan is updated with your concrete inputs. Defaults are applied but remain 
 Inputs confirmed:
 - Project ID: warm-actor-253703
 - Hosting: same-origin (UI and API served from the same Cloud Run service)
-- CI/CD: GitHub repo ikeed/jaigbot
+- CI/CD: GitHub repo ikeed/aimsbot
 
 ---
 
@@ -126,7 +126,7 @@ Inputs confirmed:
 ## 6) CI/CD plan (GitHub → Cloud Run)
 
 - Strategy: GitHub Actions builds the container, pushes to Artifact Registry, deploys to Cloud Run using WIF.
-- Repository: ikeed/jaigbot
+- Repository: ikeed/aimsbot
 - Workflow outline (on push to main):
   1) Checkout
   2) Auth to Google Cloud via WIF (google-github-actions/auth) using WORKLOAD_IDP + WORKLOAD_SA
@@ -145,7 +145,7 @@ Inputs confirmed:
   - TEMPERATURE=0.2 (variable)
   - MAX_TOKENS=256 (variable)
 - IAM and trust:
-  - Configure WIF OIDC provider to trust GitHub repo ikeed/jaigbot.
+  - Configure WIF OIDC provider to trust GitHub repo ikeed/aimsbot.
   - Grant cr-deployer the roles above; allow it to impersonate itself and use Service Account Token Creator.
   - Grant cr-deployer roles/iam.serviceAccountUser on cr-vertex-runtime.
 - Image path example:

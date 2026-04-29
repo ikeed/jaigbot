@@ -12,7 +12,7 @@ set -euo pipefail
 #
 # Local usage:
 #   export TF_BACKEND_BUCKET=tf-state-aimsbot
-#   export TF_BACKEND_PREFIX=jaigbot/prod
+#   export TF_BACKEND_PREFIX=aimsbot/prod
 #   bash scripts/terraform_init.sh
 
 trim() { awk '{$1=$1; print}' <<< "$1"; }

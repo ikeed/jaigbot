@@ -1,3 +1,4 @@
+from app.config import settings
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -12,9 +13,8 @@ def test_healthz_ok():
 
 
 def test_config_keys_present(monkeypatch):
-    import app.main as m
-    # Ensure PROJECT_ID not None to avoid surprises in later calls
-    monkeypatch.setattr(m, "PROJECT_ID", "proj")
+    # Ensure settings.PROJECT_ID not None to avoid surprises in later calls
+    monkeypatch.setattr(settings, "PROJECT_ID", "proj")
 
     r = client.get("/config")
     assert r.status_code == 200
@@ -35,8 +35,7 @@ def test_config_keys_present(monkeypatch):
 
 
 def test_diagnostics_keys_present(monkeypatch):
-    import app.main as m
-    monkeypatch.setattr(m, "PROJECT_ID", "proj")
+    monkeypatch.setattr(settings, "PROJECT_ID", "proj")
 
     r = client.get("/diagnostics")
     assert r.status_code == 200

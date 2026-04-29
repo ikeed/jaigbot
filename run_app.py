@@ -25,6 +25,8 @@ from app.main import app as backend_app
 
 app = FastAPI()
 
+from app.config import settings
+
 # Include backend routes (healthz, chat, etc.)
 # We mount the backend app under the same FastAPI instance
 app.mount("/api", backend_app)
@@ -33,7 +35,7 @@ app.mount("/api", backend_app)
 # and update BACKEND_URL to point to /api/chat
 
 # Update BACKEND_URL for this unified process
-port = os.getenv("PORT", "8080")
+port = settings.PORT
 os.environ["BACKEND_URL"] = f"http://localhost:{port}/api/chat"
 
 # A simple custom login page that shows SSO buttons
@@ -59,7 +61,10 @@ async def custom_login_page(request: Request):
             providers.append({"id": p_id, "name": name, "color": color})
             print(f"DEBUG: Found provider {p_id} via {env_name}")
 
+    # Prioritize Google, Facebook, Apple
     add_if_exists("google", "Google", "#4285F4")
+    add_if_exists("facebook", "Facebook", "#1877F2")
+    add_if_exists("apple", "Apple", "#000000")
     add_if_exists("github", "GitHub", "#333")
     add_if_exists("azure-ad", "Microsoft", "#00a1f1")
     add_if_exists("keycloak", "Keycloak", "#f0ad4e")
@@ -100,7 +105,7 @@ async def custom_login_page(request: Request):
 
     # If no providers, just show the continue button
     if not buttons_html:
-        has_auth = is_valid_env_val(os.getenv("CHAINLIT_AUTH_SECRET"))
+        has_auth = is_valid_env_val(settings.CHAINLIT_AUTH_SECRET)
         warning = ""
         if has_auth:
             warning = f"""
@@ -136,7 +141,7 @@ async def custom_login_page(request: Request):
     html_content = f"""
     <html>
         <head>
-            <title>JaigBot Login</title>
+            <title>AIMSBot Login</title>
             <style>
                 body {{ font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background: #f0f2f5; }}
                 .card {{ background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; width: 320px; }}
@@ -148,7 +153,7 @@ async def custom_login_page(request: Request):
         </head>
         <body>
             <div class="card">
-                <h1>JaigBot</h1>
+                <h1>AIMSBot</h1>
                 <p>Welcome! Please sign in.</p>
                 <div style="margin-top: 1rem; display: flex; flex-direction: column;">
                     {buttons_html}

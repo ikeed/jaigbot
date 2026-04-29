@@ -63,7 +63,7 @@ class RedisStore:
         port: int = 6379,
         db: int = 0,
         password: Optional[str] = None,
-        prefix: str = "jaig:session:",
+        prefix: str = "aims:session:",
         ttl: int = 3600,
     ) -> None:
         try:
