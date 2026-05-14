@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# JaigBot local dev runner
+# AIMSBot local dev runner
 # - Ensures venv deps are installed
 # - Exports sensible defaults for env vars if not already set
 # - Optionally checks ADC
@@ -15,16 +15,16 @@ cd "$REPO_ROOT"
 # 0) Optional Redis startup
 if [[ "${MEMORY_BACKEND:-}" == "redis" ]]; then
   if command -v docker >/dev/null 2>&1; then
-    if ! docker ps --filter "name=jaigbot-redis" --format '{{.Names}}' | grep -q "jaigbot-redis"; then
-      if docker ps -a --filter "name=jaigbot-redis" --format '{{.Names}}' | grep -q "jaigbot-redis"; then
-        echo "[dev_run] Starting stopped Redis container (jaigbot-redis)..."
-        docker start jaigbot-redis || echo "[dev_run] Failed to start existing Redis container."
+    if ! docker ps --filter "name=aimsbot-redis" --format '{{.Names}}' | grep -q "aimsbot-redis"; then
+      if docker ps -a --filter "name=aimsbot-redis" --format '{{.Names}}' | grep -q "aimsbot-redis"; then
+        echo "[dev_run] Starting stopped Redis container (aimsbot-redis)..."
+        docker start aimsbot-redis || echo "[dev_run] Failed to start existing Redis container."
       else
-        echo "[dev_run] Starting new Redis container (jaigbot-redis)..."
-        docker run -d --name jaigbot-redis -p "${REDIS_PORT:-6379}:6379" redis || echo "[dev_run] Failed to start Redis. Ensure Docker is running."
+        echo "[dev_run] Starting new Redis container (aimsbot-redis)..."
+        docker run -d --name aimsbot-redis -p "${REDIS_PORT:-6379}:6379" redis || echo "[dev_run] Failed to start Redis. Ensure Docker is running."
       fi
     else
-      echo "[dev_run] Redis container (jaigbot-redis) already running."
+      echo "[dev_run] Redis container (aimsbot-redis) already running."
     fi
   else
     echo "[dev_run] Docker not found, cannot start Redis automatically."

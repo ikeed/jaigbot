@@ -1,4 +1,4 @@
-# Migrating JaigBot to a Different GCP Project
+# Migrating AIMSBot to a Different GCP Project
 
 This guide explains everything involved in moving/deploying this app to a new Google Cloud project. It covers Google Cloud setup, GitHub and CI, Terraform, application configuration, and every place in this repo that references a GCP project.
 

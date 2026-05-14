@@ -1,6 +1,6 @@
 # API reference
 
-This document describes the FastAPI endpoints exposed by JaigBot and their request/response contracts. See the README for run instructions and Swagger UI (/docs) for live schemas.
+This document describes the FastAPI endpoints exposed by AIMSBot and their request/response contracts. See the README for run instructions and Swagger UI (/docs) for live schemas.
 
 - Base URL (local dev): http://localhost:8080
 - Primary endpoints:
@@ -125,7 +125,7 @@ Notes
 
 # API reference
 
-This document describes the FastAPI endpoints exposed by JaigBot and their request/response contracts. See the README for run instructions and Swagger UI (/docs) for live schemas.
+This document describes the FastAPI endpoints exposed by AIMSBot and their request/response contracts. See the README for run instructions and Swagger UI (/docs) for live schemas.
 
 - Base URL (local dev): http://localhost:8080
 - Primary endpoints:

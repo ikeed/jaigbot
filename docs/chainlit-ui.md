@@ -1,4 +1,4 @@
-# Chainlit UI for JaigBot
+# Chainlit UI for AIMSBot
 
 This guide covers running the Chainlit chat interface locally or as a separate service, how session persistence works, and useful environment switches.
 

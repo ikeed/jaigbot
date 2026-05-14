@@ -23,10 +23,10 @@ class TestMainBranches:
         """Test config endpoint with different configurations"""
         # Test with debug mode enabled
         monkeypatch.setenv("DEBUG_MODE", "true")
-        monkeypatch.setattr("app.main.DEBUG_MODE", True)
-        monkeypatch.setattr("app.main.DEFAULT_CHARACTER", "Test Character")
-        monkeypatch.setattr("app.main.DEFAULT_SCENE", "Test Scene")
-        
+        monkeypatch.setattr("app.config.settings.DEBUG_MODE", True)
+        monkeypatch.setenv("CHARACTER_SYSTEM", "Test Character")
+        monkeypatch.setenv("SCENE_OBJECTIVES", "Test Scene")
+
         # Mock model check data
         mock_model_check = {
             "available": True,
@@ -47,8 +47,8 @@ class TestMainBranches:
 
     def test_config_endpoint_no_debug_mode(self, monkeypatch):
         """Test config endpoint with debug mode disabled"""
-        monkeypatch.setattr("app.main.DEBUG_MODE", False)
-        
+        monkeypatch.setattr("app.config.settings.DEBUG_MODE", False)
+
         r = client.get("/config")
         assert r.status_code == 200
         data = r.json()
@@ -58,9 +58,9 @@ class TestMainBranches:
 
     def test_modelcheck_endpoint(self, monkeypatch):
         """Test modelcheck endpoint"""
-        monkeypatch.setattr("app.main.MODEL_ID", "test-model")
-        monkeypatch.setattr("app.main.VERTEX_LOCATION", "us-central1")
-        
+        monkeypatch.setattr("app.config.settings.MODEL_ID", "test-model")
+        monkeypatch.setattr("app.config.settings.VERTEX_LOCATION", "us-central1")
+
         mock_model_check = {
             "available": True,
             "modelId": "test-model",
@@ -110,8 +110,8 @@ class TestMainBranches:
 
     def test_summary_endpoint_memory_disabled(self, monkeypatch):
         """Test summary endpoint with memory disabled"""
-        monkeypatch.setattr("app.main.MEMORY_ENABLED", False)
-        
+        monkeypatch.setattr("app.config.settings.MEMORY_ENABLED", False)
+
         r = client.get("/summary?sessionId=test-session")
         assert r.status_code == 200
         data = r.json()
@@ -119,7 +119,7 @@ class TestMainBranches:
 
     def test_summary_endpoint_with_session_no_memory(self, monkeypatch):
         """Test summary endpoint with session but no stored memory"""
-        monkeypatch.setattr("app.main.MEMORY_ENABLED", True)
+        monkeypatch.setattr("app.config.settings.MEMORY_ENABLED", True)
         monkeypatch.setattr("app.main._MEMORY_STORE", {})
         
         r = client.get("/summary?sessionId=nonexistent-session")
@@ -151,7 +151,7 @@ class TestMainBranches:
             }
         }
         
-        monkeypatch.setattr("app.main.MEMORY_ENABLED", True)
+        monkeypatch.setattr("app.config.settings.MEMORY_ENABLED", True)
         monkeypatch.setattr("app.main._MEMORY_STORE", mock_memory)
         
         r = client.get("/summary?sessionId=test-session")
@@ -173,7 +173,7 @@ class TestMainBranches:
             }
         }
         
-        monkeypatch.setattr("app.main.MEMORY_ENABLED", True)
+        monkeypatch.setattr("app.config.settings.MEMORY_ENABLED", True)
         monkeypatch.setattr("app.main._MEMORY_STORE", mock_memory)
         
         r = client.get("/summary?sessionId=test-session")
@@ -199,10 +199,10 @@ class TestMainBranches:
         
         mock_vertex_call.return_value = "- Practice more open questions\n- Use better reflections"
         
-        monkeypatch.setattr("app.main.MEMORY_ENABLED", True)
+        monkeypatch.setattr("app.config.settings.MEMORY_ENABLED", True)
         monkeypatch.setattr("app.main._MEMORY_STORE", mock_memory)
-        monkeypatch.setattr("app.main.PROJECT_ID", "test-project")
-        
+        monkeypatch.setattr("app.config.settings.PROJECT_ID", "test-project")
+
         # Set aims_mapping directly on app state with proper cleanup
         original_mapping = getattr(app.state, 'aims_mapping', None)
         app.state.aims_mapping = {
@@ -240,10 +240,10 @@ class TestMainBranches:
         
         mock_vertex_call.side_effect = Exception("Vertex error")
         
-        monkeypatch.setattr("app.main.MEMORY_ENABLED", True)
+        monkeypatch.setattr("app.config.settings.MEMORY_ENABLED", True)
         monkeypatch.setattr("app.main._MEMORY_STORE", mock_memory)
-        monkeypatch.setattr("app.main.PROJECT_ID", "test-project")
-        
+        monkeypatch.setattr("app.config.settings.PROJECT_ID", "test-project")
+
         r = client.get("/summary?sessionId=test-session&analysis=true")
         assert r.status_code == 200
         data = r.json()
@@ -258,10 +258,10 @@ class TestMainBranches:
             }
         }
         
-        monkeypatch.setattr("app.main.MEMORY_ENABLED", True)
+        monkeypatch.setattr("app.config.settings.MEMORY_ENABLED", True)
         monkeypatch.setattr("app.main._MEMORY_STORE", mock_memory)
-        monkeypatch.setattr("app.main.PROJECT_ID", "test-project")
-        
+        monkeypatch.setattr("app.config.settings.PROJECT_ID", "test-project")
+
         # Temporarily clear aims_mapping from app state to simulate load failure
         original_mapping = getattr(app.state, 'aims_mapping', None)
         if hasattr(app.state, 'aims_mapping'):
@@ -280,9 +280,9 @@ class TestMainBranches:
     @patch('google.auth.transport.requests.AuthorizedSession')
     def test_models_endpoint_success(self, mock_session, mock_auth, monkeypatch):
         """Test /models endpoint successful response"""
-        monkeypatch.setattr("app.main.PROJECT_ID", "test-project")
-        monkeypatch.setattr("app.main.VERTEX_LOCATION", "us-central1")
-        
+        monkeypatch.setattr("app.config.settings.PROJECT_ID", "test-project")
+        monkeypatch.setattr("app.config.settings.VERTEX_LOCATION", "us-central1")
+
         # Mock auth
         mock_creds = Mock()
         mock_auth.return_value = (mock_creds, None)
@@ -315,9 +315,9 @@ class TestMainBranches:
     @patch('google.auth.transport.requests.AuthorizedSession')
     def test_models_endpoint_http_error(self, mock_session, mock_auth, monkeypatch):
         """Test /models endpoint with HTTP error response"""
-        monkeypatch.setattr("app.main.PROJECT_ID", "test-project")
-        monkeypatch.setattr("app.main.VERTEX_LOCATION", "us-central1")
-        
+        monkeypatch.setattr("app.config.settings.PROJECT_ID", "test-project")
+        monkeypatch.setattr("app.config.settings.VERTEX_LOCATION", "us-central1")
+
         # Mock auth
         mock_creds = Mock()
         mock_auth.return_value = (mock_creds, None)
@@ -339,9 +339,9 @@ class TestMainBranches:
     @patch('google.auth.default')
     def test_models_endpoint_exception(self, mock_auth, monkeypatch):
         """Test /models endpoint with exception"""
-        monkeypatch.setattr("app.main.PROJECT_ID", "test-project")
-        monkeypatch.setattr("app.main.VERTEX_LOCATION", "us-central1")
-        
+        monkeypatch.setattr("app.config.settings.PROJECT_ID", "test-project")
+        monkeypatch.setattr("app.config.settings.VERTEX_LOCATION", "us-central1")
+
         # Mock exception in auth
         mock_auth.side_effect = Exception("Auth failed")
         
@@ -416,8 +416,8 @@ class TestMainBranches:
 
     def test_model_preflight_disabled(self, monkeypatch):
         """Test model preflight when disabled by environment"""
-        monkeypatch.setattr("app.main.VALIDATE_MODEL_ON_STARTUP", False)
-        
+        monkeypatch.setattr("app.config.settings.VALIDATE_MODEL_ON_STARTUP", False)
+
         # Mock the app state to verify it gets set correctly
         mock_state = Mock()
         mock_state.model_check = {}
@@ -436,9 +436,9 @@ class TestMainBranches:
 
     def test_model_preflight_no_project_id(self, monkeypatch):
         """Test model preflight when PROJECT_ID is missing"""
-        monkeypatch.setattr("app.main.VALIDATE_MODEL_ON_STARTUP", True)
-        monkeypatch.setattr("app.main.PROJECT_ID", None)
-        
+        monkeypatch.setattr("app.config.settings.VALIDATE_MODEL_ON_STARTUP", True)
+        monkeypatch.setattr("app.config.settings.PROJECT_ID", None)
+
         import asyncio
         from app.main import _model_preflight
         
@@ -453,11 +453,11 @@ class TestMainBranches:
     @patch('google.auth.transport.requests.AuthorizedSession')
     def test_model_preflight_success_200(self, mock_session, mock_auth, monkeypatch):
         """Test model preflight with successful 200 response"""
-        monkeypatch.setattr("app.main.VALIDATE_MODEL_ON_STARTUP", True)
-        monkeypatch.setattr("app.main.PROJECT_ID", "test-project")
-        monkeypatch.setattr("app.main.VERTEX_LOCATION", "us-central1")
-        monkeypatch.setattr("app.main.MODEL_ID", "gemini-pro")
-        
+        monkeypatch.setattr("app.config.settings.VALIDATE_MODEL_ON_STARTUP", True)
+        monkeypatch.setattr("app.config.settings.PROJECT_ID", "test-project")
+        monkeypatch.setattr("app.config.settings.VERTEX_LOCATION", "us-central1")
+        monkeypatch.setattr("app.config.settings.MODEL_ID", "gemini-pro")
+
         # Mock auth
         mock_creds = Mock()
         mock_auth.return_value = (mock_creds, None)
@@ -484,11 +484,11 @@ class TestMainBranches:
     @patch('google.auth.transport.requests.AuthorizedSession')
     def test_model_preflight_404_with_list_match(self, mock_session, mock_auth, monkeypatch):
         """Test model preflight with 404 but model found in list"""
-        monkeypatch.setattr("app.main.VALIDATE_MODEL_ON_STARTUP", True)
-        monkeypatch.setattr("app.main.PROJECT_ID", "test-project")
-        monkeypatch.setattr("app.main.VERTEX_LOCATION", "us-central1")
-        monkeypatch.setattr("app.main.MODEL_ID", "gemini-pro")
-        
+        monkeypatch.setattr("app.config.settings.VALIDATE_MODEL_ON_STARTUP", True)
+        monkeypatch.setattr("app.config.settings.PROJECT_ID", "test-project")
+        monkeypatch.setattr("app.config.settings.VERTEX_LOCATION", "us-central1")
+        monkeypatch.setattr("app.config.settings.MODEL_ID", "gemini-pro")
+
         # Mock auth
         mock_creds = Mock()
         mock_auth.return_value = (mock_creds, None)
@@ -526,8 +526,8 @@ class TestMainBranches:
     def test_memory_store_initialization_redis_fallback(self, monkeypatch):
         """Test memory store initialization falls back to InMemory when Redis fails"""
         # This tests the exception handling in memory store initialization
-        monkeypatch.setattr("app.main.MEMORY_ENABLED", True)
-        monkeypatch.setattr("app.main.MEMORY_BACKEND", "redis")
+        monkeypatch.setattr("app.config.settings.MEMORY_ENABLED", True)
+        monkeypatch.setattr("app.config.settings.MEMORY_BACKEND", "redis")
         
         # The actual initialization happens at import time, so we test the fallback logic
         # by checking that the store is indeed an InMemoryStore when Redis is not available

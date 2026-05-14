@@ -58,7 +58,7 @@ Create a GCS bucket once (choose a unique name):
 
 Add repo variables to enable CI apply:
 - TF_BACKEND_BUCKET = tf-state-aimsbot
-- TF_BACKEND_PREFIX = jaigbot/prod
+- TF_BACKEND_PREFIX = aimsbot/prod
 
 Optional: add a backend block to terraform/versions.tf later if you want backends pinned in code. The current CI workflow also accepts backend via -backend-config when these variables are present.
 
@@ -74,7 +74,7 @@ Key requirements for main CI:
 ## 5) Troubleshooting
 - Error 403 listing services (serviceusage): Ensure deployer SA has roles/serviceusage.serviceUsageAdmin and that WORKLOAD_* secrets are set. Re-run Terraform.
 - Error creating Artifact Registry repository: Ensure roles/artifactregistry.admin is granted to the deployer SA and the Artifact Registry API is enabled. Re-run Terraform.
-- WIF/OIDC impersonation errors: Verify WORKLOAD_IDP is the exact provider name and WORKLOAD_SA is the deployer SA email. Check that the Workload Identity Pool provider condition permits `ikeed/jaigbot` on `refs/heads/main`.
+- WIF/OIDC impersonation errors: Verify WORKLOAD_IDP is the exact provider name and WORKLOAD_SA is the deployer SA email. Check that the Workload Identity Pool provider condition permits `ikeed/aimsbot` on `refs/heads/main`.
 
 ## 6) Migrate to another GCP project or GitHub repo
 - Update terraform variables (project_id, region, github_org/repo) and re-apply.
