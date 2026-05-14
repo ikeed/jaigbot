@@ -13,13 +13,14 @@ def test_cookie_issued_and_memory_persists(monkeypatch):
     Vertex client with a fake that records the prompt it was called with.
     """
     import app.main as m
+    from app.config import settings
 
     # Ensure env values are present for route checks
-    monkeypatch.setattr(m, "PROJECT_ID", "test-project")
-    monkeypatch.setattr(m, "REGION", "us-central1")
-    monkeypatch.setattr(m, "MODEL_ID", "gemini-2.5-pro")
+    monkeypatch.setattr(settings, "PROJECT_ID", "test-project")
+    monkeypatch.setattr(settings, "REGION", "us-central1")
+    monkeypatch.setattr(settings, "MODEL_ID", "gemini-2.5-pro")
     # Ensure cookies work over http in TestClient by disabling the Secure flag
-    monkeypatch.setattr(m, "SESSION_COOKIE_SECURE", False)
+    monkeypatch.setattr(settings, "SESSION_COOKIE_SECURE", False)
 
     prompts = []
 
