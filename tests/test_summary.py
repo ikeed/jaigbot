@@ -8,8 +8,9 @@ client = TestClient(app)
 
 
 def test_summary_no_session_returns_base(monkeypatch):
+    from app.config import settings
     # Ensure analysis flag doesn't break when no session is provided
-    monkeypatch.setattr(m, "PROJECT_ID", "proj")  # not strictly needed for /summary
+    monkeypatch.setattr(settings, "PROJECT_ID", "proj")  # not strictly needed for /summary
     r = client.get("/summary")
     assert r.status_code == 200
     data = r.json()
@@ -19,8 +20,9 @@ def test_summary_no_session_returns_base(monkeypatch):
 
 
 def test_summary_with_memory_without_analysis(monkeypatch):
+    from app.config import settings
     # Seed memory and verify snapshot computation without invoking LLM
-    monkeypatch.setattr(m, "PROJECT_ID", "proj")
+    monkeypatch.setattr(settings, "PROJECT_ID", "proj")
 
     sess = "sess-1"
     # Minimal aims memory with per-step counts and scores to compute averages
@@ -57,8 +59,9 @@ def test_summary_with_memory_without_analysis(monkeypatch):
 
 
 def test_summary_with_analysis_monkeypatched_llm(monkeypatch):
+    from app.config import settings
     # Seed memory again; request analysis=true and stub the LLM helper to avoid network
-    monkeypatch.setattr(m, "PROJECT_ID", "proj")
+    monkeypatch.setattr(settings, "PROJECT_ID", "proj")
 
     sess = "sess-2"
     m._MEMORY_STORE[sess] = {

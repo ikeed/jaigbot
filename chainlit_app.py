@@ -11,7 +11,9 @@ if env_path:
     # placeholder values in PyCharm run configurations.
     load_dotenv(env_path, override=True)
 else:
-    print("DEBUG: No .env file found by python-dotenv")
+    # Only print if we are not in a container (Cloud Run sets K_SERVICE)
+    if not os.getenv("K_SERVICE"):
+        print("DEBUG: No .env file found by python-dotenv")
     load_dotenv()
 
 import uuid
