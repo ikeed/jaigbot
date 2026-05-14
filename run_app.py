@@ -13,7 +13,9 @@ if env_path:
     # placeholder values in PyCharm run configurations.
     load_dotenv(env_path, override=True)
 else:
-    print("DEBUG: No .env file found by python-dotenv")
+    # Only print if we are not in a container (Cloud Run sets K_SERVICE)
+    if not os.getenv("K_SERVICE"):
+        print("DEBUG: No .env file found by python-dotenv")
     load_dotenv() # Fallback to standard loading
 
 from fastapi import FastAPI, Request
@@ -176,7 +178,6 @@ async def custom_login_page(request: Request):
 mount_chainlit(app=app, target="chainlit_app.py", path="/chat")
 
 if __name__ == "__main__":
-    # Use localhost as default for local development to ensure 
-    # OAuth redirect URIs match the standard http://localhost:8080
-    host = os.getenv("HOST", "localhost")
+    # Use 0.0.0.0 as default to ensure the app is reachable in container environments (like Cloud Run).
+    host = os.getenv("HOST", "0.0.0.0")
     uvicorn.run(app, host=host, port=int(port))

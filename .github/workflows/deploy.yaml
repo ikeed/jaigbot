@@ -18,6 +18,7 @@ env:
   MODEL_ID: ${{ vars.MODEL_ID }}
   TEMPERATURE: ${{ vars.TEMPERATURE }}
   MAX_TOKENS: ${{ vars.MAX_TOKENS }}
+  HOST: 0.0.0.0
   # SSO Credentials
   CHAINLIT_AUTH_SECRET: ${{ secrets.CHAINLIT_AUTH_SECRET }}
   OAUTH_GOOGLE_CLIENT_ID: ${{ vars.OAUTH_GOOGLE_CLIENT_ID }}
@@ -143,18 +144,18 @@ jobs:
           docker build -t "$IMAGE" .
           docker push "$IMAGE"
 
-       - name: Deploy to Cloud Run
-         run: |
-           IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/$GAR_REPO/$SERVICE_NAME:${GITHUB_SHA}"
-           gcloud run deploy "$SERVICE_NAME" \
-             --image "$IMAGE" \
-             --region "$REGION" \
-             --allow-unauthenticated \
-             --service-account "cr-vertex-runtime@${PROJECT_ID}.iam.gserviceaccount.com" \
-             --set-env-vars "PROJECT_ID=${PROJECT_ID},REGION=${REGION},MODEL_ID=${MODEL_ID:-gemini-2.5-pro},TEMPERATURE=${TEMPERATURE:-0.2},MAX_TOKENS=${MAX_TOKENS:-768},AIMS_COACHING_ENABLED=true,AIMS_COACHING_DEFAULT=true,MEMORY_BACKEND=${MEMORY_BACKEND:-memory},REDIS_URL=${REDIS_URL:-},CHAINLIT_AUTH_SECRET=${CHAINLIT_AUTH_SECRET:-},OAUTH_GOOGLE_CLIENT_ID=${OAUTH_GOOGLE_CLIENT_ID:-},OAUTH_GOOGLE_CLIENT_SECRET=${OAUTH_GOOGLE_CLIENT_SECRET:-},VALIDATE_MODEL_ON_STARTUP=false" \
-             --memory=512Mi --cpu=1 --concurrency=20 --max-instances=2 --min-instances=1 --timeout=3600 \
-             --startup-cpu-throttling \
-             --startup-probe-period=10 --startup-probe-timeout=60 --startup-probe-failure-threshold=5
+      - name: Deploy to Cloud Run
+        run: |
+          IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/$GAR_REPO/$SERVICE_NAME:${GITHUB_SHA}"
+          gcloud run deploy "$SERVICE_NAME" \
+            --image "$IMAGE" \
+            --region "$REGION" \
+            --allow-unauthenticated \
+            --service-account "cr-vertex-runtime@${PROJECT_ID}.iam.gserviceaccount.com" \
+            --set-env-vars "PROJECT_ID=${PROJECT_ID},REGION=${REGION},MODEL_ID=${MODEL_ID:-gemini-2.5-pro},TEMPERATURE=${TEMPERATURE:-0.2},MAX_TOKENS=${MAX_TOKENS:-768},HOST=${HOST:-0.0.0.0},AIMS_COACHING_ENABLED=true,AIMS_COACHING_DEFAULT=true,MEMORY_BACKEND=${MEMORY_BACKEND:-memory},REDIS_URL=${REDIS_URL:-},CHAINLIT_AUTH_SECRET=${CHAINLIT_AUTH_SECRET:-},OAUTH_GOOGLE_CLIENT_ID=${OAUTH_GOOGLE_CLIENT_ID:-},OAUTH_GOOGLE_CLIENT_SECRET=${OAUTH_GOOGLE_CLIENT_SECRET:-},VALIDATE_MODEL_ON_STARTUP=false" \
+            --memory=512Mi --cpu=1 --concurrency=20 --max-instances=2 --min-instances=1 --timeout=3600 \
+            --startup-cpu-throttling \
+            --startup-probe-period=10 --startup-probe-timeout=60 --startup-probe-failure-threshold=5
 
       - name: Show service URL and health check
         run: |
