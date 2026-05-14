@@ -32,7 +32,20 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run tests
-        run: |
-          export PYTHONPATH="$GITHUB_WORKSPACE:${PYTHONPATH:-}"
-          pytest
+       - name: Run tests
+         env:
+           # Simulate deployment environment variables for testing
+           PROJECT_ID: test-project
+           REGION: us-central1
+           MODEL_ID: gemini-2.5-pro
+           TEMPERATURE: "0.2"
+           MAX_TOKENS: "768"
+           AIMS_COACHING_ENABLED: "true"
+           AIMS_COACHING_DEFAULT: "true"
+           MEMORY_BACKEND: memory
+           CHAINLIT_AUTH_SECRET: test-chainlit-secret-for-ci
+           OAUTH_GOOGLE_CLIENT_ID: test-client-id-for-ci
+           OAUTH_GOOGLE_CLIENT_SECRET: test-client-secret-for-ci
+         run: |
+           export PYTHONPATH="$GITHUB_WORKSPACE:${PYTHONPATH:-}"
+           pytest

@@ -29,6 +29,12 @@ resource "google_project_service" "compute" {
   disable_on_destroy = false
 }
 
+resource "google_project_service" "secretmanager" {
+  project            = var.project_id
+  service            = "secretmanager.googleapis.com"
+  disable_on_destroy = false
+}
+
 resource "google_project_service" "redis" {
   count              = var.enable_redis ? 1 : 0
   project            = var.project_id
@@ -82,6 +88,16 @@ resource "google_project_iam_member" "runtime_monitoring" {
   project = var.project_id
   role    = "roles/monitoring.metricWriter"
   member  = "serviceAccount:${google_service_account.runtime.email}"
+}
+
+# Allow runtime SA to read secrets
+resource "google_project_iam_member" "runtime_secrets" {
+  project = var.project_id
+  role    = "roles/secretmanager.secretAccessor"
+  member  = "serviceAccount:${google_service_account.runtime.email}"
+  depends_on = [
+    google_project_service.secretmanager
+  ]
 }
 
 # Project-level IAM for deployer SA

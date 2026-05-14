@@ -1,3 +1,4 @@
+from app.config import settings
 import pytest
 
 from app.services.vertex_gateway import VertexGateway

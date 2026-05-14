@@ -75,6 +75,10 @@ class ChatRequest(BaseModel):
     sessionId: Optional[str] = Field(
         default=None, description="Stable session identifier for conversation memory"
     )
+    # Optional user identification for SSO/audit
+    userInfo: Optional[dict] = Field(
+        default=None, description="Optional user identification metadata (e.g. email, name)"
+    )
     # Optional persona/scene fields
     character: Optional[str] = Field(
         default=None,

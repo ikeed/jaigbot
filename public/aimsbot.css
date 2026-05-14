@@ -1,4 +1,4 @@
-/* JaigBot custom UI tweaks for Chainlit (v2.8.x)
+/* AIMSBot custom UI tweaks for Chainlit (v2.8.x)
    Distinct styling for coaching messages and subtle role theming.
    The selectors below try to be resilient across Chainlit minor versions by:
    - Targeting data-author="Coach" when available

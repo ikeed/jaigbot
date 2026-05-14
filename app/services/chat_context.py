@@ -19,6 +19,7 @@ class ChatContext:
     system_instruction: Optional[str]
     history_text: str
     parent_last: str
+    user_info: Optional[dict] = None
 
 
 class ChatContextBuilder:
@@ -50,14 +51,14 @@ class ChatContextBuilder:
         self.memory_ttl_seconds = int(memory_ttl_seconds)
         self._do_prune_mod = int(do_prune_mod)
 
-    def build(self, req: Any, body_session_id: Optional[str], character: Optional[str], scene: Optional[str]) -> ChatContext:
+    def build(self, req: Any, body_session_id: Optional[str], character: Optional[str], scene: Optional[str], user_info: Optional[dict] = None) -> ChatContext:
         # occasional prune (same modulo behavior)
         now = time.time()
         if int(now) % self._do_prune_mod == 0:
             self.sess.prune_expired()
 
         # resolve session
-        session_id, generated_session = self.sess.ensure_session(req, body_session_id)
+        session_id, generated_session = self.sess.ensure_session(req, body_session_id, user_info)
 
         mem: dict = {}
         if self.memory_enabled and session_id:
@@ -91,6 +92,9 @@ class ChatContextBuilder:
         # compact history text like before (tail of last N turns)
         history_text = format_history(mem.get("history", []), self.memory_max_turns) if mem else ""
 
+        # identify effective user_info (session vs request)
+        effective_user_info = (mem.get("user_info") if mem else None) or user_info
+
         return ChatContext(
             session_id=session_id,
             generated_session=generated_session,
@@ -100,4 +104,5 @@ class ChatContextBuilder:
             system_instruction=system_instruction,
             history_text=history_text,
             parent_last=parent_last,
+            user_info=effective_user_info,
         )
