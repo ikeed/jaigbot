@@ -13,6 +13,7 @@ This repository contains a tiny FastAPI backend that exposes a simple /chat endp
 - Backend code: `app/main.py` and `app/vertex.py`.
 - Run/setup docs: `docs/developer-setup.md` (step‑by‑step).
 - Architecture/plan: `docs/plan.md`.
+- SSO Setup Guide: `docs/sso-setup.md` (step-by-step for Google, Facebook, Apple).
 - Note: `app/static/index.html` is deprecated and no longer served; the backend does not mount a static UI.
 
 ## Running locally
@@ -21,13 +22,11 @@ This repository contains a tiny FastAPI backend that exposes a simple /chat endp
    ```bash
    pip install -r requirements.txt
    ```
-2. Set up environment variables (supports GCP_PROJECT_ID and GCP_REGION fallbacks):
+2. Set up environment variables (Optional: `PROJECT_ID` and `REGION` are auto-detected if `gcloud` or standard GCP variables are configured):
    ```bash
+   # Only required if not configured via gcloud or GOOGLE_CLOUD_PROJECT
    export PROJECT_ID=your-gcp-project-id
    export REGION=us-central1
-   # Optional: use global Vertex AI location for publisher models (recommended for Gemini 2.x)
-   export VERTEX_LOCATION=global
-   export MODEL_ID=gemini-2.5-pro
    ```
 
 ### PyCharm Run Configurations

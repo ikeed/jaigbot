@@ -34,9 +34,13 @@ app.mount("/api", backend_app)
 # But to keep the custom landing page at root, we'll keep this structure 
 # and update BACKEND_URL to point to /api/chat
 
-# Update BACKEND_URL for this unified process
+# Update BACKEND_URL and CHAINLIT_URL for this unified process
 port = settings.PORT
 os.environ["BACKEND_URL"] = f"http://localhost:{port}/api/chat"
+# Ensure Chainlit knows its public URL for OAuth redirects. 
+# Default to localhost:port for local development.
+if not os.getenv("CHAINLIT_URL"):
+    os.environ["CHAINLIT_URL"] = f"http://localhost:{port}"
 
 # A simple custom login page that shows SSO buttons
 @app.get("/", response_class=HTMLResponse)
@@ -172,4 +176,7 @@ async def custom_login_page(request: Request):
 mount_chainlit(app=app, target="chainlit_app.py", path="/chat")
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=int(port))
+    # Use localhost as default for local development to ensure 
+    # OAuth redirect URIs match the standard http://localhost:8080
+    host = os.getenv("HOST", "localhost")
+    uvicorn.run(app, host=host, port=int(port))
