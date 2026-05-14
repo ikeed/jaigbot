@@ -17,7 +17,8 @@ class Settings(BaseSettings):
     AUTO_CONTINUE_ON_MAX_TOKENS: bool = True
     MAX_CONTINUATIONS: int = 2
     SUPPRESS_VERTEXAI_DEPRECATION: bool = True
-    
+    VALIDATE_MODEL_ON_STARTUP: bool = True
+
     # App Settings
     PORT: int = 8080
     LOG_LEVEL: str = "INFO"
