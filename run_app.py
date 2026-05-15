@@ -38,7 +38,9 @@ app.mount("/api", backend_app)
 
 # Update BACKEND_URL for this unified process
 port = settings.PORT
-os.environ["BACKEND_URL"] = f"http://localhost:{port}/api/chat"
+backend_url = f"http://localhost:{port}/api/chat"
+os.environ["BACKEND_URL"] = backend_url
+settings.BACKEND_URL = backend_url
 
 # Ensure Chainlit knows its public URL for OAuth redirects.
 # If CHAINLIT_URL is not set, we default to localhost ONLY if NOT running in Cloud Run.
