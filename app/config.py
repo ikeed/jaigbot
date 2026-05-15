@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     
     # Session cookie configuration
     SESSION_COOKIE_NAME: str = "sessionId"
-    SESSION_COOKIE_SECURE: bool = True
+    SESSION_COOKIE_SECURE: bool = False
     SESSION_COOKIE_SAMESITE: str = "lax"
     SESSION_COOKIE_MAX_AGE: Optional[int] = None
     
@@ -114,7 +114,9 @@ class Settings(BaseSettings):
     def validate_vertex_location(cls, v, info):
         if v:
             return v
-        return os.getenv("REGION") or os.getenv("GCP_REGION") or "us-west4"
+        # info.data might not have REGION if it was not validated yet, but Pydantic handles order.
+        # However, let's just use environment directly for robustness here.
+        return os.getenv("VERTEX_LOCATION") or os.getenv("REGION") or os.getenv("GCP_REGION") or "us-central1"
 
     @field_validator("ALLOWED_ORIGINS", mode="before")
     @classmethod
