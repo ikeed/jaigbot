@@ -70,8 +70,8 @@ def test_session_cookie_and_memory_persistence(monkeypatch):
     # Arrange
     from app.services import legacy_chat_handler
     
-    monkeypatch.setattr(settings, "PROJECT_ID", "proj")
-    monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", False)
+    monkeypatch.setattr(m, "PROJECT_ID", "proj")
+    monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", False)
     _unset_secure_cookie_for_tests(monkeypatch)
     
     # Mock vertex helper to echo the prompt
