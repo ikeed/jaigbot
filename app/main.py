@@ -64,6 +64,20 @@ except Exception:
     _MEMORY_STORE = InMemoryStore()
     settings.MEMORY_BACKEND = "memory"
 
+# Export for legacy tests/code that expect these on app.main directly
+PROJECT_ID = settings.PROJECT_ID
+REGION = settings.REGION
+MODEL_ID = settings.MODEL_ID
+MODEL_FALLBACKS = settings.MODEL_FALLBACKS
+SESSION_COOKIE_NAME = settings.SESSION_COOKIE_NAME
+SESSION_COOKIE_SECURE = settings.SESSION_COOKIE_SECURE
+SESSION_COOKIE_SAMESITE = settings.SESSION_COOKIE_SAMESITE
+SESSION_COOKIE_MAX_AGE = settings.SESSION_COOKIE_MAX_AGE
+MEMORY_BACKEND = settings.MEMORY_BACKEND
+AIMS_COACHING_ENABLED = settings.AIMS_COACHING_ENABLED
+
+from .vertex import VertexClient, VertexAIError
+
 app = FastAPI(title="AIMSBot (Vertex AI)", version="0.1.0")
 
 # Optional CORS

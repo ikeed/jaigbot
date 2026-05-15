@@ -19,7 +19,7 @@ def _unset_secure_cookie_for_tests(monkeypatch):
 
 def test_healthz_config_diagnostics(monkeypatch):
     # Ensure settings.PROJECT_ID set so /config derives correctly
-    monkeypatch.setattr(m, "settings.PROJECT_ID", "proj")
+    monkeypatch.setattr(settings, "PROJECT_ID", "proj")
     r = client.get("/healthz")
     assert r.status_code == 200
     assert r.json() == {"status": "ok"}
@@ -70,7 +70,7 @@ def test_session_cookie_and_memory_persistence(monkeypatch):
     # Arrange
     from app.services import legacy_chat_handler
     
-    monkeypatch.setattr(m, "settings.PROJECT_ID", "proj")
+    monkeypatch.setattr(settings, "PROJECT_ID", "proj")
     _unset_secure_cookie_for_tests(monkeypatch)
     
     # Mock vertex helper to echo the prompt
@@ -111,9 +111,9 @@ def test_model_fallback_success(monkeypatch):
     # Arrange: primary fails with 404, fallback succeeds
     from app.services import legacy_chat_handler
     
-    monkeypatch.setattr(m, "settings.PROJECT_ID", "proj")
-    monkeypatch.setattr(m, "settings.MODEL_ID", "bad-primary")
-    monkeypatch.setattr(m, "settings.MODEL_FALLBACKS", ["good-fallback"]) 
+    monkeypatch.setattr(settings, "PROJECT_ID", "proj")
+    monkeypatch.setattr(settings, "MODEL_ID", "bad-primary")
+    monkeypatch.setattr(settings, "MODEL_FALLBACKS", ["good-fallback"]) 
     _unset_secure_cookie_for_tests(monkeypatch)
     
     # Mock the vertex helper to simulate primary failure and fallback success
@@ -141,7 +141,7 @@ def test_upstream_error_maps_to_502_and_sets_cookie(monkeypatch):
     from app.services import legacy_chat_handler
     from app.vertex import VertexAIError
     
-    monkeypatch.setattr(m, "settings.PROJECT_ID", "proj")
+    monkeypatch.setattr(settings, "PROJECT_ID", "proj")
     _unset_secure_cookie_for_tests(monkeypatch)
     
     # Mock vertex helper to raise upstream error
@@ -161,10 +161,10 @@ def test_upstream_error_maps_to_502_and_sets_cookie(monkeypatch):
 
 def test_config_session_cookie_fields_reflect_env(monkeypatch):
     # Override cookie-related env-derived settings in module
-    monkeypatch.setattr(m, "SESSION_COOKIE_NAME", "sid")
-    monkeypatch.setattr(m, "SESSION_COOKIE_SECURE", False)
-    monkeypatch.setattr(m, "SESSION_COOKIE_SAMESITE", "none")
-    monkeypatch.setattr(m, "SESSION_COOKIE_MAX_AGE", 123)
+    monkeypatch.setattr(settings, "SESSION_COOKIE_NAME", "sid")
+    monkeypatch.setattr(settings, "SESSION_COOKIE_SECURE", False)
+    monkeypatch.setattr(settings, "SESSION_COOKIE_SAMESITE", "none")
+    monkeypatch.setattr(settings, "SESSION_COOKIE_MAX_AGE", 123)
 
     r = client.get("/config")
     cfg = r.json()
@@ -182,8 +182,8 @@ def test_model_not_found_no_fallback_returns_404(monkeypatch):
     from app.services import legacy_chat_handler
     from app.vertex import VertexAIError
     
-    monkeypatch.setattr(m, "settings.PROJECT_ID", "proj")
-    monkeypatch.setattr(m, "settings.MODEL_FALLBACKS", [])
+    monkeypatch.setattr(settings, "PROJECT_ID", "proj")
+    monkeypatch.setattr(settings, "MODEL_FALLBACKS", [])
     _unset_secure_cookie_for_tests(monkeypatch)
     
     # Mock vertex helper to raise 404 error

@@ -43,12 +43,13 @@ class FakeVertexRaises404:
 @pytest.fixture(autouse=True)
 def ensure_env(monkeypatch):
     import app.main as m
+    from app.config import settings
     # Ensure base env values
-    monkeypatch.setattr(m, "PROJECT_ID", "proj")
-    monkeypatch.setattr(m, "REGION", "us-central1")
-    monkeypatch.setattr(m, "MODEL_ID", "gemini-2.5-pro")
+    monkeypatch.setattr(settings, "PROJECT_ID", "proj")
+    monkeypatch.setattr(settings, "REGION", "us-central1")
+    monkeypatch.setattr(settings, "MODEL_ID", "gemini-2.5-pro")
     # Enable coaching by default for these tests
-    monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", True)
+    monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", True)
     # Default VertexClient stub (individual tests override via VertexGateway + VertexClient)
     monkeypatch.setattr(m, "VertexClient", FakeVertexInvalidJSON)
     yield
@@ -172,9 +173,10 @@ def test_coach_path_safety_violation(monkeypatch, caplog):
 
 def test_flag_off_hides_coaching(monkeypatch):
     import app.main as m
+    from app.config import settings
     from app.services import legacy_chat_handler
-    
-    monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", False)
+
+    monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", False)
     
     # Mock the vertex function in the legacy handler since coaching is disabled
     def fake_vertex_call(*args, **kwargs):
