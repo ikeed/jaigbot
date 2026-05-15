@@ -142,7 +142,7 @@ class SessionService:
                 if mem:
                     # Archive to GCS before popping from store
                     user_info = mem.get("user_info")
-                    user_id = user_info.get("email") if user_info else "anonymous"
+                    user_id = user_info.get("identifier") if user_info else "anonymous"
                     
                     # Only archive if it hasn't been explicitly exported yet (best-effort flag)
                     # We can use a flag in the session data to avoid double-archiving if desired,

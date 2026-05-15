@@ -268,17 +268,14 @@ async def _replay_history(history: list[dict]):
         await cl.Message(content=content_clean, author=author).send()
 
 
-def _get_persistent_session_id() -> str:
+def _get_persistent_session_id(user_identifier: str | None = None) -> str:
     """
     Return a stable session id for Chainlit to use when calling the backend.
     Precedence:
     1) FIXED_SESSION_ID or SESSION_ID env vars
-    2) Value stored in .chainlit/session_id (created if missing)
-    3) Fresh UUID4 (as last resort)
-
-    Note: This persists across browser refreshes because it is stored on the
-    server filesystem. In multi-user deployments, all users will share this id
-    unless you enable auth or implement per-user ids.
+    2) Value stored in .chainlit/session_id_{user_identifier} (if provided)
+    3) Value stored in .chainlit/session_id (default legacy fallback)
+    4) Fresh UUID4 (as last resort)
     """
     sid = settings.FIXED_SESSION_ID or settings.SESSION_ID
     if sid:
@@ -288,11 +285,32 @@ def _get_persistent_session_id() -> str:
         root = Path(os.getcwd())
         store_dir = root / ".chainlit"
         store_dir.mkdir(parents=True, exist_ok=True)
-        f = store_dir / "session_id"
+        
+        # If we have a user, prefer a user-specific session file
+        filename = "session_id"
+        if user_identifier:
+            # Sanitize identifier for filesystem
+            safe_id = "".join([c if c.isalnum() else "_" for c in user_identifier])
+            filename = f"session_id_{safe_id}"
+            
+        f = store_dir / filename
         if f.exists():
             sid = f.read_text(encoding="utf-8").strip()
             if sid:
                 return sid
+        
+        # If no user-specific file, and we don't have a user, try legacy general file
+        if not user_identifier:
+            legacy_f = store_dir / "session_id"
+            if legacy_f.exists():
+                sid = legacy_f.read_text(encoding="utf-8").strip()
+                if sid:
+                    return sid
+        
+        # If we have a user but no user-specific file yet, we DON'T want to use the legacy general file
+        # because that would mean they share a session with everyone else.
+        # We also want to generate a new ID if they logged in but don't have a persona-linked session yet.
+        
         sid = str(uuid.uuid4())
         f.write_text(sid, encoding="utf-8")
         return sid
@@ -399,7 +417,8 @@ async def start_chat():
         return url[:-5] if url.endswith("/chat") else url
 
     # 1. Resolve Session ID
-    session_id = _get_persistent_session_id()
+    user_identifier = app_user.identifier if app_user else None
+    session_id = _get_persistent_session_id(user_identifier)
     cl.user_session.set("session_id", session_id)
 
     # 2. Attempt to fetch existing backend history for this session
