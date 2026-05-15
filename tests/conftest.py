@@ -153,9 +153,8 @@ def vertex_client_mock(monkeypatch):
             self.model_id = kwargs.get("model_id")
 
         async def generate_text_async(self, prompt: str, **kwargs) -> str:
-            # Detect if this is a unified classification prompt
-            if "unified" in (prompt or "").lower():
-                # Provide a generic but valid unified classification response
+            # 1. Unified classification path
+            if "unified" in (prompt or "").lower() or "classifier" in (prompt or "").lower():
                 payload = {
                     "is_small_talk": False,
                     "is_vaccine_relevant": True,
@@ -163,20 +162,32 @@ def vertex_client_mock(monkeypatch):
                     "safety_flags": [],
                     "reasoning": "mock"
                 }
-                # Allow specific tests to override via monkeypatching or prompt-based heuristics
                 if "day going" in (prompt or "").lower():
                     payload["is_vaccine_relevant"] = False
                 
                 return json.dumps(payload)
             
-            # Default for patient reply or other prompts
+            # 2. Patient reply path in coaching flow
+            if "parent persona" in (prompt or "").lower() or "patient_reply" in (prompt or "").lower():
+                # Avoid "ok" to prevent AimsCoachingHandler from overriding it with the long string
+                return json.dumps({"patient_reply": "Mock patient reply from VertexClient."})
+
+            # 3. Default/Legacy fallback
             return json.dumps({"patient_reply": "Mock reply from VertexClient."})
 
         def generate_text(self, *args, **kwargs):
-            return "Mock text", {}
+            # If the first arg is prompt or prompt is in kwargs
+            prompt = args[0] if args else kwargs.get("prompt", "")
+            
+            # Special case for test_chat_success_with_mock which expects "echo: "
+            if isinstance(prompt, str) and prompt.startswith("User: "):
+                user_msg = prompt.split("User: ")[-1].split("\n")[0].strip()
+                return f"echo: {user_msg}", {}
+            
+            return "Mock text response", {}
 
         def generate_text_json(self, *args, **kwargs):
-            return json.dumps({"patient_reply": "Mock reply"})
+            return json.dumps({"patient_reply": "Mock JSON reply"})
 
     monkeypatch.setattr("app.vertex.VertexClient", MockVertexClient)
     monkeypatch.setattr("app.services.classifier_service.VertexClient", MockVertexClient)
