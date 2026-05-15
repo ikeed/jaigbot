@@ -894,32 +894,43 @@ class AimsCoachingHandler:
                         mirrored_count = 0
                         secured_count = 0
 
+                    # aggregate all assistant messages from history
+                    all_assistant_texts = []
+                    for item in hist:
+                        if item.get("role") == "assistant":
+                            atxt = (item.get("content") or "").strip().lower()
+                            if atxt:
+                                all_assistant_texts.append(atxt)
+                    hist_assistant_all = " \n ".join(all_assistant_texts)
+
                     # Aggregate acknowledgements across recent parent replies
                     try:
                         pr_latest = (combined_reply_text or "").strip().lower()
                         parent_all = " \n ".join(reversed(recent_parent_texts))[:2000].lower()
-                        lu = (last_user_text or "").strip().lower()
-                        followup_offer = any(c in lu for c in (
+                        
+                        # Use all assistant history to check if an offer was ever made
+                        followup_offer = any(c in hist_assistant_all for c in (
                             "follow up", "follow-up", "another appointment", "next visit", "come back",
                             "schedule", "set up an appointment", "later appointment", "set up",
                             "book an appointment", "make an appointment", "schedule something", "talk again",
-                            "talk it over", "think it over", "decide later",
+                            "talk it over", "think it over", "decide later", "make another",
                         ))
-                        literature_offer = any(c in lu for c in (
+                        literature_offer = any(c in hist_assistant_all for c in (
                             "handout", "handouts", "brochure", "pamphlet", "literature", "written info",
                             "information to take home", "take home", "materials", "resource", "printout", "printed info",
                             "reading", "read this", "give you some literature", "leaflet", "info sheet",
-                            "look over", "something to take",
+                            "look over", "something to take", "some info", "some information",
                         ))
                         # Acks anywhere in recent parent replies
                         followup_ack_any = any(tok in parent_all for tok in (
                             "book", "schedule", "set up", "come back", "next visit", "follow up", "follow-up", "make an appointment",
-                            "talk it over", "think it over", "decide later",
+                            "talk it over", "think it over", "decide later", "agree to that", "sounds good", "okay", "fine",
+                            "will do", "sure", "definitely", "i'll do that", "i will do that",
                         ))
                         literature_ack_any = any(tok in parent_all for tok in (
                             "handout", "brochure", "pamphlet", "literature", "reading", "i'll read", "i will read", "i’ll read",
                             "info sheet", "materials", "resource", "printout", "printed info", "take home",
-                            "look over", "at home", "appreciate that",
+                            "look over", "at home", "appreciate that", "thanks", "thank you", "okay", "fine", "sure",
                         ))
                         # If the latest parent text negates follow-up, treat ack as false
                         negates_followup_latest = any(neg in pr_latest for neg in (
@@ -930,6 +941,13 @@ class AimsCoachingHandler:
                         ))
                         if negates_followup_latest:
                             followup_ack_any = False
+                        
+                        # Guard against too-easy triggers for followup_literature
+                        # If they have only had 1 or fewer parent replies, they might just be agreeing to talk
+                        if len(recent_parent_texts) <= 1:
+                            followup_ack_any = False
+                            literature_ack_any = False
+
                         # Latest-turn guards
                         has_more_questions_latest = ("?" in pr_latest) or any(q in pr_latest for q in (
                             "one other question", "another question", "what about", "is it possible", "can we", "could we",
@@ -945,7 +963,6 @@ class AimsCoachingHandler:
                         if (
                             followup_offer and literature_offer and followup_ack_any and literature_ack_any
                             and (not has_more_questions_latest) and (not pushback_latest)
-                            and (not block_endgame_state_requirements)
                         ):
                             lines = [
                                 "Outcome: Parent opted for follow-up and took literature — great coaching!",
@@ -1090,25 +1107,27 @@ class AimsCoachingHandler:
 
             # Fallback: heuristic detector when LLM not confident/available
             if not outcome or outcome == "not_endgame":
-                if block_endgame_state_requirements:
+                # We still block 'accepted_now' if state requirements aren't met
+                # but 'followup_literature' is allowed as a partial success/exit.
+                eg = EndGameDetector.detect(combined_reply_text)
+                if eg and eg.get("reason") == "accepted_now" and block_endgame_state_requirements:
                     outcome = "not_endgame"
-                else:
-                    eg = EndGameDetector.detect(combined_reply_text)
-                    if not eg:
-                        # Emit end marker (no outcome)
-                        try:
-                            telemetry_log_event(
-                                self.logger,
-                                "aims_endgame_end",
-                                sessionId=session_id,
-                                durationMs=int((time.time() - eg_begin_time) * 1000),
-                                assistantCount=int(assistant_count or 0),
-                                outcome="none",
-                            )
-                        except Exception:
-                            pass
-                        return None
+                elif eg:
                     outcome = eg.get("reason")
+                else:
+                    # Emit end marker (no outcome)
+                    try:
+                        telemetry_log_event(
+                            self.logger,
+                            "aims_endgame_end",
+                            sessionId=session_id,
+                            durationMs=int((time.time() - eg_begin_time) * 1000),
+                            assistantCount=int(assistant_count or 0),
+                            outcome="none",
+                        )
+                    except Exception:
+                        pass
+                    return None
 
             lines = []
             if outcome == "accepted_now":
