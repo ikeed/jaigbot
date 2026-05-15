@@ -37,7 +37,10 @@ class Settings(BaseSettings):
     AIMS_CLASSIFIER_MODE: str = "hybrid"
     AIMS_CLASSIFY_CONTEXT_TURNS: int = 6
     AIMS_CLASSIFY_MAX_CONCERNS: int = 3
-    
+
+    # Storage and Archiving
+    SESSIONS_BUCKET_NAME: Optional[str] = None
+
     # Memory and Session configuration
     MEMORY_ENABLED: bool = True
     MEMORY_MAX_TURNS: int = 8

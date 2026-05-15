@@ -93,3 +93,9 @@ variable "vpc_connector_range" {
   description = "The IP range for the Serverless VPC Access connector. Must be a /28."
   default     = "10.8.0.0/28"
 }
+
+variable "sessions_bucket_name" {
+  type        = string
+  description = "Name of the GCS bucket for chat sessions"
+  default     = "aimsbot-chat-sessions"
+}
