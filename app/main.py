@@ -6,7 +6,7 @@ import uuid
 import asyncio
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -63,6 +63,20 @@ try:
 except Exception:
     _MEMORY_STORE = InMemoryStore()
     settings.MEMORY_BACKEND = "memory"
+
+# Export for legacy tests/code that expect these on app.main directly
+PROJECT_ID = settings.PROJECT_ID
+REGION = settings.REGION
+MODEL_ID = settings.MODEL_ID
+MODEL_FALLBACKS = settings.MODEL_FALLBACKS
+SESSION_COOKIE_NAME = settings.SESSION_COOKIE_NAME
+SESSION_COOKIE_SECURE = settings.SESSION_COOKIE_SECURE
+SESSION_COOKIE_SAMESITE = settings.SESSION_COOKIE_SAMESITE
+SESSION_COOKIE_MAX_AGE = settings.SESSION_COOKIE_MAX_AGE
+MEMORY_BACKEND = settings.MEMORY_BACKEND
+AIMS_COACHING_ENABLED = settings.AIMS_COACHING_ENABLED
+
+from .vertex import VertexClient, VertexAIError
 
 app = FastAPI(title="AIMSBot (Vertex AI)", version="0.1.0")
 
@@ -548,10 +562,10 @@ def _get_request_id(request: Request) -> Optional[str]:
 
 
 @app.post("/chat")
-async def chat(req: Request, body: ChatRequest):
+async def chat(req: Request, body: ChatRequest, background_tasks: BackgroundTasks):
     """Main chat endpoint using the new ChatOrchestrator."""
     # Enforce settings.PROJECT_ID presence for live calls to align with tests/contract
-    if not settings.PROJECT_ID:
+    if not PROJECT_ID:
         # Raise HTTPException to be normalized by our exception handler
         raise HTTPException(status_code=500, detail={
             "error": {"message": "settings.PROJECT_ID not set — configure the settings.PROJECT_ID environment variable.", "code": 500}
@@ -559,11 +573,11 @@ async def chat(req: Request, body: ChatRequest):
 
     # Build config structures for orchestrator
     vertex_config = {
-        "project_id": settings.PROJECT_ID,
-        "region": settings.REGION,
+        "project_id": PROJECT_ID,
+        "region": REGION,
         "vertex_location": settings.VERTEX_LOCATION,
-        "model_id": settings.MODEL_ID,
-        "model_fallbacks": settings.MODEL_FALLBACKS,
+        "model_id": MODEL_ID,
+        "model_fallbacks": MODEL_FALLBACKS,
         "temperature": settings.TEMPERATURE,
         "max_tokens": settings.MAX_TOKENS,
         # Pass client class from app.main so tests can monkeypatch m.VertexClient
@@ -577,14 +591,14 @@ async def chat(req: Request, body: ChatRequest):
     }
     
     session_cookie_settings = {
-        "name": settings.SESSION_COOKIE_NAME,
-        "secure": settings.SESSION_COOKIE_SECURE,
-        "samesite": settings.SESSION_COOKIE_SAMESITE,
-        "max_age": settings.SESSION_COOKIE_MAX_AGE,
+        "name": SESSION_COOKIE_NAME,
+        "secure": SESSION_COOKIE_SECURE,
+        "samesite": SESSION_COOKIE_SAMESITE,
+        "max_age": SESSION_COOKIE_MAX_AGE,
     }
     
     aims_config = {
-        "enabled": settings.AIMS_COACHING_ENABLED,
+        "enabled": AIMS_COACHING_ENABLED,
         "force_default": (os.getenv("AIMS_COACHING_DEFAULT", "false").lower() == "true"),
     }
     
@@ -605,7 +619,7 @@ async def chat(req: Request, body: ChatRequest):
         logger=logger,
     )
     
-    return await orchestrator.handle_chat(req, body)
+    return await orchestrator.handle_chat(req, body, background_tasks)
 
 
 @app.get("/config")

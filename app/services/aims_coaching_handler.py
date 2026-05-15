@@ -153,7 +153,7 @@ class AimsCoachingHandler:
         prior_phase = (prior_state or {}).get("phase", "PreAnnounce")
 
         # Launch classification and reply generation in parallel
-        from app.main import AIMS_CLASSIFIER_MODE, AIMS_CLASSIFY_CONTEXT_TURNS, AIMS_CLASSIFY_MAX_CONCERNS
+        from app.config import settings
 
         task_cls = asyncio.create_task(
             self.classifier_service.classify_turn(
@@ -163,8 +163,8 @@ class AimsCoachingHandler:
                 prior_announced=prior_announced,
                 prior_phase=prior_phase,
                 mapping=mapping,
-                context_turns=AIMS_CLASSIFY_CONTEXT_TURNS,
-                max_concerns=AIMS_CLASSIFY_MAX_CONCERNS,
+                context_turns=settings.AIMS_CLASSIFY_CONTEXT_TURNS,
+                max_concerns=settings.AIMS_CLASSIFY_MAX_CONCERNS,
             )
         )
         task_reply = asyncio.create_task(
@@ -415,7 +415,7 @@ class AimsCoachingHandler:
         ctx: ChatContext, mapping: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Enhance classification with LLM if enabled."""
-        from app.main import AIMS_CLASSIFIER_MODE, AIMS_CLASSIFY_CONTEXT_TURNS, AIMS_CLASSIFY_MAX_CONCERNS
+        from app.config import settings
         
         # Get prior state for context
         prior_state = await self._get_prior_state(ctx.session_id) if self.memory_enabled else None
@@ -424,7 +424,7 @@ class AimsCoachingHandler:
         
         # Check if we should use LLM classification
         pre_gate_rapport = (cls_payload.get("step") is None)
-        do_llm = (AIMS_CLASSIFIER_MODE in ("hybrid", "llm")) and (not pre_gate_rapport)
+        do_llm = (settings.AIMS_CLASSIFIER_MODE in ("hybrid", "llm")) and (not pre_gate_rapport)
         
         if not do_llm:
             return cls_payload
@@ -434,8 +434,8 @@ class AimsCoachingHandler:
         markers_text = AimsPromptBuilder.markers_text(markers)
         
         history = ctx.mem.get("history", []) if ctx.mem else []
-        recent_ctx = AimsPromptBuilder.recent_context(history, AIMS_CLASSIFY_CONTEXT_TURNS * 2)
-        parent_recent_concerns = AimsPromptBuilder.extract_recent_concerns(history, AIMS_CLASSIFY_MAX_CONCERNS)
+        recent_ctx = AimsPromptBuilder.recent_context(history, settings.AIMS_CLASSIFY_CONTEXT_TURNS * 2)
+        parent_recent_concerns = AimsPromptBuilder.extract_recent_concerns(history, settings.AIMS_CLASSIFY_MAX_CONCERNS)
         
         classify_prompt = AimsPromptBuilder.build_classify_prompt(
             mapping_markers_text=markers_text,
@@ -880,10 +880,20 @@ class AimsCoachingHandler:
                     try:
                         aims_state = (mem or {}).get("aims_state") or {}
                         concerns_list = aims_state.get("parent_concerns") or []
-                        has_concerns = bool(concerns_list)
-                        all_mirrored = has_concerns and all(bool(c.get("is_mirrored")) for c in concerns_list)
-                        all_secured = has_concerns and all(bool(c.get("is_secured")) for c in concerns_list)
-                        block_endgame_state_requirements = not (has_concerns and all_mirrored and all_secured)
+                        
+                        # Filter for vaccine-related concerns
+                        vax_cues = VaccineRelevanceGate.VAX_CUES
+                        vax_concerns = []
+                        for c in concerns_list:
+                            desc = str(c.get("desc", "")).lower()
+                            topic = str(c.get("topic", "")).lower()
+                            if any(cue in desc for cue in vax_cues) or any(cue in topic for cue in vax_cues):
+                                vax_concerns.append(c)
+                        
+                        has_vax_concerns = bool(vax_concerns)
+                        all_mirrored = all(bool(c.get("is_mirrored")) for c in vax_concerns) if has_vax_concerns else True
+                        all_secured = all(bool(c.get("is_secured")) for c in vax_concerns) if has_vax_concerns else True
+                        block_endgame_state_requirements = not (all_mirrored and all_secured)
                         # Also compute counts for hints
                         concerns_count = len(concerns_list)
                         mirrored_count = sum(1 for c in concerns_list if c.get("is_mirrored"))
@@ -894,32 +904,43 @@ class AimsCoachingHandler:
                         mirrored_count = 0
                         secured_count = 0
 
+                    # aggregate all assistant messages from history
+                    all_assistant_texts = []
+                    for item in hist:
+                        if item.get("role") == "assistant":
+                            atxt = (item.get("content") or "").strip().lower()
+                            if atxt:
+                                all_assistant_texts.append(atxt)
+                    hist_assistant_all = " \n ".join(all_assistant_texts)
+
                     # Aggregate acknowledgements across recent parent replies
                     try:
                         pr_latest = (combined_reply_text or "").strip().lower()
                         parent_all = " \n ".join(reversed(recent_parent_texts))[:2000].lower()
-                        lu = (last_user_text or "").strip().lower()
-                        followup_offer = any(c in lu for c in (
+                        
+                        # Use all assistant history to check if an offer was ever made
+                        followup_offer = any(c in hist_assistant_all for c in (
                             "follow up", "follow-up", "another appointment", "next visit", "come back",
                             "schedule", "set up an appointment", "later appointment", "set up",
                             "book an appointment", "make an appointment", "schedule something", "talk again",
-                            "talk it over", "think it over", "decide later",
+                            "talk it over", "think it over", "decide later", "make another",
                         ))
-                        literature_offer = any(c in lu for c in (
+                        literature_offer = any(c in hist_assistant_all for c in (
                             "handout", "handouts", "brochure", "pamphlet", "literature", "written info",
                             "information to take home", "take home", "materials", "resource", "printout", "printed info",
                             "reading", "read this", "give you some literature", "leaflet", "info sheet",
-                            "look over", "something to take",
+                            "look over", "something to take", "some info", "some information",
                         ))
                         # Acks anywhere in recent parent replies
                         followup_ack_any = any(tok in parent_all for tok in (
                             "book", "schedule", "set up", "come back", "next visit", "follow up", "follow-up", "make an appointment",
-                            "talk it over", "think it over", "decide later",
+                            "talk it over", "think it over", "decide later", "agree to that", "sounds good", "okay", "fine",
+                            "will do", "sure", "definitely", "i'll do that", "i will do that",
                         ))
                         literature_ack_any = any(tok in parent_all for tok in (
                             "handout", "brochure", "pamphlet", "literature", "reading", "i'll read", "i will read", "i’ll read",
                             "info sheet", "materials", "resource", "printout", "printed info", "take home",
-                            "look over", "at home", "appreciate that",
+                            "look over", "at home", "appreciate that", "thanks", "thank you", "okay", "fine", "sure",
                         ))
                         # If the latest parent text negates follow-up, treat ack as false
                         negates_followup_latest = any(neg in pr_latest for neg in (
@@ -930,6 +951,13 @@ class AimsCoachingHandler:
                         ))
                         if negates_followup_latest:
                             followup_ack_any = False
+                        
+                        # Guard against too-easy triggers for followup_literature
+                        # If they have only had 1 or fewer parent replies, they might just be agreeing to talk
+                        if len(recent_parent_texts) <= 1:
+                            followup_ack_any = False
+                            literature_ack_any = False
+
                         # Latest-turn guards
                         has_more_questions_latest = ("?" in pr_latest) or any(q in pr_latest for q in (
                             "one other question", "another question", "what about", "is it possible", "can we", "could we",
@@ -945,7 +973,6 @@ class AimsCoachingHandler:
                         if (
                             followup_offer and literature_offer and followup_ack_any and literature_ack_any
                             and (not has_more_questions_latest) and (not pushback_latest)
-                            and (not block_endgame_state_requirements)
                         ):
                             lines = [
                                 "Outcome: Parent opted for follow-up and took literature — great coaching!",
@@ -1040,7 +1067,6 @@ class AimsCoachingHandler:
                     "- If the parent says they are not ready or prefers to wait, you MUST output not_endgame.\n"
                     "- Do not infer acceptance from interest or readiness to discuss; require explicit consent to vaccinate today.\n"
                     "- If hints show questions/pushback on the latest message, prefer not_endgame.\n"
-                    "- Only mark an endgame outcome if ALL concerns have been mirrored (mirrored_count == concerns_count) AND all concerns have been secured (secured_count == concerns_count).\n"
                     "- Output strict JSON only: {\"outcome\": <accepted_now|followup_literature|not_endgame>, \"reasons\":[<short strings>]} with no markdown or code fences.\n"
                 )
                 raw = await self._call_vertex_json(
@@ -1071,13 +1097,8 @@ class AimsCoachingHandler:
             if outcome == "followup_literature":
                 try:
                     pr = (combined_reply_text or "").strip().lower()
-                    followup_ack_parent = any(tok in pr for tok in (
-                        "book", "schedule", "set up", "come back", "next visit", "follow up", "follow-up", "make an appointment",
-                    ))
-                    literature_ack_parent = any(tok in pr for tok in (
-                        "handout", "brochure", "pamphlet", "literature", "reading", "i'll read", "i will read", "i’ll read",
-                        "info sheet", "materials", "resource", "printout", "printed info", "take home",
-                    ))
+                    # Use aggregated acks (across recent turns) for more robustness
+                    # followup_ack_any and literature_ack_any were computed above from parent_all
                     has_more_questions = ("?" in pr) or any(q in pr for q in (
                         "one other question", "another question", "what about", "is it possible", "can we", "could we",
                     ))
@@ -1087,32 +1108,36 @@ class AimsCoachingHandler:
                         "not sure another appointment", "don’t need another appointment", "don't need another appointment",
                         "not what we need right now", "we want to discuss now",
                     ))
-                    if (not (followup_ack_parent and literature_ack_parent)) or has_more_questions or pushback or block_endgame_state_requirements:
+                    # Only block if we strictly don't have acks or if there is pushback/questions.
+                    # We bypass block_endgame_state_requirements for followup_literature if LLM is confident and we have acks.
+                    if (not (followup_ack_any and literature_ack_any)) or has_more_questions or pushback:
                         outcome = None
                 except Exception:
                     outcome = None
 
             # Fallback: heuristic detector when LLM not confident/available
             if not outcome or outcome == "not_endgame":
-                if block_endgame_state_requirements:
+                # We still block 'accepted_now' if state requirements aren't met
+                # but 'followup_literature' is allowed as a partial success/exit.
+                eg = EndGameDetector.detect(combined_reply_text)
+                if eg and eg.get("reason") == "accepted_now" and block_endgame_state_requirements:
                     outcome = "not_endgame"
-                else:
-                    eg = EndGameDetector.detect(combined_reply_text)
-                    if not eg:
-                        # Emit end marker (no outcome)
-                        try:
-                            telemetry_log_event(
-                                self.logger,
-                                "aims_endgame_end",
-                                sessionId=session_id,
-                                durationMs=int((time.time() - eg_begin_time) * 1000),
-                                assistantCount=int(assistant_count or 0),
-                                outcome="none",
-                            )
-                        except Exception:
-                            pass
-                        return None
+                elif eg:
                     outcome = eg.get("reason")
+                else:
+                    # Emit end marker (no outcome)
+                    try:
+                        telemetry_log_event(
+                            self.logger,
+                            "aims_endgame_end",
+                            sessionId=session_id,
+                            durationMs=int((time.time() - eg_begin_time) * 1000),
+                            assistantCount=int(assistant_count or 0),
+                            outcome="none",
+                        )
+                    except Exception:
+                        pass
+                    return None
 
             lines = []
             if outcome == "accepted_now":
@@ -1129,6 +1154,7 @@ class AimsCoachingHandler:
                         durationMs=int((time.time() - eg_begin_time) * 1000),
                         assistantCount=int(assistant_count or 0),
                         outcome="none",
+                        block_endgame_state_requirements=block_endgame_state_requirements,
                     )
                 except Exception:
                     pass

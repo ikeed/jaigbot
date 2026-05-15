@@ -150,13 +150,25 @@ async def _update_message_html(message: cl.Message, author: str, html: str) -> N
 
 from app.config import settings
 
-# The backend URL for the FastAPI /chat endpoint. This can be overridden
-# at runtime by setting the BACKEND_URL environment variable.  For local
-# development, the FastAPI app typically runs on http://localhost:8080.
-BACKEND_URL = settings.BACKEND_URL or "http://localhost:8080/chat"
-# Heuristic: if we are running in run_app.py and BACKEND_URL wasn't explicitly set in .env
-# it might need to point to /api/chat if that's where we mounted the backend.
-# run_app.py sets BACKEND_URL=http://localhost:8080/api/chat
+def get_backend_url() -> str:
+    """Dynamically resolve BACKEND_URL from settings, with a fallback heuristic."""
+    url = settings.BACKEND_URL
+    if url:
+        return url
+    
+    # Fallback/Heuristic: if we are running in run_app.py (unified process), 
+    # it might need to point to /api/chat.
+    # We check if BACKEND_URL was set in environment since settings might be stale.
+    env_url = os.getenv("BACKEND_URL")
+    if env_url:
+        return env_url
+        
+    return "http://localhost:8080/chat"
+
+# We'll use a property-like approach or just update the usages.
+# Given the many usages, let's keep the module-level constant but make it a function-based resolve if possible,
+# or just ensure it's updated.
+# For simplicity in this legacy-style app, let's use a function where it's used.
 DEBUG_MODE = settings.DEBUG_MODE
 # Whether Chainlit should request coaching; default to env CHAINLIT_COACH_DEFAULT, else AIMS_COACHING_ENABLED, else false
 CHAINLIT_COACH_DEFAULT = settings.CHAINLIT_COACH_DEFAULT if settings.CHAINLIT_COACH_DEFAULT is not None else settings.AIMS_COACHING_ENABLED
@@ -383,7 +395,8 @@ async def start_chat():
 
     # Helper: derive base URL from BACKEND_URL
     def _base_url() -> str:
-        return BACKEND_URL[:-5] if BACKEND_URL.endswith("/chat") else BACKEND_URL
+        url = get_backend_url()
+        return url[:-5] if url.endswith("/chat") else url
 
     # 1. Resolve Session ID
     session_id = _get_persistent_session_id()
@@ -532,7 +545,8 @@ async def start_chat():
     # Preflight check: verify backend is reachable and reasonably configured.
     # This avoids confusing 500 errors later (e.g., PROJECT_ID not set).
     try:
-        base_url = BACKEND_URL[:-5] if BACKEND_URL.endswith("/chat") else BACKEND_URL
+        url = get_backend_url()
+        base_url = url[:-5] if url.endswith("/chat") else url
         timeout = settings.CHAINLIT_HTTP_TIMEOUT
         async with httpx.AsyncClient(timeout=timeout) as client:
             ok = False
@@ -796,7 +810,7 @@ async def handle_message(message: cl.Message):
             if CHAINLIT_COACH_DEFAULT:
                 payload["coach"] = True
             response = await client.post(
-                BACKEND_URL,
+                get_backend_url(),
                 json=payload,
                 headers={"Content-Type": "application/json"},
             )
@@ -900,7 +914,8 @@ async def handle_message(message: cl.Message):
     # If gameOver, fetch /summary analysis and render an analysis block
     if isinstance(data, dict) and data.get("gameOver"):
         try:
-            base_url = BACKEND_URL[:-5] if BACKEND_URL.endswith("/chat") else BACKEND_URL
+            url = get_backend_url()
+            base_url = url[:-5] if url.endswith("/chat") else url
             session_id = cl.user_session.get("session_id")
             timeout = settings.CHAINLIT_HTTP_TIMEOUT if settings.CHAINLIT_HTTP_TIMEOUT != 15.0 else 120.0
             async with httpx.AsyncClient(timeout=timeout) as client:
@@ -989,7 +1004,8 @@ async def resume_chat():
 
     # Otherwise, try to fetch history from the backend for this session
     def _base_url() -> str:
-        return BACKEND_URL[:-5] if BACKEND_URL.endswith("/chat") else BACKEND_URL
+        url = get_backend_url()
+        return url[:-5] if url.endswith("/chat") else url
 
     fetched = []
     try:
