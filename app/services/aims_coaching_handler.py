@@ -881,9 +881,9 @@ class AimsCoachingHandler:
                         aims_state = (mem or {}).get("aims_state") or {}
                         concerns_list = aims_state.get("parent_concerns") or []
                         has_concerns = bool(concerns_list)
-                        all_mirrored = has_concerns and all(bool(c.get("is_mirrored")) for c in concerns_list)
-                        all_secured = has_concerns and all(bool(c.get("is_secured")) for c in concerns_list)
-                        block_endgame_state_requirements = not (has_concerns and all_mirrored and all_secured)
+                        all_mirrored = all(bool(c.get("is_mirrored")) for c in concerns_list) if has_concerns else True
+                        all_secured = all(bool(c.get("is_secured")) for c in concerns_list) if has_concerns else True
+                        block_endgame_state_requirements = not (all_mirrored and all_secured)
                         # Also compute counts for hints
                         concerns_count = len(concerns_list)
                         mirrored_count = sum(1 for c in concerns_list if c.get("is_mirrored"))
@@ -1040,7 +1040,6 @@ class AimsCoachingHandler:
                     "- If the parent says they are not ready or prefers to wait, you MUST output not_endgame.\n"
                     "- Do not infer acceptance from interest or readiness to discuss; require explicit consent to vaccinate today.\n"
                     "- If hints show questions/pushback on the latest message, prefer not_endgame.\n"
-                    "- Only mark an endgame outcome if ALL concerns have been mirrored (mirrored_count == concerns_count) AND all concerns have been secured (secured_count == concerns_count).\n"
                     "- Output strict JSON only: {\"outcome\": <accepted_now|followup_literature|not_endgame>, \"reasons\":[<short strings>]} with no markdown or code fences.\n"
                 )
                 raw = await self._call_vertex_json(
@@ -1071,13 +1070,8 @@ class AimsCoachingHandler:
             if outcome == "followup_literature":
                 try:
                     pr = (combined_reply_text or "").strip().lower()
-                    followup_ack_parent = any(tok in pr for tok in (
-                        "book", "schedule", "set up", "come back", "next visit", "follow up", "follow-up", "make an appointment",
-                    ))
-                    literature_ack_parent = any(tok in pr for tok in (
-                        "handout", "brochure", "pamphlet", "literature", "reading", "i'll read", "i will read", "i’ll read",
-                        "info sheet", "materials", "resource", "printout", "printed info", "take home",
-                    ))
+                    # Use aggregated acks (across recent turns) for more robustness
+                    # followup_ack_any and literature_ack_any were computed above from parent_all
                     has_more_questions = ("?" in pr) or any(q in pr for q in (
                         "one other question", "another question", "what about", "is it possible", "can we", "could we",
                     ))
@@ -1087,7 +1081,9 @@ class AimsCoachingHandler:
                         "not sure another appointment", "don’t need another appointment", "don't need another appointment",
                         "not what we need right now", "we want to discuss now",
                     ))
-                    if (not (followup_ack_parent and literature_ack_parent)) or has_more_questions or pushback or block_endgame_state_requirements:
+                    # Only block if we strictly don't have acks or if there is pushback/questions.
+                    # We bypass block_endgame_state_requirements for followup_literature if LLM is confident and we have acks.
+                    if (not (followup_ack_any and literature_ack_any)) or has_more_questions or pushback:
                         outcome = None
                 except Exception:
                     outcome = None
@@ -1129,6 +1125,7 @@ class AimsCoachingHandler:
                         durationMs=int((time.time() - eg_begin_time) * 1000),
                         assistantCount=int(assistant_count or 0),
                         outcome="none",
+                        block_endgame_state_requirements=block_endgame_state_requirements,
                     )
                 except Exception:
                     pass
