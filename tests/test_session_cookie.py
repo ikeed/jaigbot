@@ -16,11 +16,12 @@ def test_cookie_issued_and_memory_persists(monkeypatch):
     from app.config import settings
 
     # Ensure env values are present for route checks
-    monkeypatch.setattr(settings, "PROJECT_ID", "test-project")
-    monkeypatch.setattr(settings, "REGION", "us-central1")
-    monkeypatch.setattr(settings, "MODEL_ID", "gemini-2.5-pro")
+    monkeypatch.setattr(m, "PROJECT_ID", "test-project")
+    monkeypatch.setattr(m, "REGION", "us-central1")
+    monkeypatch.setattr(m, "MODEL_ID", "gemini-2.5-pro")
+    monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", False)
     # Ensure cookies work over http in TestClient by disabling the Secure flag
-    monkeypatch.setattr(settings, "SESSION_COOKIE_SECURE", False)
+    monkeypatch.setattr(m, "SESSION_COOKIE_SECURE", False)
 
     prompts = []
 

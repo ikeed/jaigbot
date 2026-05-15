@@ -18,8 +18,9 @@ def test_chat_validation_empty_message():
 
 
 def test_chat_size_limit_rejected(monkeypatch):
-    # Ensure settings.PROJECT_ID is set so we get past the initial check
-    monkeypatch.setattr(settings, "PROJECT_ID", "proj")
+    import app.main as m
+    # Ensure env values are present for route checks
+    monkeypatch.setattr(m, "PROJECT_ID", "proj")
 
     big = "a" * 2049
     r = client.post("/chat", json={"message": big})
@@ -30,8 +31,9 @@ def test_chat_size_limit_rejected(monkeypatch):
 
 
 def test_chat_missing_project_id(monkeypatch):
+    import app.main as m
     # Force settings.PROJECT_ID to None and verify 500 structured error
-    monkeypatch.setattr(settings, "PROJECT_ID", None)
+    monkeypatch.setattr(m, "PROJECT_ID", None)
 
     r = client.post("/chat", json={"message": "hello"})
     assert r.status_code == 500
@@ -44,6 +46,7 @@ def test_chat_missing_project_id(monkeypatch):
 
 def test_chat_success_with_mock(monkeypatch):
     # Mock the vertex helper function used by legacy chat handler
+    import app.main as m
     from app.services import legacy_chat_handler
 
     # Mock the function that actually makes the API call
@@ -52,9 +55,12 @@ def test_chat_success_with_mock(monkeypatch):
         return f"echo: {prompt}"
 
     # Ensure env values are present for route checks
-    monkeypatch.setattr(settings, "PROJECT_ID", "test-project")
-    monkeypatch.setattr(settings, "REGION", "us-central1")
-    monkeypatch.setattr(settings, "MODEL_ID", "gemini-2.5-pro")
+    monkeypatch.setattr(m, "PROJECT_ID", "test-project")
+    monkeypatch.setattr(m, "REGION", "us-central1")
+    monkeypatch.setattr(m, "MODEL_ID", "gemini-2.5-pro")
+    
+    # Force legacy path to ensure our mock is used
+    monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", False)
 
     # Mock the function in the handler's module where it's actually imported and used
     monkeypatch.setattr(legacy_chat_handler, "vertex_call_with_fallback_text", fake_vertex_call)

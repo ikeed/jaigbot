@@ -12,7 +12,7 @@ class FakeSessionService:
         # No-op for tests
         pass
 
-    def ensure_session(self, req, body_session_id):
+    def ensure_session(self, req, body_session_id, user_info=None):
         sid = body_session_id or "test-sid"
         self._last_ensured = sid
         self._mem.setdefault(sid, {

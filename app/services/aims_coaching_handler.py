@@ -153,7 +153,7 @@ class AimsCoachingHandler:
         prior_phase = (prior_state or {}).get("phase", "PreAnnounce")
 
         # Launch classification and reply generation in parallel
-        from app.main import AIMS_CLASSIFIER_MODE, AIMS_CLASSIFY_CONTEXT_TURNS, AIMS_CLASSIFY_MAX_CONCERNS
+        from app.config import settings
 
         task_cls = asyncio.create_task(
             self.classifier_service.classify_turn(
@@ -163,8 +163,8 @@ class AimsCoachingHandler:
                 prior_announced=prior_announced,
                 prior_phase=prior_phase,
                 mapping=mapping,
-                context_turns=AIMS_CLASSIFY_CONTEXT_TURNS,
-                max_concerns=AIMS_CLASSIFY_MAX_CONCERNS,
+                context_turns=settings.AIMS_CLASSIFY_CONTEXT_TURNS,
+                max_concerns=settings.AIMS_CLASSIFY_MAX_CONCERNS,
             )
         )
         task_reply = asyncio.create_task(
@@ -415,7 +415,7 @@ class AimsCoachingHandler:
         ctx: ChatContext, mapping: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Enhance classification with LLM if enabled."""
-        from app.main import AIMS_CLASSIFIER_MODE, AIMS_CLASSIFY_CONTEXT_TURNS, AIMS_CLASSIFY_MAX_CONCERNS
+        from app.config import settings
         
         # Get prior state for context
         prior_state = await self._get_prior_state(ctx.session_id) if self.memory_enabled else None
@@ -424,7 +424,7 @@ class AimsCoachingHandler:
         
         # Check if we should use LLM classification
         pre_gate_rapport = (cls_payload.get("step") is None)
-        do_llm = (AIMS_CLASSIFIER_MODE in ("hybrid", "llm")) and (not pre_gate_rapport)
+        do_llm = (settings.AIMS_CLASSIFIER_MODE in ("hybrid", "llm")) and (not pre_gate_rapport)
         
         if not do_llm:
             return cls_payload
@@ -434,8 +434,8 @@ class AimsCoachingHandler:
         markers_text = AimsPromptBuilder.markers_text(markers)
         
         history = ctx.mem.get("history", []) if ctx.mem else []
-        recent_ctx = AimsPromptBuilder.recent_context(history, AIMS_CLASSIFY_CONTEXT_TURNS * 2)
-        parent_recent_concerns = AimsPromptBuilder.extract_recent_concerns(history, AIMS_CLASSIFY_MAX_CONCERNS)
+        recent_ctx = AimsPromptBuilder.recent_context(history, settings.AIMS_CLASSIFY_CONTEXT_TURNS * 2)
+        parent_recent_concerns = AimsPromptBuilder.extract_recent_concerns(history, settings.AIMS_CLASSIFY_MAX_CONCERNS)
         
         classify_prompt = AimsPromptBuilder.build_classify_prompt(
             mapping_markers_text=markers_text,

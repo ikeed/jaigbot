@@ -103,10 +103,11 @@ client = TestClient(app)
 @pytest.fixture(autouse=True)
 def setup_env(monkeypatch):
     import app.main as m
-    monkeypatch.setattr(m, "PROJECT_ID", "proj")
-    monkeypatch.setattr(m, "REGION", "us-central1")
-    monkeypatch.setattr(m, "MODEL_ID", "gemini-2.5-pro")
-    monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", True)
+    from app.config import settings
+    monkeypatch.setattr(settings, "PROJECT_ID", "proj")
+    monkeypatch.setattr(settings, "REGION", "us-central1")
+    monkeypatch.setattr(settings, "MODEL_ID", "gemini-2.5-pro")
+    monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", True)
     monkeypatch.setattr(m, "VertexClient", FakeVertexAimsJSON)
     
     # AIMS mapping mock is now handled globally by conftest.py
