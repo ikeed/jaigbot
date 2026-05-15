@@ -46,11 +46,18 @@ os.environ["BACKEND_URL"] = f"http://localhost:{port}/api/chat"
 # to prevent incorrect OAuth redirects.
 if not os.getenv("CHAINLIT_URL"):
     if os.getenv("K_SERVICE"):
-        print("WARNING: K_SERVICE detected but CHAINLIT_URL is not set. OAuth redirects may fail.")
+        # CRITICAL: In Cloud Run, we MUST have CHAINLIT_URL for OAuth to work.
+        print("ERROR: K_SERVICE detected but CHAINLIT_URL is not set. SSO/OAuth will likely fail because it will default to an internal or incorrect URL.")
     else:
         # Default to localhost for local development as it's most common in OAuth configs
         os.environ["CHAINLIT_URL"] = f"http://localhost:{port}"
         print(f"DEBUG: Defaulting CHAINLIT_URL to {os.environ['CHAINLIT_URL']}")
+else:
+    # Ensure CHAINLIT_URL uses https if it's a cloud run URL but currently uses http
+    url = os.environ["CHAINLIT_URL"]
+    if ".a.run.app" in url and url.startswith("http://"):
+        os.environ["CHAINLIT_URL"] = url.replace("http://", "https://")
+        print(f"DEBUG: Forced CHAINLIT_URL to HTTPS: {os.environ['CHAINLIT_URL']}")
 
 # Ensure CHAINLIT_AUTH_SECRET is set for cookie signing, especially for local OAuth state.
 if not os.getenv("CHAINLIT_AUTH_SECRET"):
@@ -200,4 +207,7 @@ if __name__ == "__main__":
     # Use localhost as default for local development to match typical OAuth client configs.
     # Cloud Run will typically provide HOST=0.0.0.0.
     host = os.getenv("HOST", "localhost")
+    print(f"DEBUG: Starting uvicorn on {host}:{port}")
+    print(f"DEBUG: CHAINLIT_URL is {os.environ.get('CHAINLIT_URL')}")
+    print(f"DEBUG: BACKEND_URL is {os.environ.get('BACKEND_URL')}")
     uvicorn.run(app, host=host, port=int(port))
