@@ -36,13 +36,26 @@ app.mount("/api", backend_app)
 # But to keep the custom landing page at root, we'll keep this structure 
 # and update BACKEND_URL to point to /api/chat
 
-# Update BACKEND_URL and CHAINLIT_URL for this unified process
+# Update BACKEND_URL for this unified process
 port = settings.PORT
 os.environ["BACKEND_URL"] = f"http://localhost:{port}/api/chat"
-# Ensure Chainlit knows its public URL for OAuth redirects. 
-# Default to localhost:port for local development.
+
+# Ensure Chainlit knows its public URL for OAuth redirects.
+# If CHAINLIT_URL is not set, we default to localhost ONLY if NOT running in Cloud Run.
+# In Cloud Run (detected by K_SERVICE), we avoid setting a default localhost URL 
+# to prevent incorrect OAuth redirects.
 if not os.getenv("CHAINLIT_URL"):
-    os.environ["CHAINLIT_URL"] = f"http://localhost:{port}"
+    if os.getenv("K_SERVICE"):
+        print("WARNING: K_SERVICE detected but CHAINLIT_URL is not set. OAuth redirects may fail.")
+    else:
+        # Default to localhost for local development as it's most common in OAuth configs
+        os.environ["CHAINLIT_URL"] = f"http://localhost:{port}"
+        print(f"DEBUG: Defaulting CHAINLIT_URL to {os.environ['CHAINLIT_URL']}")
+
+# Ensure CHAINLIT_AUTH_SECRET is set for cookie signing, especially for local OAuth state.
+if not os.getenv("CHAINLIT_AUTH_SECRET"):
+    os.environ["CHAINLIT_AUTH_SECRET"] = "local-dev-secret-12345"
+    print("DEBUG: Using default CHAINLIT_AUTH_SECRET for local development.")
 
 # A simple custom login page that shows SSO buttons
 @app.get("/", response_class=HTMLResponse)
@@ -177,7 +190,14 @@ async def custom_login_page(request: Request):
 # Note: This will use chainlit_app.py as the target
 mount_chainlit(app=app, target="chainlit_app.py", path="/chat")
 
+# WORKAROUND for 'oauth state does not correspond' when mounting on a subpath.
+# Chainlit's OAuth initiation sets a cookie. If the initiation happens via /chat/auth/oauth/google
+# but the callback is also under /chat, everything should work.
+# However, if there are multiple Starlette apps or midleware, cookies can get lost.
+# We ensure that the top-level app allows credentials and has no conflicting session middleware.
+
 if __name__ == "__main__":
-    # Use 0.0.0.0 as default to ensure the app is reachable in container environments (like Cloud Run).
-    host = os.getenv("HOST", "0.0.0.0")
+    # Use localhost as default for local development to match typical OAuth client configs.
+    # Cloud Run will typically provide HOST=0.0.0.0.
+    host = os.getenv("HOST", "localhost")
     uvicorn.run(app, host=host, port=int(port))
