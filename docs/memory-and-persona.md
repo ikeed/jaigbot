@@ -46,9 +46,9 @@ To test Redis persistence locally:
    export REDIS_HOST=localhost
    export REDIS_PORT=6379
    ```
-2. Start the app using `scripts/dev_run.sh` or `scripts/dev_run.py` (or the `JaigBot` PyCharm run configuration). 
-   - These scripts will automatically attempt to start a Redis container named `jaigbot-redis` via Docker if `MEMORY_BACKEND=redis` is detected.
-3. If you are not using the helper scripts, you can run Redis manually via Docker: `docker run -d --name jaigbot-redis -p 6379:6379 redis`
+2. Start the app using `scripts/dev_run.sh` or `scripts/dev_run.py` (or the `AIMSBot` PyCharm run configuration). 
+   - These scripts will automatically attempt to start a Redis container named `aimsbot-redis` via Docker if `MEMORY_BACKEND=redis` is detected.
+3. If you are not using the helper scripts, you can run Redis manually via Docker: `docker run -d --name aimsbot-redis -p 6379:6379 redis`
 
 You can verify the connection via `GET /config` when the backend is running.
 

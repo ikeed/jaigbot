@@ -1,4 +1,21 @@
 import os
+from dotenv import load_dotenv
+
+# Load environment variables early (especially for OAuth detection)
+from dotenv import find_dotenv
+env_path = find_dotenv()
+
+if env_path:
+    print(f"DEBUG: Found .env file at {env_path}")
+    # Use override=True so that .env values take precedence over 
+    # placeholder values in PyCharm run configurations.
+    load_dotenv(env_path, override=True)
+else:
+    # Only print if we are not in a container (Cloud Run sets K_SERVICE)
+    if not os.getenv("K_SERVICE"):
+        print("DEBUG: No .env file found by python-dotenv")
+    load_dotenv()
+
 import uuid
 import json
 import random
@@ -23,7 +40,7 @@ def _register_avatars_once() -> None:
             return str(p.resolve()) if p.exists() else None
 
         def _pick_avatar(name: str, env_path_var: str, defaults: list[str], env_url_var: str):
-            path = _abs_existing(os.getenv(env_path_var))
+            path = _abs_existing(getattr(settings, env_path_var, None))
             if not path:
                 for d in defaults:
                     path = _abs_existing(d)
@@ -32,7 +49,7 @@ def _register_avatars_once() -> None:
             if path:
                 cl.Avatar(id=name, name=name, path=path).save()
                 return
-            url = os.getenv(env_url_var)
+            url = getattr(settings, env_url_var, None)
             if url and (url.startswith("http://") or url.startswith("https://")):
                 cl.Avatar(id=name, name=name, url=url).save()
 
@@ -53,8 +70,8 @@ async def _inject_custom_css_once() -> None:
             return
         root = Path(__file__).resolve().parent
         css_paths = [
-            root / "public" / "jaigbot.css",
-            root.parent / "public" / "jaigbot.css",
+            root / "public" / "aimsbot.css",
+            root.parent / "public" / "aimsbot.css",
         ]
         css_text = None
         for p in css_paths:
@@ -131,13 +148,18 @@ async def _update_message_html(message: cl.Message, author: str, html: str) -> N
         except Exception:
             pass
 
+from app.config import settings
+
 # The backend URL for the FastAPI /chat endpoint. This can be overridden
 # at runtime by setting the BACKEND_URL environment variable.  For local
 # development, the FastAPI app typically runs on http://localhost:8080.
-BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8080/chat")
-DEBUG_MODE = os.getenv("DEBUG_MODE", "false").lower() == "true"
+BACKEND_URL = settings.BACKEND_URL or "http://localhost:8080/chat"
+# Heuristic: if we are running in run_app.py and BACKEND_URL wasn't explicitly set in .env
+# it might need to point to /api/chat if that's where we mounted the backend.
+# run_app.py sets BACKEND_URL=http://localhost:8080/api/chat
+DEBUG_MODE = settings.DEBUG_MODE
 # Whether Chainlit should request coaching; default to env CHAINLIT_COACH_DEFAULT, else AIMS_COACHING_ENABLED, else false
-CHAINLIT_COACH_DEFAULT = (os.getenv("CHAINLIT_COACH_DEFAULT") or os.getenv("AIMS_COACHING_ENABLED") or "false").lower() == "true"
+CHAINLIT_COACH_DEFAULT = settings.CHAINLIT_COACH_DEFAULT if settings.CHAINLIT_COACH_DEFAULT is not None else settings.AIMS_COACHING_ENABLED
 
 
 def _author_from_role(role: str) -> str:
@@ -246,7 +268,7 @@ def _get_persistent_session_id() -> str:
     server filesystem. In multi-user deployments, all users will share this id
     unless you enable auth or implement per-user ids.
     """
-    sid = os.getenv("FIXED_SESSION_ID") or os.getenv("SESSION_ID")
+    sid = settings.FIXED_SESSION_ID or settings.SESSION_ID
     if sid:
         return sid
     try:
@@ -304,7 +326,7 @@ def _load_robust_persona(name: str | None = None) -> dict:
                     return p
 
         # Pick persona index
-        idx_env = os.getenv("PERSONA_INDEX")
+        idx_env = settings.PERSONA_INDEX
         if idx_env is not None:
             idx = max(0, min(int(idx_env), len(personas) - 1))
         else:
@@ -352,6 +374,13 @@ async def start_chat():
     # Ensure our CSS is present for consistent styling across live and replay
     await _inject_custom_css_once()
 
+    # Chainlit 2.8+ session handling: ensure we have an authenticated user if auth is required
+    app_user = cl.user_session.get("user")
+    if (is_oauth_enabled or has_auth_secret) and not app_user:
+        # This shouldn't happen if authentication is properly enforced by Chainlit
+        # but if it does, we can provide a hint or simply allow Chainlit to manage it.
+        pass
+
     # Helper: derive base URL from BACKEND_URL
     def _base_url() -> str:
         return BACKEND_URL[:-5] if BACKEND_URL.endswith("/chat") else BACKEND_URL
@@ -363,7 +392,7 @@ async def start_chat():
     # 2. Attempt to fetch existing backend history for this session
     existing_hist = []
     try:
-        timeout = float(os.getenv("CHAINLIT_HTTP_TIMEOUT", "15"))
+        timeout = settings.CHAINLIT_HTTP_TIMEOUT
         async with httpx.AsyncClient(timeout=timeout) as client:
             r = await client.get(f"{_base_url()}/history", params={"sessionId": session_id})
             if r.status_code == 200 and r.headers.get("content-type", "").startswith("application/json"):
@@ -396,8 +425,8 @@ async def start_chat():
     
     # Detailed information passed to the role-playing LLM
     # We combine with DEFAULT_CHARACTER/SCENE to preserve core guardrails if not overridden by ENV
-    base_char = os.getenv("CHARACTER_SYSTEM") or DEFAULT_CHARACTER
-    base_scene = os.getenv("SCENE_OBJECTIVES") or DEFAULT_SCENE
+    base_char = settings.CHARACTER_SYSTEM or DEFAULT_CHARACTER
+    base_scene = settings.SCENE_OBJECTIVES or DEFAULT_SCENE
     
     character_detailed = (
         f"{base_char}\n\n"
@@ -504,17 +533,30 @@ async def start_chat():
     # This avoids confusing 500 errors later (e.g., PROJECT_ID not set).
     try:
         base_url = BACKEND_URL[:-5] if BACKEND_URL.endswith("/chat") else BACKEND_URL
-        timeout = float(os.getenv("CHAINLIT_HTTP_TIMEOUT", "15"))
+        timeout = settings.CHAINLIT_HTTP_TIMEOUT
         async with httpx.AsyncClient(timeout=timeout) as client:
             ok = False
             try:
+                # Use base_url from BACKEND_URL, which should be http://localhost:PORT/api if mounted via run_app.py
                 r = await client.get(f"{base_url}/healthz")
                 ok = r.status_code == 200
             except Exception:
                 ok = False
             if not ok:
+                # If healthz failed, try without /api prefix as a fallback for pure local uvicorn runs
+                # But if we are in run_app.py, /api is required.
+                alt_base = base_url.replace("/api", "") if "/api" in base_url else f"{base_url}/api"
+                try:
+                    r_alt = await client.get(f"{alt_base}/healthz")
+                    if r_alt.status_code == 200:
+                        ok = True
+                        base_url = alt_base
+                except Exception:
+                    pass
+
+            if not ok:
                 await cl.Message(
-                    f"Backend at {base_url} is not reachable. Start it first: ./scripts/dev_run.sh or `uvicorn app.main:app --port 8080`."
+                    f"Backend at {base_url} is not reachable. Ensure it is running (e.g. `uvicorn app.main:app` or using `run_app.py`)."
                 ).send()
                 return
             # Try to fetch /config; if it reveals a missing PROJECT_ID, warn helpfully.
@@ -553,6 +595,137 @@ async def start_chat():
         # httpx not available or some unexpected error; skip preflight.
         pass
 
+# Helper to check if an environment variable has a valid (non-empty, non-placeholder) value
+def is_valid_env_val(val: str | None) -> bool:
+    if not val:
+        return False
+    # If it's a known placeholder, treat it as unset
+    placeholders = ["REPLACE_WITH", "your-auth-secret", "your-id"]
+    return not any(p in val for p in placeholders)
+
+# Only enable OAuth if at least one provider is configured.
+# We check for any OAUTH_*_CLIENT_ID environment variable to be more robust.
+is_oauth_enabled = any(
+    k.startswith("OAUTH_") and k.endswith("_CLIENT_ID") and is_valid_env_val(os.environ.get(k))
+    for k in os.environ.keys()
+)
+
+# DEBUG: log detected providers in chainlit_app
+if is_oauth_enabled:
+    detected_providers = [
+        k for k in os.environ.keys() 
+        if k.startswith("OAUTH_") and k.endswith("_CLIENT_ID") and is_valid_env_val(os.environ.get(k))
+    ]
+    print(f"DEBUG: Chainlit detected OAuth providers: {detected_providers}")
+else:
+    # Be very explicit about WHY it's not detected
+    all_keys = list(os.environ.keys())
+    oauth_like = [k for k in all_keys if "OAUTH" in k.upper()]
+    # Also check if they are empty or placeholders
+    invalid_oauth = [k for k in oauth_like if not is_valid_env_val(os.environ.get(k))]
+    print(f"DEBUG: Chainlit detected NO OAuth providers.")
+    print(f"DEBUG: Environment keys total: {len(all_keys)}")
+    print(f"DEBUG: OAuth-like keys found: {oauth_like}")
+    if invalid_oauth:
+        print(f"DEBUG: WARNING: The following OAuth keys are EMPTY or PLACEHOLDERS: {invalid_oauth}")
+        print("DEBUG: To fix this, provide actual credentials in your .env file or PyCharm Run Configuration.")
+
+# Chainlit applications are public by default. To enable authentication and make your app private,
+# you must have at least one authentication callback AND CHAINLIT_AUTH_SECRET must be set.
+has_auth_secret = is_valid_env_val(settings.CHAINLIT_AUTH_SECRET)
+
+if is_oauth_enabled or has_auth_secret or settings.ENABLE_PASSWORD_AUTH:
+    # Ensure a secret exists if any auth is needed, otherwise Chainlit stays public
+    if not has_auth_secret:
+        os.environ["CHAINLIT_AUTH_SECRET"] = "dev-secret-to-force-login-screen"
+        has_auth_secret = True
+
+    # Register password auth ONLY if explicitly requested or if NO OAuth is detected.
+    # If OAuth is detected, we STRICTLY avoid the password form unless ENABLE_PASSWORD_AUTH is true.
+    should_enable_password = settings.ENABLE_PASSWORD_AUTH
+    if not is_oauth_enabled and not should_enable_password:
+        # If no SSO and no explicit password auth, we only show password auth
+        # as a fallback if the user wants the app private.
+        should_enable_password = True
+
+    if should_enable_password:
+        @cl.password_auth_callback
+        def auth_callback(username: str, password: str) -> cl.User | None:
+            if username == "admin" and password == "admin":
+                return cl.User(identifier="admin", metadata={"name": "Admin User", "provider": "password"})
+            return None
+
+    @cl.header_auth_callback
+    def header_auth_callback(headers: dict) -> cl.User | None:
+        """
+        Handle authentication based on custom headers. This is useful when
+        Chainlit is mounted in a FastAPI app that handles authentication.
+        """
+        # Example: check for a 'X-User-ID' header passed by a proxy or parent app
+        user_id = headers.get("x-user-id")
+        user_name = headers.get("x-user-name")
+        if user_id:
+            return cl.User(identifier=user_id, metadata={"name": user_name or user_id, "provider": "header"})
+        return None
+
+if is_oauth_enabled:
+    @cl.oauth_callback
+    def oauth_callback(
+        provider_id: str,
+        token: str,
+        raw_user_data: dict[str, str],
+        default_user: cl.User,
+    ) -> cl.User | None:
+        """
+        Handle OAuth authentication. This is called after a successful OAuth flow.
+        We can inspect raw_user_data to customize the user identifier and metadata.
+        """
+        # For Google, we typically get 'email', 'name', 'picture'
+        if provider_id == "google":
+            default_user.identifier = raw_user_data.get("email") or default_user.identifier
+            default_user.metadata["name"] = raw_user_data.get("name")
+            default_user.metadata["provider"] = "google"
+        
+        # For Facebook, we typically get 'id', 'name', 'email'
+        elif provider_id == "facebook":
+            default_user.identifier = raw_user_data.get("email") or raw_user_data.get("id") or default_user.identifier
+            default_user.metadata["name"] = raw_user_data.get("name")
+            default_user.metadata["provider"] = "facebook"
+
+        # For Apple, we typically get 'sub' (identifier) and 'email' in user data
+        elif provider_id == "apple":
+            default_user.identifier = raw_user_data.get("email") or raw_user_data.get("sub") or default_user.identifier
+            default_user.metadata["name"] = raw_user_data.get("name") # Note: Apple only sends name on first login
+            default_user.metadata["provider"] = "apple"
+
+        # For GitHub, we typically get 'login', 'name', 'email', 'avatar_url'
+        elif provider_id == "github":
+            # Prefer login name if email is private
+            default_user.identifier = raw_user_data.get("login") or default_user.identifier
+            default_user.metadata["name"] = raw_user_data.get("name")
+            default_user.metadata["email"] = raw_user_data.get("email")
+            default_user.metadata["provider"] = "github"
+
+        # For Azure AD, we might get 'preferred_username' or 'email'
+        elif provider_id == "azure-ad":
+            default_user.identifier = raw_user_data.get("preferred_username") or raw_user_data.get("email") or default_user.identifier
+            default_user.metadata["name"] = raw_user_data.get("name")
+            default_user.metadata["provider"] = "azure-ad"
+
+        # For Okta/Auth0/Keycloak/etc, try to find a common identifier
+        else:
+            default_user.identifier = (
+                raw_user_data.get("email") or 
+                raw_user_data.get("preferred_username") or 
+                raw_user_data.get("username") or 
+                default_user.identifier
+            )
+            default_user.metadata["name"] = raw_user_data.get("name") or raw_user_data.get("nickname")
+            default_user.metadata["provider"] = provider_id
+
+        return default_user
+
+
 @cl.on_message
 async def handle_message(message: cl.Message):
     """
@@ -590,12 +763,27 @@ async def handle_message(message: cl.Message):
 
     try:
         # Increase timeout to avoid truncation due to client-side timeouts on longer generations
-        timeout = float(os.getenv("CHAINLIT_HTTP_TIMEOUT", "120"))
+        timeout = settings.CHAINLIT_HTTP_TIMEOUT if settings.CHAINLIT_HTTP_TIMEOUT != 15.0 else 120.0
         async with httpx.AsyncClient(timeout=timeout) as client:
             # Gather session and optional persona/scene to send to backend memory
             session_id = cl.user_session.get("session_id")
             character = cl.user_session.get("character")
             scene = cl.user_session.get("scene")
+            
+            # Retrieve authenticated user info if available
+            user = cl.user_session.get("user")
+            user_info = None
+            if user:
+                user_info = {
+                    "identifier": user.identifier,
+                    "metadata": user.metadata,
+                }
+            elif has_auth_secret:
+                # If auth is required but somehow user is missing, we shouldn't continue
+                # with a request that claims to be from a session. In Chainlit, 'user'
+                # should be present if any auth callback was triggered and succeeded.
+                pass
+
             payload = {"message": content}
             if session_id:
                 payload["sessionId"] = session_id
@@ -603,6 +791,8 @@ async def handle_message(message: cl.Message):
                 payload["character"] = character
             if scene:
                 payload["scene"] = scene
+            if user_info:
+                payload["userInfo"] = user_info
             if CHAINLIT_COACH_DEFAULT:
                 payload["coach"] = True
             response = await client.post(
@@ -712,7 +902,7 @@ async def handle_message(message: cl.Message):
         try:
             base_url = BACKEND_URL[:-5] if BACKEND_URL.endswith("/chat") else BACKEND_URL
             session_id = cl.user_session.get("session_id")
-            timeout = float(os.getenv("CHAINLIT_HTTP_TIMEOUT", "120"))
+            timeout = settings.CHAINLIT_HTTP_TIMEOUT if settings.CHAINLIT_HTTP_TIMEOUT != 15.0 else 120.0
             async with httpx.AsyncClient(timeout=timeout) as client:
                 r = await client.get(f"{base_url}/summary", params={"sessionId": session_id, "analysis": "true"})
                 if r.status_code == 200:
@@ -787,9 +977,9 @@ async def resume_chat():
 
     # Ensure persona/scene keys exist
     if cl.user_session.get("character") is None:
-        cl.user_session.set("character", os.getenv("CHARACTER_SYSTEM") or (DEFAULT_CHARACTER or None))
+        cl.user_session.set("character", settings.CHARACTER_SYSTEM or (DEFAULT_CHARACTER or None))
     if cl.user_session.get("scene") is None:
-        cl.user_session.set("scene", os.getenv("SCENE_OBJECTIVES") or (DEFAULT_SCENE or None))
+        cl.user_session.set("scene", settings.SCENE_OBJECTIVES or (DEFAULT_SCENE or None))
 
     # If we already have local history, just replay it
     history = cl.user_session.get("history") or []
@@ -803,7 +993,7 @@ async def resume_chat():
 
     fetched = []
     try:
-        timeout = float(os.getenv("CHAINLIT_HTTP_TIMEOUT", "15"))
+        timeout = settings.CHAINLIT_HTTP_TIMEOUT
         async with httpx.AsyncClient(timeout=timeout) as client:
             r = await client.get(f"{_base_url()}/history", params={"sessionId": session_id})
             if r.status_code == 200 and r.headers.get("content-type", "").startswith("application/json"):

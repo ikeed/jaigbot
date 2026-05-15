@@ -1,6 +1,6 @@
 # MCP Empowerment and Available Tools
 
-This project is now wired up to a broad set of MCP services that Junie can use during development and troubleshooting. This page lists the tools, what they are for, and how they fit into JaigBot’s workflow.
+This project is now wired up to a broad set of MCP services that Junie can use during development and troubleshooting. This page lists the tools, what they are for, and how they fit into AIMSBot’s workflow.
 
 Note: These tools are available to Junie (the autonomous programmer) in the IDE/agent environment. They do not change the runtime behavior of the FastAPI backend or Chainlit UI, unless we explicitly modify the codebase.
 
@@ -38,7 +38,7 @@ Note: These tools are available to Junie (the autonomous programmer) in the IDE/
 
 7. Firebase
    - Capabilities: Manage Firebase projects and apps, initialize services, retrieve SDK configs.
-   - Usage: Only if the project adopts Firebase for any auxiliary features (not required for core JaigBot backend).
+   - Usage: Only if the project adopts Firebase for any auxiliary features (not required for core AIMSBot backend).
 
 8. Cloud Run
    - Capabilities: List GCP projects; assist with Cloud Run deployment workflows.
@@ -46,13 +46,13 @@ Note: These tools are available to Junie (the autonomous programmer) in the IDE/
 
 9. Vectorize
    - Capabilities: Vector database operations (search, upsert, manage namespaces).
-   - Usage: Optional future enhancement; not used by default in JaigBot runtime.
+   - Usage: Optional future enhancement; not used by default in AIMSBot runtime.
 
 10. JetBrains IDE Features
    - Capabilities: Code search and structure, navigate/open files, edit files with precision.
    - Usage: Preferred for exploring project structure and applying minimal, safe changes.
 
-## How Junie uses these in JaigBot
+## How Junie uses these in AIMSBot
 - Code changes under `app/` or `chainlit_app.py` → run `pytest` locally; keep API contracts stable (tests cover `POST /chat`, error shapes, and AIMS coaching flows).
 - Docs‑only changes → tests optional but recommended.
 - Infrastructure changes → consult `terraform/README.md`; CI and WIF are configured there.
