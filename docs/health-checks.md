@@ -14,7 +14,7 @@ Both hostnames are managed by Google (DNS + certs) and point to the same revisio
 
 ## Why 404/503 right after deploy?
 - If you deploy the combined UI+API container (Chainlit on $PORT, FastAPI on 8000), Cloud Run’s default URL (on $PORT) serves the Chainlit UI. In that case, probe "/" for health, not "/healthz" (which the UI won’t serve).
-- If you deploy API-first (FastAPI on $PORT), then "/healthz" is the correct probe.
+- If you deploy API-first (FastAPI on $PORT), then "/api/healthz" is the correct probe.
 - Immediately after a deploy, you can briefly see 404/503 while the new revision warms up and traffic shifts.
 
 ## Best practice: wait_for_health.sh
@@ -25,19 +25,19 @@ Use a bounded retry with backoff to probe an explicit endpoint. This repo includ
 - Env vars:
   - `SERVICE` or `SERVICE_NAME` (Cloud Run service name)
   - `REGION` (Cloud Run region)
-  - `HEALTH_PATH` (default `/healthz`)
+  - `HEALTH_PATH` (default `/api/healthz`)
   - `PROBE_URL` (optional full URL to probe; overrides derived URL)
   - `MAX_WAIT` (overall timeout in seconds, default `300`)
 
 Example (local or GitHub Actions):
 ```bash
-SERVICE_NAME=my-service REGION=us-west4 HEALTH_PATH=/healthz MAX_WAIT=300 \
+SERVICE_NAME=my-service REGION=us-west4 HEALTH_PATH=/api/healthz MAX_WAIT=300 \
   bash scripts/wait_for_health.sh
 ```
 
 If you need to probe a custom domain or a non-/healthz path, provide PROBE_URL directly:
 ```bash
-PROBE_URL=https://your.domain.tld/healthz MAX_WAIT=300 \
+PROBE_URL=https://your.domain.tld/api/healthz MAX_WAIT=300 \
   bash scripts/wait_for_health.sh
 ```
 
@@ -49,7 +49,7 @@ Cloud Build step example:
   env:
     - SERVICE=${_SERVICE}
     - REGION=${_REGION}
-    - HEALTH_PATH=/healthz
+    - HEALTH_PATH=/api/healthz
     - MAX_WAIT=300
   args:
     - -ceu
@@ -57,7 +57,7 @@ Cloud Build step example:
       bash scripts/wait_for_health.sh
 ```
 
-Replace any one‑shot curl like `curl "$URL/healthz"` with this script to avoid flaky deploy checks.
+Replace any one‑shot curl like `curl "$URL/api/healthz"` with this script to avoid flaky deploy checks.
 
 ---
 
@@ -70,7 +70,7 @@ Symptoms you might see in production with the combined UI+API container (Chainli
 
 What this means:
 - Cloud Run enforces a per‑request timeout. When it’s set to 60s (the default in many setups), long‑lived WebSocket connections are closed by the platform at ~60–61s. Chainlit then reconnects and, depending on UI state, can re‑render the initial screen — which looks like a conversation restart even though the backend didn’t crash.
-- Your backend is healthy: in the logs you’ll see repeated `200` on `/healthz`, `/config`, `/modelcheck`, and successful `/chat` calls. The issue is the front‑end connection lifetime, not server crashes.
+- Your backend is healthy: in the logs you’ll see repeated `200` on `/api/healthz`, `/api/config`, `/api/modelcheck`, and successful `/api/chat` calls. The issue is the front‑end connection lifetime, not server crashes.
 
 How to fix (choose one):
 - Increase the Cloud Run request timeout to cover expected session length (e.g., 10–60 minutes):
