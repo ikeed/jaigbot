@@ -187,7 +187,8 @@ class ChatOrchestrator:
                 if self.background_tasks:
                     try:
                         mem = self.session_service.get_mem(ctx.session_id)
-                        user_id = ctx.user_info.get("email") if ctx.user_info else None
+                        # Use identifier (email) from user_info if present
+                        user_id = ctx.user_info.get("identifier") if ctx.user_info else None
                         if not user_id:
                             user_id = "anonymous"
                             
