@@ -184,14 +184,14 @@ class EndGameDetector:
         "follow up", "follow-up", "another appointment", "next visit", "come back",
         "schedule", "set up an appointment", "later appointment", "set up",
         "book an appointment", "make an appointment", "schedule something", "talk again",
-        "talk it over", "think it over", "decide later",
+        "talk it over", "think it over", "decide later", "make another", "agree to that",
     ]
 
     LITERATURE_CUES = [
         "handout", "handouts", "brochure", "pamphlet", "literature", "written info",
         "information to take home", "take home", "materials", "resource", "printout", "printed info",
         "reading", "read this", "give you some literature", "leaflet", "info sheet",
-        "look over", "at home", "appreciate that", "read over",
+        "look over", "at home", "appreciate that", "read over", "thanks", "thank you",
     ]
 
     @staticmethod
