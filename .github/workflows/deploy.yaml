@@ -153,7 +153,7 @@ jobs:
             --region "$REGION" \
             --allow-unauthenticated \
             --service-account "cr-vertex-runtime@${PROJECT_ID}.iam.gserviceaccount.com" \
-            --set-env-vars "PROJECT_ID=${PROJECT_ID},REGION=${REGION},MODEL_ID=${MODEL_ID:-gemini-2.5-pro},TEMPERATURE=${TEMPERATURE:-0.2},MAX_TOKENS=${MAX_TOKENS:-768},HOST=${HOST:-0.0.0.0},AIMS_COACHING_ENABLED=true,AIMS_COACHING_DEFAULT=true,MEMORY_BACKEND=${MEMORY_BACKEND:-memory},REDIS_URL=${REDIS_URL:-},CHAINLIT_URL=${CHAINLIT_URL:-},CHAINLIT_AUTH_SECRET=${CHAINLIT_AUTH_SECRET:-},OAUTH_GOOGLE_CLIENT_ID=${OAUTH_GOOGLE_CLIENT_ID:-},OAUTH_GOOGLE_CLIENT_SECRET=${OAUTH_GOOGLE_CLIENT_SECRET:-},VALIDATE_MODEL_ON_STARTUP=false" \
+            --set-env-vars "PROJECT_ID=${PROJECT_ID},REGION=${REGION},MODEL_ID=${MODEL_ID:-gemini-2.5-pro},TEMPERATURE=${TEMPERATURE:-0.2},MAX_TOKENS=${MAX_TOKENS:-768},HOST=${HOST:-0.0.0.0},AIMS_COACHING_ENABLED=true,AIMS_COACHING_DEFAULT=true,MEMORY_BACKEND=${MEMORY_BACKEND:-memory},REDIS_URL=${REDIS_URL:-},CHAINLIT_URL=${CHAINLIT_URL:-},CHAINLIT_AUTH_SECRET=${CHAINLIT_AUTH_SECRET:-},OAUTH_GOOGLE_CLIENT_ID=${OAUTH_GOOGLE_CLIENT_ID:-},OAUTH_GOOGLE_CLIENT_SECRET=${OAUTH_GOOGLE_CLIENT_SECRET:-},VALIDATE_MODEL_ON_STARTUP=false,SESSIONS_BUCKET_NAME=${{ vars.SESSIONS_BUCKET_NAME || 'aimsbot-chat-sessions' }}" \
             --memory=512Mi --cpu=1 --concurrency=20 --max-instances=2 --min-instances=1 --timeout=3600 \
             --cpu-throttling \
             --startup-probe="httpGet.path=/api/healthz,periodSeconds=10,timeoutSeconds=9,failureThreshold=5"

@@ -6,7 +6,7 @@ import uuid
 import asyncio
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -548,7 +548,7 @@ def _get_request_id(request: Request) -> Optional[str]:
 
 
 @app.post("/chat")
-async def chat(req: Request, body: ChatRequest):
+async def chat(req: Request, body: ChatRequest, background_tasks: BackgroundTasks):
     """Main chat endpoint using the new ChatOrchestrator."""
     # Enforce settings.PROJECT_ID presence for live calls to align with tests/contract
     if not settings.PROJECT_ID:
@@ -605,7 +605,7 @@ async def chat(req: Request, body: ChatRequest):
         logger=logger,
     )
     
-    return await orchestrator.handle_chat(req, body)
+    return await orchestrator.handle_chat(req, body, background_tasks)
 
 
 @app.get("/config")

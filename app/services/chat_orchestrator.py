@@ -17,12 +17,13 @@ import json
 import time
 from typing import Any, Optional
 
-from fastapi import HTTPException, Request
+from fastapi import HTTPException, Request, BackgroundTasks
 from fastapi.responses import JSONResponse
 
 from app.models import ChatRequest, Coaching, SessionMetrics
 from app.services.chat_context import ChatContextBuilder, ChatContext
 from app.services.session_service import SessionService, CookieSettings
+from app.services.storage_service import storage_service
 from app.vertex import VertexAIError
 
 
@@ -86,8 +87,11 @@ class ChatOrchestrator:
             do_prune_mod=29,
         )
     
-    async def handle_chat(self, req: Request, body: ChatRequest) -> JSONResponse:
+    async def handle_chat(self, req: Request, body: ChatRequest, background_tasks: Optional[BackgroundTasks] = None) -> JSONResponse:
         """Main entry point for chat requests."""
+        # Optional: update background_tasks if passed
+        self.background_tasks = background_tasks
+        
         try:
             # Early validation
             self._validate_request(body)
@@ -178,6 +182,32 @@ class ChatOrchestrator:
             if result.get("coach_post"):
                 response_payload["coachPost"] = result["coach_post"]
                 response_payload["gameOver"] = True
+                
+                # Trigger background archive to GCS
+                if self.background_tasks:
+                    try:
+                        mem = self.session_service.get_mem(ctx.session_id)
+                        user_id = ctx.user_info.get("email") if ctx.user_info else None
+                        if not user_id:
+                            user_id = "anonymous"
+                            
+                        # Enrich mem with endgame status for the archive
+                        archive_data = {
+                            **mem,
+                            "session_id": ctx.session_id,
+                            "user_id": user_id,
+                            "game_over": True,
+                            "coach_post": result["coach_post"],
+                            "exported_via": "endgame"
+                        }
+                        self.background_tasks.add_task(
+                            storage_service.upload_session,
+                            ctx.session_id,
+                            user_id,
+                            archive_data
+                        )
+                    except Exception as archive_err:
+                        self.logger.warning(f"Failed to queue GCS archive for session {ctx.session_id}: {archive_err}")
             
             resp = JSONResponse(status_code=200, content=response_payload)
             

@@ -134,9 +134,33 @@ class SessionService:
         if not self.memory_enabled:
             return
         try:
+            from app.services.storage_service import storage_service
             now = time.time()
             expired = [sid for sid, v in self._store.items() if (now - v.get("updated", now)) > self.memory_ttl_seconds]
             for sid in expired:
+                mem = self._store.get(sid)
+                if mem:
+                    # Archive to GCS before popping from store
+                    user_info = mem.get("user_info")
+                    user_id = user_info.get("email") if user_info else "anonymous"
+                    
+                    # Only archive if it hasn't been explicitly exported yet (best-effort flag)
+                    # We can use a flag in the session data to avoid double-archiving if desired,
+                    # but GCS overwrite is also fine.
+                    archive_data = {
+                        **mem,
+                        "session_id": sid,
+                        "user_id": user_id,
+                        "exported_via": "prune_expired",
+                        "pruned_at": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(now))
+                    }
+                    try:
+                        # Note: prune_expired is usually called in the background or between requests,
+                        # so we call upload_session directly (blocking this minor loop, not the user).
+                        storage_service.upload_session(sid, user_id, archive_data)
+                    except Exception:
+                        pass # Ignore archive errors during prune
+                        
                 self._store.pop(sid, None)
         except Exception:
             # best-effort only

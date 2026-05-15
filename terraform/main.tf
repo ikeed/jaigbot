@@ -36,9 +36,13 @@ resource "google_project_service" "secretmanager" {
 }
 
 resource "google_project_service" "redis" {
-  count              = var.enable_redis ? 1 : 0
   project            = var.project_id
   service            = "redis.googleapis.com"
+  disable_on_destroy = false
+}
+resource "google_project_service" "storage" {
+  project            = var.project_id
+  service            = "storage.googleapis.com"
   disable_on_destroy = false
 }
 
@@ -98,6 +102,25 @@ resource "google_project_iam_member" "runtime_secrets" {
   depends_on = [
     google_project_service.secretmanager
   ]
+}
+
+# GCS Bucket for Session Data
+resource "google_storage_bucket" "sessions" {
+  name                        = var.sessions_bucket_name
+  location                    = var.region
+  uniform_bucket_level_access = true
+  force_destroy               = false
+
+  versioning {
+    enabled = true
+  }
+}
+
+# Grant Cloud Run Runtime SA access to the bucket
+resource "google_storage_bucket_iam_member" "runtime_storage_user" {
+  bucket = google_storage_bucket.sessions.name
+  role   = "roles/storage.objectUser"
+  member = "serviceAccount:${google_service_account.runtime.email}"
 }
 
 # Project-level IAM for deployer SA
