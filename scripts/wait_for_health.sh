@@ -8,7 +8,7 @@ set -euo pipefail
 # Environment variables:
 #   SERVICE / SERVICE_NAME - Cloud Run service name (required)
 #   REGION                 - Cloud Run region (required)
-#   HEALTH_PATH            - Health path to probe (default: /healthz)
+#   HEALTH_PATH            - Health path to probe (default: /api/healthz)
 #   PROBE_URL / URL        - Optional full URL to probe instead of deriving from service URL
 #   MAX_WAIT               - Overall timeout in seconds (default: 300)
 #   SLEEP                  - Initial backoff sleep in seconds (default: 2)
@@ -22,7 +22,7 @@ set -euo pipefail
 SERVICE=${SERVICE:-${SERVICE_NAME:-}}
 : "${SERVICE:?SERVICE or SERVICE_NAME is required}"
 : "${REGION:?REGION is required}"
-HEALTH_PATH=${HEALTH_PATH:-/healthz}
+HEALTH_PATH=${HEALTH_PATH:-/api/healthz}
 MAX_WAIT=${MAX_WAIT:-300}
 SLEEP=${SLEEP:-2}
 MAX_SLEEP=${MAX_SLEEP:-10}
