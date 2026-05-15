@@ -173,10 +173,10 @@ def test_coach_path_safety_violation(monkeypatch, caplog):
 
 def test_flag_off_hides_coaching(monkeypatch):
     import app.main as m
-    from app.config import settings
     from app.services import legacy_chat_handler
 
-    monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", False)
+    # Force coaching off at the module level where chat() reads it
+    monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", False)
     
     # Mock the vertex function in the legacy handler since coaching is disabled
     def fake_vertex_call(*args, **kwargs):

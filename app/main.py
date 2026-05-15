@@ -565,7 +565,7 @@ def _get_request_id(request: Request) -> Optional[str]:
 async def chat(req: Request, body: ChatRequest, background_tasks: BackgroundTasks):
     """Main chat endpoint using the new ChatOrchestrator."""
     # Enforce settings.PROJECT_ID presence for live calls to align with tests/contract
-    if not settings.PROJECT_ID:
+    if not PROJECT_ID:
         # Raise HTTPException to be normalized by our exception handler
         raise HTTPException(status_code=500, detail={
             "error": {"message": "settings.PROJECT_ID not set — configure the settings.PROJECT_ID environment variable.", "code": 500}
@@ -573,11 +573,11 @@ async def chat(req: Request, body: ChatRequest, background_tasks: BackgroundTask
 
     # Build config structures for orchestrator
     vertex_config = {
-        "project_id": settings.PROJECT_ID,
-        "region": settings.REGION,
+        "project_id": PROJECT_ID,
+        "region": REGION,
         "vertex_location": settings.VERTEX_LOCATION,
-        "model_id": settings.MODEL_ID,
-        "model_fallbacks": settings.MODEL_FALLBACKS,
+        "model_id": MODEL_ID,
+        "model_fallbacks": MODEL_FALLBACKS,
         "temperature": settings.TEMPERATURE,
         "max_tokens": settings.MAX_TOKENS,
         # Pass client class from app.main so tests can monkeypatch m.VertexClient
@@ -591,14 +591,14 @@ async def chat(req: Request, body: ChatRequest, background_tasks: BackgroundTask
     }
     
     session_cookie_settings = {
-        "name": settings.SESSION_COOKIE_NAME,
-        "secure": settings.SESSION_COOKIE_SECURE,
-        "samesite": settings.SESSION_COOKIE_SAMESITE,
-        "max_age": settings.SESSION_COOKIE_MAX_AGE,
+        "name": SESSION_COOKIE_NAME,
+        "secure": SESSION_COOKIE_SECURE,
+        "samesite": SESSION_COOKIE_SAMESITE,
+        "max_age": SESSION_COOKIE_MAX_AGE,
     }
     
     aims_config = {
-        "enabled": settings.AIMS_COACHING_ENABLED,
+        "enabled": AIMS_COACHING_ENABLED,
         "force_default": (os.getenv("AIMS_COACHING_DEFAULT", "false").lower() == "true"),
     }
     

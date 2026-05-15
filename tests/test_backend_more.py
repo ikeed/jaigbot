@@ -109,12 +109,13 @@ def test_session_cookie_and_memory_persistence(monkeypatch):
 
 def test_model_fallback_success(monkeypatch):
     # Arrange: primary fails with 404, fallback succeeds
+    import app.main as m
     from app.services import legacy_chat_handler
     
-    monkeypatch.setattr(settings, "PROJECT_ID", "proj")
-    monkeypatch.setattr(settings, "MODEL_ID", "bad-primary")
-    monkeypatch.setattr(settings, "MODEL_FALLBACKS", ["good-fallback"]) 
-    monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", False)
+    monkeypatch.setattr(m, "PROJECT_ID", "proj")
+    monkeypatch.setattr(m, "MODEL_ID", "bad-primary")
+    monkeypatch.setattr(m, "MODEL_FALLBACKS", ["good-fallback"]) 
+    monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", False)
     _unset_secure_cookie_for_tests(monkeypatch)
     
     # Mock the vertex helper to simulate primary failure and fallback success
@@ -139,11 +140,12 @@ def test_model_fallback_success(monkeypatch):
 
 def test_upstream_error_maps_to_502_and_sets_cookie(monkeypatch):
     # Arrange
+    import app.main as m
     from app.services import legacy_chat_handler
     from app.vertex import VertexAIError
     
-    monkeypatch.setattr(settings, "PROJECT_ID", "proj")
-    monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", False)
+    monkeypatch.setattr(m, "PROJECT_ID", "proj")
+    monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", False)
     _unset_secure_cookie_for_tests(monkeypatch)
     
     # Mock vertex helper to raise upstream error
@@ -181,12 +183,13 @@ def test_config_session_cookie_fields_reflect_env(monkeypatch):
 
 
 def test_model_not_found_no_fallback_returns_404(monkeypatch):
+    import app.main as m
     from app.services import legacy_chat_handler
     from app.vertex import VertexAIError
     
-    monkeypatch.setattr(settings, "PROJECT_ID", "proj")
-    monkeypatch.setattr(settings, "MODEL_FALLBACKS", [])
-    monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", False)
+    monkeypatch.setattr(m, "PROJECT_ID", "proj")
+    monkeypatch.setattr(m, "MODEL_FALLBACKS", [])
+    monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", False)
     _unset_secure_cookie_for_tests(monkeypatch)
     
     # Mock vertex helper to raise 404 error
