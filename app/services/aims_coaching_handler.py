@@ -880,9 +880,19 @@ class AimsCoachingHandler:
                     try:
                         aims_state = (mem or {}).get("aims_state") or {}
                         concerns_list = aims_state.get("parent_concerns") or []
-                        has_concerns = bool(concerns_list)
-                        all_mirrored = all(bool(c.get("is_mirrored")) for c in concerns_list) if has_concerns else True
-                        all_secured = all(bool(c.get("is_secured")) for c in concerns_list) if has_concerns else True
+                        
+                        # Filter for vaccine-related concerns
+                        vax_cues = VaccineRelevanceGate.VAX_CUES
+                        vax_concerns = []
+                        for c in concerns_list:
+                            desc = str(c.get("desc", "")).lower()
+                            topic = str(c.get("topic", "")).lower()
+                            if any(cue in desc for cue in vax_cues) or any(cue in topic for cue in vax_cues):
+                                vax_concerns.append(c)
+                        
+                        has_vax_concerns = bool(vax_concerns)
+                        all_mirrored = all(bool(c.get("is_mirrored")) for c in vax_concerns) if has_vax_concerns else True
+                        all_secured = all(bool(c.get("is_secured")) for c in vax_concerns) if has_vax_concerns else True
                         block_endgame_state_requirements = not (all_mirrored and all_secured)
                         # Also compute counts for hints
                         concerns_count = len(concerns_list)
