@@ -19,6 +19,7 @@ def test_cookie_issued_and_memory_persists(monkeypatch):
     monkeypatch.setattr(settings, "PROJECT_ID", "test-project")
     monkeypatch.setattr(settings, "REGION", "us-central1")
     monkeypatch.setattr(settings, "MODEL_ID", "gemini-2.5-pro")
+    monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", False)
     # Ensure cookies work over http in TestClient by disabling the Secure flag
     monkeypatch.setattr(settings, "SESSION_COOKIE_SECURE", False)
 

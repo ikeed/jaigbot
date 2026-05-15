@@ -71,6 +71,7 @@ def test_session_cookie_and_memory_persistence(monkeypatch):
     from app.services import legacy_chat_handler
     
     monkeypatch.setattr(settings, "PROJECT_ID", "proj")
+    monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", False)
     _unset_secure_cookie_for_tests(monkeypatch)
     
     # Mock vertex helper to echo the prompt
@@ -106,7 +107,6 @@ def test_session_cookie_and_memory_persistence(monkeypatch):
     assert len(mem2.get("history", [])) == 4
 
 
-
 def test_model_fallback_success(monkeypatch):
     # Arrange: primary fails with 404, fallback succeeds
     from app.services import legacy_chat_handler
@@ -114,6 +114,7 @@ def test_model_fallback_success(monkeypatch):
     monkeypatch.setattr(settings, "PROJECT_ID", "proj")
     monkeypatch.setattr(settings, "MODEL_ID", "bad-primary")
     monkeypatch.setattr(settings, "MODEL_FALLBACKS", ["good-fallback"]) 
+    monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", False)
     _unset_secure_cookie_for_tests(monkeypatch)
     
     # Mock the vertex helper to simulate primary failure and fallback success
@@ -142,6 +143,7 @@ def test_upstream_error_maps_to_502_and_sets_cookie(monkeypatch):
     from app.vertex import VertexAIError
     
     monkeypatch.setattr(settings, "PROJECT_ID", "proj")
+    monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", False)
     _unset_secure_cookie_for_tests(monkeypatch)
     
     # Mock vertex helper to raise upstream error
@@ -184,6 +186,7 @@ def test_model_not_found_no_fallback_returns_404(monkeypatch):
     
     monkeypatch.setattr(settings, "PROJECT_ID", "proj")
     monkeypatch.setattr(settings, "MODEL_FALLBACKS", [])
+    monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", False)
     _unset_secure_cookie_for_tests(monkeypatch)
     
     # Mock vertex helper to raise 404 error

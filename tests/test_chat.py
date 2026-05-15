@@ -55,6 +55,9 @@ def test_chat_success_with_mock(monkeypatch):
     monkeypatch.setattr(settings, "PROJECT_ID", "test-project")
     monkeypatch.setattr(settings, "REGION", "us-central1")
     monkeypatch.setattr(settings, "MODEL_ID", "gemini-2.5-pro")
+    
+    # Force legacy path to ensure our mock is used
+    monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", False)
 
     # Mock the function in the handler's module where it's actually imported and used
     monkeypatch.setattr(legacy_chat_handler, "vertex_call_with_fallback_text", fake_vertex_call)

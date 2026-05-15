@@ -16,6 +16,7 @@ def test_model_fallback_succeeds(monkeypatch):
     monkeypatch.setattr(m, "REGION", "us-central1")
     monkeypatch.setattr(m, "MODEL_ID", primary)
     monkeypatch.setattr(m, "MODEL_FALLBACKS", [fallback])
+    monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", False)
 
     class SwitchVertex:
         def __init__(self, project: str, region: str, model_id: str):
@@ -64,6 +65,7 @@ def test_upstream_error_maps_to_502_and_sets_cookie(monkeypatch):
     monkeypatch.setattr(m, "PROJECT_ID", "proj")
     monkeypatch.setattr(m, "REGION", "us-central1")
     monkeypatch.setattr(m, "MODEL_ID", "some-model")
+    monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", False)
 
     class ErrorVertex:
         def __init__(self, project: str, region: str, model_id: str):
