@@ -496,15 +496,24 @@ async def _start_chat_impl():
     # Set detailed persona/scene for the backend orchestration
     cl.user_session.set("character", character_detailed)
     cl.user_session.set("scene", scene_detailed)
+    # End of session setup
 
-    # Add "Report Issue" action button
-    actions = [
-        cl.Action(name="report_issue", value="report", label="Report Issue", description="End scenario and report an issue", payload={"action": "report"})
+    # 4. Final Setup: Sidebar Button for Report Issue
+    # We move the "Report Issue" button to the sidebar to avoid cluttering the chat window.
+    report_actions = [
+        cl.Action(name="report_issue", value="report", label="Report Issue", 
+                  description="End scenario and report an issue", 
+                  payload={"action": "report"})
     ]
-    await cl.Message(content="If you encounter any issues during the scenario, you can report them using the button below.", actions=actions).send()
+    await cl.Message(
+        content="## Help & Support\n\nClick the button below if you encounter any issues during the scenario. This will end the session and log a report.", 
+        actions=report_actions
+    ).send()
+    # End of sidebar config
 
-    # Initialize fresh local history for a new chat thread in Chainlit
-    cl.user_session.set("history", [])
+    # Initialize fresh local history for a new chat thread in Chainlit if not already present
+    if cl.user_session.get("history") is None:
+        cl.user_session.set("history", [])
 
     # If there is prior history on the backend, mirror it into the UI and prepend the scenario summary for context
     if existing_hist:
@@ -797,13 +806,15 @@ async def on_report_issue(action: cl.Action):
                 "reason": reason,
                 "userInfo": user_info
             }
-            r = await client.post(f"{_base_url()}/report", json=payload)
+            report_url = f"{_base_url()}/report"
+            # Ensure session is preserved in backend by including sessionId
+            r = await client.post(report_url, json=payload)
             if r.status_code == 200:
                 await cl.Message(content="Thank you for your report. The scenario has been ended and logged for review.").send()
-                # Optionally restart or end chat
-                # cl.user_session.set("history", [])
+                # Clear local history to "end" the scenario for the user
+                cl.user_session.set("history", [])
             else:
-                await cl.Message(content=f"Failed to report issue: {r.text}").send()
+                await cl.Message(content=f"Failed to report issue (HTTP {r.status_code}): {r.text}").send()
     except Exception as e:
         await cl.Message(content=f"An error occurred while reporting the issue: {str(e)}").send()
 
