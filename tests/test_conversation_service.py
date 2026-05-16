@@ -77,7 +77,7 @@ def test_mark_mirrored_multi_fallbacks_when_no_topics_found():
         {"desc": "late bedtime", "topic": "sleep", "is_mirrored": False, "is_secured": False},
         {"desc": "too much screen", "topic": "screen_time", "is_mirrored": False, "is_secured": False},
     ]}
-    # No topical match in clinician_text and parent_text
+    # No topical match in clinician_text and person_text
     mark_mirrored_multi(st, clinician_text="hello there", parent_text="random", topical_cues=TOPICAL_CUES)
     # Should mirror the first unmirrored concern as final fallback
     assert any(c["is_mirrored"] for c in st["parent_concerns"]) is True

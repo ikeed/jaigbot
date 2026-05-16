@@ -110,7 +110,7 @@ def test_classifier_post_processing_inquire_to_secure_and_tip_trim_and_score_nor
     GWStub.reply_json_payload = {"patient_reply": "safe text"}
 
     # Ensure do_llm = True by making deterministic step not rapport
-    def fake_eval(parent_last, clinician, mapping):
+    def fake_eval(person_last, clinician, mapping):
         return {"step": "Inquire", "score": 2, "reasons": ["deterministic"], "tips": []}
 
     monkeypatch.setattr(m, "evaluate_turn", fake_eval, raising=False)
@@ -143,7 +143,7 @@ def test_patient_reply_safety_violation_triggers_error_reply(monkeypatch):
     GWStub.reply_json_payload = {"patient_reply": "Take acetaminophen 5 mg every 8 hours"}
 
     # Ensure do_llm path engaged
-    def fake_eval(parent_last, clinician, mapping):
+    def fake_eval(person_last, clinician, mapping):
         return {"step": "Announce", "score": 2, "reasons": ["deterministic"], "tips": []}
     monkeypatch.setattr(m, "evaluate_turn", fake_eval, raising=False)
 
@@ -158,7 +158,7 @@ def test_patient_reply_safety_violation_triggers_error_reply(monkeypatch):
 
 def test_invalid_json_twice_falls_back_based_on_step(monkeypatch):
     # Make deterministic step Mirror via evaluate_turn to control fallback selection
-    def fake_eval(parent_last, clinician, mapping):
+    def fake_eval(person_last, clinician, mapping):
         return {"step": "Mirror", "score": 2, "reasons": ["deterministic"], "tips": []}
 
     monkeypatch.setattr(m, "evaluate_turn", fake_eval, raising=False)
