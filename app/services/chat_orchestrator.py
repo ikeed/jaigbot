@@ -369,6 +369,7 @@ class ChatOrchestrator:
         """Handle issue reports by archiving session and clearing it."""
         self.background_tasks = background_tasks
         session_id = body.sessionId
+        self.logger.info(f"Report received for session: {session_id}, reason: {body.reason}")
         
         try:
             # Fetch existing memory
@@ -385,8 +386,10 @@ class ChatOrchestrator:
                 
                 if not mem:
                     # If still no session found, return success but there's nothing to archive
+                    self.logger.warning(f"No session found to report for session_id: {session_id}")
                     return JSONResponse(content={"status": "ok", "message": "No session found to report."})
 
+            self.logger.info(f"Archiving session {session_id} for user {user_id}")
             # Prepare archive data with the extra error_report key
             archive_data = {
                 **mem,
