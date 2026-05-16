@@ -547,6 +547,14 @@ async def summary(sessionId: Optional[str] = None, analysis: Optional[bool] = Fa
 
 
 from .models import Coaching, SessionMetrics, ChatRequest, ReportRequest
+from pydantic import BaseModel as _BaseModel
+
+
+class SessionInitRequest(_BaseModel):
+    sessionId: str
+    character: Optional[str] = None
+    scene: Optional[str] = None
+    userInfo: Optional[dict] = None
 
 
 def _get_request_id(request: Request) -> Optional[str]:
@@ -620,6 +628,38 @@ async def chat(req: Request, body: ChatRequest, background_tasks: BackgroundTask
     )
     
     return await orchestrator.handle_chat(req, body, background_tasks)
+
+
+@app.post("/session")
+async def init_session(body: SessionInitRequest):
+    """Register a session in the memory store so /report and /summary can find it.
+    Called by the Chainlit UI at scenario start, before any /chat messages."""
+    if not settings.MEMORY_ENABLED:
+        return {"status": "ok"}
+    sid = body.sessionId
+    now = time.time()
+    mem = _MEMORY_STORE.get(sid)
+    if not mem:
+        mem = {
+            "history": [],
+            "character": body.character,
+            "scene": body.scene,
+            "user_info": body.userInfo,
+            "updated": now,
+        }
+        _MEMORY_STORE[sid] = mem
+    else:
+        # Update persona/scene if provided and not already set
+        if body.character and not mem.get("character"):
+            mem["character"] = body.character
+        if body.scene and not mem.get("scene"):
+            mem["scene"] = body.scene
+        if body.userInfo and not mem.get("user_info"):
+            mem["user_info"] = body.userInfo
+        mem["updated"] = now
+        _MEMORY_STORE[sid] = mem
+    logger.info(f"Session initialized: {sid}")
+    return {"status": "ok", "sessionId": sid}
 
 
 @app.post("/report")
