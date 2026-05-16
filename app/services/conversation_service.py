@@ -55,27 +55,27 @@ def is_duplicate_concern(concerns: List[Concern], desc: str, topic: Optional[str
     return False
 
 
-def maybe_add_parent_concern(
+def maybe_add_person_concern(
     state: dict, 
-    parent_text: str, 
+    person_text: str,
     topical_cues: TopicalCues, 
     llm_topic: Optional[str] = None
 ) -> None:
-    """If `parent_text` contains a topical mention, append a concern item if not duplicate.
+    """If `person_text` contains a topical mention, append a concern item if not duplicate.
 
     - Trims desc to ~240 chars (parity with existing behavior in main.py).
     - Skips affect-only mentions if no topic is detected.
     - Uses `llm_topic` if provided, otherwise falls back to `concern_topic` (keyword matching).
     """
-    if not parent_text:
+    if not person_text:
         return
     
-    topic = llm_topic or concern_topic(parent_text, topical_cues)
+    topic = llm_topic or concern_topic(person_text, topical_cues)
     if not topic:
         return
         
     concerns: List[Concern] = state.setdefault("parent_concerns", [])  # type: ignore[assignment]
-    desc = parent_text.strip()[:240]
+    desc = person_text.strip()[:240]
     if not is_duplicate_concern(concerns, desc, topic):
         concerns.append({
             "desc": desc,
@@ -85,12 +85,12 @@ def maybe_add_parent_concern(
         })
 
 
-def mark_mirrored_multi(state: dict, clinician_text: str, parent_text: str, topical_cues: TopicalCues) -> None:
+def mark_mirrored_multi(state: dict, clinician_text: str, person_text: str, topical_cues: TopicalCues) -> None:
     """Mark concerns as mirrored based on clinician reflection.
 
     Preference order:
     1) Topics detected in clinician_text (shotgun mirror)
-    2) Parent's last topical mention
+    2) Person's last topical mention
     3) First unmirrored concern
     """
     concerns: List[Concern] = state.get("parent_concerns") or []
@@ -106,7 +106,7 @@ def mark_mirrored_multi(state: dict, clinician_text: str, parent_text: str, topi
                 marked_any = True
 
     if not marked_any:
-        pt_topic = concern_topic(parent_text, topical_cues)
+        pt_topic = concern_topic(person_text, topical_cues)
         if pt_topic:
             for c in concerns:
                 if (c.get("topic") == pt_topic) and not c.get("is_mirrored"):
@@ -121,12 +121,12 @@ def mark_mirrored_multi(state: dict, clinician_text: str, parent_text: str, topi
                 break
 
 
-def mark_best_match_mirrored(state: dict, parent_text: str, topical_cues: TopicalCues) -> None:
-    """Backwards-compatible single-topic mirror using only parent's last text."""
+def mark_best_match_mirrored(state: dict, person_text: str, topical_cues: TopicalCues) -> None:
+    """Backwards-compatible single-topic mirror using only person's last text."""
     concerns: List[Concern] = state.get("parent_concerns") or []
     if not concerns:
         return
-    topic = concern_topic(parent_text, topical_cues)
+    topic = concern_topic(person_text, topical_cues)
     if topic:
         for c in concerns:
             if (c.get("topic") == topic) and not c.get("is_mirrored"):
@@ -162,7 +162,7 @@ __all__ = [
     "topics_in",
     "concern_topic",
     "is_duplicate_concern",
-    "maybe_add_parent_concern",
+    "maybe_add_person_concern",
     "mark_mirrored_multi",
     "mark_best_match_mirrored",
     "mark_secured_by_topic",

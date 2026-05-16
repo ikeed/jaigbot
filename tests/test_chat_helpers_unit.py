@@ -58,9 +58,9 @@ def test_recent_context_labels_and_empty():
     out = recent_context(turns, 3)
     # last 3 items
     assert out.split("\n") == [
-        "Parent: Hi doctor",
+        "Person: Hi doctor",
         "Clinician: How are you?",
-        "Parent: Worried about shots",
+        "Person: Worried about shots",
         ]
 
 

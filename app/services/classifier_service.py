@@ -40,7 +40,7 @@ class ClassifierService:
         self,
         *,
         clinician_message: str,
-        parent_last: str,
+        person_last: str,
         history: List[Dict[str, str]],
         prior_announced: bool,
         prior_phase: str,
@@ -58,13 +58,13 @@ class ClassifierService:
         markers = ((mapping or {}).get("meta", {}) or {}).get("per_step_classification_markers", {})
         markers_text = AimsPromptBuilder.markers_text(markers)
         recent_ctx = AimsPromptBuilder.recent_context(history, context_turns * 2)
-        parent_recent_concerns = AimsPromptBuilder.extract_recent_concerns(history, max_concerns)
+        person_recent_concerns = AimsPromptBuilder.extract_recent_concerns(history, max_concerns)
 
         prompt = AimsPromptBuilder.build_unified_classify_prompt(
             mapping_markers_text=markers_text,
             recent_ctx=recent_ctx,
-            parent_recent_concerns=parent_recent_concerns,
-            parent_last=parent_last,
+            person_recent_concerns=person_recent_concerns,
+            person_last=person_last,
             clinician_last=clinician_message,
             prior_announced=prior_announced,
             prior_phase=prior_phase,
@@ -91,7 +91,7 @@ class ClassifierService:
                 is_vaccine_relevant=data.get("is_vaccine_relevant", True),
                 aims=aims_coaching,
                 safety_flags=data.get("safety_flags") or [],
-                parent_topic=data.get("parent_topic"),
+                person_topic=data.get("person_topic"),
                 reasoning=data.get("reasoning")
             )
             
@@ -112,7 +112,7 @@ class ClassifierService:
                 
             self.logger.error("Unified classification failed, falling back: %s", e)
             return self._get_deterministic_fallback(
-                clinician_message, parent_last, mapping, safety_hints
+                clinician_message, person_last, mapping, safety_hints
             )
 
     async def _call_gemini_json(self, prompt: str) -> str:
@@ -138,37 +138,55 @@ class ClassifierService:
         "today we will", "my recommendation is",
     ]
 
+    # Strengthened Secure detection markers (Shared constants for parity)
+    _SECURE_AUTONOMY_CUES = [
+        "it's your decision", "it's your call", "up to you", "your choice", "i'm here to support"
+    ]
+
     def _apply_overrides(self, result: ClassifierResult, message: str) -> ClassifierResult:
         """Apply deterministic overrides to common LLM misclassifications."""
         # AIMS step override for questions (Question Guard)
         # Skip when strong Announce language is present — trailing questions
         # like "How does that sound?" are dialogue-inviting, not Inquire.
         msg = (message or "").strip()
+        msg_lower = msg.lower()
+
         if msg.endswith("?") and (result.aims.step in {"Announce", "Secure"}):
-            lt = msg.lower()
-            has_announce_language = any(m in lt for m in self._ANNOUNCE_MARKERS)
+            has_announce_language = any(m in msg_lower for m in self._ANNOUNCE_MARKERS)
             if not has_announce_language:
                 result.aims.step = "Inquire"
                 if result.aims.score is not None:
                     result.aims.score = min(2, result.aims.score)
-        
-        # Score normalization (ensure 0-3 as per prompt instructions, or 1-5 as per legacy)
-        # Note: prompt says 0-3, Coaching model says 0-3. Legacy engine uses 1-5.
-        # We'll stick to what the prompt produces.
-        
+
+        # Mirror+BUT penalty (parity with prompt instruction and aims_engine)
+        if result.aims.step in {"Mirror", "Mirror+Inquire"}:
+            from app.aims_engine import _introduces_new_info
+            if _introduces_new_info(msg_lower):
+                result.aims.score = min(1, result.aims.score or 0)
+                if not any("rebuttal" in r.lower() for r in result.aims.reasons):
+                    result.aims.reasons.append("Reflection included rebuttal/new info → penalized")
+
+        # Detect pseudo-Secure (data-dumping/persuasion without autonomy support)
+        # If it's classified as Secure but looks like a long lecture without autonomy cues
+        if result.aims.step == "Secure":
+            has_autonomy = any(cue in msg_lower for cue in self._SECURE_AUTONOMY_CUES)
+            if not has_autonomy and len(msg.split()) > 30:
+                result.aims.score = min(1, result.aims.score or 0)
+                result.aims.reasons.append("Secure score reduced: appears to be persuasion/data-dumping without explicit autonomy support.")
+
         return result
 
     def _get_deterministic_fallback(
         self,
         clinician_message: str,
-        parent_last: str,
+        person_last: str,
         mapping: Dict[str, Any],
         safety_hints: List[str]
     ) -> ClassifierResult:
         """Invoke the original deterministic engine as a fallback."""
         from app.aims_engine import evaluate_turn
         
-        fb = evaluate_turn(parent_last, clinician_message, mapping)
+        fb = evaluate_turn(person_last, clinician_message, mapping)
         
         # Map deterministic 'evaluate_turn' result to ClassifierResult
         reasons = fb.get("reasons", [])

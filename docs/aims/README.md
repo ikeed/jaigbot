@@ -8,6 +8,7 @@ This directory contains a structured mapping of the AIMS communication protocol 
 
 Files:
 - aims_mapping.json — a comprehensive, operational mapping for recognizing and evaluating each AIMS step.
+- AIMS_Approach_Summary.md — a concise summary of the AIMS protocol, used as the primary source of truth for prompts and logic.
 - Reference source: ../../fpubh-11-1120326.pdf (Frontiers in Public Health article)
 
 Intended uses of aims_mapping.json

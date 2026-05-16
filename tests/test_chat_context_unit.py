@@ -67,5 +67,5 @@ def test_chat_context_builder_composes_instruction_and_history():
     assert "Assistant: hello" in ht
     assert "User: how are you?" in ht
 
-    # parent_last should be the last assistant message from memory
-    assert ctx.parent_last == "hello"
+    # person_last should be the last assistant message from memory
+    assert ctx.person_last == "hello"

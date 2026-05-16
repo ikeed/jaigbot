@@ -26,7 +26,7 @@ def _get_vertex_client(project: str, region: str, model_id: str):
     return client
 from .persona import DEFAULT_CHARACTER, DEFAULT_SCENE
 from .services.conversation_service import (
-    maybe_add_parent_concern as svc_maybe_add_parent_concern,
+    maybe_add_person_concern as svc_maybe_add_person_concern,
     mark_mirrored_multi as svc_mark_mirrored_multi,
     mark_secured_by_topic as svc_mark_secured_by_topic,
 )

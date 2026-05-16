@@ -24,8 +24,8 @@ def build_classify_prompt(
     *,
     mapping_markers_text: str,
     recent_ctx: str,
-    parent_recent_concerns: List[str],
-    parent_last: str,
+    person_recent_concerns: List[str],
+    person_last: str,
     clinician_last: str,
     prior_announced: bool,
     prior_phase: str,
@@ -42,9 +42,9 @@ def build_classify_prompt(
     recent_ctx_section = (
         f"Recent context (last {context_turns} turns):\n{recent_ctx}\n\n" if recent_ctx else ""
     )
-    parent_recent_concerns_section = (
-        "Parent_recent_concerns:\n- " + "\n- ".join(parent_recent_concerns) + "\n\n"
-        if parent_recent_concerns
+    person_recent_concerns_section = (
+        "Person_recent_concerns:\n- " + "\n- ".join(person_recent_concerns) + "\n\n"
+        if person_recent_concerns
         else ""
     )
     return load_and_render(
@@ -52,8 +52,8 @@ def build_classify_prompt(
         "aims_classify.txt",
         mapping_markers_section=mapping_markers_section,
         recent_ctx_section=recent_ctx_section,
-        parent_recent_concerns_section=parent_recent_concerns_section,
-        parent_last=parent_last,
+        person_recent_concerns_section=person_recent_concerns_section,
+        person_last=person_last,
         clinician_last=clinician_last,
         prior_announced=str(prior_announced).lower(),
         prior_phase=prior_phase,
@@ -64,8 +64,8 @@ def build_unified_classify_prompt(
     *,
     mapping_markers_text: str,
     recent_ctx: str,
-    parent_recent_concerns: List[str],
-    parent_last: str,
+    person_recent_concerns: List[str],
+    person_last: str,
     clinician_last: str,
     prior_announced: bool,
     prior_phase: str,
@@ -82,9 +82,9 @@ def build_unified_classify_prompt(
     recent_ctx_section = (
         f"Recent context (last {context_turns} turns):\n{recent_ctx}\n\n" if recent_ctx else ""
     )
-    parent_recent_concerns_section = (
-        "Parent_recent_concerns:\n- " + "\n- ".join(parent_recent_concerns) + "\n\n"
-        if parent_recent_concerns
+    person_recent_concerns_section = (
+        "Person_recent_concerns:\n- " + "\n- ".join(person_recent_concerns) + "\n\n"
+        if person_recent_concerns
         else ""
     )
     return load_and_render(
@@ -92,8 +92,8 @@ def build_unified_classify_prompt(
         "unified_classify.txt",
         mapping_markers_section=mapping_markers_section,
         recent_ctx_section=recent_ctx_section,
-        parent_recent_concerns_section=parent_recent_concerns_section,
-        parent_last=parent_last,
+        person_recent_concerns_section=person_recent_concerns_section,
+        person_last=person_last,
         clinician_last=clinician_last,
         prior_announced=str(prior_announced).lower(),
         prior_phase=prior_phase,

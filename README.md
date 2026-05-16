@@ -138,4 +138,5 @@ The backend supports a session‑keyed memory with optional persona/scene, using
 - Memory and persona: docs/memory-and-persona.md
 - MCP empowerment/readiness: docs/mcp-empowerment.md
 - Standing orders (minimize manual work via efficient tool use): docs/standing-orders.md
+- AIMS protocol summary (Source of Truth): docs/aims/AIMS_Approach_Summary.md
 - AIMS protocol mapping (reference): docs/aims/aims_mapping.json (source paper: fpubh-11-1120326.pdf)

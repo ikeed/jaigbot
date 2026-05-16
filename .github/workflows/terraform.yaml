@@ -54,7 +54,8 @@ jobs:
           echo "job_workflow_ref=${{ github.job_workflow_ref }}"
           echo "actor=${{ github.actor }}"
 
-      - name: Dump OIDC claims
+      - name: Dump OIDC claims (DEBUG ONLY)
+        if: github.event_name != 'pull_request'
         run: |
           set -e
           command -v jq >/dev/null 2>&1 || { sudo apt-get update -y && sudo apt-get install -y jq; }
@@ -88,33 +89,27 @@ jobs:
         with:
           project_id: ${{ env.PROJECT_ID }}
 
-      - name: Verify gcloud installation and authentication
+      - name: Verify gcloud authentication
         if: github.event_name != 'pull_request'
         run: |
           set -e
-          echo "which gcloud: $(which gcloud)"
-          gcloud --version
-          echo "GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-<unset>}"
-          if [[ -n "${GOOGLE_APPLICATION_CREDENTIALS}" && -f "${GOOGLE_APPLICATION_CREDENTIALS}" ]]; then
-            echo "Credentials file present at $GOOGLE_APPLICATION_CREDENTIALS"
-          else
-            echo "Note: GOOGLE_APPLICATION_CREDENTIALS not set or file missing (this can be OK if using WIF without a file)."
-          fi
-          gcloud config set project "$PROJECT_ID"
-          echo "gcloud config:"
-          gcloud config list
-          echo "gcloud accounts:"
-          gcloud auth list
-          ACTIVE=$(gcloud auth list --format='value(account)' --filter='status:ACTIVE' || true)
-          if [[ -z "$ACTIVE" ]]; then
-            echo "ERROR: gcloud has no active account. Ensure the previous 'google-github-actions/auth' step ran and secrets/ID token permissions are configured." >&2
+          gcloud auth list --filter='status:ACTIVE' --format='value(account)' | grep -q . || {
+            echo "ERROR: gcloud has no active account. Ensure the previous 'google-github-actions/auth' step ran." >&2
             exit 2
-          fi
+          }
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: 1.7.5
+
+      - name: Cache Terraform plugins
+        uses: actions/cache@v4
+        with:
+          path: terraform/.terraform/providers
+          key: ${{ runner.os }}-terraform-${{ hashFiles('terraform/.terraform.lock.hcl') }}
+          restore-keys: |
+            ${{ runner.os }}-terraform-
 
       - name: Show backend configuration intent
         run: |
@@ -128,24 +123,24 @@ jobs:
         run: |
           if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
             echo "PR event detected: running 'terraform init -backend=false' to avoid remote backend auth."
-            terraform init -backend=false
+            terraform init -backend=false -no-color
           else
             if [[ -n "$TF_BACKEND_BUCKET" && -n "$TF_BACKEND_PREFIX" ]]; then
-              terraform init -backend-config="bucket=$TF_BACKEND_BUCKET" -backend-config="prefix=$TF_BACKEND_PREFIX"
+              terraform init -backend-config="bucket=$TF_BACKEND_BUCKET" -backend-config="prefix=$TF_BACKEND_PREFIX" -no-color
             else
-              terraform init
+              terraform init -no-color
             fi
           fi
 
       - name: Terraform Format Check
-        run: terraform fmt -check -recursive
+        run: terraform fmt -check -recursive -no-color
 
       - name: Terraform Validate
-        run: terraform validate
+        run: terraform validate -no-color
 
       - name: Terraform Plan
         if: github.event_name != 'pull_request'
-        run: terraform plan -input=false -var "project_id=${{ env.PROJECT_ID }}" -var "region=${{ env.REGION }}"
+        run: terraform plan -input=false -var "project_id=${{ env.PROJECT_ID }}" -var "region=${{ env.REGION }}" -no-color
 
       - name: Skip Plan Notice (pull_request)
         if: github.event_name == 'pull_request'
@@ -155,7 +150,7 @@ jobs:
 
       - name: Terraform Apply (requires GCS backend)
         if: github.event_name != 'pull_request' && env.TF_BACKEND_BUCKET != '' && env.TF_BACKEND_PREFIX != ''
-        run: terraform apply -auto-approve -input=false -var "project_id=${{ env.PROJECT_ID }}" -var "region=${{ env.REGION }}"
+        run: terraform apply -auto-approve -input=false -var "project_id=${{ env.PROJECT_ID }}" -var "region=${{ env.REGION }}" -no-color
 
       - name: Skip Apply Notice (no backend)
         if: github.event_name != 'pull_request' && (env.TF_BACKEND_BUCKET == '' || env.TF_BACKEND_PREFIX == '')
