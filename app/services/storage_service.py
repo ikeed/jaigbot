@@ -61,6 +61,7 @@ class StorageService:
                 session_data["exported_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
             
             payload = json.dumps(session_data, indent=2)
+            logger.info(f"Attempting GCS upload to bucket='{self.bucket_name}' path='{path}'")
             blob.upload_from_string(payload, content_type="application/json")
             
             logger.info(f"Successfully archived session {session_id} for user {user_id} to {path}")
