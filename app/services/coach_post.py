@@ -68,10 +68,10 @@ class VaccineRelevanceGate:
                 "step": None,
                 "score": 0,
                 "reasons": [
-                    "Non-vaccine rapport/small talk — AIMS not applied"
+                    "Rapport/symptom gathering in progress. Waiting for vaccine Announce."
                 ],
                 "tips": [
-                    "When you're ready, lead with a brief vaccine-specific Announce."
+                    "Vaccine coaching will begin after vaccination is introduced."
                 ],
             }
 
