@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 
 from app.aims_engine import evaluate_turn
 from app.models import ClassifierResult, Coaching
+from app.services.chat_helpers import recent_context as build_recent_context
 from app.services.coach_safety import detect_advice_patterns
 from app.services.prompt_builders import AimsPromptBuilder
 from app.vertex import VertexClient
@@ -58,12 +59,16 @@ class ClassifierService:
         safety_hints = detect_advice_patterns(clinician_message)
 
         # 2. Build the unified prompt
+        # Include recent conversation turns so the LLM can evaluate Mirror accuracy
+        # and detect context that a single-turn view would miss.
+        recent_ctx = build_recent_context(history, context_turns) if history else ""
         prompt = AimsPromptBuilder.build_unified_classify_prompt(
             person_last=person_last,
             clinician_last=clinician_message,
             prior_announced=prior_announced,
             prior_phase=prior_phase,
             context_turns=context_turns,
+            recent_context=recent_ctx,
             inquired_concerns_list=inquired_concerns_list,
             mirrored_concerns_list=mirrored_concerns_list,
         )
@@ -222,11 +227,14 @@ class ClassifierService:
                 if not any("rebuttal" in r.lower() for r in result.aims.reasons):
                     result.aims.reasons.append("Reflection included rebuttal/new info → penalized")
 
-        # Detect pseudo-Secure (data-dumping/persuasion without autonomy support)
-        # If it's classified as Secure but looks like a long lecture without autonomy cues
+        # Detect pseudo-Secure (data-dumping/persuasion without autonomy support).
+        # Only fires when the message is long (60+ words) AND contains no autonomy cues
+        # AND contains no question (a dialogue invite like "Does that make sense?" signals
+        # the clinician is NOT just lecturing).
         if result.aims.step == "Secure" or "Secure" in result.aims.steps:
             has_autonomy = any(cue in msg_lower for cue in self._SECURE_AUTONOMY_CUES)
-            if not has_autonomy and len(msg.split()) > 30:
+            has_question = "?" in msg
+            if not has_autonomy and not has_question and len(msg.split()) > 60:
                 result.aims.score = min(1, result.aims.score or 0)
                 if not any("persuasion" in r.lower() for r in result.aims.reasons):
                     result.aims.reasons.append("Secure score reduced: appears to be persuasion/data-dumping without explicit autonomy support.")

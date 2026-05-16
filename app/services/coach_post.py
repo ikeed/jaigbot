@@ -84,35 +84,38 @@ class AimsPostProcessor:
     Exact behavior preserved from main.py.
     """
 
+    # Tokens that strongly suggest didactic education rather than open inquiry.
+    # Deliberately narrow: broad clinical words (schedule, dose, safe, immun, risk)
+    # are common in ALL AIMS steps and must not trigger an override.
+    _DIDACTIC_TOKENS = [
+        "study shows", "studies show", "research shows", "evidence shows",
+        "the data", "data show", "statistics show", "statistically",
+        "percent of", "% of", "herd immunity",
+        "clinical trial", "randomized", "meta-analysis",
+    ]
+
     @staticmethod
     def correct_inquire_to_secure(cls_payload: Dict, clinician_text: str) -> Dict:
+        """Override Inquire → Secure only for clear didactic lectures with no question.
+
+        Guards:
+        1. No '?' anywhere in the message (a question indicates Inquire or Announce intent)
+        2. Message is long enough to be a lecture (> 40 words)
+        3. Contains specific strongly-didactic language (clinical trial, statistics, etc.)
+        """
         lt = (clinician_text or "").strip().lower()
-        if (cls_payload.get("step") == "Inquire") and ("?" not in lt):
-            if any(
-                tok in lt
-                for tok in [
-                    "study",
-                    "studies",
-                    "evidence",
-                    "data",
-                    "statistic",
-                    "percent",
-                    "%",
-                    "risk",
-                    "safe",
-                    "side effect",
-                    "protect",
-                    "immun",
-                    "schedule",
-                    "dose",
-                    "herd immunity",
-                ]
-            ):
-                cls_payload = dict(cls_payload)
-                cls_payload["reasons"] = [
-                    "Didactic education detected; overriding Inquire to Secure"
-                ] + (cls_payload.get("reasons") or [])
-                cls_payload["step"] = "Secure"
+        if cls_payload.get("step") != "Inquire":
+            return cls_payload
+        if "?" in lt:
+            return cls_payload
+        if len(lt.split()) <= 40:
+            return cls_payload
+        if any(tok in lt for tok in AimsPostProcessor._DIDACTIC_TOKENS):
+            cls_payload = dict(cls_payload)
+            cls_payload["reasons"] = [
+                "Didactic education detected; overriding Inquire to Secure"
+            ] + (cls_payload.get("reasons") or [])
+            cls_payload["step"] = "Secure"
         return cls_payload
 
     @staticmethod

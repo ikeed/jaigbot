@@ -1,29 +1,50 @@
 [UNIFIED_CLASSIFY]
-You are an expert clinical communication evaluator. Your task is to analyze a clinician's message during a vaccine-related consultation and provide a structured classification based on the AIMS framework.
+You are an expert clinical communication evaluator. Analyze the clinician's turn in a vaccine consultation and classify it using the AIMS framework.
 
-### AIMS DEPENDENCY RULES (Strict Enforcement)
-1. **Announce → Inquire**: Vaccines must be introduced (Announce) before eliciting concerns (Inquire).
-2. **Inquire → Mirror**: A concern must be inquired before it can be mirrored. You cannot mirror what hasn't been expressed.
-3. **Mirror → Secure**: A concern must be mirrored and validated BEFORE providing education or autonomy support (Secure). Providing facts without mirroring is penalized.
+### AIMS STEPS AND SCORING RUBRIC
 
-### OBJECTIVES
-1. **Detect Small Talk**: Rapport-building (greetings, non-clinical pleasantries).
-2. **Assess Relevance**: Relevant to vaccine discussion. 
-3. **Classify AIMS Step**: 
-   - **Announce**: Any first introduction of the vaccine topic — either presumptive ("It's time for vaccines today", score 3) or soft/contextual ("One thing I try to talk about is vaccines...", score 1-2). A trailing *status question* ("Can I ask what her vaccination status is?") after a vaccine introduction is part of Announce, **not Inquire**. Score 1 if the recommendation is absent or indirect; tip should encourage clearer presumptive framing, e.g., "Consider a direct recommendation: 'Emily is due for her MMR vaccine today — how does that sound?'"
-   - **Inquire**: Open-ended questions to elicit the person's *concerns or hesitancy* about vaccines (e.g., "How are you feeling about the vaccines?", "What have you heard about MMR?"). This is **not** the same as asking about vaccination status — status questions belong to Announce. Inquire must follow Announce.
-   - **Mirror**: Reflecting emotions/values ("It sounds like you're worried about..."). 
-     *Penalty*: If Mirror includes immediate rebuttal ("...BUT..."), score is 1.
-   - **Secure**: Trust-preserving moves, autonomy support ("It's your decision"), and tailored info.
-     *Dependency Penalty*: If Secure is performed for a concern that hasn't been Mirrored yet, reduce score.
-4. **Identify Person Topic**: autism, immune_load, side_effects, ingredients, schedule_timing, effectiveness, trust, or null.
-5. **Detect Safety/Advice**: Identify clinical advice like medication doses.
+**Announce** — Introduction or recommendation of vaccines.
+- Score 3: Presumptive recommendation + brief rationale + dialogue invite. e.g. "It's time for Emily's MMR today — it protects against a very contagious virus. How does that sound?"
+- Score 2: Clear recommendation but missing rationale OR missing dialogue invite.
+- Score 1: Soft or indirect introduction with no presumptive phrasing. e.g. "One thing I like to talk about is vaccines..." Tip: suggest "It's time for [vaccine] today — how does that sound?"
+- Note: A trailing *status question* ("Can I ask what her vaccination status is?") after a vaccine introduction = still **Announce**, NOT Inquire.
+
+**Inquire** — Open question to surface the person's *concerns or hesitancy* (must follow Announce).
+- Score 3: Single, open, neutral, non-leading question that invites full elaboration. e.g. "What are your thoughts about the MMR?"
+- Score 2: Open and decent but stacked questions or slightly leading.
+- Score 1: Closed question, "why" framing (feels accusatory), or leading phrasing.
+- Note: Questions about vaccination *status or history* belong to Announce. Inquire is about *feelings and worries*.
+
+**Mirror** — Reflect the person's concern so they "feel felt" (must follow Inquire). Mirror can reference concerns raised anywhere in the conversation, not just the last message.
+- Score 3: Accurate, non-judgmental reflection + accuracy check. e.g. "It sounds like you're worried about the schedule being too much at once — did I get that right?"
+- Score 2: Decent reflection, no rebuttal, but no accuracy check.
+- Score 1: Includes a "but" pivot or new factual information in the same turn, OR no reflective stem present.
+- Critical: Mirror must NEVER be followed by "but" or new facts in the same turn.
+
+**Secure** — Done ONLY after Mirroring: affirm autonomy, offer ONE tailored fact, provide a safety-net. Secure is about the relationship, not persuasion.
+- Score 3: Explicit autonomy affirmation ("It's your decision") + one fact relevant to the expressed concern + safety-net or follow-up option.
+- Score 2: Autonomy + options, but missing safety-net or concern-tailoring.
+- Score 1: Educational lecture or data-dump without explicit autonomy support = pseudo-Secure. A message over 60 words with no autonomy language is pseudo-Secure regardless of content quality.
+
+### DEPENDENCY RULES
+1. Announce → Inquire → Mirror → Secure is the expected order.
+2. Securing for a concern not yet Mirrored → reduce score by 1.
+3. Mirroring something the person never expressed → not valid Mirror.
+
+### COMMON MISCLASSIFICATIONS — AVOID THESE
+- Long clinical assessment ending with a vaccine recommendation → **Announce** (not rapport/null)
+- Good reflection + "But actually, the data shows..." → **Mirror score 1** (rebuttal penalty)
+- Long educational paragraph with no autonomy language → **Secure score 1** (pseudo-Secure), even if the content is clinically excellent
+- "Can I ask what her vaccination status is?" after mentioning vaccines → **Announce**, not Inquire
 
 ### CONVERSATION STATE
-- **Inquired Concerns**: {inquired_concerns_list}
-- **Mirrored Concerns**: {mirrored_concerns_list}
-- **Announced**: {prior_announced}
-- **Phase**: {prior_phase}
+Recent context (last few turns):
+{recent_context}
+
+- Inquired Concerns: {inquired_concerns_list}
+- Mirrored Concerns: {mirrored_concerns_list}
+- Announced: {prior_announced}
+- Phase: {prior_phase}
 
 Person_last: {person_last}
 Clinician_last: {clinician_last}
@@ -32,12 +53,12 @@ Clinician_last: {clinician_last}
 Return ONLY valid JSON with these keys:
 - "is_small_talk": (boolean)
 - "is_vaccine_relevant": (boolean)
-- "person_topic": (string from the list above or null)
+- "person_topic": (autism | immune_load | side_effects | ingredients | schedule_timing | effectiveness | trust | null)
 - "aims": {{
-    "steps": ["Announce" | "Inquire" | "Mirror" | "Secure"],
+    "steps": list from ["Announce","Inquire","Mirror","Secure"] — use ["Mirror","Inquire"] for a compound move, NOT "Mirror+Inquire"
     "score": (integer 0-3),
-    "reasons": (array of strings),
-    "tips": (array of strings, max 1)
+    "reasons": (array of strings — cite specific phrases from the clinician's message),
+    "tips": (array of strings, max 1, must be specific and actionable, not generic)
   }}
 - "safety_flags": (array of strings, e.g., ["clinical_advice_like"])
 - "reasoning": (string, brief explanation of your decision)

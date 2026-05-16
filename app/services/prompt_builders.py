@@ -62,6 +62,7 @@ class AimsPromptBuilder:
         prior_announced: bool,
         prior_phase: str,
         context_turns: int,
+        recent_context: str = "",
         inquired_concerns_list: list[str] = None,
         mirrored_concerns_list: list[str] = None,
     ) -> str:
@@ -72,6 +73,7 @@ class AimsPromptBuilder:
             prior_announced=prior_announced,
             prior_phase=prior_phase,
             context_turns=context_turns,
+            recent_context=recent_context,
             inquired_concerns_list=inquired_concerns_list,
             mirrored_concerns_list=mirrored_concerns_list,
         )

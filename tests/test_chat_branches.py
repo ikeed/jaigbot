@@ -100,7 +100,9 @@ def client():
 
 
 def test_classifier_post_processing_inquire_to_secure_and_tip_trim_and_score_norm(monkeypatch):
-    # LLM classifier returns Inquire with score=0 and >1 tips; message has didactic terms and no question
+    # LLM classifier returns Inquire with score=0 and >1 tips.
+    # Message is a long (>40 words), question-free didactic lecture with specific
+    # evidence-based language — correct_inquire_to_secure should flip it to Secure.
     GWStub.classify_payload = {
         "step": "Inquire",
         "score": 0,
@@ -116,8 +118,15 @@ def test_classifier_post_processing_inquire_to_secure_and_tip_trim_and_score_nor
     monkeypatch.setattr(m, "evaluate_turn", fake_eval, raising=False)
 
     c = client()
+    # A long (>40 words), question-free lecture with specific didactic tokens
+    # (clinical trial, evidence shows, herd immunity) — qualifies for the override.
     body = {
-        "message": "The studies and evidence about vaccines show safety",  # didactic; no question mark
+        "message": (
+            "The clinical trial data show that the MMR vaccine has a 97 percent efficacy rate. "
+            "Randomized controlled studies have demonstrated no causal link to adverse outcomes. "
+            "Evidence shows that herd immunity requires approximately 95 percent coverage. "
+            "Research shows that vaccine-preventable diseases resurge when coverage drops below threshold."
+        ),
         "coach": True,
         "sessionId": "s1",
     }

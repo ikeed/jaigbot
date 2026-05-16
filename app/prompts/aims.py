@@ -67,6 +67,7 @@ def build_unified_classify_prompt(
     prior_announced: bool,
     prior_phase: str,
     context_turns: int,
+    recent_context: str = "",
     inquired_concerns_list: List[str] = None,
     mirrored_concerns_list: List[str] = None,
 ) -> str:
@@ -82,6 +83,7 @@ def build_unified_classify_prompt(
         prior_announced=str(prior_announced).lower(),
         prior_phase=prior_phase,
         context_turns=str(context_turns),
+        recent_context=recent_context or "(none — first turn)",
         inquired_concerns_list=", ".join(inquired_concerns_list or []),
         mirrored_concerns_list=", ".join(mirrored_concerns_list or []),
     )
