@@ -373,13 +373,19 @@ class ChatOrchestrator:
         try:
             # Fetch existing memory
             mem = self.session_service.get_mem(session_id)
-            if not mem:
-                # If no session found, we still return success but there's nothing to archive
-                return JSONResponse(content={"status": "ok", "message": "No session found to report."})
-
+            
             # Identify user_id
-            user_info = body.userInfo or mem.get("user_info")
+            user_info = body.userInfo or (mem.get("user_info") if mem else None)
             user_id = user_info.get("identifier") if user_info else "anonymous"
+
+            if not mem:
+                # If no session found in memory, try to fetch from GCS
+                self.logger.info(f"Session {session_id} not in memory, checking GCS for user {user_id}")
+                mem = storage_service.download_session(session_id, user_id)
+                
+                if not mem:
+                    # If still no session found, return success but there's nothing to archive
+                    return JSONResponse(content={"status": "ok", "message": "No session found to report."})
 
             # Prepare archive data with the extra error_report key
             archive_data = {
