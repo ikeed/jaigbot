@@ -66,13 +66,17 @@ from app.main import app
 class AimsCoachingHandler:
     """Handles the full AIMS coaching flow."""
     
-    # Topical cues for concern tracking (behavior-preserving constants)
+    # Topical cues for concern tracking.
+    # NOTE: Only include terms that are specific to vaccine HESITANCY contexts.
+    # Generic medical symptom words (fever, swelling, redness) are excluded because
+    # they appear in clinical assessments of illness — not just vaccine concerns —
+    # and cause false registrations of vaccine concerns from symptom descriptions.
     _TOPICAL_CUES = {
         "autism": ["autism", "asd"],
-        "immune_load": ["too many", "too soon", "immune", "immune system", "overload", 
-                       "immune overload", "immune system load", "viral load"],
-        "side_effects": ["side effect", "adverse event", "vaers", "reaction", 
-                        "fever", "swelling", "redness"],
+        "immune_load": ["too many", "too soon", "immune overload", "immune system load",
+                       "viral load", "overwhelm the immune", "overload the immune"],
+        "side_effects": ["side effect", "adverse event", "vaers", "reaction to the vaccine",
+                        "reaction to the shot", "after the shot", "after the vaccine"],
         "ingredients": ["thimerosal", "aluminum", "adjuvant", "preservative", "ingredient"],
         "schedule_timing": ["schedule", "spacing", "delay", "alternative schedule", "wait"],
         "effectiveness": ["effective", "efficacy", "works", "breakthrough"],
@@ -454,7 +458,9 @@ class AimsCoachingHandler:
             self._apply_coaching_guidance(cls_payload, step_main, state, clinician_message, person_last)
             
             # 3. Update observational state (announced, phase)
-            self._update_observational_state(state, step_main)
+            # Pass the full steps list so compound turns (e.g. Announce+Inquire)
+            # correctly update announced even when step_main is Inquire.
+            self._update_observational_state(state, step_main, steps)
             
             # Persist state
             mem["aims_state"] = state
@@ -524,17 +530,31 @@ class AimsCoachingHandler:
                     cls_payload["score"] = 2
             mark_secured_by_topic(state, clinician_message, self._TOPICAL_CUES)
     
-    def _update_observational_state(self, state: Dict[str, Any], step_current: str) -> None:
-        """Update observational state based on detected step."""
-        if step_current == "Announce":
+    def _update_observational_state(
+        self, state: Dict[str, Any], step_current: str, steps: List[str] = None
+    ) -> None:
+        """Update observational state based on detected step(s).
+
+        Checks both step_current (legacy primary step) and the full steps list so
+        that compound turns like Announce+Inquire correctly set announced=True even
+        when the primary reported step is Inquire.
+        """
+        all_steps = set(steps or [])
+        if step_current:
+            all_steps.add(step_current)
+
+        # Announce in any step sets the announced flag
+        if "Announce" in all_steps:
             state["announced"] = True
-            if state.get("phase") == "PreAnnounce":
-                state["phase"] = "PreAnnounce"  # remain until inquiry begins
-        elif step_current in ("Inquire", "Mirror+Inquire"):
+            # Phase stays PreAnnounce until inquiry begins
+
+        # Inquire / Mirror+Inquire advances the phase
+        if step_current in ("Inquire", "Mirror+Inquire") or "Inquire" in all_steps:
             state["first_inquire_done"] = True
             state["phase"] = "InquireMirror"
-        elif step_current == "Mirror":
-            state["phase"] = "InquireMirror"
+        elif step_current == "Mirror" or "Mirror" in all_steps:
+            if state.get("phase") != "InquireMirror":
+                state["phase"] = "InquireMirror"
         elif step_current == "Secure":
             state["phase"] = "Secure"
             # pending_concerns becomes False if all concerns are secured

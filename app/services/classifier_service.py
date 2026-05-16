@@ -197,16 +197,38 @@ class ClassifierService:
         "it's your decision", "it's your call", "up to you", "your choice",
         "i'm here to support", "informed and supported", "not rushed",
         "not pushed", "continue talking", "revisit any concerns",
+        "you can decide", "how you want to proceed", "whatever you choose",
+        "your decision to make", "entirely up to you",
+    ]
+
+    # Strong presumptive recommendation phrases that always indicate Announce,
+    # used by the positive Announce detector below.
+    _STRONG_ANNOUNCE_PHRASES = [
+        "i recommend", "it's time for", "it\u2019s time for", "my recommendation is",
+        "is due for", "due for", "today we will", "today we usually",
+        "at this visit", "routine vaccines",
     ]
 
     def _apply_overrides(self, result: ClassifierResult, message: str) -> ClassifierResult:
         """Apply deterministic overrides to common LLM misclassifications."""
-        # AIMS step override for questions (Question Guard)
-        # Skip when strong Announce language is present — trailing questions
-        # like "How does that sound?" are dialogue-inviting, not Inquire.
         msg = (message or "").strip()
         msg_lower = msg.lower()
 
+        # Positive Announce detector: if the message contains unambiguous recommendation
+        # language but the LLM didn't classify as Announce, add it.
+        # This catches cases where the LLM focuses on a trailing Inquire and misses
+        # a clear recommendation earlier in the same turn (e.g. "What I recommend for
+        # kids this age is... what are your thoughts?").
+        if result.aims.step != "Announce" and "Announce" not in result.aims.steps:
+            if any(phrase in msg_lower for phrase in self._STRONG_ANNOUNCE_PHRASES):
+                result.aims.steps = ["Announce"] + result.aims.steps
+                result.aims.step = "Announce"
+                if not any("recommend" in r.lower() or "announce" in r.lower() for r in result.aims.reasons):
+                    result.aims.reasons.insert(0, "Detected recommendation language \u2192 Announce")
+
+        # Question Guard: prevent Announce/Secure from being kept when message
+        # ends with '?' but has no announce language (trailing questions are Inquire).
+        # Skip when strong Announce language is present.
         if msg.endswith("?") and (result.aims.step in {"Announce", "Secure"} or "Announce" in result.aims.steps or "Secure" in result.aims.steps):
             has_announce_language = any(m in msg_lower for m in self._ANNOUNCE_MARKERS)
             if not has_announce_language:
