@@ -51,18 +51,25 @@ def test_report_endpoint_success(monkeypatch):
         assert session_id not in _MEMORY_STORE
 
 def test_report_endpoint_no_session(monkeypatch):
-    # Mock storage download to return None
+    # Even without prior session data, a report-only archive should be created
     with patch("app.services.storage_service.StorageService.download_session") as mock_down:
         mock_down.return_value = None
-        response = client.post(
-            "/report",
-            json={
-                "sessionId": "non-existent",
-                "reason": "some reason"
-            }
-        )
-        assert response.status_code == 200
-        assert response.json()["message"] == "No session found to report."
+        with patch("app.services.storage_service.StorageService.upload_session") as mock_up:
+            mock_up.return_value = True
+            response = client.post(
+                "/report",
+                json={
+                    "sessionId": "non-existent",
+                    "reason": "some reason"
+                }
+            )
+            assert response.status_code == 200
+            assert response.json()["message"] == "Issue reported and session ended."
+            # Verify a report-only archive was still uploaded
+            mock_up.assert_called_once()
+            args, _ = mock_up.call_args
+            assert args[2]["error_report"] == "some reason"
+            assert args[2]["history"] == []
 
 def test_report_endpoint_from_gcs():
     # Setup
