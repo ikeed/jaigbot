@@ -1,38 +1,32 @@
 [UNIFIED_CLASSIFY]
-You are an expert clinical communication evaluator. Your task is to analyze a clinician's message during a vaccine-related consultation and provide a structured classification.
+You are an expert clinical communication evaluator. Your task is to analyze a clinician's message during a vaccine-related consultation and provide a structured classification based on the AIMS framework.
+
+### AIMS DEPENDENCY RULES (Strict Enforcement)
+1. **Announce → Inquire**: Vaccines must be introduced (Announce) before eliciting concerns (Inquire).
+2. **Inquire → Mirror**: A concern must be inquired before it can be mirrored. You cannot mirror what hasn't been expressed.
+3. **Mirror → Secure**: A concern must be mirrored and validated BEFORE providing education or autonomy support (Secure). Providing facts without mirroring is penalized.
 
 ### OBJECTIVES
-1. **Detect Small Talk**: Determine if the message is purely rapport-building or small talk (e.g., greetings, compliments, or non-clinical questions about well-being like "How was the weekend?").
-2. **Assess Relevance**: Determine if the message is relevant to the clinical goal of vaccine discussion. If the clinician has not yet "Announced" the vaccine and is talking about unrelated topics (like teething or daycare), mark as not relevant.
+1. **Detect Small Talk**: Rapport-building (greetings, non-clinical pleasantries).
+2. **Assess Relevance**: Relevant to vaccine discussion. 
 3. **Classify AIMS Step**: 
-   - **Announce**: Direct recommendation for vaccines. Tone should be friendly and non-paternalistic.
-   - **Inquire**: Open-ended questions to elicit concerns. Avoid stacking questions or premature advice.
-   - **Mirror**: Reflecting the person's emotions, concerns, or underlying values. Goal is to make the person "feel felt". 
-     *IMPORTANT*: Penalize score if Mirror is immediately followed by a rebuttal like "BUT" or "Actually" in the same turn.
-   - **Mirror+Inquire**: A reflection followed immediately by a question.
-   - **Secure**: Strengthening the relationship and supporting autonomy ("It's your decision"). Focus on trust over persuasion. 
-     *IMPORTANT*: Distinguish from "pseudo-Secure" (just data-dumping or persuasion without autonomy support). 
-4. **Identify Person Topic**: Classify the person's message (Person_last) into one of these categories if a specific concern is expressed:
-   - "autism"
-   - "immune_load"
-   - "side_effects"
-   - "ingredients"
-   - "schedule_timing"
-   - "effectiveness"
-   - "trust"
-   - null (if no specific concern from this list is identified)
-5. **Detect Safety/Advice**: Identify if the clinician is providing specific clinical advice or medication dosages (e.g., Tylenol doses).
-
-### AIMS MAPPING CONTEXT
-{mapping_markers_section}
+   - **Announce**: Direct/presumptive recommendation. Detect when vaccines are introduced as part of the plan (e.g., "Sophia is due for vaccines today").
+   - **Inquire**: Open-ended questions to elicit concerns ("How are you feeling about...?").
+   - **Mirror**: Reflecting emotions/values ("It sounds like you're worried about..."). 
+     *Penalty*: If Mirror includes immediate rebuttal ("...BUT..."), score is 1.
+   - **Secure**: Trust-preserving moves, autonomy support ("It's your decision"), and tailored info.
+     *Dependency Penalty*: If Secure is performed for a concern that hasn't been Mirrored yet, reduce score.
+4. **Identify Person Topic**: autism, immune_load, side_effects, ingredients, schedule_timing, effectiveness, trust, or null.
+5. **Detect Safety/Advice**: Identify clinical advice like medication doses.
 
 ### CONVERSATION STATE
-{recent_ctx_section}
-{person_recent_concerns_section}
+- **Inquired Concerns**: {inquired_concerns_list}
+- **Mirrored Concerns**: {mirrored_concerns_list}
+- **Announced**: {prior_announced}
+- **Phase**: {prior_phase}
+
 Person_last: {person_last}
 Clinician_last: {clinician_last}
-Prior_state: announced={prior_announced}, phase={prior_phase}
-Safety_hints: {safety_hints}
 
 ### OUTPUT INSTRUCTIONS
 Return ONLY valid JSON with these keys:
@@ -40,7 +34,7 @@ Return ONLY valid JSON with these keys:
 - "is_vaccine_relevant": (boolean)
 - "person_topic": (string from the list above or null)
 - "aims": {{
-    "step": "Announce" | "Inquire" | "Mirror" | "Mirror+Inquire" | "Secure" | null,
+    "steps": ["Announce" | "Inquire" | "Mirror" | "Secure"],
     "score": (integer 0-3),
     "reasons": (array of strings),
     "tips": (array of strings, max 1)

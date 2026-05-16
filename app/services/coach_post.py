@@ -191,7 +191,7 @@ class EndGameDetector:
         "handout", "handouts", "brochure", "pamphlet", "literature", "written info",
         "information to take home", "take home", "materials", "resource", "printout", "printed info",
         "reading", "read this", "give you some literature", "leaflet", "info sheet",
-        "look over", "at home", "appreciate that", "read over", "thanks", "thank you",
+        "look over", "at home", "read over",
     ]
 
     @staticmethod
@@ -255,8 +255,8 @@ class EndGameDetector:
             return {"reason": "followup_literature"}
 
         # Heuristic: if they clearly say "talk it over" or "think it over" AND "appreciate that/home", it's endgame
-        if has_literature and ("appreciate" in lt or "home" in lt or "thanks" in lt or "thank you" in lt):
-             return {"reason": "followup_literature"}
+        if has_literature and ("appreciate" in lt or "home" in lt):
+            return {"reason": "followup_literature"}
 
         return None
 

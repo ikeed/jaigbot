@@ -18,28 +18,49 @@ import time
 import asyncio
 import uuid
 import os
-from typing import Any, Dict
+import re
+from typing import Any, Dict, List, Optional
 
 from fastapi import Request
 
 from app.models import ChatRequest
+from app.config import settings
+from app.aims_engine import evaluate_turn, load_mapping
 from app.services.chat_context import ChatContext
 from app.services.classifier_service import ClassifierService
-from app.services.coach_post import VaccineRelevanceGate, AimsPostProcessor, EndGameDetector
+from app.services.coach_post import (
+    VaccineRelevanceGate, 
+    AimsPostProcessor, 
+    EndGameDetector,
+    build_endgame_bullets_fallback
+)
 from app.services.coach_safety import detect_advice_patterns
 from app.services.conversation_service import (
-    maybe_add_person_concern as svc_maybe_add_person_concern,
-    mark_mirrored_multi as svc_mark_mirrored_multi, 
-    mark_secured_by_topic as svc_mark_secured_by_topic,
-    concern_topic as svc_concern_topic,
+    maybe_add_person_concern,
+    mark_mirrored_multi,
+    mark_secured_by_topic,
 )
 from app.services.prompt_builders import AimsPromptBuilder
 from app.services.security_guard import JailbreakGuard
-from app.services.vertex_helpers import vertex_call_with_fallback_text, vertex_call_with_fallback_json
+from app.services.vertex_helpers import (
+    vertex_call_with_fallback_text, 
+    vertex_call_with_fallback_json,
+    get_last_model_used
+)
 from app.prompts.aims import build_patient_reply_prompt
-from app.telemetry.events import log_event as telemetry_log_event, truncate_for_log as telemetry_truncate
+from app.telemetry.events import (
+    log_event as telemetry_log_event, 
+    truncate_for_log as telemetry_truncate
+)
 from app.vertex import VertexClient
-from app.json_schemas import REPLY_SCHEMA, CLASSIFY_SCHEMA, ENDGAME_DETECT_SCHEMA, validate_json
+from app.json_schemas import (
+    REPLY_SCHEMA, 
+    CLASSIFY_SCHEMA, 
+    ENDGAME_DETECT_SCHEMA, 
+    validate_json
+)
+from app.services.chat_helpers import strip_appointment_headers
+from app.main import app
 
 
 class AimsCoachingHandler:
@@ -153,8 +174,6 @@ class AimsCoachingHandler:
         prior_phase = (prior_state or {}).get("phase", "PreAnnounce")
 
         # Launch classification and reply generation in parallel
-        from app.config import settings
-
         task_cls = asyncio.create_task(
             self.classifier_service.classify_turn(
                 clinician_message=body.message,
@@ -165,6 +184,8 @@ class AimsCoachingHandler:
                 mapping=mapping,
                 context_turns=settings.AIMS_CLASSIFY_CONTEXT_TURNS,
                 max_concerns=settings.AIMS_CLASSIFY_MAX_CONCERNS,
+                inquired_concerns_list=[c["topic"] for c in (prior_state or {}).get("parent_concerns", [])],
+                mirrored_concerns_list=[c["topic"] for c in (prior_state or {}).get("parent_concerns", []) if c.get("is_mirrored")],
             )
         )
         task_reply = asyncio.create_task(
@@ -212,7 +233,6 @@ class AimsCoachingHandler:
             is_small_talk = classification_result.is_small_talk
         else:
             # If we timed out or failed, use the deterministic fallback immediately
-            from app.aims_engine import evaluate_turn
             fb = evaluate_turn(ctx.person_last, body.message, mapping)
             cls_payload = {
                 "step": fb.get("step"),
@@ -225,8 +245,6 @@ class AimsCoachingHandler:
             is_small_talk = False
 
         # Apply post-processors to BOTH LLM and fallback results
-        from app.services.coach_post import VaccineRelevanceGate, AimsPostProcessor
-        
         # Vaccine relevance gate
         mem = ctx.mem or {}
         aims_state = mem.get("aims_state", {}) or {}
@@ -255,7 +273,6 @@ class AimsCoachingHandler:
         
         # Try to snapshot model used for classification (may be approximate if overwritten by parallel call)
         try:
-            from app.services.vertex_helpers import get_last_model_used
             model_used_cls = get_last_model_used() or self.model_id
         except Exception:
             model_used_cls = self.model_id
@@ -309,7 +326,6 @@ class AimsCoachingHandler:
 
         # Calculate reply duration from its previously completed task
         try:
-            from app.services.vertex_helpers import get_last_model_used
             model_used_reply = get_last_model_used() or self.model_id
         except Exception:
             model_used_reply = self.model_id
@@ -327,7 +343,6 @@ class AimsCoachingHandler:
         # scenario headers from the parent reply to avoid duplicating the UI card.
         try:
             if not (ctx.person_last or "").strip():
-                from app.services.chat_helpers import strip_appointment_headers
                 pr = reply_payload.get("patient_reply", "")
                 reply_payload["patient_reply"] = strip_appointment_headers(pr)
         except Exception:
@@ -363,7 +378,6 @@ class AimsCoachingHandler:
         # Return structured result
         # Report the actual model used (considering fallbacks) when available
         try:
-            from app.services.vertex_helpers import get_last_model_used
             model_used = get_last_model_used() or self.model_id
         except Exception:
             model_used = self.model_id
@@ -389,13 +403,9 @@ class AimsCoachingHandler:
     
     async def _load_aims_mapping(self) -> Dict[str, Any]:
         """Load and cache AIMS mapping."""
-        # Import here to avoid circular imports
-        from app.main import app
-        
         mapping = getattr(app.state, "aims_mapping", None)
         if mapping is None:
             try:
-                from app.aims_engine import load_mapping
                 mapping = load_mapping()
             except Exception as e:
                 self.logger.warning("AIMS mapping failed to load: %s", e)
@@ -423,18 +433,28 @@ class AimsCoachingHandler:
                 "parent_concerns": []
             })
             
-            step_current = cls_payload.get("step")
+            steps = cls_payload.get("steps") or ([cls_payload.get("step")] if cls_payload.get("step") else [])
             
             # Add latest person concern if any, avoiding duplicates by topic
             if person_last:
                 # Use LLM topic if available, otherwise fall back to static cues
-                svc_maybe_add_person_concern(state, person_last, self._TOPICAL_CUES, llm_topic)
+                maybe_add_person_concern(state, person_last, self._TOPICAL_CUES, llm_topic)
             
-            # Apply coaching guidance rules
-            self._apply_coaching_guidance(cls_payload, step_current, state, clinician_message, person_last)
+            # 1. Update Mirror/Secure status based on clinician message
+            # If Mirror is in steps, mark matching concerns as mirrored
+            if "Mirror" in steps:
+                mark_mirrored_multi(state, clinician_message, person_last, self._TOPICAL_CUES)
             
-            # Update observational state
-            self._update_observational_state(state, step_current)
+            # If Secure is in steps, mark matching MIRRORED concerns as secured
+            if "Secure" in steps:
+                mark_secured_by_topic(state, clinician_message, self._TOPICAL_CUES)
+
+            # 2. Apply coaching guidance rules (legacy/heuristic fallback)
+            step_main = cls_payload.get("step")
+            self._apply_coaching_guidance(cls_payload, step_main, state, clinician_message, person_last)
+            
+            # 3. Update observational state (announced, phase)
+            self._update_observational_state(state, step_main)
             
             # Persist state
             mem["aims_state"] = state
@@ -442,7 +462,7 @@ class AimsCoachingHandler:
             self.memory_store[session_id] = mem
             
         except Exception:
-            self.logger.debug("AIMS state persistence failed for session %s", session_id)
+            self.logger.exception("AIMS state persistence failed for session %s", session_id)
     
     def _apply_coaching_guidance(
         self, cls_payload: Dict[str, Any], step_current: str, state: Dict[str, Any],
@@ -486,7 +506,7 @@ class AimsCoachingHandler:
         
         # Handle mirroring
         if step_current in ("Mirror", "Mirror+Inquire"):
-            svc_mark_mirrored_multi(state, clinician_message, person_last, self._TOPICAL_CUES)
+            mark_mirrored_multi(state, clinician_message, person_last, self._TOPICAL_CUES)
         
         # Handle securing
         if step_current == "Secure":
@@ -502,7 +522,7 @@ class AimsCoachingHandler:
                     cls_payload["score"] = min(2, int(cls_payload.get("score", 2)))
                 except Exception:
                     cls_payload["score"] = 2
-            svc_mark_secured_by_topic(state, clinician_message, self._TOPICAL_CUES)
+            mark_secured_by_topic(state, clinician_message, self._TOPICAL_CUES)
     
     def _update_observational_state(self, state: Dict[str, Any], step_current: str) -> None:
         """Update observational state based on detected step."""
@@ -793,9 +813,16 @@ class AimsCoachingHandler:
                     try:
                         aims_state = (mem or {}).get("aims_state") or {}
                         announced = aims_state.get("announced", False)
+                        phase = aims_state.get("phase", "PreAnnounce")
                         
-                        # HARD GUARD: Scenario cannot end if vaccine conversation hasn't even been announced
-                        if not announced:
+                        # HARD GUARD: Scenario cannot end in PreAnnounce phase
+                        if phase == "PreAnnounce":
+                            return None
+
+                        # RELAXED GUARD: Allow endgame detection even if 'announced' flag is false,
+                        # provided there's enough dialogue (assistant_count > 1).
+                        # This covers cases where the first Announce was misclassified.
+                        if not announced and assistant_count <= 1:
                             return None
 
                         concerns_list = aims_state.get("parent_concerns") or []

@@ -1,6 +1,11 @@
 from typing import List, Optional
 
-from . import chat_helpers as ch
+from app.services.chat_helpers import format_markers, recent_context, extract_recent_concerns
+from app.prompts.aims import (
+    build_classify_prompt as _build_classify,
+    build_unified_classify_prompt as _build_unified,
+    build_endgame_detector_prompt as _build_endgame
+)
 
 
 class AimsPromptBuilder:
@@ -12,15 +17,15 @@ class AimsPromptBuilder:
 
     @staticmethod
     def markers_text(markers: dict) -> str:
-        return ch.format_markers(markers)
+        return format_markers(markers)
 
     @staticmethod
     def recent_context(history: list[dict], n_turns: int) -> str:
-        return ch.recent_context(history, n_turns)
+        return recent_context(history, n_turns)
 
     @staticmethod
     def extract_recent_concerns(history: list[dict], max_items: int) -> list[str]:
-        return ch.extract_recent_concerns(history, max_items)
+        return extract_recent_concerns(history, max_items)
 
     @staticmethod
     def build_classify_prompt(
@@ -38,9 +43,7 @@ class AimsPromptBuilder:
 
         Behavior-preserving: produces identical text as the previous in-code builder.
         """
-        from app.prompts.aims import build_classify_prompt as _build
-
-        return _build(
+        return _build_classify(
             mapping_markers_text=mapping_markers_text,
             recent_ctx=recent_ctx,
             person_recent_concerns=person_recent_concerns,
@@ -54,30 +57,39 @@ class AimsPromptBuilder:
     @staticmethod
     def build_unified_classify_prompt(
         *,
-        mapping_markers_text: str,
-        recent_ctx: str,
-        person_recent_concerns: list[str],
         person_last: str,
         clinician_last: str,
         prior_announced: bool,
         prior_phase: str,
         context_turns: int,
-        safety_hints: list[str],
+        inquired_concerns_list: list[str] = None,
+        mirrored_concerns_list: list[str] = None,
     ) -> str:
-        """Render unified classify prompt via external template.
-
-        Combines AIMS, small talk, relevance, and safety.
-        """
-        from app.prompts.aims import build_unified_classify_prompt as _build
-
-        return _build(
-            mapping_markers_text=mapping_markers_text,
-            recent_ctx=recent_ctx,
-            person_recent_concerns=person_recent_concerns,
+        """Render unified classify prompt via external template."""
+        return _build_unified(
             person_last=person_last,
             clinician_last=clinician_last,
             prior_announced=prior_announced,
             prior_phase=prior_phase,
             context_turns=context_turns,
-            safety_hints=safety_hints,
+            inquired_concerns_list=inquired_concerns_list,
+            mirrored_concerns_list=mirrored_concerns_list,
+        )
+
+    @staticmethod
+    def build_endgame_detector_prompt(
+        *,
+        history_text: str,
+        announced: bool,
+        inquired_concerns: list[str],
+        mirrored_concerns: list[str],
+        secured_concerns: list[str],
+    ) -> str:
+        """Render endgame detector prompt."""
+        return _build_endgame(
+            history_text=history_text,
+            announced=announced,
+            inquired_concerns=inquired_concerns,
+            mirrored_concerns=mirrored_concerns,
+            secured_concerns=secured_concerns,
         )

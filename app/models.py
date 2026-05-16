@@ -14,6 +14,9 @@ class Coaching(BaseModel):
     step: Optional[str] = Field(
         default=None, description="Detected AIMS step: Announce|Inquire|Mirror|Secure|Mirror+Inquire"
     )
+    steps: list[str] = Field(
+        default_factory=list, description="Detected AIMS steps (for compound moves)"
+    )
     score: Optional[int] = Field(default=None, description="0–3 per-step score")
     reasons: list[str] = Field(
         default_factory=list, description="Brief reasons supporting the score"

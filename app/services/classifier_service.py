@@ -4,7 +4,9 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
+from app.aims_engine import evaluate_turn
 from app.models import ClassifierResult, Coaching
+from app.services.coach_safety import detect_advice_patterns
 from app.services.prompt_builders import AimsPromptBuilder
 from app.vertex import VertexClient
 
@@ -47,29 +49,23 @@ class ClassifierService:
         mapping: Dict[str, Any],
         context_turns: int = 3,
         max_concerns: int = 3,
+        inquired_concerns_list: List[str] = None,
+        mirrored_concerns_list: List[str] = None,
     ) -> ClassifierResult:
         """Perform unified classification for a clinician turn."""
         
         # 1. Pre-filter with deterministic hints (optional, used as context)
-        from app.services.coach_safety import detect_advice_patterns
         safety_hints = detect_advice_patterns(clinician_message)
 
         # 2. Build the unified prompt
-        markers = ((mapping or {}).get("meta", {}) or {}).get("per_step_classification_markers", {})
-        markers_text = AimsPromptBuilder.markers_text(markers)
-        recent_ctx = AimsPromptBuilder.recent_context(history, context_turns * 2)
-        person_recent_concerns = AimsPromptBuilder.extract_recent_concerns(history, max_concerns)
-
         prompt = AimsPromptBuilder.build_unified_classify_prompt(
-            mapping_markers_text=markers_text,
-            recent_ctx=recent_ctx,
-            person_recent_concerns=person_recent_concerns,
             person_last=person_last,
             clinician_last=clinician_message,
             prior_announced=prior_announced,
             prior_phase=prior_phase,
             context_turns=context_turns,
-            safety_hints=safety_hints,
+            inquired_concerns_list=inquired_concerns_list,
+            mirrored_concerns_list=mirrored_concerns_list,
         )
 
         # 3. Call Gemini
@@ -79,8 +75,23 @@ class ClassifierService:
             
             # Extract and normalize AIMS coaching
             aims_data = data.get("aims", {})
+            steps = aims_data.get("steps") or []
+            step = aims_data.get("step") # support both formats during transition
+            
+            if not step and steps:
+                # Normalize steps array into single step string for legacy support
+                if len(steps) == 1:
+                    step = steps[0]
+                elif "Mirror" in steps and "Inquire" in steps:
+                    step = "Mirror+Inquire"
+                else:
+                    # Pick the most "advanced" step or first one
+                    priority = {"Secure": 4, "Mirror+Inquire": 3, "Mirror": 2, "Inquire": 1, "Announce": 0}
+                    step = max(steps, key=lambda s: priority.get(s, -1), default=None)
+
             aims_coaching = Coaching(
-                step=aims_data.get("step"),
+                step=step,
+                steps=steps,
                 score=aims_data.get("score"),
                 reasons=aims_data.get("reasons") or [],
                 tips=aims_data.get("tips") or []
@@ -115,6 +126,34 @@ class ClassifierService:
                 clinician_message, person_last, mapping, safety_hints
             )
 
+    async def detect_endgame(
+        self,
+        *,
+        history_text: str,
+        announced: bool,
+        inquired_concerns: List[str],
+        mirrored_concerns: List[str],
+        secured_concerns: List[str],
+    ) -> Dict[str, Any]:
+        """Call Gemini to detect if the session has reached a natural conclusion.
+
+        TODO: Wire this into AimsCoachingHandler._check_end_game() as an LLM-based
+        complement/replacement to the heuristic EndGameDetector. Currently prep work only.
+        """
+        prompt = AimsPromptBuilder.build_endgame_detector_prompt(
+            history_text=history_text,
+            announced=announced,
+            inquired_concerns=inquired_concerns,
+            mirrored_concerns=mirrored_concerns,
+            secured_concerns=secured_concerns,
+        )
+        try:
+            raw_json = await self._call_gemini_json(prompt)
+            return json.loads(raw_json)
+        except Exception as e:
+            self.logger.error("Endgame detection failed: %s", e)
+            return {"is_endgame": False, "reason": "detection_error"}
+
     async def _call_gemini_json(self, prompt: str) -> str:
         """Call Vertex AI with JSON response expectation."""
         client = self.client_cls(
@@ -135,12 +174,15 @@ class ClassifierService:
     # "How does that sound?".
     _ANNOUNCE_MARKERS = [
         "i recommend", "it's time for", "it\u2019s time for", "due for",
-        "today we will", "my recommendation is",
+        "today we will", "my recommendation is", "today we usually",
+        "at this visit", "at the 2-month visit", "is due for", "routine vaccines",
     ]
 
     # Strengthened Secure detection markers (Shared constants for parity)
     _SECURE_AUTONOMY_CUES = [
-        "it's your decision", "it's your call", "up to you", "your choice", "i'm here to support"
+        "it's your decision", "it's your call", "up to you", "your choice",
+        "i'm here to support", "informed and supported", "not rushed",
+        "not pushed", "continue talking", "revisit any concerns",
     ]
 
     def _apply_overrides(self, result: ClassifierResult, message: str) -> ClassifierResult:
@@ -151,28 +193,34 @@ class ClassifierService:
         msg = (message or "").strip()
         msg_lower = msg.lower()
 
-        if msg.endswith("?") and (result.aims.step in {"Announce", "Secure"}):
+        if msg.endswith("?") and (result.aims.step in {"Announce", "Secure"} or "Announce" in result.aims.steps or "Secure" in result.aims.steps):
             has_announce_language = any(m in msg_lower for m in self._ANNOUNCE_MARKERS)
             if not has_announce_language:
-                result.aims.step = "Inquire"
+                # If it doesn't have announce markers but was called Announce/Secure and ends in ?, 
+                # ensure Inquire is present.
+                if result.aims.step in {"Announce", "Secure"}:
+                    result.aims.step = "Inquire"
+                if "Inquire" not in result.aims.steps:
+                    result.aims.steps.append("Inquire")
+                
                 if result.aims.score is not None:
                     result.aims.score = min(2, result.aims.score)
 
         # Mirror+BUT penalty (parity with prompt instruction and aims_engine)
-        if result.aims.step in {"Mirror", "Mirror+Inquire"}:
-            from app.aims_engine import _introduces_new_info
-            if _introduces_new_info(msg_lower):
+        if result.aims.step in {"Mirror", "Mirror+Inquire"} or "Mirror" in result.aims.steps:
+            if " but " in msg_lower:  # Only penalize immediate 'but' rebuttals in Mirror turns
                 result.aims.score = min(1, result.aims.score or 0)
                 if not any("rebuttal" in r.lower() for r in result.aims.reasons):
                     result.aims.reasons.append("Reflection included rebuttal/new info → penalized")
 
         # Detect pseudo-Secure (data-dumping/persuasion without autonomy support)
         # If it's classified as Secure but looks like a long lecture without autonomy cues
-        if result.aims.step == "Secure":
+        if result.aims.step == "Secure" or "Secure" in result.aims.steps:
             has_autonomy = any(cue in msg_lower for cue in self._SECURE_AUTONOMY_CUES)
             if not has_autonomy and len(msg.split()) > 30:
                 result.aims.score = min(1, result.aims.score or 0)
-                result.aims.reasons.append("Secure score reduced: appears to be persuasion/data-dumping without explicit autonomy support.")
+                if not any("persuasion" in r.lower() for r in result.aims.reasons):
+                    result.aims.reasons.append("Secure score reduced: appears to be persuasion/data-dumping without explicit autonomy support.")
 
         return result
 
@@ -184,7 +232,6 @@ class ClassifierService:
         safety_hints: List[str]
     ) -> ClassifierResult:
         """Invoke the original deterministic engine as a fallback."""
-        from app.aims_engine import evaluate_turn
         
         fb = evaluate_turn(person_last, clinician_message, mapping)
         

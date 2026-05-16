@@ -297,6 +297,9 @@ def _introduces_new_info(lt: str) -> bool:
     Very simple heuristic: presence of 'but', statistics-like tokens, or phrases like 'the data shows'.
     """
     if " but " in lt:
+        # Check if it's a simple rebuttal "I hear you, BUT..."
+        # If the turn is long, it might be a clean reflection followed by a separate education sentence.
+        # This deterministic function is conservative.
         return True
     if re.search(r"\b(data|evidence|study|studies|statistics|percent|%|risk)\b", lt):
         return True
@@ -325,8 +328,9 @@ def score_step(step: str, person_last: str, clinician_last: str, mapping: Dict[s
         reasons.extend(inq_scr.reasons)
 
     elif step == "Mirror":
-        # Penalize if introduces new info or rebuttal
-        if _introduces_new_info(lt):
+        # Penalize if introduces new info or rebuttal inside the reflection
+        # We look for " but " specifically as a sign of immediate rebuttal.
+        if " but " in lt:
             score = 1
             reasons.append("Reflection included rebuttal/new info → penalized")
         # Bonus if includes a check for accuracy
@@ -339,22 +343,27 @@ def score_step(step: str, person_last: str, clinician_last: str, mapping: Dict[s
             reasons.append("Weak/absent reflective stem")
 
     elif step == "Inquire":
-        open_q = lt.endswith("?") or _starts_with_any(lt, ["what ", "how "])
+        # Inquire can start with generic prompts or open questions
+        open_q = lt.endswith("?") or _starts_with_any(lt, ["what ", "how ", "where ", "as you hear that"])
         leading = bool(re.search(r"\b(don't|isn't it|right\?)\b", lt)) or "myth" in lt
-        if not open_q:
+        if not (open_q or "feeling about" in lt or "leaning right" in lt):
             score = 1
             reasons.append("Not clearly open-ended")
         if leading:
             score = min(score, 1)
             reasons.append("Leading/judgmental phrasing")
-        if open_q and not leading and len(lt) < 180:
+        if (open_q or "feeling about" in lt) and not leading:
             score = max(score, 2)
             reasons.append("Clear open question with decent tone")
 
     elif step == "Announce":
         # Expect recommendation + brief rationale; brevity rewarded
-        has_reco = _stem_match(lt, ["i recommend", "it's time for", "due for", "today we will", "my recommendation is"])
-        invite = bool(re.search(r"how does that sound|what do you think|questions\??", lt))
+        has_reco = _stem_match(lt, [
+            "i recommend", "it's time for", "due for", "today we will", 
+            "my recommendation is", "today we usually", "at this visit",
+            "Sophia is due", "Sophia is due for", "routine vaccines"
+        ])
+        invite = bool(re.search(r"how does that sound|what do you think|questions\??|feeling about", lt))
         rationale = bool(re.search(r"protect|outbreak|safety|safe|helps prevent|risk", lt))
         if not has_reco:
             score = 1
@@ -368,7 +377,9 @@ def score_step(step: str, person_last: str, clinician_last: str, mapping: Dict[s
 
     elif step == "Secure":
         autonomy = _stem_match(lt, [
-            "it's your decision", "i'm here to support", "it's your call", "up to you", "your choice"
+            "it's your decision", "i'm here to support", "it's your call", "up to you", 
+            "your choice", "informed and supported", "not rushed", "not pushed",
+            "continue talking", "revisit any concerns"
         ])
         options = bool(re.search(
             r"\b("
