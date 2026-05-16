@@ -385,9 +385,9 @@ class ChatOrchestrator:
                 mem = storage_service.download_session(session_id, user_id)
                 
                 if not mem:
-                    # If still no session found, return success but there's nothing to archive
-                    self.logger.warning(f"No session found to report for session_id: {session_id}")
-                    return JSONResponse(content={"status": "ok", "message": "No session found to report."})
+                    # No conversation history, but still archive the report itself
+                    self.logger.info(f"No prior session data for {session_id}, creating report-only archive")
+                    mem = {"history": [], "character": None, "scene": None}
 
             self.logger.info(f"Archiving session {session_id} for user {user_id}")
             # Prepare archive data with the extra error_report key
