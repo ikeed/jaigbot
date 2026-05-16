@@ -546,7 +546,7 @@ async def summary(sessionId: Optional[str] = None, analysis: Optional[bool] = Fa
     return base
 
 
-from .models import Coaching, SessionMetrics, ChatRequest
+from .models import Coaching, SessionMetrics, ChatRequest, ReportRequest
 
 
 def _get_request_id(request: Request) -> Optional[str]:
@@ -620,6 +620,38 @@ async def chat(req: Request, body: ChatRequest, background_tasks: BackgroundTask
     )
     
     return await orchestrator.handle_chat(req, body, background_tasks)
+
+
+@app.post("/report")
+async def report(req: Request, body: ReportRequest, background_tasks: BackgroundTasks):
+    """Endpoint for reporting issues in a scenario."""
+    # Initialize and run the orchestrator
+    from .services.chat_orchestrator import ChatOrchestrator
+    
+    # Minimal config for report path (mostly needs memory_store and session_service)
+    # Reusing the same session cookie settings as /chat
+    session_cookie_settings = {
+        "name": SESSION_COOKIE_NAME,
+        "secure": SESSION_COOKIE_SECURE,
+        "samesite": SESSION_COOKIE_SAMESITE,
+        "max_age": SESSION_COOKIE_MAX_AGE,
+    }
+    
+    orchestrator = ChatOrchestrator(
+        memory_store=_MEMORY_STORE,
+        session_cookie_settings=session_cookie_settings,
+        memory_config={
+            "enabled": settings.MEMORY_ENABLED,
+            "max_turns": settings.MEMORY_MAX_TURNS,
+            "ttl_seconds": settings.MEMORY_TTL_SECONDS,
+        },
+        aims_config={"enabled": AIMS_COACHING_ENABLED},
+        vertex_config={"project_id": PROJECT_ID, "region": REGION},
+        debug_config={"expose_upstream_error": settings.EXPOSE_UPSTREAM_ERROR},
+        logger=logger,
+    )
+    
+    return await orchestrator.handle_report(req, body, background_tasks)
 
 
 @app.get("/config")
