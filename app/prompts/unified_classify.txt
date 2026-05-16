@@ -10,8 +10,8 @@ You are an expert clinical communication evaluator. Your task is to analyze a cl
 1. **Detect Small Talk**: Rapport-building (greetings, non-clinical pleasantries).
 2. **Assess Relevance**: Relevant to vaccine discussion. 
 3. **Classify AIMS Step**: 
-   - **Announce**: Direct/presumptive recommendation. Detect when vaccines are introduced as part of the plan (e.g., "Sophia is due for vaccines today").
-   - **Inquire**: Open-ended questions to elicit concerns ("How are you feeling about...?").
+   - **Announce**: Any first introduction of the vaccine topic — either presumptive ("It's time for vaccines today", score 3) or soft/contextual ("One thing I try to talk about is vaccines...", score 1-2). A trailing *status question* ("Can I ask what her vaccination status is?") after a vaccine introduction is part of Announce, **not Inquire**. Score 1 if the recommendation is absent or indirect; tip should encourage clearer presumptive framing, e.g., "Consider a direct recommendation: 'Emily is due for her MMR vaccine today — how does that sound?'"
+   - **Inquire**: Open-ended questions to elicit the person's *concerns or hesitancy* about vaccines (e.g., "How are you feeling about the vaccines?", "What have you heard about MMR?"). This is **not** the same as asking about vaccination status — status questions belong to Announce. Inquire must follow Announce.
    - **Mirror**: Reflecting emotions/values ("It sounds like you're worried about..."). 
      *Penalty*: If Mirror includes immediate rebuttal ("...BUT..."), score is 1.
    - **Secure**: Trust-preserving moves, autonomy support ("It's your decision"), and tailored info.

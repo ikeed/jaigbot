@@ -169,13 +169,22 @@ class ClassifierService:
             max_tokens=self.max_tokens,
         )
 
-    # Announce markers that indicate the primary intent is a recommendation,
-    # even when the message ends with a dialogue-inviting question like
-    # "How does that sound?".
+    # Announce markers that indicate the primary intent is a recommendation or
+    # first vaccine introduction, even when the message ends with a trailing
+    # question like "How does that sound?" or a status question.
+    # These prevent the Question Guard from overriding Announce → Inquire.
     _ANNOUNCE_MARKERS = [
+        # Strong presumptive phrasing
         "i recommend", "it's time for", "it\u2019s time for", "due for",
         "today we will", "my recommendation is", "today we usually",
         "at this visit", "at the 2-month visit", "is due for", "routine vaccines",
+        # Soft / contextual first-introduction patterns — these ARE Announce
+        # even without presumptive phrasing. A trailing status question
+        # ("Can I ask about vaccination status?") stays as Announce, not Inquire.
+        "vaccination status", "vaccine status",
+        "mmr vaccine", "measles protection",
+        "is vaccines", "about vaccines", "talk about vaccines", "discuss vaccines",
+        "vaccinated", "is vaccinated", "been vaccinated",
     ]
 
     # Strengthened Secure detection markers (Shared constants for parity)

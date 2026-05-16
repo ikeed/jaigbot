@@ -475,7 +475,7 @@ def evaluate_turn(person_last: str, clinician_last: str, mapping: Dict[str, Any]
             invite = bool(re.search(r"how does that sound|what do you think|questions\??", lt))
             rationale = bool(re.search(r"protect|outbreak|safety|safe|helps prevent|risk", lt))
             if not has_reco:
-                tips.append("Lead with a clear, brief recommendation specific to the vaccine and timing.")
+                tips.append("Lead with a confident, presumptive recommendation, e.g., \"It\u2019s time for Emily\u2019s MMR vaccine today \u2014 how does that sound?\"")
             elif not rationale:
                 tips.append("Add a short, person-relevant reason (safety/benefit) in plain language.")
             elif not invite:
