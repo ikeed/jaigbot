@@ -28,7 +28,7 @@ from app.services.classifier_service import ClassifierService
 from app.services.coach_post import VaccineRelevanceGate, AimsPostProcessor, EndGameDetector
 from app.services.coach_safety import detect_advice_patterns
 from app.services.conversation_service import (
-    maybe_add_parent_concern as svc_maybe_add_parent_concern,
+    maybe_add_person_concern as svc_maybe_add_person_concern,
     mark_mirrored_multi as svc_mark_mirrored_multi, 
     mark_secured_by_topic as svc_mark_secured_by_topic,
     concern_topic as svc_concern_topic,
@@ -245,6 +245,7 @@ class AimsCoachingHandler:
         if is_small_talk:
             cls_payload["step"] = None
             cls_payload["score"] = 0
+            cls_payload["reasons"] = (cls_payload.get("reasons") or []) + ["LLM flagged as small talk"]
             
         # Legacy AimsPostProcessor (score normalization, inquire->secure, score capping)
         cls_payload = AimsPostProcessor.post_process(cls_payload, body.message)
@@ -471,7 +472,7 @@ class AimsCoachingHandler:
             if not any("announce after inquiry" in s.lower() for s in reasons):
                 reasons.insert(0, "Avoid moving to Announce after inquiry before all concerns are mirrored.")
             cls_payload["reasons"] = reasons
-            cls_payload["score"] = 2
+            cls_payload["score"] = min(2, int(cls_payload.get("score", 2)))
             cls_payload.setdefault("tips", []).append(
                 "Keep it brief and invite input (e.g., 'How does that sound?')."
             )
