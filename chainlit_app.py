@@ -490,6 +490,12 @@ async def start_chat():
     cl.user_session.set("character", character_detailed)
     cl.user_session.set("scene", scene_detailed)
 
+    # Add "Report Issue" action button
+    actions = [
+        cl.Action(name="report_issue", value="report", label="Report Issue", description="End scenario and report an issue")
+    ]
+    await cl.Message(content="If you encounter any issues during the scenario, you can report them using the button below.", actions=actions).send()
+
     # Initialize fresh local history for a new chat thread in Chainlit
     cl.user_session.set("history", [])
 
@@ -757,6 +763,42 @@ if is_oauth_enabled:
             default_user.metadata["provider"] = provider_id
 
         return default_user
+
+
+@cl.on_action("report_issue")
+async def on_report_issue(action: cl.Action):
+    """Handle the report issue action."""
+    # Prompt the user for a reason
+    res = await cl.AskUserMessage(content="Please provide a reason for reporting this issue:").send()
+    if not res:
+        return
+
+    reason = res['output']
+    session_id = cl.user_session.get("session_id")
+    app_user = cl.user_session.get("user")
+    user_info = {"identifier": app_user.identifier} if app_user else None
+
+    # Call the backend report endpoint
+    def _base_url() -> str:
+        url = get_backend_url()
+        return url[:-5] if url.endswith("/chat") else url
+
+    try:
+        async with httpx.AsyncClient(timeout=settings.CHAINLIT_HTTP_TIMEOUT) as client:
+            payload = {
+                "sessionId": session_id,
+                "reason": reason,
+                "userInfo": user_info
+            }
+            r = await client.post(f"{_base_url()}/report", json=payload)
+            if r.status_code == 200:
+                await cl.Message(content="Thank you for your report. The scenario has been ended and logged for review.").send()
+                # Optionally restart or end chat
+                # cl.user_session.set("history", [])
+            else:
+                await cl.Message(content=f"Failed to report issue: {r.text}").send()
+    except Exception as e:
+        await cl.Message(content=f"An error occurred while reporting the issue: {str(e)}").send()
 
 
 @cl.on_message
