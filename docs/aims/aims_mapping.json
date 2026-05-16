@@ -1,20 +1,20 @@
 {
   "Announce": {
-    "purpose": "State the clinician's recommendation briefly and confidently, while preserving patient autonomy and inviting dialogue. Sets a clear direction without pressuring.",
-    "core_principle": "Transparency + Autonomy support. Provide a concise recommendation and rationale; avoid lecturing.",
+    "purpose": "State the clinician's recommendation briefly and confidently, while using a friendly, non-paternalistic tone. Research suggests many accept vaccination after a simple presumptive recommendation.",
+    "core_principle": "Confident Recommendation + Non-paternalistic Invitation. Sets a clear direction without pressuring.",
     "when_to_use": [
       "At or near the start of a vaccine discussion to offer a presumptive recommendation.",
       "After addressing concerns to restate the plan and next steps."
     ],
     "recognition_cues": [
       "Declarative, concise recommendation (e.g., I recommend..., It's time for...).",
-      "Neutral, confident tone; not argumentative.",
-      "Often includes a brief evidence-based rationale framed in patient-centered terms (benefits/safety).",
-      "Ends with openness to dialogue rather than closing the door (e.g., How does that sound?)."
+      "Friendly, non-paternalistic tone; confident but not argumentative.",
+      "Often includes a brief evidence-based rationale framed in person-centered terms (benefits/safety).",
+      "Ends with an invitation to respond (e.g., How does that sound?)."
     ],
     "dos": [
       "Use clear, presumptive language: It's time for the MMR today.",
-      "Add a brief, plain-language rationale tied to patient values (safety, protection of child/family/community).",
+      "Add a brief, plain-language rationale tied to the person's values (safety, protection of family/community).",
       "Signal autonomy and collaboration: It's your decision; I'm here to support you.",
       "Keep it short (1–2 sentences) and avoid overloading with data."
     ],
@@ -25,16 +25,16 @@
     ],
     "evaluation_heuristics": {
       "clarity": "Recommendation is explicit and specific to vaccine/timing.",
-      "tone": "Confident, non-judgmental, and respectful of autonomy.",
+      "tone": "Friendly, non-paternalistic, and respectful of autonomy.",
       "rationale": "Provides a succinct patient-relevant reason (benefit/safety/risks framed appropriately).",
       "invite_dialogue": "Ends or follows with an opening for questions or preferences.",
       "brevity": "1–2 sentences before inviting response."
     },
     "scoring_rubric_0_to_3": {
-      "0": "No recommendation or confusing/pressuring statement; antagonistic or shaming.",
-      "1": "Implied or vague recommendation; may be overly long or lacks autonomy support.",
+      "0": "No recommendation or confusing/pressuring statement; paternalistic or shaming.",
+      "1": "Implied or vague recommendation; may be overly long or lacks friendly tone.",
       "2": "Clear recommendation with acceptable tone; minimal rationale or weak invitation to talk.",
-      "3": "Clear, brief recommendation with relevant rationale and explicit autonomy-supportive invitation to discuss."
+      "3": "Clear, brief recommendation with relevant rationale and a friendly, non-paternalistic invitation to discuss."
     },
     "positive_examples": [
       "It's time for Layla's MMR today. It protects her from measles outbreaks we're seeing locally. How does that sound to you?",
@@ -46,12 +46,12 @@
     ],
     "coaching_tips": [
       "Lead with the recommendation, not the data dump.",
-      "Tie the rationale to the parent's priorities (safety, school, travel, protecting grandparents).",
+      "Tie the rationale to the person's priorities (safety, school, travel, protection).",
       "Pair with Inquire or Mirror immediately if hesitation appears."
     ]
   },
   "Inquire": {
-    "purpose": "Elicit the parent's perspective, concerns, and goals with open-ended, non-leading questions. Invites them to share what matters most.",
+    "purpose": "Elicit the person's perspective, concerns, and goals with open-ended, non-leading questions. Invites them to share what matters most.",
     "core_principle": "Curiosity + Collaboration. Understand before advising.",
     "when_to_use": [
       "After Announce to check reactions.",
@@ -76,7 +76,7 @@
     ],
     "evaluation_heuristics": {
       "openness": "Question is broad and non-leading (how/what) vs. closed yes/no.",
-      "focus": "Targets the parent's perspective/concern rather than testing knowledge.",
+      "focus": "Targets the person's perspective/concern rather than testing knowledge.",
       "respect": "Tone affirms autonomy and avoids judgment.",
       "listening_setup": "Leaves space for response (no immediate pivot to advising)."
     },
@@ -84,10 +84,10 @@
       "0": "No inquiry or a closed/leading question that shuts down sharing.",
       "1": "Some inquiry but cluttered, leading, or stacked; weak invitation to elaborate.",
       "2": "Clear open question with decent tone; minor leading or premature pivot.",
-      "3": "Open, focused, respectful question that clearly invites the parent's priorities and feelings."
+      "3": "Open, focused, respectful question that clearly invites the person's priorities and feelings."
     },
     "positive_examples": [
-      "What concerns do you have about the MMR for Layla?",
+      "What concerns do you have about the MMR today?",
       "What would help you feel more comfortable deciding today?"
     ],
     "negative_examples": [
@@ -101,8 +101,8 @@
     ]
   },
   "Mirror": {
-    "purpose": "Reflect back the parent's key content and emotions to show understanding and build trust. Paraphrases without judgment or argument.",
-    "core_principle": "Empathy + Accurate reflection. The parent feels heard before problem-solving.",
+    "purpose": "Ensure the person feels understood ('feel felt') by reflecting back their key content, emotions, and underlying values. Reduces defensiveness and regulates the nervous system.",
+    "core_principle": "Empathy + 'Feel Felt'. Validation of the person's intent or value behind a concern builds relational trust.",
     "when_to_use": [
       "After a concern is expressed, before providing information.",
       "Whenever emotion rises (fear, frustration, confusion).",
@@ -125,16 +125,17 @@
       "Do not tack on a but with counter-arguments."
     ],
     "evaluation_heuristics": {
+      "feel_felt": "Reflection validates the intent or value behind the concern, making the person 'feel felt'.",
       "accuracy": "Reflection captures the main concern and does not distort it.",
-      "emotion": "Acknowledges the parent's feeling or importance where relevant.",
-      "nonjudgment": "No rebuttal, no but, no sarcasm.",
+      "emotion": "Acknowledges the person's feeling or importance where relevant.",
+      "nonjudgment": "No rebuttal, no 'but' immediately after the reflection, no sarcasm.",
       "brevity": "One to two sentences; invites confirmation."
     },
     "scoring_rubric_0_to_3": {
       "0": "No reflection or dismissive response; argues or corrects instead.",
-      "1": "Partial or content-only reflection; misses the emotional core or adds rebuttal.",
-      "2": "Solid paraphrase with neutral tone; minor drift or lacks explicit emotion.",
-      "3": "Concise, accurate reflection that captures content and emotion and checks understanding."
+      "1": "Partial reflection; misses the emotional/value core or adds an immediate rebuttal (e.g., 'I hear you, BUT...').",
+      "2": "Solid paraphrase with neutral tone; accurately captures content but may miss the deeper 'feel felt' validation.",
+      "3": "Concise, accurate reflection that captures content, emotion, and underlying values, ensuring the person 'feel felt' without immediate rebuttal."
     },
     "positive_examples": [
       "It sounds like you're worried about side effects you've heard about online and want to keep Maya safe.",
@@ -146,15 +147,15 @@
     ],
     "coaching_tips": [
       "If you're tempted to educate, mirror first, then ask permission to share information.",
-      "Use the parent's own words to increase felt understanding.",
+      "Use the person's own words to increase felt understanding.",
       "End with a check: Did I capture that?"
     ]
   },
   "Mirror+Inquire": {
-    "purpose": "A powerful compound step that first validates the parent's feeling/concern (Mirror) and immediately follows with an open-ended question (Inquire). This builds trust before asking for more information.",
+    "purpose": "A powerful compound step that first validates the person's feeling/concern (Mirror) and immediately follows with an open-ended question (Inquire). This builds trust before asking for more information.",
     "core_principle": "Validate + Explore. The 'Mirror' part lowers defenses, and the 'Inquire' part maintains momentum and curiosity.",
     "when_to_use": [
-      "When a parent expresses a specific concern or emotion and you need more context.",
+      "When a person expresses a specific concern or emotion and you need more context.",
       "To transition from listening to deeper exploration without losing the empathetic connection."
     ],
     "recognition_cues": [
@@ -171,7 +172,7 @@
       "Do not use a leading or judgmental question."
     ],
     "evaluation_heuristics": {
-      "mirror_accuracy": "The reflection part accurately captures the parent's sentiment.",
+      "mirror_accuracy": "The reflection part accurately captures the person's sentiment.",
       "inquire_openness": "The question part is broad and non-leading.",
       "flow": "The transition between reflection and question feels natural and empathetic."
     },
@@ -195,16 +196,18 @@
     ]
   },
   "Secure": {
-    "purpose": "Affirm autonomy, safety-net the plan, and move toward a mutually acceptable next step (vaccinate now, plan to revisit, or provide resources).",
-    "core_principle": "Autonomy + Partnership + Next step. Reduce pressure and maintain engagement regardless of today's decision.",
+    "purpose": "Strengthen the relationship and support autonomy, ensuring the individual feels it is their decision. Secure is about relationship-building and 'receptivity regulation,' not about persuading regarding vaccination.",
+    "core_principle": "Autonomy Support + Relational Trust. Prioritize the relationship over immediate persuasion; maintain future dialogue.",
     "when_to_use": [
       "After addressing concerns to close a loop and set a next step.",
-      "When the parent remains hesitant — to preserve relationship and openness.",
+      "When the person remains hesitant — to preserve relationship and openness.",
       "After successful acceptance — to reinforce support and outline what happens next."
     ],
     "recognition_cues": [
-      "Explicit affirmation of choice and care: It's your decision; I'm here to support you.",
-      "Offer of next step options (vaccinate today, revisit later, written info, follow-up).",
+      "Explicit affirmation of autonomy: 'It's your decision,' 'I'm here to support you.'",
+      "Partnership statements: 'We both want what's safest.'",
+      "Empowering language: 'What would work best for you?'",
+      "Offer of tailored information/resources only if the individual is receptive.",
       "Safety-netting (what to watch for, how to reach out)."
     ],
     "dos": [
@@ -219,16 +222,16 @@
       "Do not leave without a clear, patient-endorsed next step."
     ],
     "evaluation_heuristics": {
-      "autonomy_affirmed": "Explicit statement recognizing parent's role in decision-making.",
+      "autonomy_affirmed": "Explicit statement recognizing the person's role in decision-making.",
       "options_provided": "At least one clear next step offered (today vs later) and/or resources.",
       "safety_net": "Provides what to expect and how to get help.",
       "tone_relationship": "Warm, supportive, preserves therapeutic alliance."
     },
     "scoring_rubric_0_to_3": {
-      "0": "No next step; pressuring or dismissive tone.",
-      "1": "Vague reassurance without concrete options or autonomy support.",
-      "2": "Autonomy affirmed with one next step; limited safety-net or specificity.",
-      "3": "Clear autonomy affirmation, multiple appropriate options, and safety-netting with supportive tone."
+      "0": "No next step; pressuring, paternalistic, or dismissive tone.",
+      "1": "Vague reassurance or data-dumping as 'persuasion'; lacks explicit autonomy support.",
+      "2": "Autonomy affirmed with one next step; limited focus on relationship over persuasion.",
+      "3": "Explicit autonomy affirmation ('It's your decision'), prioritizes relationship/trust, offers appropriate options and safety-netting."
     },
     "positive_examples": [
       "It's your call, and I appreciate how thoughtful you're being. We can do the shot today, or if you'd prefer, I can share a short handout and we can check in next week — what would work best?",
@@ -245,7 +248,7 @@
     ]
   },
   "meta": {
-    "notes": "AIMS = Announce, Inquire, Mirror, Secure. Sequence is flexible; choose the step that fits the parent's state. Use empathy and autonomy support throughout.",
+    "notes": "AIMS = Announce, Inquire, Mirror, Secure. Sequence is flexible; choose the step that fits the person's state. Use empathy and autonomy support throughout.",
     "reference": {
       "source": "Frontiers in Public Health",
       "identifier": "fpubh-11-1120326.pdf",
@@ -286,7 +289,7 @@
       }
     },
     "decision_rules": {
-      "classification_pseudocode": "Given last_two_messages = [parent_last, clinician_last]: If clinician_last contains clear reflective stems (Mirror markers) and does not introduce new info, classify as Mirror. Else if clinician_last is primarily an open-ended question (Inquire markers) and not leading, classify as Inquire. Else if clinician_last contains a concise recommendation (Announce markers) possibly with brief rationale and invitation, classify as Announce. Else if clinician_last affirms autonomy and proposes next steps/resources or safety-netting, classify as Secure. If multiple match, prefer Mirror > Inquire > Secure > Announce when parent_last expresses emotion/concern; otherwise prefer Announce at start of encounter.",
+      "classification_pseudocode": "Given last_two_messages = [person_last, clinician_last]: If clinician_last contains clear reflective stems (Mirror markers) and does not introduce new info, classify as Mirror. Else if clinician_last is primarily an open-ended question (Inquire markers) and not leading, classify as Inquire. Else if clinician_last contains a concise recommendation (Announce markers) possibly with brief rationale and invitation, classify as Announce. Else if clinician_last affirms autonomy and proposes next steps/resources or safety-netting, classify as Secure. If multiple match, prefer Mirror > Inquire > Secure > Announce when person_last expresses emotion/concern; otherwise prefer Announce at start of encounter.",
       "tie_breakers": [
         "If the turn both asks permission to share info and offers next steps, classify as Secure.",
         "If the turn includes a reflection followed by a question, classify as Mirror if the reflection is accurate and primary; otherwise Inquire."
@@ -295,7 +298,7 @@
     "turn_evaluation_logic": {
       "Announce": "Score using clarity, tone, rationale, invite_dialogue, brevity. Use clinician_last only.",
       "Inquire": "Assess openness, focus, respect, listening_setup. Use clinician_last; check that it invites elaboration without pivoting to advice.",
-      "Mirror": "Compare clinician_last to parent_last for semantic match of concern and emotion; penalize if rebuttal/new facts are added; bonus if check-for-accuracy is present.",
+      "Mirror": "Compare clinician_last to person_last for semantic match of concern and emotion; penalize if rebuttal/new facts are added; bonus if check-for-accuracy is present.",
       "Secure": "Look for explicit autonomy affirmation + at least one option or resource + safety-netting. Consider warmth of tone."
     },
     "hint_templates": {
@@ -303,10 +306,10 @@
         "Consider a shorter, more confident recommendation, then invite their thoughts: 'It's time for the MMR today — it protects against current outbreaks. How does that sound?'"
       ],
       "Inquire": [
-        "Try one open question at a time and avoid leading: 'What are your main concerns about the MMR for [child]?'"
+        "Try one open question at a time and avoid leading: 'What are your main concerns about the MMR?'"
       ],
       "Mirror": [
-        "Reflect both content and feeling before advising: 'It sounds like you're worried about side effects and want to keep [child] safe — did I get that right?'"
+        "Reflect both content and feeling before advising: 'It sounds like you're worried about side effects and want to keep safe — did I get that right?'"
       ],
       "Secure": [
         "Affirm autonomy and offer two options plus a safety net: 'It's your call. We can do it today, or I can share a short handout and check in next week — what works best?'"
@@ -330,7 +333,7 @@
       "scale": "0–3 per step, where 3 reflects exemplary execution per heuristics.",
       "overall_score": "Average step scores across the encounter; weight Mirror and Inquire slightly higher if desired (relationship-building).",
       "coaching_generation": "For any score less than 3, surface one or two specific heuristic gaps as tips.",
-      "history_window": "Evaluate using the last two messages (parent then clinician) for Mirror; for Announce and Secure, clinician message suffices; for Inquire, check that it invites elaboration."
+      "history_window": "Evaluate using the last two messages (person then clinician) for Mirror; for Announce and Secure, clinician message suffices; for Inquire, check that it invites elaboration."
     }
   }
 }

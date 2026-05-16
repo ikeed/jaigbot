@@ -40,8 +40,8 @@ class ClassifierResult(BaseModel):
     safety_flags: list[str] = Field(
         default_factory=list, description="List of detected safety or advice patterns"
     )
-    parent_topic: Optional[str] = Field(
-        default=None, description="Detected topic of the parent's message if any"
+    person_topic: Optional[str] = Field(
+        default=None, description="Detected topic of the person's message if any"
     )
     reasoning: Optional[str] = Field(
         default=None, description="Brief internal chain-of-thought for the classification"

@@ -127,7 +127,7 @@ def _is_small_talk(text: str) -> bool:
     return False
 
 
-def classify_step(parent_last: str, clinician_last: str, mapping: Dict[str, Any]) -> ClassificationResult:
+def classify_step(person_last: str, clinician_last: str, mapping: Dict[str, Any]) -> ClassificationResult:
     """Classify the clinician's last message into one AIMS step.
 
     Implements the decision rules and tie-breakers from mapping['meta'].
@@ -136,7 +136,7 @@ def classify_step(parent_last: str, clinician_last: str, mapping: Dict[str, Any]
     markers = meta.get("per_step_classification_markers", {})
     reasons: List[str] = []
     text = (clinician_last or "").strip()
-    pt = (parent_last or "").strip().lower()
+    pt = (person_last or "").strip().lower()
     lt = text.lower()
 
     mirror_stems = [
@@ -305,21 +305,21 @@ def _introduces_new_info(lt: str) -> bool:
     return False
 
 
-def score_step(step: str, parent_last: str, clinician_last: str, mapping: Dict[str, Any]) -> ScoreResult:
+def score_step(step: str, person_last: str, clinician_last: str, mapping: Dict[str, Any]) -> ScoreResult:
     """Score 0–3 based on mapping heuristics per step.
 
     This is a lightweight heuristic implementation to support unit tests and
     provide deterministic scoring. It is not intended to be exhaustive.
     """
     lt = (clinician_last or "").strip().lower()
-    pt = (parent_last or "").strip().lower()
+    pt = (person_last or "").strip().lower()
     reasons: List[str] = []
     score = 2  # start at 2 as 'decent', then adjust
 
     if step == "Mirror+Inquire":
         # Score as Mirror + Inquire combo
-        mir_scr = score_step("Mirror", parent_last, clinician_last, mapping)
-        inq_scr = score_step("Inquire", parent_last, clinician_last, mapping)
+        mir_scr = score_step("Mirror", person_last, clinician_last, mapping)
+        inq_scr = score_step("Inquire", person_last, clinician_last, mapping)
         score = (mir_scr.score + inq_scr.score) // 2
         reasons.extend(mir_scr.reasons)
         reasons.extend(inq_scr.reasons)
@@ -412,8 +412,8 @@ def score_step(step: str, parent_last: str, clinician_last: str, mapping: Dict[s
     return ScoreResult(score=score, reasons=reasons)
 
 
-def evaluate_turn(parent_last: str, clinician_last: str, mapping: Dict[str, Any]) -> Dict[str, Any]:
-    cls = classify_step(parent_last, clinician_last, mapping)
+def evaluate_turn(person_last: str, clinician_last: str, mapping: Dict[str, Any]) -> Dict[str, Any]:
+    cls = classify_step(person_last, clinician_last, mapping)
 
     # Handle rapport/pleasantries (no AIMS step attempted)
     if cls.step not in AIMS_STEPS:
@@ -430,7 +430,7 @@ def evaluate_turn(parent_last: str, clinician_last: str, mapping: Dict[str, Any]
             "tips": tips,
         }
 
-    scr = score_step(cls.step, parent_last, clinician_last, mapping)
+    scr = score_step(cls.step, person_last, clinician_last, mapping)
 
     # Context-sensitive coaching tips: only include when an actionable improvement is evident.
     tips: List[str] = []
@@ -466,7 +466,7 @@ def evaluate_turn(parent_last: str, clinician_last: str, mapping: Dict[str, Any]
             if not has_reco:
                 tips.append("Lead with a clear, brief recommendation specific to the vaccine and timing.")
             elif not rationale:
-                tips.append("Add a short, parent-relevant reason (safety/benefit) in plain language.")
+                tips.append("Add a short, person-relevant reason (safety/benefit) in plain language.")
             elif not invite:
                 tips.append("Invite dialogue with a brief opener, e.g., 'How does that sound?'")
         elif cls.step == "Secure":

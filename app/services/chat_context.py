@@ -18,7 +18,7 @@ class ChatContext:
     effective_scene: Optional[str]
     system_instruction: Optional[str]
     history_text: str
-    parent_last: str
+    person_last: str
     user_info: Optional[dict] = None
 
 
@@ -81,12 +81,12 @@ class ChatContextBuilder:
 
         system_instruction = build_system_instruction(effective_character, effective_scene)
 
-        # last assistant turn (parent voice)
-        parent_last = ""
+        # last assistant turn (person voice)
+        person_last = ""
         if mem and mem.get("history"):
             for t in reversed(mem["history"]):
                 if t.get("role") == "assistant":
-                    parent_last = t.get("content") or ""
+                    person_last = t.get("content") or ""
                     break
 
         # compact history text like before (tail of last N turns)
@@ -103,6 +103,6 @@ class ChatContextBuilder:
             effective_scene=effective_scene,
             system_instruction=system_instruction,
             history_text=history_text,
-            parent_last=parent_last,
+            person_last=person_last,
             user_info=effective_user_info,
         )

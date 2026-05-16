@@ -36,7 +36,7 @@ def format_history(turns: list[dict], memory_max_turns: int) -> str:
 def recent_context(turns: list[dict], n_turns: int) -> str:
     """Create compact recent context for classifier grounding.
 
-    Labels 'user' as Clinician and 'assistant' as Parent, identical to current logic.
+    Labels 'user' as Clinician and 'assistant' as Person, identical to current logic.
     """
     if not turns:
         return ""
@@ -50,12 +50,12 @@ def recent_context(turns: list[dict], n_turns: int) -> str:
         if role == "user":
             lines.append(f"Clinician: {content}")
         elif role == "assistant":
-            lines.append(f"Parent: {content}")
+            lines.append(f"Person: {content}")
     return "\n".join(lines)
 
 
 def extract_recent_concerns(turns: list[dict], max_items: int = 3) -> list[str]:
-    """Extract recent vaccine concerns from parent (assistant) turns.
+    """Extract recent vaccine concerns from person (assistant) turns.
 
     Uses the exact cues and ordering from the inline implementation.
     """

@@ -28,7 +28,7 @@ from app.services.classifier_service import ClassifierService
 from app.services.coach_post import VaccineRelevanceGate, AimsPostProcessor, EndGameDetector
 from app.services.coach_safety import detect_advice_patterns
 from app.services.conversation_service import (
-    maybe_add_parent_concern as svc_maybe_add_parent_concern,
+    maybe_add_person_concern as svc_maybe_add_person_concern,
     mark_mirrored_multi as svc_mark_mirrored_multi, 
     mark_secured_by_topic as svc_mark_secured_by_topic,
     concern_topic as svc_concern_topic,
@@ -158,7 +158,7 @@ class AimsCoachingHandler:
         task_cls = asyncio.create_task(
             self.classifier_service.classify_turn(
                 clinician_message=body.message,
-                parent_last=ctx.parent_last,
+                person_last=ctx.person_last,
                 history=ctx.mem.get("history", []) if ctx.mem else [],
                 prior_announced=prior_announced,
                 prior_phase=prior_phase,
@@ -213,7 +213,7 @@ class AimsCoachingHandler:
         else:
             # If we timed out or failed, use the deterministic fallback immediately
             from app.aims_engine import evaluate_turn
-            fb = evaluate_turn(ctx.parent_last, body.message, mapping)
+            fb = evaluate_turn(ctx.person_last, body.message, mapping)
             cls_payload = {
                 "step": fb.get("step"),
                 "score": fb.get("score", 2),
@@ -236,7 +236,7 @@ class AimsCoachingHandler:
         cls_payload = VaccineRelevanceGate.gate(
             cls_payload=cls_payload,
             clinician_text=body.message,
-            parent_last=ctx.parent_last,
+            person_last=ctx.person_last,
             parent_recent_concerns=recent_concerns_texts,
             prior_announced=prior_announced
         )
@@ -245,6 +245,7 @@ class AimsCoachingHandler:
         if is_small_talk:
             cls_payload["step"] = None
             cls_payload["score"] = 0
+            cls_payload["reasons"] = (cls_payload.get("reasons") or []) + ["LLM flagged as small talk"]
             
         # Legacy AimsPostProcessor (score normalization, inquire->secure, score capping)
         cls_payload = AimsPostProcessor.post_process(cls_payload, body.message)
@@ -267,9 +268,9 @@ class AimsCoachingHandler:
         )
 
         # Step 3: Update AIMS state and provide coaching guidance (after classification completes)
-        llm_topic = classification_result.parent_topic if classification_result else None
+        llm_topic = classification_result.person_topic if classification_result else None
         await self._update_aims_state(
-            ctx.session_id, cls_payload, body.message, ctx.parent_last, llm_topic
+            ctx.session_id, cls_payload, body.message, ctx.person_last, llm_topic
         )
 
         # Step 4: Persist AIMS metrics (after state update)
@@ -319,7 +320,7 @@ class AimsCoachingHandler:
         # If this is the first assistant turn in the session, strip any accidental
         # scenario headers from the parent reply to avoid duplicating the UI card.
         try:
-            if not (ctx.parent_last or "").strip():
+            if not (ctx.person_last or "").strip():
                 from app.services.chat_helpers import strip_appointment_headers
                 pr = reply_payload.get("patient_reply", "")
                 reply_payload["patient_reply"] = strip_appointment_headers(pr)
@@ -396,104 +397,9 @@ class AimsCoachingHandler:
         
         return mapping
     
-    def _get_deterministic_classification(
-        self, parent_last: str, clinician_message: str, mapping: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """Legacy helper for deterministic classification."""
-        from app.aims_engine import evaluate_turn
-
-        fb = evaluate_turn(parent_last, clinician_message, mapping)
-        return {
-            "step": fb.get("step"),
-            "score": fb.get("score", 2),
-            "reasons": fb.get("reasons", ["deterministic"]),
-            "tips": fb.get("tips", []),
-        }
-    
-    async def _enhance_with_llm_classification(
-        self, cls_payload: Dict[str, Any], clinician_message: str, 
-        ctx: ChatContext, mapping: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """Enhance classification with LLM if enabled."""
-        from app.config import settings
-        
-        # Get prior state for context
-        prior_state = await self._get_prior_state(ctx.session_id) if self.memory_enabled else None
-        prior_announced = bool((prior_state or {}).get("announced", False))
-        prior_phase = (prior_state or {}).get("phase", "PreAnnounce")
-        
-        # Check if we should use LLM classification
-        pre_gate_rapport = (cls_payload.get("step") is None)
-        do_llm = (settings.AIMS_CLASSIFIER_MODE in ("hybrid", "llm")) and (not pre_gate_rapport)
-        
-        if not do_llm:
-            return cls_payload
-        
-        # Build classification prompt
-        markers = ((mapping or {}).get("meta", {}) or {}).get("per_step_classification_markers", {})
-        markers_text = AimsPromptBuilder.markers_text(markers)
-        
-        history = ctx.mem.get("history", []) if ctx.mem else []
-        recent_ctx = AimsPromptBuilder.recent_context(history, settings.AIMS_CLASSIFY_CONTEXT_TURNS * 2)
-        parent_recent_concerns = AimsPromptBuilder.extract_recent_concerns(history, settings.AIMS_CLASSIFY_MAX_CONCERNS)
-        
-        classify_prompt = AimsPromptBuilder.build_classify_prompt(
-            mapping_markers_text=markers_text,
-            recent_ctx=recent_ctx,
-            parent_recent_concerns=parent_recent_concerns,
-            parent_last=ctx.parent_last,
-            clinician_last=clinician_message,
-            prior_announced=prior_announced,
-            prior_phase=prior_phase,
-            context_turns=AIMS_CLASSIFY_CONTEXT_TURNS,
-        )
-        
-        # Attempt LLM classification with retry
-        used_llm_cls = False
-        for attempt in (1, 2):
-            try:
-                raw = await self._call_vertex_json(
-                    classify_prompt,
-                    CLASSIFY_SCHEMA,
-                    "coach_classify",
-                    temperature=self.classify_temperature,
-                    max_tokens=self.classify_max_tokens,
-                )
-                cand = json.loads((raw or "").strip())
-                validate_json(cand, CLASSIFY_SCHEMA)
-                
-                # Clip tips to at most one as policy
-                tips = (cand.get("tips") or [])
-                if isinstance(tips, list) and len(tips) > 1:
-                    tips = tips[:1]
-                
-                cls_payload = {
-                    "step": cand.get("step"),
-                    "score": int(cand.get("score", 2)),
-                    "reasons": cand.get("reasons") or ["llm"],
-                    "tips": tips,
-                }
-                used_llm_cls = True
-                break
-                
-            except Exception as ve:
-                telemetry_log_event(
-                    self.logger,
-                    "aims_classifier_invalid_json" if attempt == 1 else "aims_classifier_fallback",
-                    attempt=attempt,
-                    sessionId=ctx.session_id,
-                    error=str(ve),
-                )
-                if attempt == 1:
-                    continue
-                # On second failure, keep deterministic cls_payload
-                break
-        
-        return cls_payload
-    
     async def _update_aims_state(
         self, session_id: str, cls_payload: Dict[str, Any], 
-        clinician_message: str, parent_last: str,
+        clinician_message: str, person_last: str,
         llm_topic: Optional[str] = None
     ) -> None:
         """Update AIMS state and provide coaching guidance."""
@@ -512,13 +418,13 @@ class AimsCoachingHandler:
             
             step_current = cls_payload.get("step")
             
-            # Add latest parent concern if any, avoiding duplicates by topic
-            if parent_last:
+            # Add latest person concern if any, avoiding duplicates by topic
+            if person_last:
                 # Use LLM topic if available, otherwise fall back to static cues
-                svc_maybe_add_parent_concern(state, parent_last, self._TOPICAL_CUES, llm_topic)
+                svc_maybe_add_person_concern(state, person_last, self._TOPICAL_CUES, llm_topic)
             
             # Apply coaching guidance rules
-            self._apply_coaching_guidance(cls_payload, step_current, state, clinician_message, parent_last)
+            self._apply_coaching_guidance(cls_payload, step_current, state, clinician_message, person_last)
             
             # Update observational state
             self._update_observational_state(state, step_current)
@@ -533,7 +439,7 @@ class AimsCoachingHandler:
     
     def _apply_coaching_guidance(
         self, cls_payload: Dict[str, Any], step_current: str, state: Dict[str, Any],
-        clinician_message: str, parent_last: str
+        clinician_message: str, person_last: str
     ) -> None:
         """Apply coaching-specific guidance rules."""
         # Suppress tips about mirroring or 'what else' if all known concerns have been mirrored
@@ -566,21 +472,21 @@ class AimsCoachingHandler:
             if not any("announce after inquiry" in s.lower() for s in reasons):
                 reasons.insert(0, "Avoid moving to Announce after inquiry before all concerns are mirrored.")
             cls_payload["reasons"] = reasons
-            cls_payload["score"] = 2
+            cls_payload["score"] = min(2, int(cls_payload.get("score", 2)))
             cls_payload.setdefault("tips", []).append(
                 "Keep it brief and invite input (e.g., 'How does that sound?')."
             )
         
         # Handle mirroring
         if step_current in ("Mirror", "Mirror+Inquire"):
-            svc_mark_mirrored_multi(state, clinician_message, parent_last, self._TOPICAL_CUES)
+            svc_mark_mirrored_multi(state, clinician_message, person_last, self._TOPICAL_CUES)
         
         # Handle securing
         if step_current == "Secure":
             needs_mirror = any(not c.get("is_mirrored") for c in (state.get("parent_concerns") or []))
             if needs_mirror:
                 cls_payload["reasons"] = [
-                    "Securing before mirroring — allowed, but mirror first so the parent feels heard"
+                    "Securing before mirroring — allowed, but mirror first so the person feels heard"
                 ] + (cls_payload.get("reasons") or [])
                 cls_payload.setdefault("tips", []).append(
                     "Before educating, briefly reflect the concern (e.g., 'It feels like a lot at once — did I get that right?')."

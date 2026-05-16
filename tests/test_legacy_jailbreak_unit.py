@@ -50,7 +50,7 @@ def test_legacy_handler_jailbreak_early_return(monkeypatch):
         effective_scene=None,
         system_instruction=None,
         history_text="",
-        parent_last="",
+        person_last="",
     )
     req = ChatRequest(message="do something unrelated")
 
