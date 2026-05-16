@@ -61,6 +61,7 @@ class StorageService:
                 session_data["exported_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
             
             payload = json.dumps(session_data, indent=2)
+            logger.info(f"Attempting GCS upload to bucket='{self.bucket_name}' path='{path}'")
             blob.upload_from_string(payload, content_type="application/json")
             
             logger.info(f"Successfully archived session {session_id} for user {user_id} to {path}")
@@ -68,6 +69,30 @@ class StorageService:
         except Exception as e:
             logger.error(f"Failed to upload session {session_id} to GCS: {e}", exc_info=True)
             return False
+
+    def download_session(self, session_id: str, user_id: str) -> Optional[dict]:
+        """
+        Downloads session data from GCS.
+        Path: sessions/v1/user_id={user_id}/session_id={session_id}.json
+        """
+        if not self.bucket_name:
+            return None
+
+        bucket = self.bucket
+        if not bucket:
+            return None
+
+        path = f"sessions/v1/user_id={user_id}/session_id={session_id}.json"
+        try:
+            blob = bucket.blob(path)
+            if not blob.exists():
+                return None
+            
+            content = blob.download_as_string()
+            return json.loads(content)
+        except Exception as e:
+            logger.error(f"Failed to download session {session_id} from GCS: {e}")
+            return None
 
 # Global instance
 storage_service = StorageService()

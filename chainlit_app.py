@@ -396,6 +396,13 @@ def _build_scenario_card() -> list[str]:
 
 @cl.on_chat_start
 async def start_chat():
+    try:
+        return await _start_chat_impl()
+    except Exception as e:
+        await _report_error_silently(e, "start_chat")
+        await cl.Message("An error occurred while starting the chat. The issue has been reported. Please try refreshing the page.").send()
+
+async def _start_chat_impl():
     """
     Initialize the Chainlit chat session. If a prior backend conversation exists for
     this sessionId, replay it instead of stacking a new scenario card. Otherwise,
@@ -489,9 +496,24 @@ async def start_chat():
     # Set detailed persona/scene for the backend orchestration
     cl.user_session.set("character", character_detailed)
     cl.user_session.set("scene", scene_detailed)
+    # End of session setup
 
-    # Initialize fresh local history for a new chat thread in Chainlit
-    cl.user_session.set("history", [])
+    # 4. Final Setup: Sidebar Button for Report Issue
+    # We move the "Report Issue" button to the sidebar to avoid cluttering the chat window.
+    report_actions = [
+        cl.Action(name="report_issue", value="report", label="Report Issue", 
+                  description="End scenario and report an issue", 
+                  payload={"action": "report"})
+    ]
+    await cl.Message(
+        content="## Help & Support\n\nClick the button below if you encounter any issues during the scenario. This will end the session and log a report.", 
+        actions=report_actions
+    ).send()
+    # End of sidebar config
+
+    # Initialize fresh local history for a new chat thread in Chainlit if not already present
+    if cl.user_session.get("history") is None:
+        cl.user_session.set("history", [])
 
     # If there is prior history on the backend, mirror it into the UI and prepend the scenario summary for context
     if existing_hist:
@@ -759,8 +781,79 @@ if is_oauth_enabled:
         return default_user
 
 
+@cl.action_callback("report_issue")
+async def on_report_issue(action: cl.Action):
+    """Handle the report issue action."""
+    # Prompt the user for a reason
+    res = await cl.AskUserMessage(content="Please provide a reason for reporting this issue:").send()
+    if not res:
+        return
+
+    reason = res['output']
+    session_id = cl.user_session.get("session_id")
+    app_user = cl.user_session.get("user")
+    user_info = {"identifier": app_user.identifier} if app_user else None
+
+    # Call the backend report endpoint
+    def _base_url() -> str:
+        url = get_backend_url()
+        return url[:-5] if url.endswith("/chat") else url
+
+    try:
+        async with httpx.AsyncClient(timeout=settings.CHAINLIT_HTTP_TIMEOUT) as client:
+            payload = {
+                "sessionId": session_id,
+                "reason": reason,
+                "userInfo": user_info
+            }
+            report_url = f"{_base_url()}/report"
+            # Ensure session is preserved in backend by including sessionId
+            r = await client.post(report_url, json=payload)
+            if r.status_code == 200:
+                await cl.Message(content="Thank you for your report. The scenario has been ended and logged for review.").send()
+                # Clear local history to "end" the scenario for the user
+                cl.user_session.set("history", [])
+            else:
+                await cl.Message(content=f"Failed to report issue (HTTP {r.status_code}): {r.text}").send()
+    except Exception as e:
+        await cl.Message(content=f"An error occurred while reporting the issue: {str(e)}").send()
+
+
+async def _report_error_silently(error: Exception, context: str = "general"):
+    """
+    Log an error to the backend /report endpoint automatically without
+    interrupting the user with multiple dialogs.
+    """
+    session_id = cl.user_session.get("session_id")
+    app_user = cl.user_session.get("user")
+    user_info = {"identifier": app_user.identifier} if app_user else None
+    
+    def _base_url() -> str:
+        url = get_backend_url()
+        return url[:-5] if url.endswith("/chat") else url
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            payload = {
+                "sessionId": session_id or f"error-{uuid.uuid4()}",
+                "reason": f"Auto-reported error in {context}: {str(error)}",
+                "userInfo": user_info
+            }
+            await client.post(f"{_base_url()}/report", json=payload)
+    except Exception:
+        # Best effort only
+        pass
+
+
 @cl.on_message
 async def handle_message(message: cl.Message):
+    try:
+        return await _handle_message_impl(message)
+    except Exception as e:
+        await _report_error_silently(e, "handle_message")
+        await cl.Message("An error occurred while processing your message. The issue has been reported.").send()
+
+async def _handle_message_impl(message: cl.Message):
     """
     Handle an incoming user message by forwarding it to the FastAPI backend
     and streaming the reply back to the user.
@@ -1000,6 +1093,13 @@ async def handle_message(message: cl.Message):
 
 @cl.on_chat_resume
 async def resume_chat():
+    try:
+        return await _resume_chat_impl()
+    except Exception as e:
+        await _report_error_silently(e, "resume_chat")
+        await cl.Message("An error occurred while resuming the chat. The issue has been reported.").send()
+
+async def _resume_chat_impl():
     """
     When an existing session is resumed, display the conversation. If local
     history is empty (e.g., after a server restart), fetch it from the backend

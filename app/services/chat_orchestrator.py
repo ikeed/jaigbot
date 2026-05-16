@@ -20,7 +20,7 @@ from typing import Any, Optional
 from fastapi import HTTPException, Request, BackgroundTasks
 from fastapi.responses import JSONResponse
 
-from app.models import ChatRequest, Coaching, SessionMetrics
+from app.models import ChatRequest, Coaching, SessionMetrics, ReportRequest
 from app.services.chat_context import ChatContextBuilder, ChatContext
 from app.services.session_service import SessionService, CookieSettings
 from app.services.storage_service import storage_service
@@ -44,25 +44,25 @@ class ChatOrchestrator:
         self.memory_store = memory_store
         self.logger = logger
         
-        # Extract config values for easier access
-        self.memory_enabled = memory_config["enabled"]
-        self.memory_max_turns = memory_config["max_turns"]
-        self.memory_ttl_seconds = memory_config["ttl_seconds"]
+        # Extract config values for easier access with safe defaults
+        self.memory_enabled = memory_config.get("enabled", True)
+        self.memory_max_turns = memory_config.get("max_turns", 10)
+        self.memory_ttl_seconds = memory_config.get("ttl_seconds", 3600)
         
-        self.aims_coaching_enabled = aims_config["enabled"]
+        self.aims_coaching_enabled = aims_config.get("enabled", False)
         self.force_coach_default = bool(aims_config.get("force_default", False))
         
         self.project_id = vertex_config.get("project_id")
-        self.region = vertex_config["region"]
-        self.vertex_location = vertex_config["vertex_location"]
-        self.model_id = vertex_config["model_id"]
-        self.model_fallbacks = vertex_config["model_fallbacks"]
-        self.temperature = vertex_config["temperature"]
-        self.max_tokens = vertex_config["max_tokens"]
+        self.region = vertex_config.get("region", "us-central1")
+        self.vertex_location = vertex_config.get("vertex_location", "us-central1")
+        self.model_id = vertex_config.get("model_id")
+        self.model_fallbacks = vertex_config.get("model_fallbacks", [])
+        self.temperature = vertex_config.get("temperature", 0.0)
+        self.max_tokens = vertex_config.get("max_tokens", 1024)
         self.client_cls = vertex_config.get("client_cls")
         
-        self.expose_upstream_error = debug_config["expose_upstream_error"]
-        self.log_response_preview_max = debug_config["log_response_preview_max"]
+        self.expose_upstream_error = debug_config.get("expose_upstream_error", False)
+        self.log_response_preview_max = debug_config.get("log_response_preview_max", 100)
         
         # Initialize session service
         self.session_service = SessionService(
@@ -365,6 +365,62 @@ class ChatOrchestrator:
             }
         )
     
+    async def handle_report(self, req: Request, body: ReportRequest, background_tasks: Optional[BackgroundTasks] = None) -> JSONResponse:
+        """Handle issue reports by archiving session and clearing it."""
+        self.background_tasks = background_tasks
+        session_id = body.sessionId
+        self.logger.info(f"Report received for session: {session_id}, reason: {body.reason}")
+        
+        try:
+            # Fetch existing memory
+            mem = self.session_service.get_mem(session_id)
+            
+            # Identify user_id
+            user_info = body.userInfo or (mem.get("user_info") if mem else None)
+            user_id = user_info.get("identifier") if user_info else "anonymous"
+
+            if not mem:
+                # If no session found in memory, try to fetch from GCS
+                self.logger.info(f"Session {session_id} not in memory, checking GCS for user {user_id}")
+                mem = storage_service.download_session(session_id, user_id)
+                
+                if not mem:
+                    # If still no session found, return success but there's nothing to archive
+                    self.logger.warning(f"No session found to report for session_id: {session_id}")
+                    return JSONResponse(content={"status": "ok", "message": "No session found to report."})
+
+            self.logger.info(f"Archiving session {session_id} for user {user_id}")
+            # Prepare archive data with the extra error_report key
+            archive_data = {
+                **mem,
+                "session_id": session_id,
+                "user_id": user_id,
+                "game_over": True,
+                "error_report": body.reason,
+                "reported_at": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+            }
+
+            # Trigger background archive
+            if self.background_tasks:
+                self.background_tasks.add_task(
+                    storage_service.upload_session,
+                    session_id,
+                    user_id,
+                    archive_data
+                )
+            else:
+                # Fallback to synchronous if no background tasks (rare)
+                storage_service.upload_session(session_id, user_id, archive_data)
+
+            # Clear session from memory store
+            self.memory_store.pop(session_id, None)
+
+            return JSONResponse(content={"status": "ok", "message": "Issue reported and session ended."})
+
+        except Exception as e:
+            self.logger.error(f"Error handling report for session {session_id}: {e}", exc_info=True)
+            return self._build_error_response(req, e, 500, "Internal server error during report")
+
     def _get_request_id(self, request: Request) -> Optional[str]:
         """Extract request ID from headers or generate one."""
         h = request.headers.get("x-cloud-trace-context") or request.headers.get("x-request-id")
