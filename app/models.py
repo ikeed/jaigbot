@@ -98,4 +98,13 @@ class ChatRequest(BaseModel):
     )
 
 
-__all__ = ["Coaching", "ClassifierResult", "SessionMetrics", "ChatRequest"]
+class ReportRequest(BaseModel):
+    """Request model for POST /report."""
+    sessionId: str = Field(..., description="The session ID to report an issue for")
+    reason: str = Field(..., min_length=1, description="The reason for reporting the issue")
+    userInfo: Optional[dict] = Field(
+        default=None, description="Optional user identification metadata"
+    )
+
+
+__all__ = ["Coaching", "ClassifierResult", "SessionMetrics", "ChatRequest", "ReportRequest"]
