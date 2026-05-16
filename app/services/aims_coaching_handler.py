@@ -249,6 +249,9 @@ class AimsCoachingHandler:
             
         # Legacy AimsPostProcessor (score normalization, inquire->secure, score capping)
         cls_payload = AimsPostProcessor.post_process(cls_payload, body.message)
+
+        # Populate current phase for UI transparency
+        cls_payload["phase"] = aims_state.get("phase", "PreAnnounce")
         
         # Try to snapshot model used for classification (may be approximate if overwritten by parallel call)
         try:
@@ -285,8 +288,11 @@ class AimsCoachingHandler:
                 }
                 parts: list[str] = []
                 step = cls_payload.get("step")
+                phase = cls_payload.get("phase")
                 reasons = cls_payload.get("reasons") or []
                 tips = cls_payload.get("tips") or []
+                if phase:
+                    parts.append(f"Conversation phase: {phase}")
                 if step:
                     parts.append(f"Detected step: {step}")
                 if reasons:
@@ -371,6 +377,7 @@ class AimsCoachingHandler:
                 "score": cls_payload.get("score"),
                 "reasons": cls_payload.get("reasons", []),
                 "tips": cls_payload.get("tips", []),
+                "phase": cls_payload.get("phase"),
             },
             "session": session_obj,
         }
@@ -785,6 +792,12 @@ class AimsCoachingHandler:
                     # New gating: require that at least one concern has been revealed and all concerns have been mirrored
                     try:
                         aims_state = (mem or {}).get("aims_state") or {}
+                        announced = aims_state.get("announced", False)
+                        
+                        # HARD GUARD: Scenario cannot end if vaccine conversation hasn't even been announced
+                        if not announced:
+                            return None
+
                         concerns_list = aims_state.get("parent_concerns") or []
                         
                         # Filter for vaccine-related concerns
@@ -1016,7 +1029,8 @@ class AimsCoachingHandler:
                     ))
                     # Only block if we strictly don't have acks or if there is pushback/questions.
                     # We bypass block_endgame_state_requirements for followup_literature if LLM is confident and we have acks.
-                    if (not (followup_ack_any and literature_ack_any)) or has_more_questions or pushback:
+                    # We MUST have both an offer in history and an acknowledgement in the transcript.
+                    if (not (followup_offer and literature_offer and followup_ack_any and literature_ack_any)) or has_more_questions or pushback:
                         outcome = None
                 except Exception:
                     outcome = None

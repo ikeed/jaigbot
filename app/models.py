@@ -19,6 +19,9 @@ class Coaching(BaseModel):
         default_factory=list, description="Brief reasons supporting the score"
     )
     tips: list[str] = Field(default_factory=list, description="Coaching tips")
+    phase: Optional[str] = Field(
+        default=None, description="Current conversation phase: PreAnnounce|InquireMirror|Secure"
+    )
 
 
 class ClassifierResult(BaseModel):
