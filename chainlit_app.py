@@ -86,6 +86,10 @@ async def _inject_custom_css_once() -> None:
             html = f"<style>{css_text}</style>"
             await _send_html("System", html)
             cl.user_session.set("_css_injected", True)
+
+        # Report Issue button & modal are now handled by public/report-issue.js
+        # (loaded via custom_js in .chainlit/config.toml) to avoid inline-JS
+        # sanitisation by Chainlit's HTML rendering pipeline.
     except Exception:
         # best-effort only
         pass
@@ -497,21 +501,24 @@ async def _start_chat_impl():
     # Set detailed persona/scene for the backend orchestration
     cl.user_session.set("character", character_detailed)
     cl.user_session.set("scene", scene_detailed)
-    # End of session setup
 
-    # 4. Final Setup: Sidebar Button for Report Issue
-    # We move the "Report Issue" button to the sidebar to avoid cluttering the chat window.
-    report_actions = [
-        cl.Action(name="report_issue", value="report", label="Report Issue", 
-                  description="End scenario and report an issue", 
-                  payload={"action": "report"})
-    ]
-    await cl.Message(
-        content="## Help & Support\n\nClick the button below if you encounter any issues during the scenario. This will end the session and log a report.", 
-        actions=report_actions,
-        display="side"
-    ).send()
-    # End of sidebar config
+    # Register session with the backend so /report can find it even before
+    # the first /chat message is sent.
+    try:
+        user = cl.user_session.get("user")
+        user_info = {"identifier": user.identifier} if user else None
+        async with httpx.AsyncClient(timeout=settings.CHAINLIT_HTTP_TIMEOUT) as client:
+            await client.post(
+                f"{_base_url()}/session",
+                json={
+                    "sessionId": session_id,
+                    "character": character_detailed,
+                    "scene": scene_detailed,
+                    "userInfo": user_info,
+                },
+            )
+    except Exception:
+        pass  # best-effort; /chat will create the session on first message anyway
 
     # Initialize fresh local history for a new chat thread in Chainlit if not already present
     if cl.user_session.get("history") is None:
@@ -785,42 +792,29 @@ if is_oauth_enabled:
 
 @cl.action_callback("report_issue")
 async def on_report_issue(action: cl.Action):
-    """Handle the report issue action by opening a modal dialog."""
-    # Set a flag to indicate we're in reporting mode
-    cl.user_session.set("reporting_issue", True)
-    
-    # Open the ChatSettings modal with a single text input for the reason.
-    # We use ChatSettings because it renders as a modal and avoids the main chat box.
-    await cl.ChatSettings(
-        [
-            TextInput(
-                id="report_reason",
-                label="Reason for reporting",
-                placeholder="Describe the issue you encountered...",
-                initial=""
-            )
-        ]
-    ).send()
-    
-    # Inform the user to fill out the settings modal
-    await cl.Message(content="Please provide the reason for your report in the settings modal that just opened.").send()
-
-
-@cl.on_settings_update
-async def on_settings_update(settings_dict: dict):
-    """Handle the submission from the report modal (ChatSettings)."""
-    if not cl.user_session.get("reporting_issue"):
-        # Not in reporting mode, ignore or handle other settings if any
+    """Handle the report issue action submitted from the custom HTML modal."""
+    reason = action.value
+    if not reason or reason == "report":
+        # This was the old action call or empty reason
         return
+    await _submit_report(reason)
 
-    reason = settings_dict.get("report_reason", "").strip()
-    if not reason:
-        # User might have just closed it or cleared it
+
+@cl.on_window_message
+async def on_window_message(message: str):
+    """Handle messages from the browser via window.postMessage (used by report-issue.js)."""
+    try:
+        data = json.loads(message)
+    except (json.JSONDecodeError, TypeError):
         return
+    if data.get("type") == "report_issue":
+        reason = (data.get("reason") or "").strip()
+        if reason:
+            await _submit_report(reason)
 
-    # Clear the reporting flag and reset settings so they don't persist awkwardly
-    cl.user_session.set("reporting_issue", False)
-    
+
+async def _submit_report(reason: str):
+    """Shared logic for submitting a report to the backend."""
     session_id = cl.user_session.get("session_id")
     app_user = cl.user_session.get("user")
     user_info = {"identifier": app_user.identifier} if app_user else None
@@ -840,16 +834,17 @@ async def on_settings_update(settings_dict: dict):
             report_url = f"{_base_url()}/report"
             r = await client.post(report_url, json=payload)
             if r.status_code == 200:
-                await cl.Message(content="Thank you for your report. The scenario has been ended and logged for review.").send()
-                # Clear local history to "end" the scenario for the user
+                # Mark session as ended so further messages are blocked
+                cl.user_session.set("session_ended", True)
                 cl.user_session.set("history", [])
+                await cl.Message(
+                    content="Thank you for your report. The scenario has been ended and logged for review. "
+                    "Please start a new chat to continue."
+                ).send()
             else:
                 await cl.Message(content=f"Failed to report issue (HTTP {r.status_code}): {r.text}").send()
     except Exception as e:
         await cl.Message(content=f"An error occurred while reporting the issue: {str(e)}").send()
-    finally:
-        # Reset ChatSettings to empty so it doesn't show the report reason next time it's opened
-        await cl.ChatSettings([]).send()
 
 
 async def _report_error_silently(error: Exception, context: str = "general"):
@@ -891,6 +886,13 @@ async def _handle_message_impl(message: cl.Message):
     Handle an incoming user message by forwarding it to the FastAPI backend
     and streaming the reply back to the user.
     """
+    # Block messages after a report has ended the session
+    if cl.user_session.get("session_ended"):
+        await cl.Message(
+            "This session has ended due to a report. Please start a new chat to continue."
+        ).send()
+        return
+
     content = message.content.strip()
     if not content:
         await cl.Message("Please enter a message.").send()
@@ -1138,6 +1140,9 @@ async def _resume_chat_impl():
     history is empty (e.g., after a server restart), fetch it from the backend
     using the persistent session id and replay it, avoiding duplicate scenario cards.
     """
+    # Ensure our CSS and sidebar button are present on resume
+    await _inject_custom_css_once()
+    
     # Keep the same session id established in start_chat
     session_id = cl.user_session.get("session_id") or _get_persistent_session_id()
     cl.user_session.set("session_id", session_id)
