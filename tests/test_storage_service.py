@@ -7,7 +7,8 @@ def mock_storage_client():
     with patch("google.cloud.storage.Client") as mock:
         yield mock
 
-def test_storage_service_skips_when_no_bucket():
+def test_storage_service_skips_when_no_bucket(monkeypatch):
+    monkeypatch.setattr("app.config.settings.SESSIONS_BUCKET_NAME", None)
     service = StorageService(bucket_name=None)
     result = service.upload_session("sid", "uid", {"data": "test"})
     assert result is False
