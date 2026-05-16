@@ -48,12 +48,12 @@ class VaccineRelevanceGate:
         *,
         cls_payload: Dict,
         clinician_text: str,
-        parent_last: str,
+        person_last: str,
         parent_recent_concerns: List[str],
         prior_announced: bool,
     ) -> Dict:
         lt_msg = (clinician_text or "").strip().lower()
-        pt_msg = (parent_last or "").strip().lower()
+        pt_msg = (person_last or "").strip().lower()
         ctx_blob = ("\n".join(parent_recent_concerns) if parent_recent_concerns else "").lower()
 
         is_vax_related = (

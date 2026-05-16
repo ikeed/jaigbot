@@ -4,7 +4,7 @@ from app.services.conversation_service import (
     topics_in,
     concern_topic,
     is_duplicate_concern,
-    maybe_add_parent_concern,
+    maybe_add_person_concern,
     mark_mirrored_multi,
     mark_best_match_mirrored,
     mark_secured_by_topic,
@@ -38,26 +38,26 @@ def test_is_duplicate_concern_basic():
     assert is_duplicate_concern(concerns, "late bedtime!", "sleep") is False
 
 
-def test_maybe_add_parent_concern_adds_and_trims():
+def test_maybe_add_person_concern_adds_and_trims():
     st = {}
     long_text = "x" * 300
-    maybe_add_parent_concern(st, long_text + " sleep", TOPICAL_CUES)
+    maybe_add_person_concern(st, long_text + " sleep", TOPICAL_CUES)
     assert st["parent_concerns"]
     assert len(st["parent_concerns"][0]["desc"]) == 240
     assert st["parent_concerns"][0]["topic"] == "sleep"
 
 
-def test_maybe_add_parent_concern_uses_llm_topic():
+def test_maybe_add_person_concern_uses_llm_topic():
     st = {}
     # text doesn't contain keyword for 'diet', but we pass it as llm_topic
-    maybe_add_parent_concern(st, "I'm worried about what he eats.", TOPICAL_CUES, llm_topic="diet")
+    maybe_add_person_concern(st, "I'm worried about what he eats.", TOPICAL_CUES, llm_topic="diet")
     assert st["parent_concerns"][0]["topic"] == "diet"
     assert st["parent_concerns"][0]["desc"] == "I'm worried about what he eats."
 
 
-def test_maybe_add_parent_concern_skips_when_no_topic():
+def test_maybe_add_person_concern_skips_when_no_topic():
     st = {"parent_concerns": []}
-    maybe_add_parent_concern(st, "this is unrelated chit chat", TOPICAL_CUES)
+    maybe_add_person_concern(st, "this is unrelated chit chat", TOPICAL_CUES)
     assert st["parent_concerns"] == []
 
 
@@ -66,7 +66,7 @@ def test_mark_mirrored_multi_prefers_clinician_topics():
         {"desc": "late bedtime", "topic": "sleep", "is_mirrored": False, "is_secured": False},
         {"desc": "too much screen", "topic": "screen_time", "is_mirrored": False, "is_secured": False},
     ]}
-    mark_mirrored_multi(st, clinician_text="Let's reduce screen time.", parent_text="late bedtime", topical_cues=TOPICAL_CUES)
+    mark_mirrored_multi(st, clinician_text="Let's reduce screen time.", person_text="late bedtime", topical_cues=TOPICAL_CUES)
     # screen_time should be mirrored due to clinician reflection
     mirrored = [c for c in st["parent_concerns"] if c["is_mirrored"]]
     assert {c["topic"] for c in mirrored} == {"screen_time"}
@@ -77,27 +77,27 @@ def test_mark_mirrored_multi_fallbacks_when_no_topics_found():
         {"desc": "late bedtime", "topic": "sleep", "is_mirrored": False, "is_secured": False},
         {"desc": "too much screen", "topic": "screen_time", "is_mirrored": False, "is_secured": False},
     ]}
-    # No topical match in clinician_text and parent_text
-    mark_mirrored_multi(st, clinician_text="hello there", parent_text="random", topical_cues=TOPICAL_CUES)
+    # No topical match in clinician_text and person_text
+    mark_mirrored_multi(st, clinician_text="hello there", person_text="random", topical_cues=TOPICAL_CUES)
     # Should mirror the first unmirrored concern as final fallback
     assert any(c["is_mirrored"] for c in st["parent_concerns"]) is True
 
 
-def test_mark_best_match_mirrored_uses_parent_text():
+def test_mark_best_match_mirrored_uses_person_text():
     st = {"parent_concerns": [
         {"desc": "late bedtime", "topic": "sleep", "is_mirrored": False, "is_secured": False},
         {"desc": "too much screen", "topic": "screen_time", "is_mirrored": False, "is_secured": False},
     ]}
-    mark_best_match_mirrored(st, parent_text="The tablet is on too long", topical_cues=TOPICAL_CUES)
+    mark_best_match_mirrored(st, person_text="The tablet is on too long", topical_cues=TOPICAL_CUES)
     mirrored = [c for c in st["parent_concerns"] if c["is_mirrored"]]
     assert {c["topic"] for c in mirrored} == {"screen_time"}
 
 
-def test_mark_best_match_mirrored_fallback_when_no_parent_topic():
+def test_mark_best_match_mirrored_fallback_when_no_person_topic():
     st = {"parent_concerns": [
         {"desc": "late bedtime", "topic": "sleep", "is_mirrored": False, "is_secured": False},
     ]}
-    mark_best_match_mirrored(st, parent_text="no topic here", topical_cues=TOPICAL_CUES)
+    mark_best_match_mirrored(st, person_text="no topic here", topical_cues=TOPICAL_CUES)
     assert st["parent_concerns"][0]["is_mirrored"] is True
 
 

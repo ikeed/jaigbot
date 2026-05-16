@@ -39,7 +39,7 @@ async def test_classify_turn_success(classifier_service, mock_vertex_client):
 
     result = await classifier_service.classify_turn(
         clinician_message="I hear you're worried about side effects.",
-        parent_last="I'm scared of the shots.",
+        person_last="I'm scared of the shots.",
         history=[],
         prior_announced=False,
         prior_phase="PreAnnounce",
@@ -53,12 +53,12 @@ async def test_classify_turn_success(classifier_service, mock_vertex_client):
     assert "Reflected concern well" in result.aims.reasons
 
 @pytest.mark.asyncio
-async def test_classify_turn_with_parent_topic(classifier_service, mock_vertex_client):
-    # Mock successful JSON response with parent_topic
+async def test_classify_turn_with_person_topic(classifier_service, mock_vertex_client):
+    # Mock successful JSON response with person_topic
     mock_response = {
         "is_small_talk": False,
         "is_vaccine_relevant": True,
-        "parent_topic": "side_effects",
+        "person_topic": "side_effects",
         "aims": {
             "step": "Mirror",
             "score": 3,
@@ -66,20 +66,20 @@ async def test_classify_turn_with_parent_topic(classifier_service, mock_vertex_c
             "tips": ["Good job"]
         },
         "safety_flags": [],
-        "reasoning": "Parent mentioned side effects."
+        "reasoning": "Person mentioned side effects."
     }
     mock_vertex_client.generate_text_async.return_value = json.dumps(mock_response)
 
     result = await classifier_service.classify_turn(
         clinician_message="I hear you're worried about side effects.",
-        parent_last="I'm scared of the shots causing a fever.",
+        person_last="I'm scared of the shots causing a fever.",
         history=[],
         prior_announced=False,
         prior_phase="PreAnnounce",
         mapping={}
     )
 
-    assert result.parent_topic == "side_effects"
+    assert result.person_topic == "side_effects"
 
 @pytest.mark.asyncio
 async def test_classify_turn_fallback_on_error(classifier_service, mock_vertex_client):
@@ -88,7 +88,7 @@ async def test_classify_turn_fallback_on_error(classifier_service, mock_vertex_c
 
     result = await classifier_service.classify_turn(
         clinician_message="I recommend the MMR today.",
-        parent_last="Okay.",
+        person_last="Okay.",
         history=[],
         prior_announced=False,
         prior_phase="PreAnnounce",
@@ -101,6 +101,26 @@ async def test_classify_turn_fallback_on_error(classifier_service, mock_vertex_c
     assert result.aims.step == "Announce"
     # reasons contains "fallback" because our service explicitly adds it in _get_deterministic_fallback
     assert "fallback" in result.aims.reasons
+
+@pytest.mark.asyncio
+async def test_apply_overrides_pseudo_secure(classifier_service):
+    # Test that long data-dumping Secure is penalized
+    long_message = "Vaccines are safe and effective. " * 10 # More than 30 words
+    initial_result = ClassifierResult(
+        is_small_talk=False,
+        is_vaccine_relevant=True,
+        aims={
+            "step": "Secure",
+            "score": 3,
+            "reasons": ["LLM labeled Secure"],
+            "tips": []
+        }
+    )
+    
+    overridden = classifier_service._apply_overrides(initial_result, long_message)
+    assert overridden.aims.step == "Secure"
+    assert overridden.aims.score <= 1
+    assert "pseudo-Secure" in overridden.aims.reasons[1] or "Secure score reduced" in overridden.aims.reasons[1]
 
 @pytest.mark.asyncio
 async def test_apply_overrides_question_guard(classifier_service):

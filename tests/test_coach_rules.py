@@ -118,4 +118,4 @@ def test_announce_after_inquiry_gets_reason_and_score_capped(monkeypatch):
     data = r.json()
     # Score should be capped to at most 2 and reasons should contain guidance about Announce after inquiry
     assert data["coaching"]["score"] <= 2
-    assert any("announce after inquiry" in s.lower() for s in data["coaching"]["reasons"])
+    assert any("avoid moving to announce after inquiry" in s.lower() for s in data["coaching"]["reasons"])

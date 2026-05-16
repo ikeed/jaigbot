@@ -78,7 +78,7 @@ class LegacyChatHandler:
 
         # If first assistant turn this session, strip accidental scenario headers
         try:
-            if not (ctx.parent_last or "").strip():
+            if not (ctx.person_last or "").strip():
                 from app.services.chat_helpers import strip_appointment_headers
                 reply_text = strip_appointment_headers(reply_text)
         except Exception:
