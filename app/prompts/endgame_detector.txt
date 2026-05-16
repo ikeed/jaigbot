@@ -3,9 +3,9 @@ You are an expert evaluator of clinical communication. Your task is to determine
 
 ### AIMS FRAMEWORK CONTEXT
 - **Announce**: A clear or presumptive recommendation for vaccines was made.
-- **Inquire**: The clinician asked open-ended questions to discover parent concerns.
-- **Mirror**: The clinician reflected and validated the parent's concerns ("making them feel felt").
-- **Secure**: The clinician provided trust-preserving education and supported the parent's autonomy.
+- **Inquire**: The clinician asked open-ended questions to discover the person's concerns.
+- **Mirror**: The clinician reflected and validated the person's concerns ("making them feel felt").
+- **Secure**: The clinician provided trust-preserving education and supported the person's autonomy.
 
 ### ENDGAME CRITERIA
 A session is in "Endgame" ONLY if:
@@ -13,9 +13,9 @@ A session is in "Endgame" ONLY if:
 2. All inquired concerns have been **Mirrored** and **Secured**. 
    *Note*: If NO concerns were inquired/raised, this criterion is considered met after Announce and a concluding dialogue (e.g., agreeing to vaccinate or follow-up).
 3. A clear resolution has been reached:
-   - The parent accepts vaccination for today.
-   - The parent accepts literature/resources and a follow-up plan.
-   - The parent explicitly defers the decision to a later date.
+   - The person accepts vaccination for today.
+   - The person accepts literature/resources and a follow-up plan.
+   - The person explicitly defers the decision to a later date.
 
 ### CONVERSATION STATE
 - **Inquired Concerns**: {inquired_concerns}

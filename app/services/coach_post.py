@@ -157,11 +157,11 @@ class AimsPostProcessor:
 
 
 class EndGameDetector:
-    """Detects conversation end conditions based on the parent's latest reply.
+    """Detects conversation end conditions based on the person's latest reply.
 
     End when either:
-      - Parent agrees to vaccinate now, or
-      - Parent prefers a follow-up appointment and to take literature/home materials
+      - Person agrees to vaccinate now, or
+      - Person prefers a follow-up appointment and to take literature/home materials
     """
 
     ACCEPT_NOW_CUES = [
@@ -365,7 +365,7 @@ def build_endgame_bullets_fallback(session_obj: Dict | None) -> List[str]:
         )
     else:
         bullets.append(
-            "Nice inquiry pacing — keep questions open and single-barreled, then pause for the parent’s full answer."
+        "Nice inquiry pacing — keep questions open and single-barreled, then pause for the person's full answer."
         )
 
     # 3) Mirror
@@ -375,7 +375,7 @@ def build_endgame_bullets_fallback(session_obj: Dict | None) -> List[str]:
         )
     else:
         bullets.append(
-            "Your reflections help the parent feel heard — keep mirroring the specific worry before offering facts."
+        "Your reflections help the person feel heard — keep mirroring the specific worry before offering facts."
         )
 
     # 4) Secure

@@ -748,377 +748,118 @@ class AimsCoachingHandler:
     async def _check_end_game(
         self, session_id: str, reply_payload: Dict[str, Any], session_obj: Dict[str, Any] | None
     ) -> Dict[str, Any] | None:
-        """Check for end-game scenarios and build coach post if needed."""
-        # Emit begin marker with gating context
+        """Check for end-game scenarios using LLM-centric detection with heuristic fallback."""
         eg_begin_time = time.time()
-        assistant_count = 0
-        combined_reply_text = reply_payload.get("patient_reply", "")
         try:
-            telemetry_log_event(
-                self.logger,
-                "aims_endgame_begin",
-                sessionId=session_id,
-                combinedReplyLen=len((combined_reply_text or "").strip()),
-            )
-        except Exception:
-            pass
-        try:
-            # Get combined reply text from recent assistant messages
-            combined_reply_text = reply_payload.get("patient_reply", "")
-            
-            if self.memory_enabled and session_id:
-                try:
-                    mem = self.memory_store.get(session_id) or {}
-                    hist = mem.get("history") or []
-                    
-                    # Collect last two assistant messages and the last user message
-                    acc = []
-                    last_user_text = ""
-                    recent_parent_texts: list[str] = []
-                    recent_transcript_parts: list[str] = []
-                    for item in reversed(hist):
-                        role_i = item.get("role")
-                        txt_i = (item.get("content") or "").strip()
-                        if not txt_i:
-                            continue
-                        # Build a small recent transcript (up to 6 turns total)
-                        if len(recent_transcript_parts) < 6:
-                            prefix = "Clinician" if role_i == "user" else "Parent"
-                            recent_transcript_parts.append(f"{prefix}: {txt_i}")
-                        if role_i == "assistant":
-                            recent_parent_texts.append(txt_i)
-                            if len(acc) < 2:
-                                acc.append(txt_i)
-                        elif role_i == "user" and not last_user_text:
-                            last_user_text = txt_i
-                        if len(acc) >= 2 and last_user_text:
-                            # stop early once we have enough context for fast heuristics
-                            pass
-                    
-                    if acc:
-                        # Reverse back to chronological order and join
-                        combined_reply_text = " ".join(reversed(acc)).strip()
-
-                    # Count total assistant replies in history for gating
-                    try:
-                        assistant_count = sum(
-                            1
-                            for it in hist
-                            if it.get("role") == "assistant" and (it.get("content") or "").strip()
-                        )
-                    except Exception:
-                        assistant_count = 0
-
-                    # New gating: require that at least one concern has been revealed and all concerns have been mirrored
-                    try:
-                        aims_state = (mem or {}).get("aims_state") or {}
-                        announced = aims_state.get("announced", False)
-                        phase = aims_state.get("phase", "PreAnnounce")
-                        
-                        # HARD GUARD: Scenario cannot end in PreAnnounce phase
-                        if phase == "PreAnnounce":
-                            return None
-
-                        # RELAXED GUARD: Allow endgame detection even if 'announced' flag is false,
-                        # provided there's enough dialogue (assistant_count > 1).
-                        # This covers cases where the first Announce was misclassified.
-                        if not announced and assistant_count <= 1:
-                            return None
-
-                        concerns_list = aims_state.get("parent_concerns") or []
-                        
-                        # Filter for vaccine-related concerns
-                        vax_cues = VaccineRelevanceGate.VAX_CUES
-                        vax_concerns = []
-                        for c in concerns_list:
-                            desc = str(c.get("desc", "")).lower()
-                            topic = str(c.get("topic", "")).lower()
-                            if any(cue in desc for cue in vax_cues) or any(cue in topic for cue in vax_cues):
-                                vax_concerns.append(c)
-                        
-                        has_vax_concerns = bool(vax_concerns)
-                        all_mirrored = all(bool(c.get("is_mirrored")) for c in vax_concerns) if has_vax_concerns else True
-                        all_secured = all(bool(c.get("is_secured")) for c in vax_concerns) if has_vax_concerns else True
-                        block_endgame_state_requirements = not (all_mirrored and all_secured)
-                        # Also compute counts for hints
-                        concerns_count = len(concerns_list)
-                        mirrored_count = sum(1 for c in concerns_list if c.get("is_mirrored"))
-                        secured_count = sum(1 for c in concerns_list if c.get("is_secured"))
-                    except Exception:
-                        block_endgame_state_requirements = True
-                        concerns_count = 0
-                        mirrored_count = 0
-                        secured_count = 0
-
-                    # aggregate all assistant messages from history
-                    all_assistant_texts = []
-                    for item in hist:
-                        if item.get("role") == "assistant":
-                            atxt = (item.get("content") or "").strip().lower()
-                            if atxt:
-                                all_assistant_texts.append(atxt)
-                    hist_assistant_all = " \n ".join(all_assistant_texts)
-
-                    # Aggregate acknowledgements across recent parent replies
-                    try:
-                        pr_latest = (combined_reply_text or "").strip().lower()
-                        parent_all = " \n ".join(reversed(recent_parent_texts))[:2000].lower()
-                        
-                        # Use all assistant history to check if an offer was ever made
-                        followup_offer = any(c in hist_assistant_all for c in (
-                            "follow up", "follow-up", "another appointment", "next visit", "come back",
-                            "schedule", "set up an appointment", "later appointment", "set up",
-                            "book an appointment", "make an appointment", "schedule something", "talk again",
-                            "talk it over", "think it over", "decide later", "make another",
-                        ))
-                        literature_offer = any(c in hist_assistant_all for c in (
-                            "handout", "handouts", "brochure", "pamphlet", "literature", "written info",
-                            "information to take home", "take home", "materials", "resource", "printout", "printed info",
-                            "reading", "read this", "give you some literature", "leaflet", "info sheet",
-                            "look over", "something to take", "some info", "some information",
-                        ))
-                        # Acks anywhere in recent parent replies
-                        followup_ack_any = any(tok in parent_all for tok in (
-                            "book", "schedule", "set up", "come back", "next visit", "follow up", "follow-up", "make an appointment",
-                            "talk it over", "think it over", "decide later", "agree to that", "sounds good", "okay", "fine",
-                            "will do", "sure", "definitely", "i'll do that", "i will do that",
-                        ))
-                        literature_ack_any = any(tok in parent_all for tok in (
-                            "handout", "brochure", "pamphlet", "literature", "reading", "i'll read", "i will read", "i’ll read",
-                            "info sheet", "materials", "resource", "printout", "printed info", "take home",
-                            "look over", "at home", "appreciate that", "thanks", "thank you", "okay", "fine", "sure",
-                        ))
-                        # If the latest parent text negates follow-up, treat ack as false
-                        negates_followup_latest = any(neg in pr_latest for neg in (
-                            "not another appointment", "not what we need", "not what we need right now",
-                            "not sure another appointment", "don’t need another appointment", "don't need another appointment",
-                            "we were hoping to discuss now", "we were hoping to discuss this now", "we want to discuss now",
-                            "we want to talk now", "while we're here", "while we are here",
-                        ))
-                        if negates_followup_latest:
-                            followup_ack_any = False
-                        
-                        # Guard against too-easy triggers for followup_literature
-                        # If they have only had 1 or fewer parent replies, they might just be agreeing to talk
-                        if len(recent_parent_texts) <= 1:
-                            followup_ack_any = False
-                            literature_ack_any = False
-
-                        # Latest-turn guards
-                        has_more_questions_latest = ("?" in pr_latest) or any(q in pr_latest for q in (
-                            "one other question", "another question", "what about", "is it possible", "can we", "could we",
-                        ))
-                        pushback_latest = any(p in pr_latest for p in (
-                            "discuss this now", "talk about this now", "we were hoping to discuss now", "we were hoping to discuss this now",
-                            "not ready today", "not ready right now", "we're not ready", "we are not ready",
-                            "not another appointment", "not what we need", "not what we need right now",
-                            "we want to discuss now", "we want to talk now", "while we're here", "while we are here",
-                            "not just take reading material", "not just take literature",
-                        ))
-                        # Short-circuit endgame (heuristic) if conditions met across recent turns
-                        if (
-                            followup_offer and literature_offer and followup_ack_any and literature_ack_any
-                            and (not has_more_questions_latest) and (not pushback_latest)
-                        ):
-                            lines = [
-                                "Outcome: Parent opted for follow-up and took literature — great coaching!",
-                            ]
-                            try:
-                                from app.services.coach_post import build_endgame_bullets_fallback
-                                fb_bullets = build_endgame_bullets_fallback(session_obj)
-                                if fb_bullets:
-                                    lines.extend(fb_bullets)
-                            except Exception:
-                                pass
-                            return {"title": "🎉 Great job!", "lines": lines}
-                        # Stash hints for LLM usage below
-                        recent_transcript = "\n".join(reversed(recent_transcript_parts[-6:]))
-                    except Exception:
-                        recent_transcript = ""
-                except Exception:
-                    pass
-
-                except Exception:
-                    pass
-            
-            # Heuristic gates to reduce false endgame triggers in very early/short turns
-            try:
-                # 1) Require at least two assistant replies before we consider the scenario finished
-                if locals().get("assistant_count", 0) < 2:
-                    return None
-                # 2) If the combined reply is very short and lacks vaccine terms, do not trigger
-                vax_terms = (
-                    "vaccine", "vaccinate", "vaccination", "shot", "shots", "immuniz", "jab", "injection", "mmr", "flu", "booster"
-                )
-                lt_combined = (combined_reply_text or "").strip().lower()
-                if len(lt_combined) < 20 and not any(t in lt_combined for t in vax_terms):
-                    return None
-            except Exception:
-                pass
-
-            # Negative-intent override: if the latest parent replies contain strong declines, never end.
-            try:
-                lt_neg = (combined_reply_text or "").strip().lower()
-                NEGATE = (
-                    "not ready", "not today", "not now", "let's wait", "let’s wait", "prefer to wait",
-                    "hold off", "maybe later", "another time", "i’d rather wait", "i would rather wait",
-                    "i need more time", "we’re not ready", "we are not ready"
-                )
-                if any(tok in lt_neg for tok in NEGATE):
-                    try:
-                        telemetry_log_event(
-                            self.logger,
-                            "aims_endgame_end",
-                            sessionId=session_id,
-                            durationMs=int((time.time() - eg_begin_time) * 1000),
-                            assistantCount=int(assistant_count or 0),
-                            outcome="none",
-                        )
-                    except Exception:
-                        pass
-                    return None
-            except Exception:
-                pass
-
-            # First attempt: LLM-based endgame detection (robust to phrasing differences)
-            try:
-                # Collect hints with safe defaults from earlier aggregation
-                _assistant_count = locals().get("assistant_count", 0)
-                _concerns_count = locals().get("concerns_count", 0)
-                _mirrored_count = locals().get("mirrored_count", 0)
-                _secured_count = locals().get("secured_count", 0)
-                _followup_ack_any = locals().get("followup_ack_any", False)
-                _literature_ack_any = locals().get("literature_ack_any", False)
-                _has_more_questions_latest = locals().get("has_more_questions_latest", False)
-                _pushback_latest = locals().get("pushback_latest", False)
-                _recent_transcript = locals().get("recent_transcript", "")
-
-                detect_prompt = (
-                    "You are an expert conversation evaluator for pediatric vaccination visits.\n"
-                    "Decide if the PARENT's recent replies indicate the scenario is complete.\n"
-                    "Endgame outcomes:\n"
-                    "- accepted_now: The parent clearly consented/agreed to vaccinate today (not a question).\n"
-                    "- followup_literature: The parent prefers to defer vaccination, plans a follow-up, and accepted written materials.\n"
-                    "- not_endgame: Anything else (including questions like 'I have some questions about the vaccination').\n\n"
-                    "Consider these latest parent messages (most recent last):\n"
-                    f"PARENT_RECENT=\"{combined_reply_text}\"\n\n"
-                    "Recent condensed transcript (last few turns, newest last):\n"
-                    f"TRANSCRIPT=\n{_recent_transcript}\n\n"
-                    "Heuristic hints (may be approximate):\n"
-                    f"assistant_count={_assistant_count}, concerns_count={_concerns_count}, mirrored_count={_mirrored_count}, secured_count={_secured_count}\n"
-                    f"parent_ack_followup_any={_followup_ack_any}, parent_ack_literature_any={_literature_ack_any}\n"
-                    f"parent_has_more_questions_latest={_has_more_questions_latest}, parent_pushback_latest={_pushback_latest}\n\n"
-                    "Rules:\n"
-                    "- If the statement is conditional or a question (e.g., 'If we go ahead...?','Should we proceed?'), do NOT mark accepted_now unless an explicit consent token is present (e.g., 'I consent', 'let's do it today').\n"
-                    "- If the parent says they are not ready or prefers to wait, you MUST output not_endgame.\n"
-                    "- Do not infer acceptance from interest or readiness to discuss; require explicit consent to vaccinate today.\n"
-                    "- If hints show questions/pushback on the latest message, prefer not_endgame.\n"
-                    "- Output strict JSON only: {\"outcome\": <accepted_now|followup_literature|not_endgame>, \"reasons\":[<short strings>]} with no markdown or code fences.\n"
-                )
-                raw = await self._call_vertex_json(
-                    detect_prompt,
-                    ENDGAME_DETECT_SCHEMA,
-                    log_path="endgame_detect",
-                    temperature=self.endgame_temperature,
-                    max_tokens=self.endgame_max_tokens,
-                )
-                obj = json.loads((raw or "").strip())
-                outcome = (obj.get("outcome") or "").strip()
-            except Exception:
-                outcome = None
-
-            # Dual-consent gating: require local heuristic confirmation for accepted_now
-            if outcome == "accepted_now":
-                if block_endgame_state_requirements:
-                    outcome = None
-                else:
-                    try:
-                        eg_local = EndGameDetector.detect(combined_reply_text)
-                    except Exception:
-                        eg_local = None
-                    if not eg_local or eg_local.get("reason") != "accepted_now":
-                        outcome = None  # Treat as not decisive; fall back below
-
-            # Additional gating for followup_literature: require explicit parent ack and no new questions/pushback
-            if outcome == "followup_literature":
-                try:
-                    pr = (combined_reply_text or "").strip().lower()
-                    # Use aggregated acks (across recent turns) for more robustness
-                    # followup_ack_any and literature_ack_any were computed above from parent_all
-                    has_more_questions = ("?" in pr) or any(q in pr for q in (
-                        "one other question", "another question", "what about", "is it possible", "can we", "could we",
-                    ))
-                    pushback = any(p in pr for p in (
-                        "discuss this now", "talk about this now", "we were hoping to discuss now", "we were hoping to discuss this now",
-                        "not ready today", "not ready right now", "we're not ready", "we are not ready",
-                        "not sure another appointment", "don’t need another appointment", "don't need another appointment",
-                        "not what we need right now", "we want to discuss now",
-                    ))
-                    # Only block if we strictly don't have acks or if there is pushback/questions.
-                    # We bypass block_endgame_state_requirements for followup_literature if LLM is confident and we have acks.
-                    # We MUST have both an offer in history and an acknowledgement in the transcript.
-                    if (not (followup_offer and literature_offer and followup_ack_any and literature_ack_any)) or has_more_questions or pushback:
-                        outcome = None
-                except Exception:
-                    outcome = None
-
-            # Fallback: heuristic detector when LLM not confident/available
-            if not outcome or outcome == "not_endgame":
-                # We still block 'accepted_now' if state requirements aren't met
-                # but 'followup_literature' is allowed as a partial success/exit.
-                eg = EndGameDetector.detect(combined_reply_text)
-                if eg and eg.get("reason") == "accepted_now" and block_endgame_state_requirements:
-                    outcome = "not_endgame"
-                elif eg:
-                    outcome = eg.get("reason")
-                else:
-                    # Emit end marker (no outcome)
-                    try:
-                        telemetry_log_event(
-                            self.logger,
-                            "aims_endgame_end",
-                            sessionId=session_id,
-                            durationMs=int((time.time() - eg_begin_time) * 1000),
-                            assistantCount=int(assistant_count or 0),
-                            outcome="none",
-                        )
-                    except Exception:
-                        pass
-                    return None
-
-            lines = []
-            if outcome == "accepted_now":
-                lines.append("Outcome: Parent agreed to vaccinate today — well done!")
-            elif outcome == "followup_literature":
-                lines.append("Outcome: Parent opted for follow-up and took literature — great coaching!")
-            else:
-                # Emit end marker (no outcome)
-                try:
-                    telemetry_log_event(
-                        self.logger,
-                        "aims_endgame_end",
-                        sessionId=session_id,
-                        durationMs=int((time.time() - eg_begin_time) * 1000),
-                        assistantCount=int(assistant_count or 0),
-                        outcome="none",
-                        block_endgame_state_requirements=block_endgame_state_requirements,
-                    )
-                except Exception:
-                    pass
+            if not (self.memory_enabled and session_id):
                 return None
 
-            # Add fallback bullets for end-game summary
+            mem = self.memory_store.get(session_id) or {}
+            hist = mem.get("history") or []
+            aims_state = mem.get("aims_state") or {}
+
+            # 1. Hard guards to avoid unnecessary LLM calls
+            phase = aims_state.get("phase", "PreAnnounce")
+            announced = aims_state.get("announced", False)
+            if phase == "PreAnnounce":
+                return None
+
+            assistant_count = sum(1 for it in hist if it.get("role") == "assistant" and (it.get("content") or "").strip())
+            if not announced and assistant_count <= 1:
+                return None
+
+            # 2. Extract context for LLM
+            # Filter out coach entries so only dialogue reaches the model; label assistant role as "Person"
+            history_text = "\n".join([
+                f"{'Clinician' if m.get('role') == 'user' else 'Person'}: {m.get('content')}"
+                for m in hist[-10:]
+                if m.get("role") in ("user", "assistant")
+            ])
+
+            # Pre-compute recent person replies for heuristic fallback and dual-consent gate
+            combined_reply_text = " ".join(
+                m.get("content", "")
+                for m in reversed(hist[-6:])
+                if m.get("role") == "assistant" and (m.get("content") or "").strip()
+            )[:500]
+
+            # Extract concern states
+            concerns = aims_state.get("parent_concerns") or []
+            inquired = [c["topic"] for c in concerns]
+            mirrored = [c["topic"] for c in concerns if c.get("is_mirrored")]
+            secured = [c["topic"] for c in concerns if c.get("is_secured")]
+
+            # Telemetry begin
             try:
-                from app.services.coach_post import build_endgame_bullets_fallback
-                fb_bullets = build_endgame_bullets_fallback(session_obj)
-                if fb_bullets:
-                    lines.extend(fb_bullets)
+                telemetry_log_event(
+                    self.logger,
+                    "aims_endgame_begin",
+                    sessionId=session_id,
+                    inquiredCount=len(inquired),
+                    mirroredCount=len(mirrored),
+                    securedCount=len(secured)
+                )
             except Exception:
                 pass
-            
-            return {"title": "🎉 Great job!", "lines": lines}
-            
-        except Exception:
+
+            # 3. Call LLM detector via ClassifierService
+            result = await self.classifier_service.detect_endgame(
+                history_text=history_text,
+                announced=announced,
+                inquired_concerns=inquired,
+                mirrored_concerns=mirrored,
+                secured_concerns=secured
+            )
+
+            is_endgame = result.get("is_endgame", False)
+            outcome = result.get("resolution_type", "not_resolved")
+            summary = result.get("summary", "")
+
+            # 4. Heuristic fallback: if LLM detection errored, delegate to EndGameDetector
+            if not is_endgame and result.get("reason") == "detection_error":
+                eg_local = EndGameDetector.detect(combined_reply_text)
+                if eg_local:
+                    is_endgame = True
+                    heuristic_reason = eg_local.get("reason", "")
+                    outcome = "accepted_vaccine" if heuristic_reason == "accepted_now" else "accepted_literature"
+                    summary = ""
+
+            # 5. Dual-consent gate: vaccine acceptance requires heuristic confirmation to reduce LLM false positives
+            if is_endgame and outcome == "accepted_vaccine":
+                eg_local = EndGameDetector.detect(combined_reply_text)
+                if not eg_local or eg_local.get("reason") != "accepted_now":
+                    is_endgame = False
+
+            try:
+                telemetry_log_event(
+                    self.logger,
+                    "aims_endgame_end",
+                    sessionId=session_id,
+                    durationMs=int((time.time() - eg_begin_time) * 1000),
+                    isEndgame=is_endgame,
+                    outcome=outcome
+                )
+            except Exception:
+                pass
+
+            if is_endgame:
+                title = "🎉 Great job!" if outcome in ("accepted_vaccine", "accepted_literature") else "Session Complete"
+                lines = [f"Outcome: {summary}"] if summary else []
+
+                # Add fallback metrics bullets if available
+                try:
+                    fb_bullets = build_endgame_bullets_fallback(session_obj)
+                    if fb_bullets:
+                        lines.extend(fb_bullets)
+                except Exception:
+                    pass
+
+                return {"title": title, "lines": lines}
+
+            return None
+
+        except Exception as e:
+            self.logger.exception("LLM endgame detection failed: %s", e)
             return None
     
     async def _get_prior_state(self, session_id: str) -> Dict[str, Any] | None:
