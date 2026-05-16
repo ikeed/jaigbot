@@ -765,7 +765,7 @@ if is_oauth_enabled:
         return default_user
 
 
-@cl.on_action("report_issue")
+@cl.action_callback("report_issue")
 async def on_report_issue(action: cl.Action):
     """Handle the report issue action."""
     # Prompt the user for a reason
