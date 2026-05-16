@@ -22,6 +22,7 @@ import random
 from pathlib import Path
 import httpx
 import chainlit as cl
+from chainlit.input_widget import TextInput
 from app.persona import DEFAULT_CHARACTER, DEFAULT_SCENE
 
 
@@ -507,7 +508,8 @@ async def _start_chat_impl():
     ]
     await cl.Message(
         content="## Help & Support\n\nClick the button below if you encounter any issues during the scenario. This will end the session and log a report.", 
-        actions=report_actions
+        actions=report_actions,
+        display="side"
     ).send()
     # End of sidebar config
 
@@ -783,13 +785,42 @@ if is_oauth_enabled:
 
 @cl.action_callback("report_issue")
 async def on_report_issue(action: cl.Action):
-    """Handle the report issue action."""
-    # Prompt the user for a reason
-    res = await cl.AskUserMessage(content="Please provide a reason for reporting this issue:").send()
-    if not res:
+    """Handle the report issue action by opening a modal dialog."""
+    # Set a flag to indicate we're in reporting mode
+    cl.user_session.set("reporting_issue", True)
+    
+    # Open the ChatSettings modal with a single text input for the reason.
+    # We use ChatSettings because it renders as a modal and avoids the main chat box.
+    await cl.ChatSettings(
+        [
+            TextInput(
+                id="report_reason",
+                label="Reason for reporting",
+                placeholder="Describe the issue you encountered...",
+                initial=""
+            )
+        ]
+    ).send()
+    
+    # Inform the user to fill out the settings modal
+    await cl.Message(content="Please provide the reason for your report in the settings modal that just opened.").send()
+
+
+@cl.on_settings_update
+async def on_settings_update(settings_dict: dict):
+    """Handle the submission from the report modal (ChatSettings)."""
+    if not cl.user_session.get("reporting_issue"):
+        # Not in reporting mode, ignore or handle other settings if any
         return
 
-    reason = res['output']
+    reason = settings_dict.get("report_reason", "").strip()
+    if not reason:
+        # User might have just closed it or cleared it
+        return
+
+    # Clear the reporting flag and reset settings so they don't persist awkwardly
+    cl.user_session.set("reporting_issue", False)
+    
     session_id = cl.user_session.get("session_id")
     app_user = cl.user_session.get("user")
     user_info = {"identifier": app_user.identifier} if app_user else None
@@ -807,7 +838,6 @@ async def on_report_issue(action: cl.Action):
                 "userInfo": user_info
             }
             report_url = f"{_base_url()}/report"
-            # Ensure session is preserved in backend by including sessionId
             r = await client.post(report_url, json=payload)
             if r.status_code == 200:
                 await cl.Message(content="Thank you for your report. The scenario has been ended and logged for review.").send()
@@ -817,6 +847,9 @@ async def on_report_issue(action: cl.Action):
                 await cl.Message(content=f"Failed to report issue (HTTP {r.status_code}): {r.text}").send()
     except Exception as e:
         await cl.Message(content=f"An error occurred while reporting the issue: {str(e)}").send()
+    finally:
+        # Reset ChatSettings to empty so it doesn't show the report reason next time it's opened
+        await cl.ChatSettings([]).send()
 
 
 async def _report_error_silently(error: Exception, context: str = "general"):
