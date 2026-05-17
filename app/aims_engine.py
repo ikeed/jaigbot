@@ -34,6 +34,10 @@ AIMS_STEPS = ("Announce", "Inquire", "Mirror", "Secure", "Mirror+Inquire")
 # markers are too narrow.  These cover soft introductions, status questions,
 # and visit-based phrasing that signal the first vaccine mention.
 _ANNOUNCE_FALLBACK_MARKERS = [
+    # Core recommendation phrases (also in the mapping, but needed for empty-mapping fallback)
+    "i recommend", "it's time for", "it\u2019s time for", "my recommendation is",
+    "is due for", "due for", "today we will", "today we usually",
+    # Soft introductions & status questions
     "routine vaccines", "measles protection", "vaccination status", "vaccine status",
     "mmr vaccine", "about vaccines", "talk about vaccines", "discuss vaccines",
     "vaccinated", "been vaccinated", "is vaccinated",
