@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any, Dict, List, Optional
 
 from app.aims_engine import evaluate_turn
@@ -87,11 +88,20 @@ class ClassifierService:
                 # Normalize steps array into single step string for legacy support
                 if len(steps) == 1:
                     step = steps[0]
+                elif "Announce" in steps and not prior_announced:
+                    # First vaccine introduction: Announce dominates any other steps
+                    # the LLM detected in the same turn (e.g. ["Announce","Inquire"]).
+                    # The trailing question is the dialogue invite, not a separate Inquire.
+                    step = "Announce"
+                elif "Mirror" in steps and "Secure" in steps and "Inquire" not in steps:
+                    step = "Mirror+Secure"
                 elif "Mirror" in steps and "Inquire" in steps:
                     step = "Mirror+Inquire"
+                elif "Secure" in steps and "Inquire" in steps and "Mirror" not in steps:
+                    step = "Secure+Inquire"
                 else:
                     # Pick the most "advanced" step or first one
-                    priority = {"Secure": 4, "Mirror+Inquire": 3, "Mirror": 2, "Inquire": 1, "Announce": 0}
+                    priority = {"Secure": 5, "Mirror+Secure": 4, "Mirror+Inquire": 3, "Secure+Inquire": 3, "Mirror": 2, "Inquire": 1, "Announce": 0}
                     step = max(steps, key=lambda s: priority.get(s, -1), default=None)
 
             aims_coaching = Coaching(
@@ -116,7 +126,7 @@ class ClassifierService:
                 result.aims.tips = result.aims.tips[:1]
 
             # Post-processing overrides for known LLM weaknesses
-            result = self._apply_overrides(result, clinician_message)
+            result = self._apply_overrides(result, clinician_message, prior_announced=prior_announced)
             return result
 
         except Exception as e:
@@ -174,6 +184,18 @@ class ClassifierService:
             max_tokens=self.max_tokens,
         )
 
+    # Regex for vaccine-preventable disease names and vaccine-specific terms.
+    # Used by the soft Announce detector to catch null-step classifications
+    # where the LLM missed a soft vaccine introduction buried in a clinical
+    # assessment (e.g. "I also like to make sure children are protected against
+    # measles, whooping cough...").
+    _SOFT_ANNOUNCE_RE = re.compile(
+        r"\b(vaccin|immuniz|mmr|booster|measles|whooping|pertussis|"
+        r"diphtheria|tetanus|polio|rotavirus|varicella|dtap|tdap|ipv|pcv|hib|"
+        r"routine vaccines|routine shots)",
+        re.IGNORECASE,
+    )
+
     # Announce markers that indicate the primary intent is a recommendation or
     # first vaccine introduction, even when the message ends with a trailing
     # question like "How does that sound?" or a status question.
@@ -209,10 +231,74 @@ class ClassifierService:
         "at this visit", "routine vaccines",
     ]
 
-    def _apply_overrides(self, result: ClassifierResult, message: str) -> ClassifierResult:
+    # Sentence-level rebuttal detection: fires only when 'but' appears in the
+    # same sentence as a reflective stem, indicating a direct "I hear you, but..."
+    # pivot rather than an incidental 'but' in a separate educational clause.
+    _REBUTTAL_STEMS = [
+        "i hear you", "i understand", "it sounds like", "sounds like",
+        "you're worried", "you feel", "i'm hearing", "what i'm hearing",
+        "i hear that", "that makes sense", "that's fair", "that's valid",
+        "that's understandable", "you're right that", "i know that",
+    ]
+
+    @classmethod
+    def _has_rebuttal_but(cls, msg: str) -> bool:
+        """True only when 'but' appears in the same sentence as a reflective stem.
+
+        Splits on sentence boundaries so that 'but' in a later educational
+        clause (e.g. '...but serious reactions are rare') does not trigger
+        the penalty for a valid mirror in a preceding sentence.
+        """
+        sentences = re.split(r'(?<=[.!?\n])\s+', msg.lower())
+        for sent in sentences:
+            if ' but ' in sent and any(stem in sent for stem in cls._REBUTTAL_STEMS):
+                return True
+        return False
+
+    def _apply_overrides(
+        self,
+        result: ClassifierResult,
+        message: str,
+        *,
+        prior_announced: bool = False,
+    ) -> ClassifierResult:
         """Apply deterministic overrides to common LLM misclassifications."""
         msg = (message or "").strip()
         msg_lower = msg.lower()
+
+        # Soft Announce detector: catches two patterns the LLM commonly
+        # misclassifies when Announce hasn't happened yet:
+        #
+        # (a) LLM returns null (rapport) but vaccine content is present —
+        #     e.g. long clinical assessment ending with "I also like to make
+        #     sure children are protected against measles, whooping cough..."
+        #
+        # (b) LLM returns Inquire but Announce hasn't happened yet and vaccine
+        #     content is present — e.g. "I'm more interested in hearing your
+        #     thoughts around vaccines for Carter."  Under AIMS, any first
+        #     mention of vaccines (even embedded in an invite for concerns) is
+        #     part of the Announce step, not a standalone Inquire.
+        if not prior_announced and self._SOFT_ANNOUNCE_RE.search(msg):
+            is_null_step = not result.aims.step
+            is_inquire_pre_announce = (
+                result.aims.step == "Inquire"
+                and "Announce" not in result.aims.steps
+            )
+            if is_null_step or is_inquire_pre_announce:
+                result.aims.step = "Announce"
+                result.aims.steps = ["Announce"]
+                result.aims.score = 1
+                result.is_small_talk = False
+                label = "null" if is_null_step else "Inquire"
+                result.aims.reasons = [
+                    f"Soft vaccine introduction detected (LLM said {label}) "
+                    f"\u2192 Announce score 1"
+                ] + list(result.aims.reasons or [])
+                result.aims.tips = [
+                    "Try a presumptive recommendation to strengthen this "
+                    "(e.g. \"It\u2019s time for [vaccine] today \u2014 how does that sound?\")."
+                ]
+                return result
 
         # Positive Announce detector: if the message contains unambiguous recommendation
         # language but the LLM didn't classify as Announce, add it.
@@ -229,9 +315,20 @@ class ClassifierService:
 
         # Question Guard: prevent Announce/Secure from being kept when message
         # ends with '?' but has no announce language (trailing questions are Inquire).
-        # Skip when strong Announce language is present.
+        # Skip when strong Announce language is present OR when vaccine content is
+        # detected (any message about specific vaccines is an Announce, regardless
+        # of whether it matches the _ANNOUNCE_MARKERS keyword list exactly).
         if msg.endswith("?") and (result.aims.step in {"Announce", "Secure"} or "Announce" in result.aims.steps or "Secure" in result.aims.steps):
-            has_announce_language = any(m in msg_lower for m in self._ANNOUNCE_MARKERS)
+            # _SOFT_ANNOUNCE_RE only overrides the guard for multi-sentence messages
+            # where vaccine content appears in an introductory body before the question.
+            # A single-sentence question like "How are you feeling about today's vaccines?"
+            # should still be flipped to Inquire; it is not a vaccine introduction.
+            _msg_body = msg.rstrip("?").rstrip()
+            _is_multi_sentence = bool(re.search(r'[.!\n]', _msg_body))
+            has_announce_language = (
+                any(m in msg_lower for m in self._ANNOUNCE_MARKERS)
+                or (_is_multi_sentence and bool(self._SOFT_ANNOUNCE_RE.search(msg)))
+            )
             if not has_announce_language:
                 # If it doesn't have announce markers but was called Announce/Secure and ends in ?, 
                 # ensure Inquire is present.
@@ -243,18 +340,26 @@ class ClassifierService:
                 if result.aims.score is not None:
                     result.aims.score = min(2, result.aims.score)
 
-        # Mirror+BUT penalty (parity with prompt instruction and aims_engine)
-        if result.aims.step in {"Mirror", "Mirror+Inquire"} or "Mirror" in result.aims.steps:
-            if " but " in msg_lower:  # Only penalize immediate 'but' rebuttals in Mirror turns
-                result.aims.score = min(1, result.aims.score or 0)
-                if not any("rebuttal" in r.lower() for r in result.aims.reasons):
-                    result.aims.reasons.append("Reflection included rebuttal/new info → penalized")
+        # Mirror+BUT penalty: only fires when 'but' co-occurs with a reflective stem
+        # in the SAME SENTENCE (direct pivot like "I hear you, but...").
+        # Does NOT fire for 'but' in a separate educational clause, and is exempt
+        # for Mirror+Secure where educational content is the intended Secure component.
+        _is_mirror_step = (
+            result.aims.step in {"Mirror", "Mirror+Inquire"}
+            or ("Mirror" in result.aims.steps and result.aims.step not in {"Mirror+Secure"})
+        )
+        if _is_mirror_step and self._has_rebuttal_but(msg):
+            result.aims.score = min(1, result.aims.score or 0)
+            if not any("rebuttal" in r.lower() for r in result.aims.reasons):
+                result.aims.reasons.append("Reflection included direct rebuttal \u2192 penalized")
 
         # Detect pseudo-Secure (data-dumping/persuasion without autonomy support).
         # Only fires when the message is long (60+ words) AND contains no autonomy cues
         # AND contains no question (a dialogue invite like "Does that make sense?" signals
         # the clinician is NOT just lecturing).
-        if result.aims.step == "Secure" or "Secure" in result.aims.steps:
+        # Mirror+Secure is exempt: it explicitly combines Mirror and Secure content, so the
+        # message will naturally be longer and have both reflective and educational sections.
+        if (result.aims.step == "Secure" or "Secure" in result.aims.steps) and result.aims.step != "Mirror+Secure":
             has_autonomy = any(cue in msg_lower for cue in self._SECURE_AUTONOMY_CUES)
             has_question = "?" in msg
             if not has_autonomy and not has_question and len(msg.split()) > 60:

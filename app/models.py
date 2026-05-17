@@ -12,7 +12,7 @@ class Coaching(BaseModel):
     """
 
     step: Optional[str] = Field(
-        default=None, description="Detected AIMS step: Announce|Inquire|Mirror|Secure|Mirror+Inquire"
+        default=None, description="Detected AIMS step: Announce|Inquire|Mirror|Secure|Mirror+Inquire|Mirror+Secure|Secure+Inquire"
     )
     steps: list[str] = Field(
         default_factory=list, description="Detected AIMS steps (for compound moves)"

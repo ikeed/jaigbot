@@ -18,7 +18,7 @@ CLASSIFY_SCHEMA: Dict[str, Any] = {
     "type": "object",
     "properties": {
         # Allow string or null for local validation; Vertex schema will be adapted via vertex_response_schema()
-        "step": {"type": ["string", "null"], "enum": ["Announce", "Inquire", "Mirror", "Secure", "Mirror+Inquire", None]},
+        "step": {"type": ["string", "null"], "enum": ["Announce", "Inquire", "Mirror", "Secure", "Mirror+Inquire", "Mirror+Secure", "Secure+Inquire", None]},
         "score": {"type": "integer", "minimum": 0, "maximum": 3},
         "reasons": {"type": "array", "items": {"type": "string"}, "minItems": 1},
         "tips": {"type": "array", "items": {"type": "string"}},

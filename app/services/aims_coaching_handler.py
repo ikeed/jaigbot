@@ -80,7 +80,21 @@ class AimsCoachingHandler:
         "ingredients": ["thimerosal", "aluminum", "adjuvant", "preservative", "ingredient"],
         "schedule_timing": ["schedule", "spacing", "delay", "alternative schedule", "wait"],
         "effectiveness": ["effective", "efficacy", "works", "breakthrough"],
-        "trust": ["data", "study", "studies", "pharma", "big pharma", "trust"],
+        "trust": [
+            "data", "study", "studies", "pharma", "big pharma", "trust",
+            # Research/epistemic autonomy language common in vaccine-hesitant parents
+            "look into things", "look things up", "own research", "do my own research",
+            "find out myself", "find out for myself", "look it up",
+            "informed decision", "informed choice", "conflicting information",
+            "hard to know what to believe", "sort through",
+        ],
+        # Liberty/autonomy concerns: 'I don't like feeling pressured', 'it's my choice'
+        "autonomy": [
+            "pressured", "pressure", "pushed", "cornered", "forced", "lectured",
+            "steamroll", "don't like being told", "my choice", "my decision",
+            "right to choose", "right to decide", "your choice", "your decision",
+            "not ready", "without pressure", "not pushed",
+        ],
     }
     
     def __init__(
@@ -327,11 +341,19 @@ class AimsCoachingHandler:
                     parts.append(f"Detected step: {step}")
                 # Show the first user-facing reason as feedback, skipping
                 # internal classifier/guard reasons that aren't helpful.
-                feedback = self._first_user_facing_reason(reasons)
+                feedback = self._first_user_facing_reason(reasons, step=step)
                 if feedback:
                     parts.append(f"Feedback: {feedback}")
-                if tips:
-                    parts.append(f"Tip: {tips[0]}")
+                # Suppress tips that suggest Announce when Announce has already been done.
+                # The LLM occasionally generates these for null-step turns.
+                aims_state_now = mem.get("aims_state") or {}
+                already_announced = aims_state_now.get("announced", False)
+                tips_to_show = [
+                    t for t in tips
+                    if not (already_announced and "announce" in (t or "").lower())
+                ]
+                if tips_to_show:
+                    parts.append(f"Tip: {tips_to_show[0]}")
                 coach_text = " | ".join(parts)
                 if coach_text:
                     mem.setdefault("history", []).append({"role": "coach", "content": coach_text})
@@ -405,7 +427,11 @@ class AimsCoachingHandler:
             "coaching": {
                 "step": cls_payload.get("step"),
                 "score": cls_payload.get("score"),
-                "reasons": cls_payload.get("reasons", []),
+                # Strip internal guard/debug reasons before sending to client
+                "reasons": self._filter_user_facing_reasons(
+                    cls_payload.get("reasons", []),
+                    step=cls_payload.get("step"),
+                ),
                 "tips": cls_payload.get("tips", []),
                 "phase": cls_payload.get("phase"),
             },
@@ -457,9 +483,13 @@ class AimsCoachingHandler:
                 maybe_add_person_concern(state, person_last, self._TOPICAL_CUES, llm_topic)
             
             # 1. Update Mirror/Secure status based on clinician message
-            # If Mirror is in steps, mark matching concerns as mirrored
+            # If Mirror is in steps, mark matching concerns as mirrored.
+            # Pass llm_topic as a semantic tiebreaker when keyword matching fails.
             if "Mirror" in steps:
-                mark_mirrored_multi(state, clinician_message, person_last, self._TOPICAL_CUES)
+                mark_mirrored_multi(
+                    state, clinician_message, person_last,
+                    self._TOPICAL_CUES, llm_topic=llm_topic
+                )
             
             # If Secure is in steps, mark matching MIRRORED concerns as secured
             if "Secure" in steps:
@@ -467,7 +497,12 @@ class AimsCoachingHandler:
 
             # 2. Apply coaching guidance rules (legacy/heuristic fallback)
             step_main = cls_payload.get("step")
-            self._apply_coaching_guidance(cls_payload, step_main, state, clinician_message, person_last)
+            # Pass character for persona-adaptive tips
+            character = mem.get("character")
+            self._apply_coaching_guidance(
+                cls_payload, step_main, state, clinician_message, person_last,
+                character=character,
+            )
             
             # 3. Update observational state (announced, phase)
             # Pass the full steps list so compound turns (e.g. Announce+Inquire)
@@ -495,12 +530,34 @@ class AimsCoachingHandler:
     )
 
     @classmethod
-    def _first_user_facing_reason(cls, reasons: list[str]) -> str | None:
-        """Return the first reason that is NOT internal classifier logic."""
-        for r in reasons or []:
-            if not any(r.lower().startswith(p) for p in cls._INTERNAL_REASON_PREFIXES):
-                return r
+    def _first_user_facing_reason(cls, reasons: list[str], step: str | None = None) -> str | None:
+        """Return the first reason that is NOT internal classifier logic.
+
+        Accepts an optional step for context-specific filtering:
+        - 'no clear recommendation' is suppressed for Secure steps (it is never
+          valid feedback for a Secure turn and leaks from Announce scoring).
+        """
+        for r in cls._filter_user_facing_reasons(reasons, step=step):
+            return r
         return None
+
+    @classmethod
+    def _filter_user_facing_reasons(cls, reasons: list[str], step: str | None = None) -> list[str]:
+        """Return reasons with internal classifier/guard entries removed.
+
+        Used both to pick the single feedback line for the coach note and to
+        clean the full reasons array before it is returned to the client so
+        that debug strings like 'Phase guard: Announce already done → ...' are
+        never shown to the end user.
+        """
+        out = []
+        for r in reasons or []:
+            if any(r.lower().startswith(p) for p in cls._INTERNAL_REASON_PREFIXES):
+                continue
+            if step and step not in {"Announce"} and "no clear recommendation" in r.lower():
+                continue
+            out.append(r)
+        return out
 
     # Regex for detecting vaccine-related content in a clinician message.
     _VACCINE_CONTENT_RE = re.compile(
@@ -513,9 +570,15 @@ class AimsCoachingHandler:
     # Mirror stems used by the phase guard to detect reflective content
     # when reclassifying backward Announce transitions.
     _MIRROR_STEMS_FOR_GUARD = [
+        # Emotional/formulaic reflection stems
         "it sounds like", "sounds like", "you're worried", "i'm hearing",
         "you feel", "you want", "i hear you", "i understand",
         "what i'm hearing", "what i hear", "i'm hearing that",
+        # Cognitive validation stems (used by phase guard only;
+        # the LLM classifier handles the concern-vs-statement distinction)
+        "that's a reasonable", "that's a good point", "that's a fair",
+        "you raise a valid", "you make a good point",
+        "that's an important distinction",
     ]
 
     def _apply_phase_guard(
@@ -562,7 +625,11 @@ class AimsCoachingHandler:
             return cls_payload
 
         # --- Rule 2: PreAnnounce forward guard ---
-        if prior_phase == "PreAnnounce" and step in ("Secure", "Mirror", "Mirror+Inquire"):
+        # Only fires when Announce has NOT yet been done.  After Announce, the phase
+        # stays "PreAnnounce" until Inquire is detected, so we must also check
+        # prior_announced to avoid reclassifying a legitimate Mirror/Mirror+Inquire
+        # back to a second Announce.
+        if prior_phase == "PreAnnounce" and not prior_announced and step in ("Secure", "Mirror", "Mirror+Inquire", "Mirror+Secure", "Secure+Inquire"):
             if self._VACCINE_CONTENT_RE.search(clinician_message or ""):
                 cls_payload["step"] = "Announce"
                 cls_payload["reasons"] = [
@@ -574,9 +641,30 @@ class AimsCoachingHandler:
 
         return cls_payload
 
+    # Trust style detection keywords and corresponding tip templates
+    _ANALYTICAL_KEYWORDS = (
+        "analytical", "data", "evidence", "need for cognition",
+        "epistemic", "statistical", "peer-reviewed", "research",
+    )
+
+    @classmethod
+    def _detect_trust_style(cls, character: str | None) -> str:
+        """Detect the persona's epistemic trust style from character text.
+
+        Returns 'analytical', 'emotional', or 'default'.
+        """
+        if not character:
+            return "default"
+        lt = character.lower()
+        if any(kw in lt for kw in cls._ANALYTICAL_KEYWORDS):
+            return "analytical"
+        # Could add emotional detection here in future
+        return "default"
+
     def _apply_coaching_guidance(
         self, cls_payload: Dict[str, Any], step_current: str, state: Dict[str, Any],
-        clinician_message: str, person_last: str
+        clinician_message: str, person_last: str,
+        *, character: str | None = None,
     ) -> None:
         """Apply coaching-specific guidance rules."""
         # Suppress tips about mirroring or 'what else' if all known concerns have been mirrored
@@ -618,24 +706,73 @@ class AimsCoachingHandler:
                 "Keep it brief and invite input (e.g., 'How does that sound?')."
             )
         
-        # Handle mirroring
-        if step_current in ("Mirror", "Mirror+Inquire"):
+        # Handle mirroring (Mirror, Mirror+Inquire, and Mirror+Secure all mirror)
+        if step_current in ("Mirror", "Mirror+Inquire", "Mirror+Secure"):
             mark_mirrored_multi(state, clinician_message, person_last, self._TOPICAL_CUES)
         
         # Handle securing
-        if step_current == "Secure":
+        if step_current == "Mirror+Secure":
+            # Compound step: securing is part of the blended turn. No "secure before mirror"
+            # warning — the Mirror component handles it. Simply mark secured.
+            mark_secured_by_topic(state, clinician_message, self._TOPICAL_CUES)
+        elif step_current == "Secure":
             needs_mirror = any(not c.get("is_mirrored") for c in (state.get("parent_concerns") or []))
+            # Suppress the warning if Mirror turns have already been detected in this session.
+            # Keyword matching sometimes fails to update is_mirrored even when genuine
+            # mirroring occurred; trusting the step-count avoids repetitive false alarms.
+            mirrors_done = state.get("mirrors_done", 0)
+            if needs_mirror and mirrors_done > 0:
+                needs_mirror = False  # mirroring happened — suppress the warning
             if needs_mirror:
-                cls_payload["reasons"] = [
-                    "Securing before mirroring — allowed, but mirror first so the person feels heard"
-                ] + (cls_payload.get("reasons") or [])
-                cls_payload.setdefault("tips", []).append(
-                    "Before educating, briefly reflect the concern (e.g., 'It feels like a lot at once — did I get that right?')."
-                )
+                # De-duplicate: check how many times the "secure before mirror"
+                # feedback has been given recently and escalate accordingly.
+                recent = state.get("recent_coaching") or []
+                secure_before_mirror_key = "secure_before_mirror"
+                repeat_count = sum(1 for r in recent if r == secure_before_mirror_key)
+
+                # Find first unmirrored concern topic for specificity
+                unmirrored_topics = [
+                    c.get("topic", "unknown")
+                    for c in (state.get("parent_concerns") or [])
+                    if not c.get("is_mirrored")
+                ]
+                first_unmirrored = unmirrored_topics[0] if unmirrored_topics else None
+
+                trust_style = self._detect_trust_style(character)
+
+                if repeat_count == 0:
+                    # First time: standard feedback, persona-adapted
+                    if trust_style == "analytical":
+                        reason = "Securing before mirroring — validate their reasoning before educating; analytical patients feel heard when their logic is acknowledged"
+                        tip = "Reflect the reasoning (e.g., 'You want to weigh absolute vs. relative risk individually — did I capture that right?')."
+                    else:
+                        reason = "Securing before mirroring — allowed, but mirror first so the person feels heard"
+                        tip = "Before educating, briefly reflect the concern (e.g., 'It feels like a lot at once — did I get that right?')."
+                elif repeat_count == 1:
+                    # Second time: add specificity about which concern
+                    topic_hint = f" ('{first_unmirrored}')" if first_unmirrored else ""
+                    reason = f"Still securing without mirroring — the concern{topic_hint} hasn't been reflected yet"
+                    tip = f"Try reflecting the specific concern{topic_hint} before more education."
+                else:
+                    # Third+ time: escalate to pattern-level observation
+                    n = repeat_count + 1
+                    topic_hint = f" about '{first_unmirrored}'" if first_unmirrored else ""
+                    reason = f"You've had {n} Secure turns without mirroring{topic_hint} — try pausing to reflect before more education"
+                    tip = f"Pause and mirror: acknowledge the concern{topic_hint} before sharing more facts."
+
+                cls_payload["reasons"] = [reason] + (cls_payload.get("reasons") or [])
+                cls_payload.setdefault("tips", []).append(tip)
                 try:
                     cls_payload["score"] = min(2, int(cls_payload.get("score", 2)))
                 except Exception:
                     cls_payload["score"] = 2
+
+                # Track this feedback for future de-duplication
+                recent.append(secure_before_mirror_key)
+                state["recent_coaching"] = recent[-3:]  # keep last 3
+            else:
+                # Reset the counter when concerns ARE mirrored
+                state["recent_coaching"] = []
             mark_secured_by_topic(state, clinician_message, self._TOPICAL_CUES)
     
     def _update_observational_state(
@@ -656,17 +793,42 @@ class AimsCoachingHandler:
             state["announced"] = True
             # Phase stays PreAnnounce until inquiry begins
 
-        # Inquire / Mirror+Inquire advances the phase
-        if step_current in ("Inquire", "Mirror+Inquire") or "Inquire" in all_steps:
+        # Track how many turns have included a Mirror component.  Used to
+        # suppress false-alarm "secure before mirroring" warnings when
+        # keyword matching fails to update is_mirrored on individual concerns.
+        if "Mirror" in all_steps or step_current in ("Mirror", "Mirror+Inquire", "Mirror+Secure"):
+            state["mirrors_done"] = state.get("mirrors_done", 0) + 1
+
+        # Inquire / Mirror+Inquire / Secure+Inquire always sets phase to InquireMirror,
+        # even from Secure — AIMS is cyclical, not a one-way state machine.
+        if step_current in ("Inquire", "Mirror+Inquire", "Secure+Inquire") or "Inquire" in all_steps:
             state["first_inquire_done"] = True
             state["phase"] = "InquireMirror"
-        elif step_current == "Mirror" or "Mirror" in all_steps:
-            if state.get("phase") != "InquireMirror":
-                state["phase"] = "InquireMirror"
-        elif step_current == "Secure":
-            state["phase"] = "Secure"
-            # pending_concerns becomes False if all concerns are secured
+        elif step_current == "Mirror+Secure":
+            # Compound step: both Mirror and Secure done in one turn.
+            # If all concerns are now mirrored (which mark_mirrored_multi just handled),
+            # allow phase to advance to Secure; otherwise stay in InquireMirror.
             pc = state.get("parent_concerns") or []
+            all_mirrored = all(c.get("is_mirrored") for c in pc) if pc else True
+            if all_mirrored:
+                state["phase"] = "Secure"
+            else:
+                state["phase"] = "InquireMirror"
+            state["pending_concerns"] = not all(
+                c.get("is_mirrored") and c.get("is_secured") for c in pc
+            ) if pc else False
+        elif step_current == "Mirror" or ("Mirror" in all_steps and "Secure" not in all_steps):
+            # Plain Mirror: cycle back to InquireMirror regardless of prior phase
+            state["phase"] = "InquireMirror"
+        elif step_current == "Secure":
+            # Only advance to Secure phase when all concerns are mirrored.
+            # If unmirrored concerns remain, stay in InquireMirror to signal
+            # that the clinician should mirror before continuing to educate.
+            pc = state.get("parent_concerns") or []
+            all_mirrored = all(c.get("is_mirrored") for c in pc) if pc else True
+            if all_mirrored:
+                state["phase"] = "Secure"
+            # pending_concerns becomes False if all concerns are secured
             state["pending_concerns"] = not all(
                 c.get("is_mirrored") and c.get("is_secured") for c in pc
             ) if pc else False
@@ -681,8 +843,8 @@ class AimsCoachingHandler:
                 "history": [], "character": None, "scene": None, "updated": time.time()
             }
             aims = mem.setdefault("aims", {
-                "perStepCounts": {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0, "Mirror+Inquire": 0},
-                "scores": {"Announce": [], "Inquire": [], "Mirror": [], "Secure": [], "Mirror+Inquire": []},
+                "perStepCounts": {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0, "Mirror+Inquire": 0, "Mirror+Secure": 0, "Secure+Inquire": 0},
+                "scores": {"Announce": [], "Inquire": [], "Mirror": [], "Secure": [], "Mirror+Inquire": [], "Mirror+Secure": [], "Secure+Inquire": []},
                 "totalTurns": 0
             })
             
@@ -690,7 +852,7 @@ class AimsCoachingHandler:
             # Always count the turn; only score/count recognized AIMS steps
             aims["totalTurns"] = int(aims.get("totalTurns", 0)) + 1
             
-            if step in {"Announce", "Inquire", "Mirror", "Secure", "Mirror+Inquire"}:
+            if step in {"Announce", "Inquire", "Mirror", "Secure", "Mirror+Inquire", "Mirror+Secure", "Secure+Inquire"}:
                 score_val = int(cls_payload.get("score", 2))
                 aims["perStepCounts"][step] = aims["perStepCounts"].get(step, 0) + 1
                 aims["scores"].setdefault(step, []).append(score_val)
@@ -701,6 +863,20 @@ class AimsCoachingHandler:
                     aims["perStepCounts"]["Mirror"] = aims["perStepCounts"].get("Mirror", 0) + 1
                     aims["perStepCounts"]["Inquire"] = aims["perStepCounts"].get("Inquire", 0) + 1
                     aims["scores"].setdefault("Mirror", []).append(score_val)
+                    aims["scores"].setdefault("Inquire", []).append(score_val)
+                
+                elif step == "Mirror+Secure":
+                    # Expand into Mirror and Secure so individual step coverage metrics work
+                    aims["perStepCounts"]["Mirror"] = aims["perStepCounts"].get("Mirror", 0) + 1
+                    aims["perStepCounts"]["Secure"] = aims["perStepCounts"].get("Secure", 0) + 1
+                    aims["scores"].setdefault("Mirror", []).append(score_val)
+                    aims["scores"].setdefault("Secure", []).append(score_val)
+
+                elif step == "Secure+Inquire":
+                    # Expand into Secure and Inquire so individual step coverage metrics work
+                    aims["perStepCounts"]["Secure"] = aims["perStepCounts"].get("Secure", 0) + 1
+                    aims["perStepCounts"]["Inquire"] = aims["perStepCounts"].get("Inquire", 0) + 1
+                    aims["scores"].setdefault("Secure", []).append(score_val)
                     aims["scores"].setdefault("Inquire", []).append(score_val)
                 
                 # Maintain running averages per step for quick snapshot reads
@@ -851,7 +1027,7 @@ class AimsCoachingHandler:
         
         try:
             aims = (self.memory_store.get(session_id) or {}).get("aims") or {}
-            counts = {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0, "Mirror+Inquire": 0}
+            counts = {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0, "Mirror+Inquire": 0, "Mirror+Secure": 0, "Secure+Inquire": 0}
             counts.update(aims.get("perStepCounts", {}))
             
             # Prefer precomputed runningAverage if available
@@ -894,6 +1070,14 @@ class AimsCoachingHandler:
 
             assistant_count = sum(1 for it in hist if it.get("role") == "assistant" and (it.get("content") or "").strip())
             if not announced and assistant_count <= 1:
+                return None
+
+            # 1b. Block endgame when concerns remain unmirrored.
+            # Use the actual concern list as source of truth rather than
+            # relying only on pending_concerns which may lag state transitions.
+            concerns = aims_state.get("parent_concerns") or []
+            has_unmirrored = any(not c.get("is_mirrored") for c in concerns)
+            if concerns and has_unmirrored:
                 return None
 
             # 2. Extract context for LLM
@@ -952,7 +1136,10 @@ class AimsCoachingHandler:
                     outcome = "accepted_vaccine" if heuristic_reason == "accepted_now" else "accepted_literature"
                     summary = ""
 
-            # 5. Dual-consent gate: vaccine acceptance requires heuristic confirmation to reduce LLM false positives
+            # 5. High-stakes gate: require heuristic confirmation ONLY for accepted_vaccine
+            # (consent to vaccinate today is irreversible, so we require a double-check).
+            # For accepted_literature and deferred we trust the LLM — natural language
+            # for deferral/follow-up is too varied for reliable keyword matching.
             if is_endgame and outcome == "accepted_vaccine":
                 eg_local = EndGameDetector.detect(combined_reply_text)
                 if not eg_local or eg_local.get("reason") != "accepted_now":
