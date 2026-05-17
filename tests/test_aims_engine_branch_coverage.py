@@ -159,10 +159,10 @@ class TestClassifyStepBranches:
         assert result.step == "Inquire"
     
     def test_classify_step_small_talk_detection(self):
-        """Test classify_step detects small talk"""
+        """Test classify_step detects small talk when no AIMS markers match"""
         result = classify_step("", "Hi there! Great to see you both!", {})
         assert result.step == ""  # No AIMS step
-        assert "Rapport/pleasantries" in result.reasons[0]
+        assert "rapport/pleasantries" in result.reasons[0].lower()
         
     def test_classify_step_small_talk_question_not_inquire(self):
         """Test classify_step detects small talk cues"""
@@ -200,17 +200,23 @@ class TestClassifyStepBranches:
         assert result2.step in ["Mirror", "Announce"]
         
         result3 = classify_step("I'm hesitant", "We can do it today", {})
-        assert result3.step in ["Secure", "Announce"]
+        # With empty mapping, no Secure (needs autonomy+safety) and no Announce markers
+        assert result3.step in ["Secure", "Announce", ""]
         
-    def test_classify_step_default_announce_no_markers(self):
-        """Test classify_step defaults to Announce when no markers match"""
+    def test_classify_step_no_markers_falls_to_rapport(self):
+        """Test classify_step falls to rapport when no AIMS markers match"""
+        # "The vaccine is important for health." has no question mark, no mirror
+        # stems, no secure markers — but does match didactic_secure ("protect" in
+        # didactic_re won't fire because "important" isn't in the regex, but
+        # "safe" isn't present either). With the inverted logic, messages that
+        # don't match any AIMS marker fall through to rapport.
         result = classify_step(
-            "I'm thinking about it", 
-            "The vaccine is important for health.", 
+            "I'm thinking about it",
+            "Thank you for sharing that with me.",
             {}
         )
-        assert result.step == "Announce"
-        assert "Defaulted to Announce" in result.reasons[0]
+        assert result.step == ""
+        assert "rapport" in result.reasons[0].lower()
 
 
 class TestScoreStepBranches:
@@ -391,16 +397,22 @@ class TestEvaluateTurnBranches:
         assert result["score"] < 3
         assert any("accuracy" in tip.lower() for tip in result["tips"])
         
-    def test_evaluate_turn_announce_tips_no_recommendation(self):
-        """Test evaluate_turn Announce tips when missing recommendation"""
-        result = evaluate_turn("I'm thinking", "Vaccines are important for health", {})
+    def test_evaluate_turn_announce_tips_no_invite(self, aims_mapping):
+        """Test evaluate_turn Announce tips when missing dialogue invitation"""
+        # Has recommendation + rationale but no invitation ("How does that sound?")
+        # Needs real mapping so Announce linguistic markers are available.
+        result = evaluate_turn(
+            "I'm thinking",
+            "I recommend the MMR vaccine today to protect against measles outbreaks.",
+            aims_mapping,
+        )
         assert result["step"] == "Announce"
         assert result["score"] < 3
-        assert any("recommendation" in tip.lower() for tip in result["tips"])
+        assert any("invite" in tip.lower() or "dialogue" in tip.lower() for tip in result["tips"])
         
-    def test_evaluate_turn_announce_tips_no_rationale(self):
+    def test_evaluate_turn_announce_tips_no_rationale(self, aims_mapping):
         """Test evaluate_turn Announce tips when missing rationale"""
-        result = evaluate_turn("I'm not sure", "I recommend the MMR vaccine", {})
+        result = evaluate_turn("I'm not sure", "I recommend the MMR vaccine", aims_mapping)
         assert result["step"] == "Announce"
         assert result["score"] < 3
         assert any("reason" in tip.lower() for tip in result["tips"])
@@ -442,9 +454,9 @@ class TestEvaluateTurnBranches:
         result5 = score_step("Inquire", "", long_text, {})
         assert isinstance(result5.score, int)
         
-    def test_evaluate_turn_multiple_tips_truncated(self):
+    def test_evaluate_turn_multiple_tips_truncated(self, aims_mapping):
         """Test evaluate_turn limits tips to one when multiple are generated"""
-        # Create a scenario that would generate multiple tips
-        result = evaluate_turn("I'm hesitant", "Let me tell you about vaccines", {})
+        # Use real mapping so Announce markers are available
+        result = evaluate_turn("I'm hesitant", "Today we will give Emily her vaccines", aims_mapping)
         assert result["step"] == "Announce"
         assert len(result["tips"]) <= 1  # Should be truncated to at most one tip

@@ -104,8 +104,9 @@ async def test_classify_turn_fallback_on_error(classifier_service, mock_vertex_c
 
 @pytest.mark.asyncio
 async def test_apply_overrides_pseudo_secure(classifier_service):
-    # Test that long data-dumping Secure is penalized
-    long_message = "Vaccines are safe and effective. " * 10 # More than 30 words
+    # Test that long data-dumping Secure (>60 words, no autonomy cues, no question) is penalized.
+    # "Vaccines are safe and effective. " is 5 words; repeat 15 times = 75 words.
+    long_message = "Vaccines are safe and effective. " * 15  # 75 words, no question, no autonomy cues
     initial_result = ClassifierResult(
         is_small_talk=False,
         is_vaccine_relevant=True,

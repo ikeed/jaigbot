@@ -128,7 +128,7 @@ def format_markers(md: dict) -> str:
 
 
 def strip_appointment_headers(text: str) -> str:
-    """Remove scenario header lines like 'Parent:', 'Patient:', 'Purpose:', 'Notes:' from text.
+    """Remove scenario header lines like 'Person:', 'Parent:', 'Patient:', 'Purpose:', 'Notes:' from text.
 
     Intended for sanitizing the very first assistant reply so we don't show a duplicate
     appointment summary when the UI already displayed a scenario card.
@@ -145,7 +145,8 @@ def strip_appointment_headers(text: str) -> str:
             continue
         ltl = lt.lower()
         if (
-            ltl.startswith("parent:")
+            ltl.startswith("person:")
+            or ltl.startswith("parent:")
             or ltl.startswith("patient:")
             or ltl.startswith("purpose:")
             or ltl.startswith("notes:")
