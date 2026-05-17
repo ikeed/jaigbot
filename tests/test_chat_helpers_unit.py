@@ -5,6 +5,7 @@ from app.services.chat_helpers import (
     format_history,
     recent_context,
     extract_recent_concerns,
+    strip_appointment_headers,
 )
 
 
@@ -62,6 +63,23 @@ def test_recent_context_labels_and_empty():
         "Clinician: How are you?",
         "Person: Worried about shots",
         ]
+
+
+def test_strip_appointment_headers_strips_person_label():
+    """'Person:' header lines (from LLM output using new terminology) must be stripped."""
+    text = "Person: Taylor Lopez\nPurpose: Flu vaccination\nHere is my reply."
+    out = strip_appointment_headers(text)
+    assert "Person: Taylor Lopez" not in out
+    assert "Purpose: Flu vaccination" not in out
+    assert "Here is my reply." in out
+
+
+def test_strip_appointment_headers_still_strips_parent_label():
+    """Legacy 'Parent:' headers must still be stripped for backward compatibility."""
+    text = "Parent: Sarah Jenkins\nPurpose: Checkup\nHello, I am here."
+    out = strip_appointment_headers(text)
+    assert "Parent: Sarah Jenkins" not in out
+    assert "Hello, I am here." in out
 
 
 def test_extract_recent_concerns_filters_parent_and_limits():

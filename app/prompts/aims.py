@@ -62,42 +62,50 @@ def build_classify_prompt(
 
 def build_unified_classify_prompt(
     *,
-    mapping_markers_text: str,
-    recent_ctx: str,
-    person_recent_concerns: List[str],
     person_last: str,
     clinician_last: str,
     prior_announced: bool,
     prior_phase: str,
     context_turns: int,
-    safety_hints: List[str],
+    recent_context: str = "",
+    inquired_concerns_list: List[str] = None,
+    mirrored_concerns_list: List[str] = None,
 ) -> str:
     """Render the unified classification prompt from the template.
 
     Combines AIMS, small talk, relevance, and safety signals.
     """
-    mapping_markers_section = (
-        "AIMS markers (from mapping):\n" + mapping_markers_text + "\n" if mapping_markers_text else ""
-    )
-    recent_ctx_section = (
-        f"Recent context (last {context_turns} turns):\n{recent_ctx}\n\n" if recent_ctx else ""
-    )
-    person_recent_concerns_section = (
-        "Person_recent_concerns:\n- " + "\n- ".join(person_recent_concerns) + "\n\n"
-        if person_recent_concerns
-        else ""
-    )
     return load_and_render(
         "app.prompts",
         "unified_classify.txt",
-        mapping_markers_section=mapping_markers_section,
-        recent_ctx_section=recent_ctx_section,
-        person_recent_concerns_section=person_recent_concerns_section,
         person_last=person_last,
         clinician_last=clinician_last,
         prior_announced=str(prior_announced).lower(),
         prior_phase=prior_phase,
-        safety_hints=", ".join(safety_hints) if safety_hints else "none",
+        context_turns=str(context_turns),
+        recent_context=recent_context or "(none — first turn)",
+        inquired_concerns_list=", ".join(inquired_concerns_list or []),
+        mirrored_concerns_list=", ".join(mirrored_concerns_list or []),
+    )
+
+
+def build_endgame_detector_prompt(
+    *,
+    history_text: str,
+    announced: bool,
+    inquired_concerns: List[str],
+    mirrored_concerns: List[str],
+    secured_concerns: List[str],
+) -> str:
+    """Render the endgame detector prompt."""
+    return load_and_render(
+        "app.prompts",
+        "endgame_detector.txt",
+        history_text=history_text,
+        announced=str(announced).lower(),
+        inquired_concerns=", ".join(inquired_concerns),
+        mirrored_concerns=", ".join(mirrored_concerns),
+        secured_concerns=", ".join(secured_concerns),
     )
 
 
