@@ -68,8 +68,8 @@ div[data-step-type="user_message"] div.bg-accent {
   position: absolute;
   right: 6px; /* inside the bubble to avoid clipping */
   top: -10px;
-  width: 18px;
-  height: 18px;
+  width: 28px;
+  height: 28px;
   border-radius: 9999px;
   background: url('/public/doctor.svg') center/cover no-repeat;
   box-shadow: 0 0 0 2px var(--background, #fff); /* ring to separate from bubble */
@@ -126,6 +126,32 @@ div[data-step-type="user_message"] div.bg-accent {
 [data-author="Coach"] .cl-avatar img,
 [data-author="Coach"] .avatar img,
 [data-author="Coach"] .message-avatar img { opacity: 0 !important; }
+
+/* 5) Hide the Chainlit "Readme" button in the header */
+#readme-button {
+  display: none !important;
+}
+
+/* 6) Make the chat profile / splash icon much larger */
+img[alt="AIMSBot"] {
+  width: 256px !important;
+  height: 256px !important;
+  max-width: none !important;
+  max-height: none !important;
+}
+
+/* 8) Show "New Chat" label permanently (not just on hover tooltip) */
+#new-chat-button {
+  width: auto !important;
+  padding-left: 8px !important;
+  padding-right: 12px !important;
+  gap: 4px !important;
+}
+#new-chat-button::after {
+  content: "New Scenario";
+  font-size: 13px;
+  font-weight: 500;
+}
 
 /* Fallback: treat user_message bubbles as Doctor when author annotation missing */
 .step[data-step-type="user_message"] .message-avatar,
