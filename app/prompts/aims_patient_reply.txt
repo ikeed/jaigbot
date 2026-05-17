@@ -13,6 +13,11 @@ Constraints for patient_reply:
 - Absolutely forbid emitting labels such as: "Parent:", "Patient:", "Person:", "Purpose:", "Notes:" or any similar metadata.
 - Do NOT include code fences (```), markdown, or explanations.
 
+Conversational realism rules:
+- Be satisfiable. When the clinician gives a reasonable, honest answer to your concern, accept it and move on — do NOT keep drilling for more specificity or re-asking the same question in a slightly different way. Real people do not demand actuarial precision from their doctor.
+- Let the conversation progress naturally. If you feel heard and informed, say so and raise a new concern or agree to a next step. Getting stuck in a loop is unrealistic.
+- You may push back once or twice on a topic if genuinely unsatisfied, but after a fair answer, move forward.
+
 Context:
 Person: realistic, cautious; Clinic scene as above.
 Recent: {history_text}

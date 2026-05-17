@@ -30,6 +30,18 @@ _CLINICAL_TOKENS = re.compile(
 
 AIMS_STEPS = ("Announce", "Inquire", "Mirror", "Secure", "Mirror+Inquire")
 
+# Broader Announce markers used as fallback when the mapping's linguistic
+# markers are too narrow.  These cover soft introductions, status questions,
+# and visit-based phrasing that signal the first vaccine mention.
+_ANNOUNCE_FALLBACK_MARKERS = [
+    "routine vaccines", "measles protection", "vaccination status", "vaccine status",
+    "mmr vaccine", "about vaccines", "talk about vaccines", "discuss vaccines",
+    "vaccinated", "been vaccinated", "is vaccinated",
+    "at the 2-month visit", "at the 4-month visit", "at the 6-month visit",
+    "at the 12-month visit", "at the 18-month visit", "at this visit",
+    "first set of", "next set of", "routine shots", "routine immunizations",
+]
+
 
 @dataclass
 class ClassificationResult:
@@ -142,16 +154,20 @@ def classify_step(person_last: str, clinician_last: str, mapping: Dict[str, Any]
     mirror_stems = [
         "it sounds like", "sounds like", "you're worried", "you are worried", "i'm hearing", "you feel", "you want",
         "i get you're", "i get that you're", "i hear you're", "i hear that you're", "i hear you", "i hear that",
-        "i understand", "it seems like", "it feels like", "that feels like", "that sounds like"
+        "i understand", "it seems like", "it feels like", "that feels like", "that sounds like",
+        "what i'm hearing", "what i hear", "what i'm hearing is",
     ]
 
     # Heuristic checks per step (stages take precedence; small-talk is fallback only)
     inquire_match = lt.endswith("?") or _starts_with_any(lt, ["what ", "how "]) or _stem_match(
         lt, (markers.get("Inquire", {}).get("linguistic", []))
     )
-    # Do not treat generic well-being/small-talk questions as Inquire; let them fall back to small-talk
-    if inquire_match and _is_small_talk(lt):
-        inquire_match = False
+    # Only suppress Inquire for non-clinical wellbeing questions (e.g. "How's he been sleeping?")
+    # Do NOT suppress when the message contains vaccine/clinical tokens.
+    if inquire_match and not _CLINICAL_TOKENS.search(lt):
+        m = re.search(r"([^.?!]*\?)\s*$", lt)
+        if m and _GENERIC_WELLBEING_Q.match(m.group(1).strip()):
+            inquire_match = False
 
     # Mirror match should EXCLUDE things that are clearly just Inquire markers
     inquire_stems_from_mapping = markers.get("Inquire", {}).get("linguistic", [])
@@ -205,6 +221,9 @@ def classify_step(person_last: str, clinician_last: str, mapping: Dict[str, Any]
     secure_match = (has_autonomy and (has_option or has_safety)) or (has_option and has_safety)
 
     announce_match = _stem_match(lt, (markers.get("Announce", {}).get("linguistic", [])))
+    # Also check broader fallback markers for soft Announce phrasing
+    if not announce_match:
+        announce_match = _stem_match(lt, _ANNOUNCE_FALLBACK_MARKERS)
 
     # Didactic education detector (no question + factual/educational tokens)
     didactic_re = re.compile(r"\b(study|studies|evidence|data|statistics?|percent|%|risk|safe|side effects?|protect|immunit|schedule|dose|herd immunity)\b")
@@ -254,14 +273,9 @@ def classify_step(person_last: str, clinician_last: str, mapping: Dict[str, Any]
         step = "Inquire"
         reasons.append("Detected open-ended question; inviting elaboration")
     else:
-        # No explicit markers matched — detect small talk/pleasantries first
-        if _is_small_talk(lt):
-            step = ""  # represent no AIMS step
-            reasons.append("Rapport/pleasantries detected — no AIMS step attempted (allowed).")
-        else:
-            # Default: no explicit markers and not small talk → default to Announce unless a clear open question exists
-            step = "Announce"
-            reasons.append("Defaulted to Announce (no markers and no open question)")
+        # No AIMS markers matched → rapport/pleasantries
+        step = ""
+        reasons.append("No AIMS markers detected — rapport/pleasantries (allowed anytime).")
 
     # Removed single-choice tie-breaker in favor of Mirror+Inquire compound step
     # if mirror_match and inquire_match:
@@ -338,7 +352,10 @@ def score_step(step: str, person_last: str, clinician_last: str, mapping: Dict[s
             score = min(3, score + 1)
             reasons.append("Included check for accuracy")
         # If no reflective stems, score low
-        if not (_starts_with_any(lt, ["it sounds like", "you're", "you are", "i'm hearing", "you feel", "you want"])):
+        if not (_starts_with_any(lt, [
+            "it sounds like", "you're", "you are", "i'm hearing", "you feel", "you want",
+            "what i'm hearing", "what i hear",
+        ])):
             score = min(score, 1)
             reasons.append("Weak/absent reflective stem")
 

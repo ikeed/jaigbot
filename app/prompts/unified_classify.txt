@@ -20,6 +20,7 @@ You are an expert clinical communication evaluator. Analyze the clinician's turn
 - Score 2: Decent reflection, no rebuttal, but no accuracy check.
 - Score 1: Includes a "but" pivot or new factual information in the same turn, OR no reflective stem present.
 - Critical: Mirror must NEVER be followed by "but" or new facts in the same turn.
+- Common Mirror stems: "It sounds like...", "What I'm hearing is...", "You're worried that...", "I'm hearing that...", "So the question for you is really...". These are Mirror even when embedded in a longer turn.
 
 **Secure** — Done ONLY after Mirroring: affirm autonomy, offer ONE tailored fact, provide a safety-net. Secure is about the relationship, not persuasion.
 - Score 3: Explicit autonomy affirmation ("It's your decision") + one fact relevant to the expressed concern + safety-net or follow-up option.

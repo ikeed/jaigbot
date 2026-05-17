@@ -263,14 +263,23 @@ class AimsCoachingHandler:
             prior_announced=prior_announced
         )
         
-        # Additional logic: if the LLM says it's small talk, we override step to None
-        if is_small_talk:
+        # Only apply small-talk override when no AIMS step was detected.
+        # If an AIMS step is present (e.g. from _apply_overrides Announce correction),
+        # the LLM's small-talk flag must not clobber it.
+        if is_small_talk and not cls_payload.get("step"):
             cls_payload["step"] = None
             cls_payload["score"] = 0
             cls_payload["reasons"] = (cls_payload.get("reasons") or []) + ["LLM flagged as small talk"]
             
         # Legacy AimsPostProcessor (score normalization, inquire->secure, score capping)
         cls_payload = AimsPostProcessor.post_process(cls_payload, body.message)
+
+        # Phase guard: enforce AIMS dependency order.
+        # Secure and Mirror are not valid before Announce; reclassify if needed.
+        # Announce only happens once; duplicates are reclassified.
+        cls_payload = self._apply_phase_guard(
+            cls_payload, body.message, prior_phase, prior_announced
+        )
 
         # Populate current phase for UI transparency
         cls_payload["phase"] = aims_state.get("phase", "PreAnnounce")
@@ -316,8 +325,11 @@ class AimsCoachingHandler:
                     parts.append(f"Conversation phase: {phase}")
                 if step:
                     parts.append(f"Detected step: {step}")
-                if reasons:
-                    parts.append(f"Feedback: {reasons[0]}")
+                # Show the first user-facing reason as feedback, skipping
+                # internal classifier/guard reasons that aren't helpful.
+                feedback = self._first_user_facing_reason(reasons)
+                if feedback:
+                    parts.append(f"Feedback: {feedback}")
                 if tips:
                     parts.append(f"Tip: {tips[0]}")
                 coach_text = " | ".join(parts)
@@ -470,6 +482,98 @@ class AimsCoachingHandler:
         except Exception:
             self.logger.exception("AIMS state persistence failed for session %s", session_id)
     
+    # Prefixes that mark a reason as internal/debug rather than user-facing
+    # coaching feedback.  These are filtered out when building the coach note.
+    _INTERNAL_REASON_PREFIXES = (
+        "phase guard:",
+        "tie-breaker:",
+        "detected recommendation language",
+        "fallback",
+        "llm flagged",
+        "rapport/symptom gathering",
+        "vaccine coaching will begin",
+    )
+
+    @classmethod
+    def _first_user_facing_reason(cls, reasons: list[str]) -> str | None:
+        """Return the first reason that is NOT internal classifier logic."""
+        for r in reasons or []:
+            if not any(r.lower().startswith(p) for p in cls._INTERNAL_REASON_PREFIXES):
+                return r
+        return None
+
+    # Regex for detecting vaccine-related content in a clinician message.
+    _VACCINE_CONTENT_RE = re.compile(
+        r"\b(vaccin|shot|mmr|booster|immuniz|dose|measles|whooping|pertussis|"
+        r"diphtheria|tetanus|hep\s?b|polio|rotavirus|dtap|tdap|ipv|pcv|hib|"
+        r"routine vaccines|routine shots)",
+        re.IGNORECASE,
+    )
+
+    # Mirror stems used by the phase guard to detect reflective content
+    # when reclassifying backward Announce transitions.
+    _MIRROR_STEMS_FOR_GUARD = [
+        "it sounds like", "sounds like", "you're worried", "i'm hearing",
+        "you feel", "you want", "i hear you", "i understand",
+        "what i'm hearing", "what i hear", "i'm hearing that",
+    ]
+
+    def _apply_phase_guard(
+        self, cls_payload: Dict[str, Any], clinician_message: str,
+        prior_phase: str, prior_announced: bool = False,
+    ) -> Dict[str, Any]:
+        """Enforce AIMS dependency order.
+
+        1. Announce only happens once.  If the clinician has already
+           announced and the classifier returns Announce again,
+           reclassify based on message content (Mirror > Inquire > Secure).
+        2. PreAnnounce: Secure/Mirror not valid \u2192 reclassify as Announce.
+
+        When a reclassification happens, stale tips from the original step
+        are cleared so they don\u2019t leak into the coaching output.
+        """
+        step = cls_payload.get("step")
+        if not step:
+            return cls_payload
+
+        lt = (clinician_message or "").lower()
+
+        # --- Rule 1: Announce only happens once ---
+        if step == "Announce" and prior_announced:
+            has_mirror = any(s in lt for s in self._MIRROR_STEMS_FOR_GUARD)
+            has_question = lt.rstrip().endswith("?")
+
+            if has_mirror and has_question:
+                new_step = "Mirror+Inquire"
+            elif has_mirror:
+                new_step = "Mirror"
+            elif has_question:
+                new_step = "Inquire"
+            else:
+                # Educational / recommendation content post-Announce is Secure
+                new_step = "Secure"
+
+            cls_payload["step"] = new_step
+            cls_payload["reasons"] = [
+                f"Phase guard: Announce already done "
+                f"\u2192 reclassified as {new_step}"
+            ] + (cls_payload.get("reasons") or [])
+            cls_payload["tips"] = []  # clear stale tips from wrong step
+            return cls_payload
+
+        # --- Rule 2: PreAnnounce forward guard ---
+        if prior_phase == "PreAnnounce" and step in ("Secure", "Mirror", "Mirror+Inquire"):
+            if self._VACCINE_CONTENT_RE.search(clinician_message or ""):
+                cls_payload["step"] = "Announce"
+                cls_payload["reasons"] = [
+                    f"Phase guard: {step} not valid before Announce; "
+                    f"vaccine content detected \u2192 reclassified as Announce"
+                ] + (cls_payload.get("reasons") or [])
+                cls_payload["tips"] = []  # clear stale tips from wrong step
+            return cls_payload
+
+        return cls_payload
+
     def _apply_coaching_guidance(
         self, cls_payload: Dict[str, Any], step_current: str, state: Dict[str, Any],
         clinician_message: str, person_last: str
@@ -499,7 +603,11 @@ class AimsCoachingHandler:
                         filtered_tips.append(tip)
                 cls_payload["tips"] = filtered_tips
         
-        # Handle Announce after inquiry
+        # NOTE: Announce-after-inquiry is now handled by the phase guard
+        # (_apply_phase_guard) which reclassifies the step before coaching
+        # guidance runs.  The block below is kept only as a safety net for
+        # edge cases where the phase guard didn't fire (e.g. Announce was
+        # added by a post-processor after the guard).
         if step_current == "Announce" and state.get("phase") == "InquireMirror":
             reasons = list(cls_payload.get("reasons") or [])
             if not any("announce after inquiry" in s.lower() for s in reasons):

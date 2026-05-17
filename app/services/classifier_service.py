@@ -223,6 +223,7 @@ class ClassifierService:
             if any(phrase in msg_lower for phrase in self._STRONG_ANNOUNCE_PHRASES):
                 result.aims.steps = ["Announce"] + result.aims.steps
                 result.aims.step = "Announce"
+                result.is_small_talk = False  # Can't be small talk if it's Announce
                 if not any("recommend" in r.lower() or "announce" in r.lower() for r in result.aims.reasons):
                     result.aims.reasons.insert(0, "Detected recommendation language \u2192 Announce")
 
