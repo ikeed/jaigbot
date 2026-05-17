@@ -84,35 +84,38 @@ class AimsPostProcessor:
     Exact behavior preserved from main.py.
     """
 
+    # Tokens that strongly suggest didactic education rather than open inquiry.
+    # Deliberately narrow: broad clinical words (schedule, dose, safe, immun, risk)
+    # are common in ALL AIMS steps and must not trigger an override.
+    _DIDACTIC_TOKENS = [
+        "study shows", "studies show", "research shows", "evidence shows",
+        "the data", "data show", "statistics show", "statistically",
+        "percent of", "% of", "herd immunity",
+        "clinical trial", "randomized", "meta-analysis",
+    ]
+
     @staticmethod
     def correct_inquire_to_secure(cls_payload: Dict, clinician_text: str) -> Dict:
+        """Override Inquire → Secure only for clear didactic lectures with no question.
+
+        Guards:
+        1. No '?' anywhere in the message (a question indicates Inquire or Announce intent)
+        2. Message is long enough to be a lecture (> 40 words)
+        3. Contains specific strongly-didactic language (clinical trial, statistics, etc.)
+        """
         lt = (clinician_text or "").strip().lower()
-        if (cls_payload.get("step") == "Inquire") and ("?" not in lt):
-            if any(
-                tok in lt
-                for tok in [
-                    "study",
-                    "studies",
-                    "evidence",
-                    "data",
-                    "statistic",
-                    "percent",
-                    "%",
-                    "risk",
-                    "safe",
-                    "side effect",
-                    "protect",
-                    "immun",
-                    "schedule",
-                    "dose",
-                    "herd immunity",
-                ]
-            ):
-                cls_payload = dict(cls_payload)
-                cls_payload["reasons"] = [
-                    "Didactic education detected; overriding Inquire to Secure"
-                ] + (cls_payload.get("reasons") or [])
-                cls_payload["step"] = "Secure"
+        if cls_payload.get("step") != "Inquire":
+            return cls_payload
+        if "?" in lt:
+            return cls_payload
+        if len(lt.split()) <= 40:
+            return cls_payload
+        if any(tok in lt for tok in AimsPostProcessor._DIDACTIC_TOKENS):
+            cls_payload = dict(cls_payload)
+            cls_payload["reasons"] = [
+                "Didactic education detected; overriding Inquire to Secure"
+            ] + (cls_payload.get("reasons") or [])
+            cls_payload["step"] = "Secure"
         return cls_payload
 
     @staticmethod
@@ -157,11 +160,11 @@ class AimsPostProcessor:
 
 
 class EndGameDetector:
-    """Detects conversation end conditions based on the parent's latest reply.
+    """Detects conversation end conditions based on the person's latest reply.
 
     End when either:
-      - Parent agrees to vaccinate now, or
-      - Parent prefers a follow-up appointment and to take literature/home materials
+      - Person agrees to vaccinate now, or
+      - Person prefers a follow-up appointment and to take literature/home materials
     """
 
     ACCEPT_NOW_CUES = [
@@ -191,7 +194,7 @@ class EndGameDetector:
         "handout", "handouts", "brochure", "pamphlet", "literature", "written info",
         "information to take home", "take home", "materials", "resource", "printout", "printed info",
         "reading", "read this", "give you some literature", "leaflet", "info sheet",
-        "look over", "at home", "appreciate that", "read over", "thanks", "thank you",
+        "look over", "at home", "read over",
     ]
 
     @staticmethod
@@ -255,8 +258,8 @@ class EndGameDetector:
             return {"reason": "followup_literature"}
 
         # Heuristic: if they clearly say "talk it over" or "think it over" AND "appreciate that/home", it's endgame
-        if has_literature and ("appreciate" in lt or "home" in lt or "thanks" in lt or "thank you" in lt):
-             return {"reason": "followup_literature"}
+        if has_literature and ("appreciate" in lt or "home" in lt):
+            return {"reason": "followup_literature"}
 
         return None
 
@@ -365,7 +368,7 @@ def build_endgame_bullets_fallback(session_obj: Dict | None) -> List[str]:
         )
     else:
         bullets.append(
-            "Nice inquiry pacing — keep questions open and single-barreled, then pause for the parent’s full answer."
+        "Nice inquiry pacing — keep questions open and single-barreled, then pause for the person's full answer."
         )
 
     # 3) Mirror
@@ -375,7 +378,7 @@ def build_endgame_bullets_fallback(session_obj: Dict | None) -> List[str]:
         )
     else:
         bullets.append(
-            "Your reflections help the parent feel heard — keep mirroring the specific worry before offering facts."
+        "Your reflections help the person feel heard — keep mirroring the specific worry before offering facts."
         )
 
     # 4) Secure

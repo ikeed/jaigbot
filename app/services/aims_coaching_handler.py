@@ -18,40 +18,65 @@ import time
 import asyncio
 import uuid
 import os
-from typing import Any, Dict
+import re
+from typing import Any, Dict, List, Optional
 
 from fastapi import Request
 
 from app.models import ChatRequest
+from app.config import settings
+from app.aims_engine import evaluate_turn, load_mapping
 from app.services.chat_context import ChatContext
 from app.services.classifier_service import ClassifierService
-from app.services.coach_post import VaccineRelevanceGate, AimsPostProcessor, EndGameDetector
+from app.services.coach_post import (
+    VaccineRelevanceGate, 
+    AimsPostProcessor, 
+    EndGameDetector,
+    build_endgame_bullets_fallback
+)
 from app.services.coach_safety import detect_advice_patterns
 from app.services.conversation_service import (
-    maybe_add_person_concern as svc_maybe_add_person_concern,
-    mark_mirrored_multi as svc_mark_mirrored_multi, 
-    mark_secured_by_topic as svc_mark_secured_by_topic,
-    concern_topic as svc_concern_topic,
+    maybe_add_person_concern,
+    mark_mirrored_multi,
+    mark_secured_by_topic,
 )
 from app.services.prompt_builders import AimsPromptBuilder
 from app.services.security_guard import JailbreakGuard
-from app.services.vertex_helpers import vertex_call_with_fallback_text, vertex_call_with_fallback_json
+from app.services.vertex_helpers import (
+    vertex_call_with_fallback_text, 
+    vertex_call_with_fallback_json,
+    get_last_model_used
+)
 from app.prompts.aims import build_patient_reply_prompt
-from app.telemetry.events import log_event as telemetry_log_event, truncate_for_log as telemetry_truncate
+from app.telemetry.events import (
+    log_event as telemetry_log_event, 
+    truncate_for_log as telemetry_truncate
+)
 from app.vertex import VertexClient
-from app.json_schemas import REPLY_SCHEMA, CLASSIFY_SCHEMA, ENDGAME_DETECT_SCHEMA, validate_json
+from app.json_schemas import (
+    REPLY_SCHEMA, 
+    CLASSIFY_SCHEMA, 
+    ENDGAME_DETECT_SCHEMA, 
+    validate_json
+)
+from app.services.chat_helpers import strip_appointment_headers
+from app.main import app
 
 
 class AimsCoachingHandler:
     """Handles the full AIMS coaching flow."""
     
-    # Topical cues for concern tracking (behavior-preserving constants)
+    # Topical cues for concern tracking.
+    # NOTE: Only include terms that are specific to vaccine HESITANCY contexts.
+    # Generic medical symptom words (fever, swelling, redness) are excluded because
+    # they appear in clinical assessments of illness — not just vaccine concerns —
+    # and cause false registrations of vaccine concerns from symptom descriptions.
     _TOPICAL_CUES = {
         "autism": ["autism", "asd"],
-        "immune_load": ["too many", "too soon", "immune", "immune system", "overload", 
-                       "immune overload", "immune system load", "viral load"],
-        "side_effects": ["side effect", "adverse event", "vaers", "reaction", 
-                        "fever", "swelling", "redness"],
+        "immune_load": ["too many", "too soon", "immune overload", "immune system load",
+                       "viral load", "overwhelm the immune", "overload the immune"],
+        "side_effects": ["side effect", "adverse event", "vaers", "reaction to the vaccine",
+                        "reaction to the shot", "after the shot", "after the vaccine"],
         "ingredients": ["thimerosal", "aluminum", "adjuvant", "preservative", "ingredient"],
         "schedule_timing": ["schedule", "spacing", "delay", "alternative schedule", "wait"],
         "effectiveness": ["effective", "efficacy", "works", "breakthrough"],
@@ -153,8 +178,6 @@ class AimsCoachingHandler:
         prior_phase = (prior_state or {}).get("phase", "PreAnnounce")
 
         # Launch classification and reply generation in parallel
-        from app.config import settings
-
         task_cls = asyncio.create_task(
             self.classifier_service.classify_turn(
                 clinician_message=body.message,
@@ -165,6 +188,8 @@ class AimsCoachingHandler:
                 mapping=mapping,
                 context_turns=settings.AIMS_CLASSIFY_CONTEXT_TURNS,
                 max_concerns=settings.AIMS_CLASSIFY_MAX_CONCERNS,
+                inquired_concerns_list=[c["topic"] for c in (prior_state or {}).get("parent_concerns", [])],
+                mirrored_concerns_list=[c["topic"] for c in (prior_state or {}).get("parent_concerns", []) if c.get("is_mirrored")],
             )
         )
         task_reply = asyncio.create_task(
@@ -212,7 +237,6 @@ class AimsCoachingHandler:
             is_small_talk = classification_result.is_small_talk
         else:
             # If we timed out or failed, use the deterministic fallback immediately
-            from app.aims_engine import evaluate_turn
             fb = evaluate_turn(ctx.person_last, body.message, mapping)
             cls_payload = {
                 "step": fb.get("step"),
@@ -225,8 +249,6 @@ class AimsCoachingHandler:
             is_small_talk = False
 
         # Apply post-processors to BOTH LLM and fallback results
-        from app.services.coach_post import VaccineRelevanceGate, AimsPostProcessor
-        
         # Vaccine relevance gate
         mem = ctx.mem or {}
         aims_state = mem.get("aims_state", {}) or {}
@@ -241,8 +263,10 @@ class AimsCoachingHandler:
             prior_announced=prior_announced
         )
         
-        # Additional logic: if the LLM says it's small talk, we override step to None
-        if is_small_talk:
+        # Only apply small-talk override when no AIMS step was detected.
+        # If an AIMS step is present (e.g. from _apply_overrides Announce correction),
+        # the LLM's small-talk flag must not clobber it.
+        if is_small_talk and not cls_payload.get("step"):
             cls_payload["step"] = None
             cls_payload["score"] = 0
             cls_payload["reasons"] = (cls_payload.get("reasons") or []) + ["LLM flagged as small talk"]
@@ -250,12 +274,18 @@ class AimsCoachingHandler:
         # Legacy AimsPostProcessor (score normalization, inquire->secure, score capping)
         cls_payload = AimsPostProcessor.post_process(cls_payload, body.message)
 
+        # Phase guard: enforce AIMS dependency order.
+        # Secure and Mirror are not valid before Announce; reclassify if needed.
+        # Announce only happens once; duplicates are reclassified.
+        cls_payload = self._apply_phase_guard(
+            cls_payload, body.message, prior_phase, prior_announced
+        )
+
         # Populate current phase for UI transparency
         cls_payload["phase"] = aims_state.get("phase", "PreAnnounce")
         
         # Try to snapshot model used for classification (may be approximate if overwritten by parallel call)
         try:
-            from app.services.vertex_helpers import get_last_model_used
             model_used_cls = get_last_model_used() or self.model_id
         except Exception:
             model_used_cls = self.model_id
@@ -295,8 +325,11 @@ class AimsCoachingHandler:
                     parts.append(f"Conversation phase: {phase}")
                 if step:
                     parts.append(f"Detected step: {step}")
-                if reasons:
-                    parts.append(f"Feedback: {reasons[0]}")
+                # Show the first user-facing reason as feedback, skipping
+                # internal classifier/guard reasons that aren't helpful.
+                feedback = self._first_user_facing_reason(reasons)
+                if feedback:
+                    parts.append(f"Feedback: {feedback}")
                 if tips:
                     parts.append(f"Tip: {tips[0]}")
                 coach_text = " | ".join(parts)
@@ -309,7 +342,6 @@ class AimsCoachingHandler:
 
         # Calculate reply duration from its previously completed task
         try:
-            from app.services.vertex_helpers import get_last_model_used
             model_used_reply = get_last_model_used() or self.model_id
         except Exception:
             model_used_reply = self.model_id
@@ -327,7 +359,6 @@ class AimsCoachingHandler:
         # scenario headers from the parent reply to avoid duplicating the UI card.
         try:
             if not (ctx.person_last or "").strip():
-                from app.services.chat_helpers import strip_appointment_headers
                 pr = reply_payload.get("patient_reply", "")
                 reply_payload["patient_reply"] = strip_appointment_headers(pr)
         except Exception:
@@ -363,7 +394,6 @@ class AimsCoachingHandler:
         # Return structured result
         # Report the actual model used (considering fallbacks) when available
         try:
-            from app.services.vertex_helpers import get_last_model_used
             model_used = get_last_model_used() or self.model_id
         except Exception:
             model_used = self.model_id
@@ -389,13 +419,9 @@ class AimsCoachingHandler:
     
     async def _load_aims_mapping(self) -> Dict[str, Any]:
         """Load and cache AIMS mapping."""
-        # Import here to avoid circular imports
-        from app.main import app
-        
         mapping = getattr(app.state, "aims_mapping", None)
         if mapping is None:
             try:
-                from app.aims_engine import load_mapping
                 mapping = load_mapping()
             except Exception as e:
                 self.logger.warning("AIMS mapping failed to load: %s", e)
@@ -423,18 +449,30 @@ class AimsCoachingHandler:
                 "parent_concerns": []
             })
             
-            step_current = cls_payload.get("step")
+            steps = cls_payload.get("steps") or ([cls_payload.get("step")] if cls_payload.get("step") else [])
             
             # Add latest person concern if any, avoiding duplicates by topic
             if person_last:
                 # Use LLM topic if available, otherwise fall back to static cues
-                svc_maybe_add_person_concern(state, person_last, self._TOPICAL_CUES, llm_topic)
+                maybe_add_person_concern(state, person_last, self._TOPICAL_CUES, llm_topic)
             
-            # Apply coaching guidance rules
-            self._apply_coaching_guidance(cls_payload, step_current, state, clinician_message, person_last)
+            # 1. Update Mirror/Secure status based on clinician message
+            # If Mirror is in steps, mark matching concerns as mirrored
+            if "Mirror" in steps:
+                mark_mirrored_multi(state, clinician_message, person_last, self._TOPICAL_CUES)
             
-            # Update observational state
-            self._update_observational_state(state, step_current)
+            # If Secure is in steps, mark matching MIRRORED concerns as secured
+            if "Secure" in steps:
+                mark_secured_by_topic(state, clinician_message, self._TOPICAL_CUES)
+
+            # 2. Apply coaching guidance rules (legacy/heuristic fallback)
+            step_main = cls_payload.get("step")
+            self._apply_coaching_guidance(cls_payload, step_main, state, clinician_message, person_last)
+            
+            # 3. Update observational state (announced, phase)
+            # Pass the full steps list so compound turns (e.g. Announce+Inquire)
+            # correctly update announced even when step_main is Inquire.
+            self._update_observational_state(state, step_main, steps)
             
             # Persist state
             mem["aims_state"] = state
@@ -442,8 +480,100 @@ class AimsCoachingHandler:
             self.memory_store[session_id] = mem
             
         except Exception:
-            self.logger.debug("AIMS state persistence failed for session %s", session_id)
+            self.logger.exception("AIMS state persistence failed for session %s", session_id)
     
+    # Prefixes that mark a reason as internal/debug rather than user-facing
+    # coaching feedback.  These are filtered out when building the coach note.
+    _INTERNAL_REASON_PREFIXES = (
+        "phase guard:",
+        "tie-breaker:",
+        "detected recommendation language",
+        "fallback",
+        "llm flagged",
+        "rapport/symptom gathering",
+        "vaccine coaching will begin",
+    )
+
+    @classmethod
+    def _first_user_facing_reason(cls, reasons: list[str]) -> str | None:
+        """Return the first reason that is NOT internal classifier logic."""
+        for r in reasons or []:
+            if not any(r.lower().startswith(p) for p in cls._INTERNAL_REASON_PREFIXES):
+                return r
+        return None
+
+    # Regex for detecting vaccine-related content in a clinician message.
+    _VACCINE_CONTENT_RE = re.compile(
+        r"\b(vaccin|shot|mmr|booster|immuniz|dose|measles|whooping|pertussis|"
+        r"diphtheria|tetanus|hep\s?b|polio|rotavirus|dtap|tdap|ipv|pcv|hib|"
+        r"routine vaccines|routine shots)",
+        re.IGNORECASE,
+    )
+
+    # Mirror stems used by the phase guard to detect reflective content
+    # when reclassifying backward Announce transitions.
+    _MIRROR_STEMS_FOR_GUARD = [
+        "it sounds like", "sounds like", "you're worried", "i'm hearing",
+        "you feel", "you want", "i hear you", "i understand",
+        "what i'm hearing", "what i hear", "i'm hearing that",
+    ]
+
+    def _apply_phase_guard(
+        self, cls_payload: Dict[str, Any], clinician_message: str,
+        prior_phase: str, prior_announced: bool = False,
+    ) -> Dict[str, Any]:
+        """Enforce AIMS dependency order.
+
+        1. Announce only happens once.  If the clinician has already
+           announced and the classifier returns Announce again,
+           reclassify based on message content (Mirror > Inquire > Secure).
+        2. PreAnnounce: Secure/Mirror not valid \u2192 reclassify as Announce.
+
+        When a reclassification happens, stale tips from the original step
+        are cleared so they don\u2019t leak into the coaching output.
+        """
+        step = cls_payload.get("step")
+        if not step:
+            return cls_payload
+
+        lt = (clinician_message or "").lower()
+
+        # --- Rule 1: Announce only happens once ---
+        if step == "Announce" and prior_announced:
+            has_mirror = any(s in lt for s in self._MIRROR_STEMS_FOR_GUARD)
+            has_question = lt.rstrip().endswith("?")
+
+            if has_mirror and has_question:
+                new_step = "Mirror+Inquire"
+            elif has_mirror:
+                new_step = "Mirror"
+            elif has_question:
+                new_step = "Inquire"
+            else:
+                # Educational / recommendation content post-Announce is Secure
+                new_step = "Secure"
+
+            cls_payload["step"] = new_step
+            cls_payload["reasons"] = [
+                f"Phase guard: Announce already done "
+                f"\u2192 reclassified as {new_step}"
+            ] + (cls_payload.get("reasons") or [])
+            cls_payload["tips"] = []  # clear stale tips from wrong step
+            return cls_payload
+
+        # --- Rule 2: PreAnnounce forward guard ---
+        if prior_phase == "PreAnnounce" and step in ("Secure", "Mirror", "Mirror+Inquire"):
+            if self._VACCINE_CONTENT_RE.search(clinician_message or ""):
+                cls_payload["step"] = "Announce"
+                cls_payload["reasons"] = [
+                    f"Phase guard: {step} not valid before Announce; "
+                    f"vaccine content detected \u2192 reclassified as Announce"
+                ] + (cls_payload.get("reasons") or [])
+                cls_payload["tips"] = []  # clear stale tips from wrong step
+            return cls_payload
+
+        return cls_payload
+
     def _apply_coaching_guidance(
         self, cls_payload: Dict[str, Any], step_current: str, state: Dict[str, Any],
         clinician_message: str, person_last: str
@@ -473,7 +603,11 @@ class AimsCoachingHandler:
                         filtered_tips.append(tip)
                 cls_payload["tips"] = filtered_tips
         
-        # Handle Announce after inquiry
+        # NOTE: Announce-after-inquiry is now handled by the phase guard
+        # (_apply_phase_guard) which reclassifies the step before coaching
+        # guidance runs.  The block below is kept only as a safety net for
+        # edge cases where the phase guard didn't fire (e.g. Announce was
+        # added by a post-processor after the guard).
         if step_current == "Announce" and state.get("phase") == "InquireMirror":
             reasons = list(cls_payload.get("reasons") or [])
             if not any("announce after inquiry" in s.lower() for s in reasons):
@@ -486,7 +620,7 @@ class AimsCoachingHandler:
         
         # Handle mirroring
         if step_current in ("Mirror", "Mirror+Inquire"):
-            svc_mark_mirrored_multi(state, clinician_message, person_last, self._TOPICAL_CUES)
+            mark_mirrored_multi(state, clinician_message, person_last, self._TOPICAL_CUES)
         
         # Handle securing
         if step_current == "Secure":
@@ -502,19 +636,33 @@ class AimsCoachingHandler:
                     cls_payload["score"] = min(2, int(cls_payload.get("score", 2)))
                 except Exception:
                     cls_payload["score"] = 2
-            svc_mark_secured_by_topic(state, clinician_message, self._TOPICAL_CUES)
+            mark_secured_by_topic(state, clinician_message, self._TOPICAL_CUES)
     
-    def _update_observational_state(self, state: Dict[str, Any], step_current: str) -> None:
-        """Update observational state based on detected step."""
-        if step_current == "Announce":
+    def _update_observational_state(
+        self, state: Dict[str, Any], step_current: str, steps: List[str] = None
+    ) -> None:
+        """Update observational state based on detected step(s).
+
+        Checks both step_current (legacy primary step) and the full steps list so
+        that compound turns like Announce+Inquire correctly set announced=True even
+        when the primary reported step is Inquire.
+        """
+        all_steps = set(steps or [])
+        if step_current:
+            all_steps.add(step_current)
+
+        # Announce in any step sets the announced flag
+        if "Announce" in all_steps:
             state["announced"] = True
-            if state.get("phase") == "PreAnnounce":
-                state["phase"] = "PreAnnounce"  # remain until inquiry begins
-        elif step_current in ("Inquire", "Mirror+Inquire"):
+            # Phase stays PreAnnounce until inquiry begins
+
+        # Inquire / Mirror+Inquire advances the phase
+        if step_current in ("Inquire", "Mirror+Inquire") or "Inquire" in all_steps:
             state["first_inquire_done"] = True
             state["phase"] = "InquireMirror"
-        elif step_current == "Mirror":
-            state["phase"] = "InquireMirror"
+        elif step_current == "Mirror" or "Mirror" in all_steps:
+            if state.get("phase") != "InquireMirror":
+                state["phase"] = "InquireMirror"
         elif step_current == "Secure":
             state["phase"] = "Secure"
             # pending_concerns becomes False if all concerns are secured
@@ -728,370 +876,118 @@ class AimsCoachingHandler:
     async def _check_end_game(
         self, session_id: str, reply_payload: Dict[str, Any], session_obj: Dict[str, Any] | None
     ) -> Dict[str, Any] | None:
-        """Check for end-game scenarios and build coach post if needed."""
-        # Emit begin marker with gating context
+        """Check for end-game scenarios using LLM-centric detection with heuristic fallback."""
         eg_begin_time = time.time()
-        assistant_count = 0
-        combined_reply_text = reply_payload.get("patient_reply", "")
         try:
-            telemetry_log_event(
-                self.logger,
-                "aims_endgame_begin",
-                sessionId=session_id,
-                combinedReplyLen=len((combined_reply_text or "").strip()),
-            )
-        except Exception:
-            pass
-        try:
-            # Get combined reply text from recent assistant messages
-            combined_reply_text = reply_payload.get("patient_reply", "")
-            
-            if self.memory_enabled and session_id:
-                try:
-                    mem = self.memory_store.get(session_id) or {}
-                    hist = mem.get("history") or []
-                    
-                    # Collect last two assistant messages and the last user message
-                    acc = []
-                    last_user_text = ""
-                    recent_parent_texts: list[str] = []
-                    recent_transcript_parts: list[str] = []
-                    for item in reversed(hist):
-                        role_i = item.get("role")
-                        txt_i = (item.get("content") or "").strip()
-                        if not txt_i:
-                            continue
-                        # Build a small recent transcript (up to 6 turns total)
-                        if len(recent_transcript_parts) < 6:
-                            prefix = "Clinician" if role_i == "user" else "Parent"
-                            recent_transcript_parts.append(f"{prefix}: {txt_i}")
-                        if role_i == "assistant":
-                            recent_parent_texts.append(txt_i)
-                            if len(acc) < 2:
-                                acc.append(txt_i)
-                        elif role_i == "user" and not last_user_text:
-                            last_user_text = txt_i
-                        if len(acc) >= 2 and last_user_text:
-                            # stop early once we have enough context for fast heuristics
-                            pass
-                    
-                    if acc:
-                        # Reverse back to chronological order and join
-                        combined_reply_text = " ".join(reversed(acc)).strip()
-
-                    # Count total assistant replies in history for gating
-                    try:
-                        assistant_count = sum(
-                            1
-                            for it in hist
-                            if it.get("role") == "assistant" and (it.get("content") or "").strip()
-                        )
-                    except Exception:
-                        assistant_count = 0
-
-                    # New gating: require that at least one concern has been revealed and all concerns have been mirrored
-                    try:
-                        aims_state = (mem or {}).get("aims_state") or {}
-                        announced = aims_state.get("announced", False)
-                        
-                        # HARD GUARD: Scenario cannot end if vaccine conversation hasn't even been announced
-                        if not announced:
-                            return None
-
-                        concerns_list = aims_state.get("parent_concerns") or []
-                        
-                        # Filter for vaccine-related concerns
-                        vax_cues = VaccineRelevanceGate.VAX_CUES
-                        vax_concerns = []
-                        for c in concerns_list:
-                            desc = str(c.get("desc", "")).lower()
-                            topic = str(c.get("topic", "")).lower()
-                            if any(cue in desc for cue in vax_cues) or any(cue in topic for cue in vax_cues):
-                                vax_concerns.append(c)
-                        
-                        has_vax_concerns = bool(vax_concerns)
-                        all_mirrored = all(bool(c.get("is_mirrored")) for c in vax_concerns) if has_vax_concerns else True
-                        all_secured = all(bool(c.get("is_secured")) for c in vax_concerns) if has_vax_concerns else True
-                        block_endgame_state_requirements = not (all_mirrored and all_secured)
-                        # Also compute counts for hints
-                        concerns_count = len(concerns_list)
-                        mirrored_count = sum(1 for c in concerns_list if c.get("is_mirrored"))
-                        secured_count = sum(1 for c in concerns_list if c.get("is_secured"))
-                    except Exception:
-                        block_endgame_state_requirements = True
-                        concerns_count = 0
-                        mirrored_count = 0
-                        secured_count = 0
-
-                    # aggregate all assistant messages from history
-                    all_assistant_texts = []
-                    for item in hist:
-                        if item.get("role") == "assistant":
-                            atxt = (item.get("content") or "").strip().lower()
-                            if atxt:
-                                all_assistant_texts.append(atxt)
-                    hist_assistant_all = " \n ".join(all_assistant_texts)
-
-                    # Aggregate acknowledgements across recent parent replies
-                    try:
-                        pr_latest = (combined_reply_text or "").strip().lower()
-                        parent_all = " \n ".join(reversed(recent_parent_texts))[:2000].lower()
-                        
-                        # Use all assistant history to check if an offer was ever made
-                        followup_offer = any(c in hist_assistant_all for c in (
-                            "follow up", "follow-up", "another appointment", "next visit", "come back",
-                            "schedule", "set up an appointment", "later appointment", "set up",
-                            "book an appointment", "make an appointment", "schedule something", "talk again",
-                            "talk it over", "think it over", "decide later", "make another",
-                        ))
-                        literature_offer = any(c in hist_assistant_all for c in (
-                            "handout", "handouts", "brochure", "pamphlet", "literature", "written info",
-                            "information to take home", "take home", "materials", "resource", "printout", "printed info",
-                            "reading", "read this", "give you some literature", "leaflet", "info sheet",
-                            "look over", "something to take", "some info", "some information",
-                        ))
-                        # Acks anywhere in recent parent replies
-                        followup_ack_any = any(tok in parent_all for tok in (
-                            "book", "schedule", "set up", "come back", "next visit", "follow up", "follow-up", "make an appointment",
-                            "talk it over", "think it over", "decide later", "agree to that", "sounds good", "okay", "fine",
-                            "will do", "sure", "definitely", "i'll do that", "i will do that",
-                        ))
-                        literature_ack_any = any(tok in parent_all for tok in (
-                            "handout", "brochure", "pamphlet", "literature", "reading", "i'll read", "i will read", "i’ll read",
-                            "info sheet", "materials", "resource", "printout", "printed info", "take home",
-                            "look over", "at home", "appreciate that", "thanks", "thank you", "okay", "fine", "sure",
-                        ))
-                        # If the latest parent text negates follow-up, treat ack as false
-                        negates_followup_latest = any(neg in pr_latest for neg in (
-                            "not another appointment", "not what we need", "not what we need right now",
-                            "not sure another appointment", "don’t need another appointment", "don't need another appointment",
-                            "we were hoping to discuss now", "we were hoping to discuss this now", "we want to discuss now",
-                            "we want to talk now", "while we're here", "while we are here",
-                        ))
-                        if negates_followup_latest:
-                            followup_ack_any = False
-                        
-                        # Guard against too-easy triggers for followup_literature
-                        # If they have only had 1 or fewer parent replies, they might just be agreeing to talk
-                        if len(recent_parent_texts) <= 1:
-                            followup_ack_any = False
-                            literature_ack_any = False
-
-                        # Latest-turn guards
-                        has_more_questions_latest = ("?" in pr_latest) or any(q in pr_latest for q in (
-                            "one other question", "another question", "what about", "is it possible", "can we", "could we",
-                        ))
-                        pushback_latest = any(p in pr_latest for p in (
-                            "discuss this now", "talk about this now", "we were hoping to discuss now", "we were hoping to discuss this now",
-                            "not ready today", "not ready right now", "we're not ready", "we are not ready",
-                            "not another appointment", "not what we need", "not what we need right now",
-                            "we want to discuss now", "we want to talk now", "while we're here", "while we are here",
-                            "not just take reading material", "not just take literature",
-                        ))
-                        # Short-circuit endgame (heuristic) if conditions met across recent turns
-                        if (
-                            followup_offer and literature_offer and followup_ack_any and literature_ack_any
-                            and (not has_more_questions_latest) and (not pushback_latest)
-                        ):
-                            lines = [
-                                "Outcome: Parent opted for follow-up and took literature — great coaching!",
-                            ]
-                            try:
-                                from app.services.coach_post import build_endgame_bullets_fallback
-                                fb_bullets = build_endgame_bullets_fallback(session_obj)
-                                if fb_bullets:
-                                    lines.extend(fb_bullets)
-                            except Exception:
-                                pass
-                            return {"title": "🎉 Great job!", "lines": lines}
-                        # Stash hints for LLM usage below
-                        recent_transcript = "\n".join(reversed(recent_transcript_parts[-6:]))
-                    except Exception:
-                        recent_transcript = ""
-                except Exception:
-                    pass
-
-                except Exception:
-                    pass
-            
-            # Heuristic gates to reduce false endgame triggers in very early/short turns
-            try:
-                # 1) Require at least two assistant replies before we consider the scenario finished
-                if locals().get("assistant_count", 0) < 2:
-                    return None
-                # 2) If the combined reply is very short and lacks vaccine terms, do not trigger
-                vax_terms = (
-                    "vaccine", "vaccinate", "vaccination", "shot", "shots", "immuniz", "jab", "injection", "mmr", "flu", "booster"
-                )
-                lt_combined = (combined_reply_text or "").strip().lower()
-                if len(lt_combined) < 20 and not any(t in lt_combined for t in vax_terms):
-                    return None
-            except Exception:
-                pass
-
-            # Negative-intent override: if the latest parent replies contain strong declines, never end.
-            try:
-                lt_neg = (combined_reply_text or "").strip().lower()
-                NEGATE = (
-                    "not ready", "not today", "not now", "let's wait", "let’s wait", "prefer to wait",
-                    "hold off", "maybe later", "another time", "i’d rather wait", "i would rather wait",
-                    "i need more time", "we’re not ready", "we are not ready"
-                )
-                if any(tok in lt_neg for tok in NEGATE):
-                    try:
-                        telemetry_log_event(
-                            self.logger,
-                            "aims_endgame_end",
-                            sessionId=session_id,
-                            durationMs=int((time.time() - eg_begin_time) * 1000),
-                            assistantCount=int(assistant_count or 0),
-                            outcome="none",
-                        )
-                    except Exception:
-                        pass
-                    return None
-            except Exception:
-                pass
-
-            # First attempt: LLM-based endgame detection (robust to phrasing differences)
-            try:
-                # Collect hints with safe defaults from earlier aggregation
-                _assistant_count = locals().get("assistant_count", 0)
-                _concerns_count = locals().get("concerns_count", 0)
-                _mirrored_count = locals().get("mirrored_count", 0)
-                _secured_count = locals().get("secured_count", 0)
-                _followup_ack_any = locals().get("followup_ack_any", False)
-                _literature_ack_any = locals().get("literature_ack_any", False)
-                _has_more_questions_latest = locals().get("has_more_questions_latest", False)
-                _pushback_latest = locals().get("pushback_latest", False)
-                _recent_transcript = locals().get("recent_transcript", "")
-
-                detect_prompt = (
-                    "You are an expert conversation evaluator for pediatric vaccination visits.\n"
-                    "Decide if the PARENT's recent replies indicate the scenario is complete.\n"
-                    "Endgame outcomes:\n"
-                    "- accepted_now: The parent clearly consented/agreed to vaccinate today (not a question).\n"
-                    "- followup_literature: The parent prefers to defer vaccination, plans a follow-up, and accepted written materials.\n"
-                    "- not_endgame: Anything else (including questions like 'I have some questions about the vaccination').\n\n"
-                    "Consider these latest parent messages (most recent last):\n"
-                    f"PARENT_RECENT=\"{combined_reply_text}\"\n\n"
-                    "Recent condensed transcript (last few turns, newest last):\n"
-                    f"TRANSCRIPT=\n{_recent_transcript}\n\n"
-                    "Heuristic hints (may be approximate):\n"
-                    f"assistant_count={_assistant_count}, concerns_count={_concerns_count}, mirrored_count={_mirrored_count}, secured_count={_secured_count}\n"
-                    f"parent_ack_followup_any={_followup_ack_any}, parent_ack_literature_any={_literature_ack_any}\n"
-                    f"parent_has_more_questions_latest={_has_more_questions_latest}, parent_pushback_latest={_pushback_latest}\n\n"
-                    "Rules:\n"
-                    "- If the statement is conditional or a question (e.g., 'If we go ahead...?','Should we proceed?'), do NOT mark accepted_now unless an explicit consent token is present (e.g., 'I consent', 'let's do it today').\n"
-                    "- If the parent says they are not ready or prefers to wait, you MUST output not_endgame.\n"
-                    "- Do not infer acceptance from interest or readiness to discuss; require explicit consent to vaccinate today.\n"
-                    "- If hints show questions/pushback on the latest message, prefer not_endgame.\n"
-                    "- Output strict JSON only: {\"outcome\": <accepted_now|followup_literature|not_endgame>, \"reasons\":[<short strings>]} with no markdown or code fences.\n"
-                )
-                raw = await self._call_vertex_json(
-                    detect_prompt,
-                    ENDGAME_DETECT_SCHEMA,
-                    log_path="endgame_detect",
-                    temperature=self.endgame_temperature,
-                    max_tokens=self.endgame_max_tokens,
-                )
-                obj = json.loads((raw or "").strip())
-                outcome = (obj.get("outcome") or "").strip()
-            except Exception:
-                outcome = None
-
-            # Dual-consent gating: require local heuristic confirmation for accepted_now
-            if outcome == "accepted_now":
-                if block_endgame_state_requirements:
-                    outcome = None
-                else:
-                    try:
-                        eg_local = EndGameDetector.detect(combined_reply_text)
-                    except Exception:
-                        eg_local = None
-                    if not eg_local or eg_local.get("reason") != "accepted_now":
-                        outcome = None  # Treat as not decisive; fall back below
-
-            # Additional gating for followup_literature: require explicit parent ack and no new questions/pushback
-            if outcome == "followup_literature":
-                try:
-                    pr = (combined_reply_text or "").strip().lower()
-                    # Use aggregated acks (across recent turns) for more robustness
-                    # followup_ack_any and literature_ack_any were computed above from parent_all
-                    has_more_questions = ("?" in pr) or any(q in pr for q in (
-                        "one other question", "another question", "what about", "is it possible", "can we", "could we",
-                    ))
-                    pushback = any(p in pr for p in (
-                        "discuss this now", "talk about this now", "we were hoping to discuss now", "we were hoping to discuss this now",
-                        "not ready today", "not ready right now", "we're not ready", "we are not ready",
-                        "not sure another appointment", "don’t need another appointment", "don't need another appointment",
-                        "not what we need right now", "we want to discuss now",
-                    ))
-                    # Only block if we strictly don't have acks or if there is pushback/questions.
-                    # We bypass block_endgame_state_requirements for followup_literature if LLM is confident and we have acks.
-                    # We MUST have both an offer in history and an acknowledgement in the transcript.
-                    if (not (followup_offer and literature_offer and followup_ack_any and literature_ack_any)) or has_more_questions or pushback:
-                        outcome = None
-                except Exception:
-                    outcome = None
-
-            # Fallback: heuristic detector when LLM not confident/available
-            if not outcome or outcome == "not_endgame":
-                # We still block 'accepted_now' if state requirements aren't met
-                # but 'followup_literature' is allowed as a partial success/exit.
-                eg = EndGameDetector.detect(combined_reply_text)
-                if eg and eg.get("reason") == "accepted_now" and block_endgame_state_requirements:
-                    outcome = "not_endgame"
-                elif eg:
-                    outcome = eg.get("reason")
-                else:
-                    # Emit end marker (no outcome)
-                    try:
-                        telemetry_log_event(
-                            self.logger,
-                            "aims_endgame_end",
-                            sessionId=session_id,
-                            durationMs=int((time.time() - eg_begin_time) * 1000),
-                            assistantCount=int(assistant_count or 0),
-                            outcome="none",
-                        )
-                    except Exception:
-                        pass
-                    return None
-
-            lines = []
-            if outcome == "accepted_now":
-                lines.append("Outcome: Parent agreed to vaccinate today — well done!")
-            elif outcome == "followup_literature":
-                lines.append("Outcome: Parent opted for follow-up and took literature — great coaching!")
-            else:
-                # Emit end marker (no outcome)
-                try:
-                    telemetry_log_event(
-                        self.logger,
-                        "aims_endgame_end",
-                        sessionId=session_id,
-                        durationMs=int((time.time() - eg_begin_time) * 1000),
-                        assistantCount=int(assistant_count or 0),
-                        outcome="none",
-                        block_endgame_state_requirements=block_endgame_state_requirements,
-                    )
-                except Exception:
-                    pass
+            if not (self.memory_enabled and session_id):
                 return None
 
-            # Add fallback bullets for end-game summary
+            mem = self.memory_store.get(session_id) or {}
+            hist = mem.get("history") or []
+            aims_state = mem.get("aims_state") or {}
+
+            # 1. Hard guards to avoid unnecessary LLM calls
+            phase = aims_state.get("phase", "PreAnnounce")
+            announced = aims_state.get("announced", False)
+            if phase == "PreAnnounce":
+                return None
+
+            assistant_count = sum(1 for it in hist if it.get("role") == "assistant" and (it.get("content") or "").strip())
+            if not announced and assistant_count <= 1:
+                return None
+
+            # 2. Extract context for LLM
+            # Filter out coach entries so only dialogue reaches the model; label assistant role as "Person"
+            history_text = "\n".join([
+                f"{'Clinician' if m.get('role') == 'user' else 'Person'}: {m.get('content')}"
+                for m in hist[-10:]
+                if m.get("role") in ("user", "assistant")
+            ])
+
+            # Pre-compute recent person replies for heuristic fallback and dual-consent gate
+            combined_reply_text = " ".join(
+                m.get("content", "")
+                for m in reversed(hist[-6:])
+                if m.get("role") == "assistant" and (m.get("content") or "").strip()
+            )[:500]
+
+            # Extract concern states
+            concerns = aims_state.get("parent_concerns") or []
+            inquired = [c["topic"] for c in concerns]
+            mirrored = [c["topic"] for c in concerns if c.get("is_mirrored")]
+            secured = [c["topic"] for c in concerns if c.get("is_secured")]
+
+            # Telemetry begin
             try:
-                from app.services.coach_post import build_endgame_bullets_fallback
-                fb_bullets = build_endgame_bullets_fallback(session_obj)
-                if fb_bullets:
-                    lines.extend(fb_bullets)
+                telemetry_log_event(
+                    self.logger,
+                    "aims_endgame_begin",
+                    sessionId=session_id,
+                    inquiredCount=len(inquired),
+                    mirroredCount=len(mirrored),
+                    securedCount=len(secured)
+                )
             except Exception:
                 pass
-            
-            return {"title": "🎉 Great job!", "lines": lines}
-            
-        except Exception:
+
+            # 3. Call LLM detector via ClassifierService
+            result = await self.classifier_service.detect_endgame(
+                history_text=history_text,
+                announced=announced,
+                inquired_concerns=inquired,
+                mirrored_concerns=mirrored,
+                secured_concerns=secured
+            )
+
+            is_endgame = result.get("is_endgame", False)
+            outcome = result.get("resolution_type", "not_resolved")
+            summary = result.get("summary", "")
+
+            # 4. Heuristic fallback: if LLM detection errored, delegate to EndGameDetector
+            if not is_endgame and result.get("reason") == "detection_error":
+                eg_local = EndGameDetector.detect(combined_reply_text)
+                if eg_local:
+                    is_endgame = True
+                    heuristic_reason = eg_local.get("reason", "")
+                    outcome = "accepted_vaccine" if heuristic_reason == "accepted_now" else "accepted_literature"
+                    summary = ""
+
+            # 5. Dual-consent gate: vaccine acceptance requires heuristic confirmation to reduce LLM false positives
+            if is_endgame and outcome == "accepted_vaccine":
+                eg_local = EndGameDetector.detect(combined_reply_text)
+                if not eg_local or eg_local.get("reason") != "accepted_now":
+                    is_endgame = False
+
+            try:
+                telemetry_log_event(
+                    self.logger,
+                    "aims_endgame_end",
+                    sessionId=session_id,
+                    durationMs=int((time.time() - eg_begin_time) * 1000),
+                    isEndgame=is_endgame,
+                    outcome=outcome
+                )
+            except Exception:
+                pass
+
+            if is_endgame:
+                title = "🎉 Great job!" if outcome in ("accepted_vaccine", "accepted_literature") else "Session Complete"
+                lines = [f"Outcome: {summary}"] if summary else []
+
+                # Add fallback metrics bullets if available
+                try:
+                    fb_bullets = build_endgame_bullets_fallback(session_obj)
+                    if fb_bullets:
+                        lines.extend(fb_bullets)
+                except Exception:
+                    pass
+
+                return {"title": title, "lines": lines}
+
+            return None
+
+        except Exception as e:
+            self.logger.exception("LLM endgame detection failed: %s", e)
             return None
     
     async def _get_prior_state(self, session_id: str) -> Dict[str, Any] | None:
