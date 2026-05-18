@@ -121,7 +121,7 @@ async def test_apply_overrides_pseudo_secure(classifier_service):
     overridden = classifier_service._apply_overrides(initial_result, long_message)
     assert overridden.aims.step == "Secure"
     assert overridden.aims.score <= 1
-    assert "pseudo-Secure" in overridden.aims.reasons[1] or "Secure score reduced" in overridden.aims.reasons[1]
+    assert "autonomy" in overridden.aims.reasons[1].lower() or "partnership" in overridden.aims.reasons[1].lower()
 
 @pytest.mark.asyncio
 async def test_apply_overrides_question_guard(classifier_service):

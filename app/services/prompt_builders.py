@@ -4,7 +4,9 @@ from app.services.chat_helpers import format_markers, recent_context, extract_re
 from app.prompts.aims import (
     build_classify_prompt as _build_classify,
     build_unified_classify_prompt as _build_unified,
-    build_endgame_detector_prompt as _build_endgame
+    build_endgame_detector_prompt as _build_endgame,
+    get_classify_system_instruction as _get_classify_sysinstruction,
+    build_classify_turn_prompt as _build_classify_turn,
 )
 
 
@@ -73,6 +75,33 @@ class AimsPromptBuilder:
             prior_announced=prior_announced,
             prior_phase=prior_phase,
             context_turns=context_turns,
+            recent_context=recent_context,
+            inquired_concerns_list=inquired_concerns_list,
+            mirrored_concerns_list=mirrored_concerns_list,
+        )
+
+    @staticmethod
+    def get_classify_system_instruction() -> str:
+        """Return the static AIMS system instruction (cached, identical across requests)."""
+        return _get_classify_sysinstruction()
+
+    @staticmethod
+    def build_classify_turn_prompt(
+        *,
+        person_last: str,
+        clinician_last: str,
+        prior_announced: bool,
+        prior_phase: str,
+        recent_context: str = "",
+        inquired_concerns_list: list[str] = None,
+        mirrored_concerns_list: list[str] = None,
+    ) -> str:
+        """Render the lean per-turn classification prompt (dynamic content only)."""
+        return _build_classify_turn(
+            person_last=person_last,
+            clinician_last=clinician_last,
+            prior_announced=prior_announced,
+            prior_phase=prior_phase,
             recent_context=recent_context,
             inquired_concerns_list=inquired_concerns_list,
             mirrored_concerns_list=mirrored_concerns_list,

@@ -56,6 +56,12 @@ Recent context:
 Person_last: {person_last}
 Clinician_last: {clinician_last}
 
+### FEEDBACK RULES
+- Use second-person voice ("You reflected..."). Never third-person ("The clinician...").
+- Never reference numeric scores in reasons, tips, or step_feedback.
+- Each step_feedback entry must be clearly praise or improvement.
+- For compound steps, provide one step_feedback entry per component.
+
 ### OUTPUT — JSON only, no fences
 {{
   "is_small_talk": (boolean),
@@ -64,10 +70,13 @@ Clinician_last: {clinician_last}
   "aims": {{
     "steps": [...],
     "score": (0-3),
-    "reasons": ["cite specific phrases"],
-    "tips": ["max 1, specific and actionable"]
+    "reasons": ["second-person phrase-citing feedback"],
+    "tips": ["max 1, specific and actionable"],
+    "step_feedback": [
+      {{"step": "StepName", "feedback": "second-person feedback citing specific phrases", "tone": "praise|improvement"}}
+    ]
   }},
   "safety_flags": [],
   "reasoning": "brief"
 }}
-If score=1, the tip MUST name the weakness. If Announced=true, do NOT suggest Announce in tips.
+When execution has weaknesses, feedback MUST name the weakness and suggest a concrete alternative. If Announced=true, do NOT suggest Announce in tips.

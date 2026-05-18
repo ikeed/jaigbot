@@ -238,7 +238,7 @@ def test_secure_before_mirror_first_time_gives_standard_feedback():
     ])
     cls = {"step": "Secure", "score": 2, "reasons": [], "tips": []}
     h._apply_coaching_guidance(cls, "Secure", state, "The data shows...", "I don't trust pharma")
-    assert "allowed" in cls["reasons"][0].lower()
+    assert "reflecting" in cls["reasons"][0].lower() or "mirroring" in cls["reasons"][0].lower()
     assert state.get("recent_coaching") == ["secure_before_mirror"]
 
 
@@ -330,5 +330,5 @@ def test_default_persona_gets_emotional_tip():
         cls, "Secure", state, "The data shows...", "I'm scared",
         character="Sarah is a caring mother.",
     )
-    assert "feels heard" in cls["reasons"][0].lower()
+    assert "feel heard" in cls["reasons"][0].lower()
     assert "reflect the concern" in cls["tips"][0].lower()
