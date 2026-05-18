@@ -121,10 +121,10 @@ class AimsCoachingHandler:
         
         # Per-call tuning (env-configurable) for latency/cost-sensitive JSON tasks
         self.classify_temperature = float(os.getenv("AIMS_CLASSIFY_TEMPERATURE", "0.1"))
-        self.classify_max_tokens = int(os.getenv("AIMS_CLASSIFY_MAX_TOKENS", "256"))
+        self.classify_max_tokens = int(os.getenv("AIMS_CLASSIFY_MAX_TOKENS", "4096"))
         self.endgame_temperature = float(os.getenv("AIMS_ENDGAME_TEMPERATURE", "0.1"))
         self.endgame_max_tokens = int(os.getenv("AIMS_ENDGAME_MAX_TOKENS", "192"))
-        self.classify_budget_s = float(os.getenv("AIMS_CLASSIFY_BUDGET_S", "10.0"))
+        self.classify_budget_s = float(os.getenv("AIMS_CLASSIFY_BUDGET_S", "30.0"))
 
         # Allow tests to monkeypatch the client via app.main.VertexClient
         self.client_cls = vertex_config.get("client_cls", None) or VertexClient

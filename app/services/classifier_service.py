@@ -77,7 +77,7 @@ class ClassifierService:
         # 3. Call Gemini
         try:
             raw_json = await self._call_gemini_json(prompt)
-            data = json.loads(raw_json)
+            data = json.loads(self._strip_json_fences(raw_json))
             
             # Extract and normalize AIMS coaching
             aims_data = data.get("aims", {})
@@ -144,6 +144,28 @@ class ClassifierService:
                 clinician_message, person_last, mapping, safety_hints
             )
 
+    @staticmethod
+    def _strip_json_fences(text: str) -> str:
+        """Strip markdown ```json ... ``` fences from LLM output.
+
+        Gemini 2.5 models frequently wrap JSON responses in markdown code
+        fences even when the prompt asks for raw JSON.  This must be stripped
+        before json.loads().
+        """
+        s = (text or "").strip()
+        # Handle ```json ... ``` or ``` ... ```
+        if s.startswith("```"):
+            # Remove opening fence line
+            first_newline = s.find("\n")
+            if first_newline != -1:
+                s = s[first_newline + 1:]
+            else:
+                s = s[3:]  # just "```" with no newline
+            # Remove closing fence
+            if s.rstrip().endswith("```"):
+                s = s.rstrip()[:-3].rstrip()
+        return s
+
     async def detect_endgame(
         self,
         *,
@@ -167,7 +189,7 @@ class ClassifierService:
         )
         try:
             raw_json = await self._call_gemini_json(prompt)
-            return json.loads(raw_json)
+            return json.loads(self._strip_json_fences(raw_json))
         except Exception as e:
             self.logger.error("Endgame detection failed: %s", e)
             return {"is_endgame": False, "reason": "detection_error"}

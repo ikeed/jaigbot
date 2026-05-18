@@ -77,7 +77,7 @@ def build_unified_classify_prompt(
     """
     return load_and_render(
         "app.prompts",
-        "unified_classify.txt",
+        "unified_classify_v2.txt",
         person_last=person_last,
         clinician_last=clinician_last,
         prior_announced=str(prior_announced).lower(),
