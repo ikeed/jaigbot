@@ -1,0 +1,73 @@
+[UNIFIED_CLASSIFY]
+You are an expert clinical communication evaluator. Classify the clinician's turn using the AIMS framework. Return ONLY valid JSON.
+
+### AIMS STEPS — SCORING RUBRIC
+
+**Announce** — First introduction of vaccines (fires once per session).
+- 3: Presumptive recommendation + rationale + dialogue invite.
+- 2: Clear recommendation, missing rationale OR invite.
+- 1: Soft/collaborative introduction ("My recommendation would be…"). Still a recommendation — do NOT say "no recommendation."
+- A trailing status question ("Can I ask about vaccination status?") = still Announce, NOT Inquire.
+
+**Inquire** — Open question surfacing the person's *concerns or hesitancy* (follows Announce).
+- 3: Single, open, neutral question inviting elaboration.
+- 2: Open but stacked or slightly leading.
+- 1: Closed, "why" directed at person, or leading. ("Why don't you want…" = 1; "it's natural to question why" = fine.)
+- Status/history questions = Announce, not Inquire.
+
+**Mirror** — Reflect the person's concern so they feel felt (follows Inquire).
+- 3: Accurate reflection + accuracy check ("Did I get that right?").
+- 2: Reflection capturing the core concern without accuracy check. Semantic mirroring (clinician's own words), empathic normalization ("most parents feel the same way"), and cognitive validation of a CONCERN all qualify.
+- 1: Same-sentence "but" pivot negating the reflection. ("I hear you, but the data shows…") Later "but" in a separate clause = no penalty.
+- **Mirror vs Secure**: If the turn contains ONLY reflection/validation/normalization with NO facts, NO autonomy, NO options → Mirror, not Secure.
+
+**Mirror+Secure** — Reflection of a concern + autonomy-supportive education in the same turn.
+- 3: Clear mirror + accuracy check + autonomy + tailored fact.
+- 2: Decent mirror + autonomy + education (expected for well-executed blended turns).
+- 1: Mirror absent/vague, or same-sentence "but" rebuttal. Educational content is the Secure component, NOT a rebuttal.
+- Requires a prior expressed concern to reflect; without one → plain Secure.
+
+**Secure** — Autonomy + one tailored fact + safety-net (follows Mirror).
+- 3: Explicit autonomy ("It's your decision") + concern-relevant fact + safety-net/follow-up.
+- 2: Autonomy + options, missing safety-net or concern-tailoring.
+- 1: Educational lecture with no autonomy language = pseudo-Secure.
+
+### COMPOUND STEPS
+Use arrays: `["Announce","Inquire"]`, `["Mirror","Inquire"]`, `["Mirror","Secure"]`, `["Secure","Inquire"]`.
+- Announce+Inquire: First vaccine introduction + open concern question in same turn.
+- Mirror+Inquire: Reflection + open question.
+- Secure+Inquire: Securing one concern + inviting more.
+
+### RULES
+1. Announce → Inquire → Mirror → Secure is the expected order.
+2. First mention of vaccines = Announce, even if phrased as a question.
+3. Securing an unmirrored concern → reduce score by 1 (not for Mirror+Secure).
+4. Mirroring something never expressed → not valid Mirror.
+
+### CONVERSATION STATE
+Recent context:
+{recent_context}
+
+- Inquired Concerns: {inquired_concerns_list}
+- Mirrored Concerns: {mirrored_concerns_list}
+- Announced: {prior_announced}
+- Phase: {prior_phase}
+
+Person_last: {person_last}
+Clinician_last: {clinician_last}
+
+### OUTPUT — JSON only, no fences
+{{
+  "is_small_talk": (boolean),
+  "is_vaccine_relevant": (boolean),
+  "person_topic": (autism | immune_load | side_effects | ingredients | schedule_timing | effectiveness | trust | null),
+  "aims": {{
+    "steps": [...],
+    "score": (0-3),
+    "reasons": ["cite specific phrases"],
+    "tips": ["max 1, specific and actionable"]
+  }},
+  "safety_flags": [],
+  "reasoning": "brief"
+}}
+If score=1, the tip MUST name the weakness. If Announced=true, do NOT suggest Announce in tips.

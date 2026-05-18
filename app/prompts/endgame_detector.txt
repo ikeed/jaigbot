@@ -10,17 +10,33 @@ You are an expert evaluator of clinical communication. Your task is to determine
 ### ENDGAME CRITERIA
 A session is in "Endgame" ONLY if:
 1. Vaccines have been **Announced**.
-2. All inquired concerns have been **Mirrored** and **Secured**. 
+2. All inquired concerns have been **Mirrored** and **Secured**.
    *Note*: If NO concerns were inquired/raised, this criterion is considered met after Announce and a concluding dialogue (e.g., agreeing to vaccinate or follow-up).
-3. A clear resolution has been reached:
-   - The person accepts vaccination for today.
-   - The person accepts literature/resources and a follow-up plan.
-   - The person explicitly defers the decision to a later date.
+3. A clear resolution has been reached — one of:
+   - **accepted_vaccine**: The person consents to vaccinate today. e.g. "Let's do it", "Go ahead", "We're ready", "I consent".
+   - **accepted_literature**: The person agrees to take home information and book a follow-up. Look for *intent*, not exact phrases. e.g. "I'll take a look at the information", "That sounds fair — give me a couple of weeks", "I'd like to think it over and come back", "Send me home with something to read", "two or three weeks should give me enough time".
+   - **deferred**: The person explicitly postpones the decision without a clear follow-up plan. e.g. "I'm not ready yet", "I need more time", "Maybe next visit".
+
+### IMPORTANT: Judge INTENT, not exact wording
+Do NOT require specific keywords. Natural language varies widely. If the person's reply clearly signals they are taking information home and planning to return, classify as **accepted_literature** even if they use informal phrasing like "look things over", "mull it over", or "give me some time to read through it".
+
+### COMMON MISTAKES TO AVOID
+- Do NOT return `not_resolved` just because the person didn't use formal words like "follow-up appointment" or "literature". Informal agreement is still agreement.
+- Do NOT return `accepted_vaccine` unless the person clearly consents to vaccinate *today*.
+- If the person says things like "that sounds fair", "I appreciate you not pushing", and "I'll take a look" in the same reply, that is **accepted_literature**.
+
+### IMPORTANT: Concern lists may be incomplete
+The Inquired/Mirrored/Secured Concerns lists are derived from automatic keyword tracking
+and are **often incomplete or empty even when concerns were clearly raised and addressed**.
+Do NOT rely on empty lists as evidence that criterion 2 was not met.
+Instead, use the **full transcript** as the authoritative source:
+- If the transcript shows the person raised a concern AND the clinician acknowledged/reflected it, treat that concern as mirrored.
+- If the conversation clearly reached a follow-up agreement or resolution, do NOT return `not_resolved` just because the tracked lists are sparse.
 
 ### CONVERSATION STATE
-- **Inquired Concerns**: {inquired_concerns}
-- **Mirrored Concerns**: {mirrored_concerns}
-- **Secured Concerns**: {secured_concerns}
+- **Inquired Concerns** (may be incomplete): {inquired_concerns}
+- **Mirrored Concerns** (may be incomplete): {mirrored_concerns}
+- **Secured Concerns** (may be incomplete): {secured_concerns}
 - **Announced**: {announced}
 
 ### TRANSCRIPT

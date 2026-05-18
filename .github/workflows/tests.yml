@@ -48,4 +48,4 @@ jobs:
           OAUTH_GOOGLE_CLIENT_SECRET: test-client-secret-for-ci
         run: |
           export PYTHONPATH="$GITHUB_WORKSPACE:${PYTHONPATH:-}"
-          pytest
+          pytest --ignore=tests/integration

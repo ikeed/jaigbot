@@ -28,7 +28,7 @@ _CLINICAL_TOKENS = re.compile(
 )
 
 
-AIMS_STEPS = ("Announce", "Inquire", "Mirror", "Secure", "Mirror+Inquire")
+AIMS_STEPS = ("Announce", "Inquire", "Mirror", "Secure", "Announce+Inquire", "Mirror+Inquire")
 
 # Broader Announce markers used as fallback when the mapping's linguistic
 # markers are too narrow.  These cover soft introductions, status questions,

@@ -85,13 +85,20 @@ def maybe_add_person_concern(
         })
 
 
-def mark_mirrored_multi(state: dict, clinician_text: str, person_text: str, topical_cues: TopicalCues) -> None:
+def mark_mirrored_multi(
+    state: dict,
+    clinician_text: str,
+    person_text: str,
+    topical_cues: TopicalCues,
+    llm_topic: Optional[str] = None,
+) -> None:
     """Mark concerns as mirrored based on clinician reflection.
 
     Preference order:
-    1) Topics detected in clinician_text (shotgun mirror)
-    2) Person's last topical mention
-    3) First unmirrored concern
+    1) Topics detected in clinician_text (keyword match)
+    2) Person's last topical mention (keyword match)
+    3) LLM-detected parent topic (semantic tiebreaker when keyword matching fails)
+    4) First unmirrored concern (last-resort fallback)
     """
     concerns: List[Concern] = state.get("parent_concerns") or []
     if not concerns:
@@ -113,6 +120,17 @@ def mark_mirrored_multi(state: dict, clinician_text: str, person_text: str, topi
                     c["is_mirrored"] = True
                     marked_any = True
                     break
+
+    # If keyword matching still found nothing, use the LLM's detected parent topic
+    # as a semantic tiebreaker.  This covers cases where the clinician used natural
+    # reflective language ("Wanting to look into things yourself is reasonable") that
+    # doesn't contain any of the topical keywords.
+    if not marked_any and llm_topic:
+        for c in concerns:
+            if (c.get("topic") == llm_topic) and not c.get("is_mirrored"):
+                c["is_mirrored"] = True
+                marked_any = True
+                break
 
     if not marked_any:
         for c in concerns:

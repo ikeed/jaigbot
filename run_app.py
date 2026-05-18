@@ -20,6 +20,7 @@ else:
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from chainlit.utils import mount_chainlit
 
 # Import the existing backend app
@@ -181,6 +182,7 @@ async def custom_login_page(request: Request):
         </head>
         <body>
             <div class="card">
+<img src="/public/aimsbot.png" alt="AIMSBot" style="width: 256px; height: 256px; margin: 0 auto 1rem; display: block;" />
                 <h1>AIMSBot</h1>
                 <p>Welcome! Please sign in.</p>
                 <div style="margin-top: 1rem; display: flex; flex-direction: column;">
@@ -194,6 +196,11 @@ async def custom_login_page(request: Request):
     </html>
     """
     return HTMLResponse(content=html_content)
+
+# Serve static assets (SVGs, CSS, JS) at /public so that inline HTML
+# references like /public/doctor.svg resolve correctly even though
+# Chainlit is mounted at /chat (which serves them at /chat/public/).
+app.mount("/public", StaticFiles(directory="public"), name="public-static")
 
 # Mount the Chainlit app under /chat
 # Note: This will use chainlit_app.py as the target

@@ -1,24 +1,37 @@
 # AIMS protocol mapping (reference)
 
-This directory contains a structured mapping of the AIMS communication protocol used in vaccine conversations:
-- Announce
-- Inquire
-- Mirror
-- Secure
+This directory contains the AIMS communication protocol as implemented in JaigBot.
 
-Files:
-- aims_mapping.json — a comprehensive, operational mapping for recognizing and evaluating each AIMS step.
-- AIMS_Approach_Summary.md — a concise summary of the AIMS protocol, used as the primary source of truth for prompts and logic.
-- Reference source: ../../fpubh-11-1120326.pdf (Frontiers in Public Health article)
+## Files
 
-Intended uses of aims_mapping.json
-1. Developer/reference: as a precise spec for implementing AIMS behavior in the bot.
-2. Classification: to classify a clinician/user turn into one of the four AIMS steps.
-3. Per-turn evaluation: given the last two messages (parent then clinician) and the step, evaluate execution quality.
-4. Coaching: generate immediate, constructive hints after each turn.
-5. Overall scoring: aggregate per-turn scores at the end of a conversation.
+- **classification-scoring-rules.md** — *Canonical reference* for all classification, scoring,
+  deterministic post-processing, phase-state, and endgame rules as currently implemented.
+  **Start here if you want to understand how the system works.**
 
-Notes
-- The backend loads this mapping at runtime (see app/aims_engine.py) to support deterministic classification, scoring, and coaching. Keep the JSON stable and aligned with the source paper.
-- See docs/memory-and-persona.md and docs/plan.md for broader context on conversation flow and upcoming implementation steps.
-- Roadmap: see implementation tasks in docs/aims/implementation-plan.md (kept up to date as work progresses).
+- **AIMS_Approach_Summary.md** — Faithful summary of the original academic paper
+  (Parrish-Sprowl et al., 2023).  Describes the theoretical AIMS framework; does not describe
+  implementation details.
+
+- **aims_mapping.json** — Operational mapping used by the deterministic fallback engine
+  (`app/aims_engine.py`).  The LLM classifier (`app/services/classifier_service.py`) is the
+  primary path; this file is consulted on LLM timeout or failure.
+
+- **implementation-plan.md** — Historical implementation notes (may be outdated).
+
+- Reference source: `../../fpubh-11-1120326.pdf` (Frontiers in Public Health article)
+
+## AIMS Steps
+
+The system recognises six step values:
+
+| Step | Description |
+|------|-------------|
+| `Announce` | First (and only) introduction/recommendation of vaccines |
+| `Inquire` | Open question to surface concerns or hesitancy |
+| `Mirror` | Reflect the person's concern so they "feel felt" |
+| `Mirror+Inquire` | Compound: reflection + open question in one turn |
+| `Mirror+Secure` | Compound: reflection + autonomy-supportive education in one turn |
+| `Secure` | Affirm autonomy, offer one tailored fact, provide safety-net |
+
+For full scoring rubrics, dependency rules, deterministic guards, and endgame logic see
+**classification-scoring-rules.md**.
