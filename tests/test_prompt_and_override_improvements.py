@@ -232,3 +232,86 @@ class TestPseudoSecureGate:
         assert out.aims.score == 3, (
             f"Secure with autonomy cue should not be penalized, got {out.aims.score}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Closing-turn guard: Inquire → Secure for wrap-up turns
+# ---------------------------------------------------------------------------
+
+class TestClosingTurnGuard:
+
+    def test_closing_turn_with_literature_followup_autonomy_becomes_secure(self):
+        """A wrap-up message with literature + follow-up + autonomy must be
+        reclassified from Inquire to Secure even when it contains '?'."""
+        svc = _make_svc()
+        msg = (
+            "I appreciate you being willing to talk it through with me openly. "
+            "What I can do is send you home with some balanced information you can "
+            "read on your own time. We don't have to decide today. "
+            "Why don't we book a follow-up in the next little while?"
+        )
+        result = _result("Inquire", score=3)
+        out = svc._apply_overrides(result, msg, prior_announced=True)
+        assert out.aims.step == "Secure", (
+            f"Closing turn should be Secure, got {out.aims.step}"
+        )
+        assert out.aims.score == 2
+
+    def test_closing_turn_with_literature_and_followup_becomes_secure(self):
+        """Literature + follow-up (2 of 3 signals) is enough to override."""
+        svc = _make_svc()
+        msg = (
+            "I can give you some information to take home and read at your own "
+            "pace. Why don't we book a follow-up to continue this conversation?"
+        )
+        result = _result("Inquire", score=2)
+        out = svc._apply_overrides(result, msg, prior_announced=True)
+        assert out.aims.step == "Secure", (
+            f"Literature + follow-up should trigger Secure, got {out.aims.step}"
+        )
+
+    def test_closing_turn_with_autonomy_and_followup_becomes_secure(self):
+        """Autonomy + follow-up (2 of 3 signals) is enough to override."""
+        svc = _make_svc()
+        msg = (
+            "There's no pressure to decide anything today. Take your time with "
+            "this. Let's schedule a follow-up to check in and continue talking."
+        )
+        result = _result("Inquire", score=2)
+        out = svc._apply_overrides(result, msg, prior_announced=True)
+        assert out.aims.step == "Secure", (
+            f"Autonomy + follow-up should trigger Secure, got {out.aims.step}"
+        )
+
+    def test_genuine_inquire_not_overridden(self):
+        """A genuine open concern-surfacing question must stay Inquire."""
+        svc = _make_svc()
+        msg = "What are your main concerns about the vaccine?"
+        result = _result("Inquire", score=3)
+        out = svc._apply_overrides(result, msg, prior_announced=True)
+        assert out.aims.step == "Inquire", (
+            f"Genuine Inquire must not be overridden, got {out.aims.step}"
+        )
+
+    def test_single_signal_not_enough(self):
+        """Only one closing signal (e.g. follow-up alone) must NOT trigger."""
+        svc = _make_svc()
+        msg = "Let's book a follow-up to talk more about this."
+        result = _result("Inquire", score=2)
+        out = svc._apply_overrides(result, msg, prior_announced=True)
+        assert out.aims.step == "Inquire", (
+            f"Single signal should not trigger override, got {out.aims.step}"
+        )
+
+    def test_not_triggered_before_announce(self):
+        """The closing-turn guard must not fire before Announce."""
+        svc = _make_svc()
+        msg = (
+            "I can send you home with some information and we can schedule a "
+            "follow-up to continue talking. No pressure at all."
+        )
+        result = _result("Inquire", score=2)
+        out = svc._apply_overrides(result, msg, prior_announced=False)
+        assert out.aims.step != "Secure", (
+            f"Closing-turn guard must not fire pre-Announce, got {out.aims.step}"
+        )

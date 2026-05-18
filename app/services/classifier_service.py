@@ -284,6 +284,22 @@ class ClassifierService:
         "at this visit", "routine vaccines",
     ]
 
+    # Closing-turn cues: detect wrapping-up turns that the LLM misclassifies
+    # as Inquire because of proposal-style question phrasing ("Why don't we
+    # book a follow-up?").  A message offering literature + follow-up +
+    # autonomy is categorically Secure, not concern-surfacing Inquire.
+    _CLOSING_LITERATURE_CUES = [
+        "information", "literature", "read on your", "look over",
+        "look it over", "take home", "materials", "handout", "brochure",
+        "pamphlet", "review the information", "read at your",
+        "send you home with",
+    ]
+
+    _CLOSING_FOLLOWUP_CUES = [
+        "follow-up", "follow up", "book a", "come back",
+        "next visit", "another appointment", "schedule a",
+    ]
+
     # Sentence-level rebuttal detection: fires only when 'but' appears in the
     # same sentence as a reflective stem, indicating a direct "I hear you, but..."
     # pivot rather than an incidental 'but' in a separate educational clause.
@@ -397,6 +413,24 @@ class ClassifierService:
                 
                 if result.aims.score is not None:
                     result.aims.score = min(2, result.aims.score)
+
+        # Closing-turn override: must be AFTER Question Guard so it is not
+        # undone.  A message the LLM labelled Inquire that wraps up the visit
+        # with literature + follow-up + autonomy is a Secure turn — the
+        # question-style phrasing ("Why don't we book a follow-up?") is a
+        # proposal, not concern-surfacing.
+        if result.aims.step == "Inquire" and prior_announced:
+            _has_lit = any(cue in msg_lower for cue in self._CLOSING_LITERATURE_CUES)
+            _has_fu  = any(cue in msg_lower for cue in self._CLOSING_FOLLOWUP_CUES)
+            _has_aut = any(cue in msg_lower for cue in self._SECURE_AUTONOMY_CUES)
+            if sum([_has_lit, _has_fu, _has_aut]) >= 2:
+                result.aims.step = "Secure"
+                result.aims.steps = ["Secure"]
+                result.aims.score = 2
+                result.aims.reasons = [
+                    "This turn wraps up with literature, follow-up, and/or autonomy support \u2014 classified as Secure"
+                ] + list(result.aims.reasons or [])
+                result.aims.tips = []
 
         # Mirror+BUT penalty: only fires when 'but' co-occurs with a reflective stem
         # in the SAME SENTENCE (direct pivot like "I hear you, but...").

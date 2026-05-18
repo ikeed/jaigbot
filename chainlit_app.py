@@ -1128,74 +1128,8 @@ async def _handle_message_impl(message: cl.Message):
             f'<ul style="margin:4px 0 0 18px;padding:0;color:inherit;opacity:1;">{items_html}</ul>'
             '</div>'
         )
-        await cl.Message(html, author="Coach").send()
+        await _send_html("Coach", html)
 
-    # If gameOver, fetch /summary analysis and render an analysis block
-    if isinstance(data, dict) and data.get("gameOver"):
-        try:
-            url = get_backend_url()
-            base_url = url[:-5] if url.endswith("/chat") else url
-            session_id = cl.user_session.get("session_id")
-            timeout = settings.CHAINLIT_HTTP_TIMEOUT if settings.CHAINLIT_HTTP_TIMEOUT != 15.0 else 120.0
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                r = await client.get(f"{base_url}/summary", params={"sessionId": session_id, "analysis": "true"})
-                if r.status_code == 200:
-                    summ = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
-                    analysis = summ.get("analysis") or []
-                    # Build a multi-line numerical breakdown using percentages
-                    step_cov = summ.get("stepCoverage") or {}
-                    running_avg = summ.get("runningAverage") or {}
-                    total_turns = summ.get("totalTurns") or 0
-                    overall = summ.get("overallScore")
-                    try:
-                        oa = float(overall) if overall is not None else 0.0
-                    except Exception:
-                        oa = 0.0
-
-                    def _pct(n: float, d: float) -> str:
-                        try:
-                            if not d:
-                                return "0%"
-                            return f"{(float(n)/float(d))*100:.0f}%"
-                        except Exception:
-                            return "0%"
-
-                    def _avg_pct(v) -> str:
-                        try:
-                            if not isinstance(v, (int, float)):
-                                return "-"
-                            return f"{(float(v)/3.0)*100:.0f}%"
-                        except Exception:
-                            return "-"
-
-                    header_items = []
-                    header_items.append("Scoring summary:")
-                    header_items.append(f"Turns: {int(total_turns or 0)}")
-                    for step in ("Announce", "Inquire", "Mirror", "Secure"):
-                        c = int(step_cov.get(step, 0) or 0)
-                        cover = _pct(c, total_turns)
-                        avgp = _avg_pct(running_avg.get(step))
-                        header_items.append(f"{step}: {c} ({cover}), average: {avgp}")
-                    # Overall as percentage of 3
-                    overall_pct = (oa/3.0)*100 if oa else 0.0
-                    header_items.append(f"Overall AIMS score: {overall_pct:.0f}%")
-
-                    items_html = "".join([f"<li>{p}</li>" for p in header_items])
-                    # Then append analysis bullets if any
-                    if analysis:
-                        items_html += "".join([f"<li>{p}</li>" for p in analysis])
-
-                    html = (
-                        '<div style="background:#fff7e6;border-left:4px solid #ffb020;padding:10px 12px;'
-                        'border-radius:6px;color:#8a5a00;opacity:1;">'
-                        '<div style="font-weight:700;margin-bottom:4px;">📊 Evaluation</div>'
-                        f'<ul style="margin:4px 0 0 18px;padding:0;color:inherit;opacity:1;">{items_html}</ul>'
-                        '</div>'
-                    )
-                    await cl.Message(html, author="Coach").send()
-        except Exception:
-            # Non-fatal: if analysis fails, skip silently.
-            pass
 
 
 @cl.on_chat_resume

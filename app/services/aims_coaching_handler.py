@@ -32,7 +32,8 @@ from app.services.coach_post import (
     VaccineRelevanceGate, 
     AimsPostProcessor, 
     EndGameDetector,
-    build_endgame_bullets_fallback
+    build_endgame_bullets_fallback,
+    endgame_title,
 )
 from app.services.coach_safety import detect_advice_patterns
 from app.services.conversation_service import (
@@ -1197,8 +1198,14 @@ class AimsCoachingHandler:
             outcome = result.get("resolution_type", "not_resolved")
             summary = result.get("summary", "")
 
-            # 4. Heuristic fallback: if LLM detection errored, delegate to EndGameDetector
-            if not is_endgame and result.get("reason") == "detection_error":
+            # 4. Heuristic cross-check: always consult EndGameDetector when
+            #    the LLM says no endgame.  The LLM occasionally misses clear
+            #    acceptance signals ("I'm comfortable proceeding", "I'll look
+            #    forward to reviewing that material"); the heuristic catches
+            #    these via keyword cues and provides a safety net.  This is
+            #    safe because the heuristic has high precision (requires
+            #    FOLLOWUP+LITERATURE or LITERATURE+"appreciate"/"home").
+            if not is_endgame:
                 eg_local = EndGameDetector.detect(combined_reply_text)
                 if eg_local:
                     is_endgame = True
@@ -1206,10 +1213,14 @@ class AimsCoachingHandler:
                     outcome = "accepted_vaccine" if heuristic_reason == "accepted_now" else "accepted_literature"
                     summary = ""
 
-            # 5. High-stakes gate: require heuristic confirmation ONLY for accepted_vaccine
+            # 5. Gate: deferred is never a completed session (no literature + follow-up plan).
+            if is_endgame and outcome == "deferred":
+                is_endgame = False
+
+            # 6. High-stakes gate: require heuristic confirmation ONLY for accepted_vaccine
             # (consent to vaccinate today is irreversible, so we require a double-check).
-            # For accepted_literature and deferred we trust the LLM — natural language
-            # for deferral/follow-up is too varied for reliable keyword matching.
+            # For accepted_literature we trust the LLM — natural language for follow-up
+            # agreement is too varied for reliable keyword matching.
             if is_endgame and outcome == "accepted_vaccine":
                 eg_local = EndGameDetector.detect(combined_reply_text)
                 if not eg_local or eg_local.get("reason") != "accepted_now":
@@ -1228,7 +1239,7 @@ class AimsCoachingHandler:
                 pass
 
             if is_endgame:
-                title = "🎉 Great job!" if outcome in ("accepted_vaccine", "accepted_literature") else "Session Complete"
+                title = endgame_title(session_obj) if outcome in ("accepted_vaccine", "accepted_literature") else "Session Complete"
                 lines = [f"Outcome: {summary}"] if summary else []
 
                 # Add fallback metrics bullets if available
