@@ -384,14 +384,19 @@ async def healthz():
 
 
 @app.get("/history")
-async def history(sessionId: Optional[str] = None):
-    """Return raw conversation history for a session as a list of {role, content}.
-    If the session is missing or memory disabled, return an empty list.
+async def history(sessionId: Optional[str] = None, full: Optional[bool] = False):
+    """Return conversation history for a session.
+
+    By default returns the trimmed working history as a list of {role, content}.
+    Pass ``full=true`` to get the complete untrimmed history with timestamps
+    ({role, content, time}).
     """
     try:
         if not (sessionId and settings.MEMORY_ENABLED):
             return {"history": []}
         mem = _MEMORY_STORE.get(sessionId) or {}
+        if full:
+            return {"history": mem.get("full_history") or []}
         hist = mem.get("history") or []
         # Ensure items are objects with role/content strings
         out = []
@@ -642,10 +647,12 @@ async def init_session(body: SessionInitRequest):
     if not mem:
         mem = {
             "history": [],
+            "full_history": [],
             "character": body.character,
             "scene": body.scene,
             "user_info": body.userInfo,
             "updated": now,
+            "session_started": now,
         }
         _MEMORY_STORE[sid] = mem
     else:
@@ -656,6 +663,8 @@ async def init_session(body: SessionInitRequest):
             mem["scene"] = body.scene
         if body.userInfo and not mem.get("user_info"):
             mem["user_info"] = body.userInfo
+        mem.setdefault("full_history", [])
+        mem.setdefault("session_started", now)
         mem["updated"] = now
         _MEMORY_STORE[sid] = mem
     logger.info(f"Session initialized: {sid}")

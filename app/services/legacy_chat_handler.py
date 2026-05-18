@@ -171,18 +171,22 @@ class LegacyChatHandler:
             return
         
         try:
+            now = time.time()
             mem = self.memory_store.get(session_id) or {
-                "history": [], "character": None, "scene": None, "updated": time.time()
+                "history": [], "full_history": [], "character": None, "scene": None, "updated": now
             }
-            mem.setdefault("history", []).append({"role": "user", "content": user_message})
-            mem["history"].append({"role": "assistant", "content": assistant_reply})
+            user_entry = {"role": "user", "content": user_message}
+            asst_entry = {"role": "assistant", "content": assistant_reply}
+            mem.setdefault("history", []).append(user_entry)
+            mem["history"].append(asst_entry)
+            mem.setdefault("full_history", []).append({**user_entry, "time": now})
+            mem["full_history"].append({**asst_entry, "time": now})
             
-            # Trim to last N pairs
-            max_items = self.memory_max_turns * 2
-            if len(mem["history"]) > max_items:
-                mem["history"] = mem["history"][-max_items:]
+            # Trim working history (coach-aware)
+            from app.services.session_service import SessionService
+            mem["history"] = SessionService._trim_history(mem["history"], self.memory_max_turns)
             
-            mem["updated"] = time.time()
+            mem["updated"] = now
             self.memory_store[session_id] = mem
             
         except Exception:

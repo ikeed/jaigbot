@@ -59,11 +59,21 @@ class SessionService:
             now = time.time()
             mem = self._store.get(sid)
             if not mem:
-                mem = {"history": [], "character": None, "scene": None, "updated": now, "user_info": user_info}
+                mem = {
+                    "history": [],
+                    "full_history": [],
+                    "character": None,
+                    "scene": None,
+                    "updated": now,
+                    "session_started": now,
+                    "user_info": user_info,
+                }
                 self._store[sid] = mem
             else:
                 # touch updated lazily; callers also update as needed
                 mem.setdefault("updated", now)
+                mem.setdefault("full_history", [])
+                mem.setdefault("session_started", now)
                 if user_info and not mem.get("user_info"):
                     mem["user_info"] = user_info
                     self._store[sid] = mem
@@ -94,16 +104,45 @@ class SessionService:
         self._store[session_id] = mem
         return mem
 
+    @staticmethod
+    def _trim_history(history: list, max_turns: int) -> list:
+        """Trim history to the last *max_turns* dialogue pairs.
+
+        Coach entries are interleaved but should not count toward the
+        turn budget.  We keep the last N user+assistant messages (where
+        N = max_turns * 2) plus any coach messages that fall within
+        that window.
+        """
+        # Count only dialogue (non-coach) entries
+        dialogue_count = sum(1 for m in history if m.get("role") in ("user", "assistant"))
+        max_dialogue = max_turns * 2
+        if dialogue_count <= max_dialogue:
+            return history
+
+        # Walk backwards keeping last max_dialogue dialogue entries
+        # plus any coach entries that appear between them.
+        kept: list = []
+        seen_dialogue = 0
+        for entry in reversed(history):
+            if entry.get("role") in ("user", "assistant"):
+                if seen_dialogue >= max_dialogue:
+                    break
+                seen_dialogue += 1
+            kept.append(entry)
+        kept.reverse()
+        return kept
+
     def append_history(self, session_id: str, role: str, content: str) -> None:
         if not (self.memory_enabled and session_id):
             return
-        mem = self._store.get(session_id) or {"history": [], "character": None, "scene": None, "updated": time.time()}
-        mem.setdefault("history", []).append({"role": role, "content": content})
-        # Trim to last N pairs (user+assistant)
-        max_items = self.memory_max_turns * 2
-        if len(mem["history"]) > max_items:
-            mem["history"] = mem["history"][ - max_items:]
-        mem["updated"] = time.time()
+        now = time.time()
+        mem = self._store.get(session_id) or {"history": [], "full_history": [], "character": None, "scene": None, "updated": now}
+        entry = {"role": role, "content": content}
+        mem.setdefault("history", []).append(entry)
+        mem.setdefault("full_history", []).append({**entry, "time": now})
+        # Trim working history (coach-aware)
+        mem["history"] = self._trim_history(mem["history"], self.memory_max_turns)
+        mem["updated"] = now
         self._store[session_id] = mem
 
     # Optional helpers for metrics/state (thin wrappers around mem dict)

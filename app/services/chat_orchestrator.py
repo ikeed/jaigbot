@@ -193,6 +193,8 @@ class ChatOrchestrator:
                             user_id = "anonymous"
                             
                         # Enrich mem with endgame status for the archive
+                        mem["session_ended"] = time.time()
+                        self.memory_store[ctx.session_id] = mem
                         archive_data = {
                             **mem,
                             "session_id": ctx.session_id,
@@ -390,6 +392,8 @@ class ChatOrchestrator:
                     mem = {"history": [], "character": None, "scene": None}
 
             self.logger.info(f"Archiving session {session_id} for user {user_id}")
+            # Record session_ended timestamp
+            mem["session_ended"] = time.time()
             # Prepare archive data with the extra error_report key
             archive_data = {
                 **mem,

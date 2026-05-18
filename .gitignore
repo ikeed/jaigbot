@@ -1,6 +1,7 @@
 /.chainlit/translations/
+/.chainlit/public/
+/.chainlit/session_id*
 /.coverage
-/.chainlit/session_id
 /.vscode/
 
 # Terraform
