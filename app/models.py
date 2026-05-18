@@ -5,11 +5,23 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 
-class Coaching(BaseModel):
-    """AIMS coaching payload returned in responses when coaching is enabled.
+class StepFeedback(BaseModel):
+    """Per-step coaching feedback for compound AIMS classifications.
 
-    Behavior-preserving extraction from app.main.
+    Each detected step gets its own feedback line with an explicit tone
+    so the UI can distinguish praise from improvement suggestions.
     """
+
+    step: str = Field(description="AIMS step this feedback applies to: Announce|Inquire|Mirror|Secure")
+    feedback: str = Field(description="Second-person coaching feedback for this step")
+    tone: str = Field(
+        default="praise",
+        description="'praise' for reinforcement or 'improvement' for a suggested change",
+    )
+
+
+class Coaching(BaseModel):
+    """AIMS coaching payload returned in responses when coaching is enabled."""
 
     step: Optional[str] = Field(
         default=None, description="Detected AIMS step: Announce|Inquire|Mirror|Secure|Announce+Inquire|Mirror+Inquire|Mirror+Secure|Secure+Inquire"
@@ -22,6 +34,10 @@ class Coaching(BaseModel):
         default_factory=list, description="Brief reasons supporting the score"
     )
     tips: list[str] = Field(default_factory=list, description="Coaching tips")
+    step_feedback: list[StepFeedback] = Field(
+        default_factory=list,
+        description="Per-step feedback for compound classifications; replaces reasons/tips when present",
+    )
     phase: Optional[str] = Field(
         default=None, description="Current conversation phase: PreAnnounce|InquireMirror|Secure"
     )
@@ -110,4 +126,4 @@ class ReportRequest(BaseModel):
     )
 
 
-__all__ = ["Coaching", "ClassifierResult", "SessionMetrics", "ChatRequest", "ReportRequest"]
+__all__ = ["StepFeedback", "Coaching", "ClassifierResult", "SessionMetrics", "ChatRequest", "ReportRequest"]

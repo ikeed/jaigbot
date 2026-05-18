@@ -1,0 +1,31 @@
+Classify this clinician turn. Return ONLY valid JSON — no fences, no explanation.
+
+### CONVERSATION STATE
+Recent context:
+{recent_context}
+
+- Inquired Concerns: {inquired_concerns_list}
+- Mirrored Concerns: {mirrored_concerns_list}
+- Announced: {prior_announced}
+- Phase: {prior_phase}
+
+Person_last: {person_last}
+Clinician_last: {clinician_last}
+
+### OUTPUT — JSON only
+{{
+  "is_small_talk": (boolean),
+  "is_vaccine_relevant": (boolean),
+  "person_topic": (autism | immune_load | side_effects | ingredients | schedule_timing | effectiveness | trust | autonomy | null),
+  "aims": {{
+    "steps": [...],
+    "score": (0-3),
+    "reasons": ["second-person phrase-citing feedback"],
+    "tips": ["max 1, specific and actionable"],
+    "step_feedback": [
+      {{"step": "StepName", "feedback": "second-person feedback", "tone": "praise|improvement"}}
+    ]
+  }},
+  "safety_flags": [],
+  "reasoning": "brief"
+}}

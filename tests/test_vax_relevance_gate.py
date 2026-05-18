@@ -34,7 +34,7 @@ class FakeVertexAimsJSON:
 
     async def generate_text_async(self, prompt: str, **kwargs) -> str:
         prompt = prompt or ""
-        if "unified" in prompt.lower():
+        if "unified" in (prompt or "").lower() or "classify" in (prompt or "").lower():
             # ClassifierService's unified prompt
             aims_payload = {"step": None, "score": 0, "reasons": ["test: default"], "tips": []}
             # Simple rules for the test

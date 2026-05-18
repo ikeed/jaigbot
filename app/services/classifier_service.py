@@ -6,7 +6,7 @@ import re
 from typing import Any, Dict, List, Optional
 
 from app.aims_engine import evaluate_turn
-from app.models import ClassifierResult, Coaching
+from app.models import ClassifierResult, Coaching, StepFeedback
 from app.services.chat_helpers import recent_context as build_recent_context
 from app.services.coach_safety import detect_advice_patterns
 from app.services.prompt_builders import AimsPromptBuilder
@@ -59,16 +59,17 @@ class ClassifierService:
         # 1. Pre-filter with deterministic hints (optional, used as context)
         safety_hints = detect_advice_patterns(clinician_message)
 
-        # 2. Build the unified prompt
-        # Include recent conversation turns so the LLM can evaluate Mirror accuracy
-        # and detect context that a single-turn view would miss.
+        # 2. Build the prompt (split: static system instruction + lean per-turn prompt)
+        # The system instruction contains the full AIMS rubric, scoring rules, and
+        # reference data — identical across all requests (benefits from implicit caching).
+        # The per-turn prompt contains only the dynamic conversation state.
         recent_ctx = build_recent_context(history, context_turns) if history else ""
-        prompt = AimsPromptBuilder.build_unified_classify_prompt(
+        system_instruction = AimsPromptBuilder.get_classify_system_instruction()
+        prompt = AimsPromptBuilder.build_classify_turn_prompt(
             person_last=person_last,
             clinician_last=clinician_message,
             prior_announced=prior_announced,
             prior_phase=prior_phase,
-            context_turns=context_turns,
             recent_context=recent_ctx,
             inquired_concerns_list=inquired_concerns_list,
             mirrored_concerns_list=mirrored_concerns_list,
@@ -76,7 +77,7 @@ class ClassifierService:
 
         # 3. Call Gemini
         try:
-            raw_json = await self._call_gemini_json(prompt)
+            raw_json = await self._call_gemini_json(prompt, system_instruction=system_instruction)
             data = json.loads(self._strip_json_fences(raw_json))
             
             # Extract and normalize AIMS coaching
@@ -107,12 +108,24 @@ class ClassifierService:
                     priority = {"Secure": 5, "Mirror+Secure": 4, "Mirror+Inquire": 3, "Secure+Inquire": 3, "Mirror": 2, "Inquire": 1, "Announce": 0}
                     step = max(steps, key=lambda s: priority.get(s, -1), default=None)
 
+            # Parse per-step feedback if present
+            raw_sf = aims_data.get("step_feedback") or []
+            step_feedback = []
+            for sf in raw_sf:
+                if isinstance(sf, dict) and sf.get("step") and sf.get("feedback"):
+                    step_feedback.append(StepFeedback(
+                        step=sf["step"],
+                        feedback=sf["feedback"],
+                        tone=sf.get("tone", "praise"),
+                    ))
+
             aims_coaching = Coaching(
                 step=step,
                 steps=steps,
                 score=aims_data.get("score"),
                 reasons=aims_data.get("reasons") or [],
-                tips=aims_data.get("tips") or []
+                tips=aims_data.get("tips") or [],
+                step_feedback=step_feedback,
             )
 
             result = ClassifierResult(
@@ -194,19 +207,31 @@ class ClassifierService:
             self.logger.error("Endgame detection failed: %s", e)
             return {"is_endgame": False, "reason": "detection_error"}
 
-    async def _call_gemini_json(self, prompt: str) -> str:
-        """Call Vertex AI with JSON response expectation."""
+    async def _call_gemini_json(
+        self, prompt: str, *, system_instruction: str | None = None
+    ) -> str:
+        """Call Gemini with JSON response expectation.
+
+        Uses thinking_budget=128 to minimize thinking for classification tasks,
+        reducing latency and cost. 128 is the minimum supported by gemini-2.5-pro;
+        gemini-2.5-flash supports 0 but we use 128 for cross-model compatibility.
+
+        When system_instruction is provided, the static AIMS rubric and reference
+        data are passed separately from the per-turn prompt. This enables implicit
+        context caching by the Gemini platform (the system_instruction prefix is
+        identical across all classification requests in a session).
+        """
         client = self.client_cls(
             project=self.project_id,
             region=self.location,
             model_id=self.model_id
         )
-        # We don't use strict schema here yet to keep it flexible, 
-        # but we expect JSON from the prompt instructions.
         return await client.generate_text_async(
             prompt,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
+            system_instruction=system_instruction,
+            thinking_budget=128,
         )
 
     # Regex for vaccine-preventable disease names and vaccine-specific terms.
@@ -319,11 +344,10 @@ class ClassifierService:
                 result.is_small_talk = False
                 label = "null" if is_null_step else "Inquire"
                 result.aims.reasons = [
-                    f"Soft vaccine introduction detected (LLM said {label}) "
-                    f"\u2192 Announce score 1"
+                    f"You introduced vaccines softly — try a more direct recommendation to strengthen the Announce"
                 ] + list(result.aims.reasons or [])
                 result.aims.tips = [
-                    "Try a presumptive recommendation to strengthen this "
+                    "Try a presumptive recommendation "
                     "(e.g. \"It\u2019s time for [vaccine] today \u2014 how does that sound?\")."
                 ]
                 return result
@@ -385,7 +409,7 @@ class ClassifierService:
         if _is_mirror_step and self._has_rebuttal_but(msg):
             result.aims.score = min(1, result.aims.score or 0)
             if not any("rebuttal" in r.lower() for r in result.aims.reasons):
-                result.aims.reasons.append("Reflection included direct rebuttal \u2192 penalized")
+                result.aims.reasons.append("Your reflection included a direct rebuttal ('but') in the same sentence — try separating the reflection from the education")
 
         # Detect pseudo-Secure (data-dumping/persuasion without autonomy support).
         # Only fires when the message is long (60+ words) AND contains no autonomy cues
@@ -399,7 +423,7 @@ class ClassifierService:
             if not has_autonomy and not has_question and len(msg.split()) > 60:
                 result.aims.score = min(1, result.aims.score or 0)
                 if not any("persuasion" in r.lower() for r in result.aims.reasons):
-                    result.aims.reasons.append("Secure score reduced: appears to be persuasion/data-dumping without explicit autonomy support.")
+                    result.aims.reasons.append("You shared a lot of information without acknowledging their autonomy — try adding an explicit partnership statement (e.g., 'It's your decision').")
 
         return result
 

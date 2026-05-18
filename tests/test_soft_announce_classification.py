@@ -323,8 +323,9 @@ class TestSoftAnnounceDetector:
             f"Pre-Announce Inquire with vaccine content should be promoted to "
             f"Announce, got {out.aims.step!r}"
         )
+        # Reason should reference the soft introduction in second-person voice
+        assert any("softly" in r.lower() or "announce" in r.lower() for r in out.aims.reasons)
         assert out.aims.score == 1
-        assert "inquire" in out.aims.reasons[0].lower()
 
     def test_inquire_post_announce_not_affected(self):
         """After Announce is done, an Inquire step must NOT be promoted."""

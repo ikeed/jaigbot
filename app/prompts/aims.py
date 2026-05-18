@@ -89,6 +89,45 @@ def build_unified_classify_prompt(
     )
 
 
+def get_classify_system_instruction() -> str:
+    """Return the static AIMS system instruction for classification calls.
+
+    This content is identical across all requests, making it ideal for
+    implicit context caching by the Gemini platform.  The instruction is
+    loaded once and cached in-process via the loader's lru_cache.
+    """
+    from .loader import _load_text
+    return _load_text("app.prompts", "aims_system_instruction.txt")
+
+
+def build_classify_turn_prompt(
+    *,
+    person_last: str,
+    clinician_last: str,
+    prior_announced: bool,
+    prior_phase: str,
+    recent_context: str = "",
+    inquired_concerns_list: List[str] = None,
+    mirrored_concerns_list: List[str] = None,
+) -> str:
+    """Render the lean per-turn classification prompt.
+
+    Paired with get_classify_system_instruction() which provides the static
+    AIMS rubric, rules, and reference data as the system_instruction.
+    """
+    return load_and_render(
+        "app.prompts",
+        "classify_turn.txt",
+        person_last=person_last,
+        clinician_last=clinician_last,
+        prior_announced=str(prior_announced).lower(),
+        prior_phase=prior_phase,
+        recent_context=recent_context or "(none — first turn)",
+        inquired_concerns_list=", ".join(inquired_concerns_list or []),
+        mirrored_concerns_list=", ".join(mirrored_concerns_list or []),
+    )
+
+
 def build_endgame_detector_prompt(
     *,
     history_text: str,
