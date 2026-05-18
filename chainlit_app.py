@@ -19,11 +19,29 @@ else:
 import uuid
 import json
 import random
+import shutil
 from pathlib import Path
 import httpx
 import chainlit as cl
 from chainlit.input_widget import TextInput
 from app.persona import DEFAULT_CHARACTER, DEFAULT_SCENE
+
+
+# Sync public/ → .chainlit/public/ so there is a single source of truth.
+# Chainlit serves static assets from .chainlit/public/, but we keep the
+# canonical copies in public/ for visibility.  This runs once at import
+# time regardless of whether the app is launched via run_app.py or
+# standalone `chainlit run`.
+try:
+    _src = Path(__file__).resolve().parent / "public"
+    _dst = Path(__file__).resolve().parent / ".chainlit" / "public"
+    if _src.is_dir():
+        _dst.mkdir(parents=True, exist_ok=True)
+        for _f in _src.iterdir():
+            if _f.is_file():
+                shutil.copy2(_f, _dst / _f.name)
+except Exception:
+    pass
 
 
 def _register_avatars_once() -> None:
@@ -262,7 +280,7 @@ async def _replay_history(history: list[dict]):
                 html = (
                     '<div style="display:flex; justify-content:flex-end; align-items:flex-start; gap:6px; margin:6px 0;">'
                     '  <div style="max-width:80%; background:#e6f0ff; color:#123; padding:10px 12px; border-radius:8px;">{}</div>'
-                    '  <img src="/public/doctor.svg" alt="Doctor" style="width:18px;height:18px; border-radius:50%; box-shadow:0 0 0 2px rgba(255,255,255,0.9);" />'
+                    '  <img src="/public/doctor.svg" alt="Doctor" style="width:28px;height:28px; border-radius:50%; box-shadow:0 0 0 2px rgba(255,255,255,0.9);" />'
                     '</div>'
                 ).format(content_clean.replace("\n", "<br>"))
                 await _send_html(author, html)
@@ -276,6 +294,7 @@ async def _replay_history(history: list[dict]):
 def _get_persistent_session_id(user_identifier: str | None = None) -> str:
     """
     Return a stable session id for Chainlit to use when calling the backend.
+    Used by on_chat_resume to recover the most recent session.
     Precedence:
     1) FIXED_SESSION_ID or SESSION_ID env vars
     2) Value stored in .chainlit/session_id_{user_identifier} (if provided)
@@ -323,22 +342,37 @@ def _get_persistent_session_id(user_identifier: str | None = None) -> str:
         return str(uuid.uuid4())
 
 
-# Chat profile: present the clinician as "Doctor" with a custom icon so their role is visible in the UI.
+def _write_persistent_session_id(session_id: str, user_identifier: str | None = None) -> None:
+    """Persist the given session id to disk so on_chat_resume can recover it."""
+    try:
+        root = Path(os.getcwd())
+        store_dir = root / ".chainlit"
+        store_dir.mkdir(parents=True, exist_ok=True)
+        filename = "session_id"
+        if user_identifier:
+            safe_id = "".join([c if c.isalnum() else "_" for c in user_identifier])
+            filename = f"session_id_{safe_id}"
+        f = store_dir / filename
+        f.write_text(session_id, encoding="utf-8")
+    except Exception:
+        pass
+
+
+# Chat profile: shown as a splash/loading screen while on_chat_start runs.
 @cl.set_chat_profiles
 async def chat_profiles():
     try:
-        # Prefer public URL that Chainlit serves
-        icon = "/public/doctor.svg"
+        icon = "/public/aimsbot.png"
         return [
             cl.ChatProfile(
-                name="Doctor",
-                markdown_description="Clinician perspective",
+                name="AIMSBot",
+                markdown_description="Loading your scenario…",
                 icon=icon,
                 default=True,
             )
         ]
     except Exception:
-        return [cl.ChatProfile(name="Doctor", markdown_description="Clinician perspective", default=True)]
+        return [cl.ChatProfile(name="AIMSBot", markdown_description="Loading your scenario…", default=True)]
 
 
 def _load_robust_persona(name: str | None = None) -> dict:
@@ -383,6 +417,46 @@ def _load_robust_persona(name: str | None = None) -> dict:
         }
 
 
+def _render_scenario_card_html(card_text: str) -> str:
+    """Convert a plain-text scenario card into styled HTML for the Chainlit UI.
+    Parses 'Key: Value' lines and renders them as a visually distinct briefing card.
+    """
+    rows_html = ""
+    note_html = ""
+    for line in (card_text or "").splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        # Parenthetical notes get separate treatment
+        if stripped.startswith("(") and stripped.endswith(")"):
+            note_html = (
+                f'<div style="margin-top:8px;font-style:italic;color:#6b7280;font-size:13px;">'
+                f'{stripped}</div>'
+            )
+            continue
+        # Split on first colon to get label/value
+        if ": " in stripped:
+            label, value = stripped.split(": ", 1)
+            rows_html += (
+                f'<div style="margin-bottom:4px;">'
+                f'<span style="font-weight:600;color:#374151;">{label}:</span> {value}'
+                f'</div>'
+            )
+        else:
+            rows_html += f'<div style="margin-bottom:4px;">{stripped}</div>'
+
+    return (
+        '<div style="background:linear-gradient(135deg,#f0f7ff,#e8f0fe);'
+        'border:1px solid #b8d4f0;border-radius:10px;padding:14px 18px;margin:4px 0;">'
+        '<div style="display:flex;align-items:center;font-weight:700;font-size:14px;'
+        'color:#1a56db;margin-bottom:10px;">'
+        '📋&nbsp; Scenario Briefing</div>'
+        f'<div style="color:#1f2937;font-size:14px;line-height:1.6;">{rows_html}</div>'
+        f'{note_html}'
+        '</div>'
+    )
+
+
 def _build_scenario_card() -> list[str]:
     """
     Deprecated in favor of robust persona logic in on_chat_start,
@@ -413,9 +487,6 @@ async def _start_chat_impl():
     this sessionId, replay it instead of stacking a new scenario card. Otherwise,
     show the scenario card to seed the scene and names.
     """
-    # Ensure our CSS is present for consistent styling across live and replay
-    await _inject_custom_css_once()
-
     # Chainlit 2.8+ session handling: ensure we have an authenticated user if auth is required
     app_user = cl.user_session.get("user")
     if (is_oauth_enabled or has_auth_secret) and not app_user:
@@ -428,9 +499,11 @@ async def _start_chat_impl():
         url = get_backend_url()
         return url[:-5] if url.endswith("/chat") else url
 
-    # 1. Resolve Session ID
+    # 1. Generate a fresh Session ID for every new chat so that clicking
+    #    "New Chat" does not replay the previous conversation.
     user_identifier = app_user.identifier if app_user else None
-    session_id = _get_persistent_session_id(user_identifier)
+    session_id = str(uuid.uuid4())
+    _write_persistent_session_id(session_id, user_identifier)
     cl.user_session.set("session_id", session_id)
 
     # 2. Attempt to fetch existing backend history for this session
@@ -520,9 +593,8 @@ async def _start_chat_impl():
     except Exception:
         pass  # best-effort; /chat will create the session on first message anyway
 
-    # Initialize fresh local history for a new chat thread in Chainlit if not already present
-    if cl.user_session.get("history") is None:
-        cl.user_session.set("history", [])
+    # Always start with a clean local history for a new chat
+    cl.user_session.set("history", [])
 
     # If there is prior history on the backend, mirror it into the UI and prepend the scenario summary for context
     if existing_hist:
@@ -543,7 +615,7 @@ async def _start_chat_impl():
 
         try:
             # Render a scenario summary card at the top (not persisted anew) for consistent context after refresh
-            await cl.Message(card, author="Patient").send()
+            await _send_html("Patient", _render_scenario_card_html(card))
         except Exception:
             pass
         try:
@@ -578,7 +650,7 @@ async def _start_chat_impl():
     if not has_card:
         history.append({"role": "assistant", "content": card})
         cl.user_session.set("history", history)
-        await cl.Message(card, author="Patient").send()
+        await _send_html("Patient", _render_scenario_card_html(card))
     
     # Inject the scenario into the scene context for grounding
     try:
@@ -905,7 +977,7 @@ async def _handle_message_impl(message: cl.Message):
         doctor_html = (
             '<div style="display:flex; justify-content:flex-end; align-items:flex-start; gap:6px; margin:6px 0;">'
             '  <div style="max-width:80%; background:#e6f0ff; color:#123; padding:10px 12px; border-radius:8px;">{}</div>'
-            '  <img src="/public/doctor.svg" alt="Doctor" style="width:18px;height:18px; border-radius:50%; box-shadow:0 0 0 2px rgba(255,255,255,0.9);" />'
+            '  <img src="/public/doctor.svg" alt="Doctor" style="width:28px;height:28px; border-radius:50%; box-shadow:0 0 0 2px rgba(255,255,255,0.9);" />'
             '</div>'
         ).format(content.replace("\n", "<br>"))
         await _update_message_html(message, "Doctor", doctor_html)
@@ -1140,9 +1212,6 @@ async def _resume_chat_impl():
     history is empty (e.g., after a server restart), fetch it from the backend
     using the persistent session id and replay it, avoiding duplicate scenario cards.
     """
-    # Ensure our CSS and sidebar button are present on resume
-    await _inject_custom_css_once()
-    
     # Keep the same session id established in start_chat
     session_id = cl.user_session.get("session_id") or _get_persistent_session_id()
     cl.user_session.set("session_id", session_id)

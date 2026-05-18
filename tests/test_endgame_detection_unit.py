@@ -330,3 +330,178 @@ def test_deferred_outcome_uses_session_complete_title():
     result = _run(handler._check_end_game("s11", {}, None))
     assert result is not None
     assert result["title"] == "Session Complete"
+
+
+# ---------------------------------------------------------------------------
+# Tests — pending-concerns guard (Fix 1)
+# ---------------------------------------------------------------------------
+
+def test_unmirrored_concerns_block_endgame():
+    """Endgame must be blocked when concerns exist but some are not mirrored."""
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_vaccine",
+            "summary": "Person agreed.",
+            "reason": "",
+        }
+    )
+    store = {
+        "s12": {
+            "history": [
+                {"role": "user", "content": "MMR recommended."},
+                {"role": "assistant", "content": "Okay, let's do it today. I consent."},
+            ],
+            "aims_state": {
+                "phase": "Secure",
+                "announced": True,
+                "parent_concerns": [
+                    {"desc": "side effects", "topic": "side_effects", "is_mirrored": True, "is_secured": True},
+                    {"desc": "trust", "topic": "trust", "is_mirrored": False, "is_secured": False},
+                    {"desc": "more side effects", "topic": "side_effects", "is_mirrored": False, "is_secured": False},
+                ],
+            },
+        }
+    }
+    handler = _make_handler(store, mock_svc)
+    result = _run(handler._check_end_game("s12", {}, None))
+    assert result is None, "Endgame should be blocked when unmirrored concerns exist"
+    # The LLM should never have been called
+    assert mock_svc.last_history_text == ""
+
+
+def test_all_concerns_mirrored_allows_endgame():
+    """Endgame should proceed when all concerns are mirrored (and heuristic confirms)."""
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_vaccine",
+            "summary": "Person agreed to vaccinate.",
+            "reason": "",
+        }
+    )
+    store = {
+        "s13": {
+            "history": [
+                {"role": "user", "content": "MMR recommended."},
+                {"role": "assistant", "content": "Okay, let's do it today. I consent."},
+            ],
+            "aims_state": {
+                "phase": "Secure",
+                "announced": True,
+                "parent_concerns": [
+                    {"desc": "side effects", "topic": "side_effects", "is_mirrored": True, "is_secured": True},
+                ],
+            },
+        }
+    }
+    handler = _make_handler(store, mock_svc)
+    result = _run(handler._check_end_game("s13", {}, None))
+    assert result is not None, "Endgame should proceed when all concerns are mirrored"
+
+
+def test_no_concerns_allows_endgame():
+    """Endgame should proceed when no concerns have been registered at all."""
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_vaccine",
+            "summary": "Person agreed.",
+            "reason": "",
+        }
+    )
+    store = {
+        "s14": {
+            "history": [
+                {"role": "user", "content": "MMR recommended."},
+                {"role": "assistant", "content": "Okay, let's do it today. I consent."},
+            ],
+            "aims_state": _announced_state(),  # empty parent_concerns
+        }
+    }
+    handler = _make_handler(store, mock_svc)
+    result = _run(handler._check_end_game("s14", {}, None))
+    assert result is not None, "Endgame should proceed when no concerns are registered"
+
+
+# ---------------------------------------------------------------------------
+# Tests — LLM-trust endgame design
+# ---------------------------------------------------------------------------
+
+def test_llm_accepted_literature_trusted_without_keyword_match():
+    """LLM says accepted_literature — we now trust the LLM, so endgame fires
+    even when the person didn't use exact literature keywords.
+    Natural language like 'I'll take a look at the information' should be
+    detected by the improved prompt, not by a heuristic gate."""
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_literature",
+            "summary": "Person agreed to take information home.",
+            "reason": "",
+        }
+    )
+    store = {
+        "s15": {
+            "history": [
+                {"role": "user", "content": "Vaccines are recommended."},
+                {"role": "assistant", "content": "That sounds fair, I'll take a look at the information."},
+            ],
+            "aims_state": _announced_state(),
+        }
+    }
+    handler = _make_handler(store, mock_svc)
+    result = _run(handler._check_end_game("s15", {}, None))
+    assert result is not None, "LLM accepted_literature should fire without requiring keyword match"
+    assert result["title"] == "\U0001f389 Great job!"
+
+
+def test_llm_deferred_trusted_without_exact_keyword():
+    """LLM says deferred — we trust the LLM, so endgame fires even without
+    exact deferral keyword matches. The improved prompt handles the semantics."""
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "deferred",
+            "summary": "Person needs more time.",
+            "reason": "",
+        }
+    )
+    store = {
+        "s16": {
+            "history": [
+                {"role": "user", "content": "We can discuss more about this."},
+                {"role": "assistant", "content": "Two or three weeks should give me enough time to look things over."},
+            ],
+            "aims_state": _announced_state(),
+        }
+    }
+    handler = _make_handler(store, mock_svc)
+    result = _run(handler._check_end_game("s16", {}, None))
+    assert result is not None, "LLM deferred should fire without requiring exact deferral keywords"
+    assert result["title"] == "Session Complete"
+
+
+def test_deferred_llm_endgame_triggers():
+    """LLM says deferred and person has clear deferral language — endgame fires."""
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "deferred",
+            "summary": "Person needs more time.",
+            "reason": "",
+        }
+    )
+    store = {
+        "s17": {
+            "history": [
+                {"role": "user", "content": "We can discuss at the next visit."},
+                {"role": "assistant", "content": "I'd like to think about it. I need more time."},
+            ],
+            "aims_state": _announced_state(),
+        }
+    }
+    handler = _make_handler(store, mock_svc)
+    result = _run(handler._check_end_game("s17", {}, None))
+    assert result is not None, "Deferred endgame should fire when LLM and language agree"
+    assert result["title"] == "Session Complete"

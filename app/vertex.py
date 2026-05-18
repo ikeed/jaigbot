@@ -243,7 +243,13 @@ class VertexClient:
                         if not content:
                             continue
                         parts = getattr(content, "parts", None) or []
-                        texts = [getattr(p, "text", "") for p in parts]
+                        # Filter out thinking parts (thought=True) so they
+                        # don't contaminate the response text.
+                        texts = [
+                            getattr(p, "text", "")
+                            for p in parts
+                            if not getattr(p, "thought", False)
+                        ]
                         joined = "".join([t for t in texts if t])
                         if joined:
                             txt = joined
@@ -398,6 +404,13 @@ class VertexClient:
                 if system_instruction:
                     body["systemInstruction"] = {"role": "system", "parts": [{"text": system_instruction}]}
                 
+                self.logger.info(json.dumps({
+                    "event": "vertex_rest_request_body",
+                    "maxOutputTokens": body["generationConfig"]["maxOutputTokens"],
+                    "temperature": body["generationConfig"]["temperature"],
+                    "responseMimeType": body["generationConfig"]["responseMimeType"],
+                    "modelId": self.model_id,
+                }))
                 # Retry on ReadTimeout to handle transient network issues gracefully
                 max_retries = 1
                 for attempt in range(max_retries + 1):
@@ -430,12 +443,21 @@ class VertexClient:
             def extract_from_json(d: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
                 cands = d.get("candidates", [])
                 txt = ""
+                thought_txt = ""
                 if cands:
                     content = cands[0].get("content") or {}
                     parts = content.get("parts") or []
                     for p in parts:
                         t = p.get("text")
-                        if t:
+                        if not t:
+                            continue
+                        # Gemini 2.5 thinking models mark internal reasoning
+                        # parts with "thought": true.  These must NOT be
+                        # concatenated into the response text — they would
+                        # corrupt JSON output and inflate token counts.
+                        if p.get("thought"):
+                            thought_txt += t
+                        else:
                             txt += t
                 usage = d.get("usageMetadata") or {}
                 fr = (cands[0].get("finishReason") if cands else None)
@@ -452,10 +474,28 @@ class VertexClient:
                     "thoughtsTokens": usage.get("thoughtsTokenCount"),
                     "safety": safety_summary,
                     "textLen": len(txt.strip()),
+                    "thoughtLen": len(thought_txt.strip()),
+                    "partsCount": len(parts) if cands else 0,
                 }
                 return txt.strip(), meta_local
 
             text, meta_local = extract_from_json(data)
+
+            # Diagnostic logging: surface what the model actually returned
+            # so classification failures can be debugged from logs alone.
+            self.logger.info(json.dumps({
+                "event": "vertex_rest_response",
+                "modelId": self.model_id,
+                "finishReason": meta_local.get("finishReason"),
+                "textLen": meta_local.get("textLen"),
+                "thoughtLen": meta_local.get("thoughtLen", 0),
+                "partsCount": meta_local.get("partsCount", 0),
+                "promptTokens": meta_local.get("promptTokens"),
+                "candidatesTokens": meta_local.get("candidatesTokens"),
+                "thoughtsTokens": meta_local.get("thoughtsTokens"),
+                "hasText": bool(text),
+                "textPreview": (text[:120] + "...") if len(text) > 120 else text,
+            }))
 
             # Allow auto-continue even if the initial turn has no text.
             continuation_count = 0
@@ -502,6 +542,22 @@ class VertexClient:
                     break
                 if next_meta.get("finishReason") not in ("MAX_TOKENS", "MAX_TOKEN", "MAX_OUTPUT_TOKENS"):
                     break
+
+            # Guard: raise if no text after all attempts (parity with SDK path)
+            if not text:
+                self.logger.warning(json.dumps({
+                    "event": "vertex_rest_empty_response",
+                    "modelId": self.model_id,
+                    "finishReason": meta_local.get("finishReason"),
+                    "thoughtLen": meta_local.get("thoughtLen", 0),
+                    "partsCount": meta_local.get("partsCount", 0),
+                    "safety": meta_local.get("safety"),
+                }))
+                raise VertexAIError(
+                    f"No text in REST response (finishReason={meta_local.get('finishReason')}, "
+                    f"thoughtLen={meta_local.get('thoughtLen', 0)}, "
+                    f"parts={meta_local.get('partsCount', 0)})"
+                )
 
             meta = {
                 "model": self.model_id,

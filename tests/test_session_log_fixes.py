@@ -95,11 +95,14 @@ class TestPositiveAnnounceDetector:
         assert out.aims.steps.count("Announce") == 1
 
     def test_no_announce_language_not_triggered(self):
-        """Without strong recommendation language, no Announce should be added."""
+        """Without strong recommendation language, the Positive Announce detector
+        should not add Announce.  Uses prior_announced=True to isolate this
+        detector from the Soft Announce detector (which fires on any vaccine
+        content when prior_announced is False)."""
         svc = _svc()
         msg = "What are your thoughts about vaccines in general?"
         result = _result("Inquire", ["Inquire"])
-        out = svc._apply_overrides(result, msg)
+        out = svc._apply_overrides(result, msg, prior_announced=True)
         assert out.aims.step == "Inquire"
         assert "Announce" not in out.aims.steps
 
