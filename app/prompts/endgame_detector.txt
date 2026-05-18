@@ -30,7 +30,7 @@ The Inquired/Mirrored/Secured Concerns lists are derived from automatic keyword 
 and are **often incomplete or empty even when concerns were clearly raised and addressed**.
 Do NOT rely on empty lists as evidence that criterion 2 was not met.
 Instead, use the **full transcript** as the authoritative source:
-- If the transcript shows the parent raised a concern AND the clinician acknowledged/reflected it, treat that concern as mirrored.
+- If the transcript shows the person raised a concern AND the clinician acknowledged/reflected it, treat that concern as mirrored.
 - If the conversation clearly reached a follow-up agreement or resolution, do NOT return `not_resolved` just because the tracked lists are sparse.
 
 ### CONVERSATION STATE

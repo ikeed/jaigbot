@@ -391,7 +391,7 @@ class TestAnnounceInquireNormalization:
                     mapping={},
                 )
 
-        result = asyncio.get_event_loop().run_until_complete(_run())
+        result = asyncio.run(_run())
         assert result.aims.step == "Announce+Inquire", (
             f"First vaccine introduction with trailing concern question should be "
             f"Announce+Inquire, got {result.aims.step!r}"

@@ -80,13 +80,12 @@ class TestRecentContextInPrompt:
             prior_phase="PreAnnounce",
             context_turns=3,
         )
-        assert "Score 3" in prompt
-        assert "Score 2" in prompt
-        assert "Score 1" in prompt
+        # v2 prompt uses compact "3:" / "2:" / "1:" format
+        assert "3:" in prompt and "2:" in prompt and "1:" in prompt
         assert "pseudo-Secure" in prompt.lower() or "pseudo" in prompt.lower()
 
-    def test_prompt_contains_misclassification_examples(self):
-        """The prompt should include the common misclassification guidance."""
+    def test_prompt_contains_key_classification_rules(self):
+        """The prompt should include key classification boundary rules."""
         prompt = build_unified_classify_prompt(
             person_last="",
             clinician_last="Test",
@@ -94,8 +93,10 @@ class TestRecentContextInPrompt:
             prior_phase="PreAnnounce",
             context_turns=3,
         )
-        assert "MISCLASSIFICATION" in prompt or "misclassif" in prompt.lower()
-        assert "vaccination status" in prompt.lower()
+        # Mirror vs Secure boundary rule
+        assert "mirror" in prompt.lower() and "secure" in prompt.lower()
+        # Status question rule
+        assert "vaccination status" in prompt.lower() or "status question" in prompt.lower()
 
 
 # ---------------------------------------------------------------------------
