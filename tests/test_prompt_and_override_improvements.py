@@ -315,3 +315,96 @@ class TestClosingTurnGuard:
         assert out.aims.step != "Secure", (
             f"Closing-turn guard must not fire pre-Announce, got {out.aims.step}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Check-in question exemption in the Question Guard
+# ---------------------------------------------------------------------------
+
+class TestCheckinQuestionExemption:
+
+    def test_secure_with_landing_check_stays_secure(self):
+        """A Secure turn ending with 'How does that land?' must NOT become Inquire."""
+        svc = _make_svc()
+        msg = (
+            "The vaccines we give at this age have decades of safety data. "
+            "How does that land for you?"
+        )
+        result = _result("Secure", score=3)
+        out = svc._apply_overrides(result, msg)
+        assert out.aims.step == "Secure", (
+            f"Landing check should not flip Secure, got {out.aims.step}"
+        )
+
+    def test_secure_with_accuracy_check_stays_secure(self):
+        """A Secure turn ending with 'Does that make sense?' must NOT become Inquire."""
+        svc = _make_svc()
+        msg = (
+            "The immune system handles thousands of antigens daily. "
+            "A few more from vaccines is a tiny fraction. Does that make sense?"
+        )
+        result = _result("Secure", score=2)
+        out = svc._apply_overrides(result, msg)
+        assert out.aims.step == "Secure", (
+            f"Accuracy check should not flip Secure, got {out.aims.step}"
+        )
+
+    def test_mirror_with_accuracy_check_stays_mirror(self):
+        """A Mirror turn ending with 'Have I got that right?' must NOT gain Inquire."""
+        svc = _make_svc()
+        msg = (
+            "You want to protect Sophia but you're worried this is too much "
+            "for her system all at once. Have I got that right?"
+        )
+        # Mirror isn't in the Question Guard's trigger set, but verify no inflation
+        result = _result("Mirror", score=3)
+        out = svc._apply_overrides(result, msg)
+        assert out.aims.step == "Mirror", (
+            f"Mirror accuracy check should stay Mirror, got {out.aims.step}"
+        )
+        assert "Inquire" not in out.aims.steps
+
+    def test_mirror_inquire_with_accuracy_check_deflated_to_mirror(self):
+        """Mirror+Inquire where the only question is 'Have I got that right?'
+        must be deflated to plain Mirror."""
+        svc = _make_svc()
+        msg = (
+            "You're trying to be careful and thoughtful for Sophia, and some "
+            "of the things you've read online have left you worried about "
+            "whether the vaccines could overwhelm her. Have I got that right?"
+        )
+        result = _result("Mirror+Inquire", score=3, steps=["Mirror", "Inquire"])
+        out = svc._apply_overrides(result, msg)
+        assert out.aims.step == "Mirror", (
+            f"Mirror+Inquire with accuracy check should deflate to Mirror, got {out.aims.step}"
+        )
+        assert "Inquire" not in out.aims.steps
+
+    def test_secure_inquire_with_landing_check_deflated_to_secure(self):
+        """Secure+Inquire where the only question is 'How does that sit?'
+        must be deflated to plain Secure."""
+        svc = _make_svc()
+        msg = (
+            "The vaccines we give at 2 months have been used in millions of "
+            "babies safely. The immune system can handle them easily. "
+            "How does that sit with you?"
+        )
+        result = _result("Secure+Inquire", score=2, steps=["Secure", "Inquire"])
+        out = svc._apply_overrides(result, msg)
+        assert out.aims.step == "Secure", (
+            f"Secure+Inquire with landing check should deflate to Secure, got {out.aims.step}"
+        )
+        assert "Inquire" not in out.aims.steps
+
+    def test_genuine_trailing_question_still_flipped(self):
+        """A Secure turn ending with a real concern question must still flip."""
+        svc = _make_svc()
+        msg = (
+            "Side effects are typically mild and short-lived. "
+            "What other concerns do you have?"
+        )
+        result = _result("Secure", score=2)
+        out = svc._apply_overrides(result, msg)
+        assert out.aims.step == "Inquire", (
+            f"Genuine trailing question should flip to Inquire, got {out.aims.step}"
+        )

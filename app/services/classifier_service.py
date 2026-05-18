@@ -284,6 +284,24 @@ class ClassifierService:
         "at this visit", "routine vaccines",
     ]
 
+    # Check-in / landing / accuracy-check questions that are NOT Inquire.
+    # These are part of the preceding Secure or Mirror step, not a new
+    # concern-surfacing question.  Used by the Question Guard to avoid
+    # inflating Secure/Mirror → Inquire.
+    _CHECKIN_QUESTION_PHRASES = [
+        # Secure landing checks
+        "how does that land", "how does that sit", "how does that sound",
+        "how does that feel", "does that make sense", "does that help",
+        "does that address", "does that ease", "does that change",
+        "what do you think about that", "how do you feel about that",
+        "how do you feel hearing",
+        # Mirror accuracy checks
+        "have i got that right", "did i get that right",
+        "did i capture that", "am i understanding", "am i getting that right",
+        "am i reading that right", "is that right", "is that fair",
+        "is that what you mean", "does that resonate",
+    ]
+
     # Closing-turn cues: detect wrapping-up turns that the LLM misclassifies
     # as Inquire because of proposal-style question phrasing ("Why don't we
     # book a follow-up?").  A message offering literature + follow-up +
@@ -386,33 +404,49 @@ class ClassifierService:
         # Skip when strong Announce language is present OR when vaccine content is
         # detected (any message about specific vaccines is an Announce, regardless
         # of whether it matches the _ANNOUNCE_MARKERS keyword list exactly).
+        # Also skip when the trailing question is a check-in or accuracy check
+        # ("How does that land?", "Have I got that right?") — these are part of
+        # the Secure or Mirror step, not concern-surfacing Inquire.
         if msg.endswith("?") and (result.aims.step in {"Announce", "Secure"} or "Announce" in result.aims.steps or "Secure" in result.aims.steps):
-            # _SOFT_ANNOUNCE_RE only overrides the guard for multi-sentence messages
-            # where vaccine content appears in an introductory body before the question.
-            # A single-sentence question like "How are you feeling about today's vaccines?"
-            # should still be flipped to Inquire; it is not a vaccine introduction.
-            #
-            # The multi-sentence+vaccine-content bypass is restricted to Announce-phase
-            # steps.  For Secure turns ending in '?' (e.g. education + "How does that
-            # sit with you?"), the trailing question IS a genuine Inquire component and
-            # should not be suppressed.
-            _msg_body = msg.rstrip("?").rstrip()
-            _is_multi_sentence = bool(re.search(r'[.!\n]', _msg_body))
-            _step_is_announce = result.aims.step == "Announce" or "Announce" in result.aims.steps
-            has_announce_language = (
-                any(m in msg_lower for m in self._ANNOUNCE_MARKERS)
-                or (_is_multi_sentence and _step_is_announce and bool(self._SOFT_ANNOUNCE_RE.search(msg)))
-            )
-            if not has_announce_language:
-                # If it doesn't have announce markers but was called Announce/Secure and ends in ?, 
-                # ensure Inquire is present.
-                if result.aims.step in {"Announce", "Secure"}:
-                    result.aims.step = "Inquire"
-                if "Inquire" not in result.aims.steps:
-                    result.aims.steps.append("Inquire")
-                
-                if result.aims.score is not None:
-                    result.aims.score = min(2, result.aims.score)
+            # Check-in exemption: if the trailing question is a landing/accuracy
+            # check, it is NOT Inquire — skip the guard entirely.
+            _is_checkin = any(phrase in msg_lower for phrase in self._CHECKIN_QUESTION_PHRASES)
+            if _is_checkin:
+                pass  # Leave step as-is; the question is part of Secure/Mirror
+            else:
+                # _SOFT_ANNOUNCE_RE only overrides the guard for multi-sentence messages
+                # where vaccine content appears in an introductory body before the question.
+                # A single-sentence question like "How are you feeling about today's vaccines?"
+                # should still be flipped to Inquire; it is not a vaccine introduction.
+                _msg_body = msg.rstrip("?").rstrip()
+                _is_multi_sentence = bool(re.search(r'[.!\n]', _msg_body))
+                _step_is_announce = result.aims.step == "Announce" or "Announce" in result.aims.steps
+                has_announce_language = (
+                    any(m in msg_lower for m in self._ANNOUNCE_MARKERS)
+                    or (_is_multi_sentence and _step_is_announce and bool(self._SOFT_ANNOUNCE_RE.search(msg)))
+                )
+                if not has_announce_language:
+                    # If it doesn't have announce markers but was called Announce/Secure and ends in ?, 
+                    # ensure Inquire is present.
+                    if result.aims.step in {"Announce", "Secure"}:
+                        result.aims.step = "Inquire"
+                    if "Inquire" not in result.aims.steps:
+                        result.aims.steps.append("Inquire")
+                    
+                    if result.aims.score is not None:
+                        result.aims.score = min(2, result.aims.score)
+
+        # Check-in deflation: if the LLM returned a compound step with
+        # Inquire (e.g. Mirror+Inquire, Secure+Inquire) but the only question
+        # is a check-in/accuracy check, strip the Inquire component.
+        # This catches cases the Question Guard can't — the guard only fires
+        # for Announce/Secure, but the LLM can return Mirror+Inquire directly.
+        if "Inquire" in (result.aims.steps or []) and len(result.aims.steps) > 1:
+            if any(phrase in msg_lower for phrase in self._CHECKIN_QUESTION_PHRASES):
+                clean_steps = [s for s in result.aims.steps if s != "Inquire"]
+                if clean_steps:
+                    result.aims.steps = clean_steps
+                    result.aims.step = clean_steps[0] if len(clean_steps) == 1 else result.aims.step.replace("+Inquire", "")
 
         # Closing-turn override: must be AFTER Question Guard so it is not
         # undone.  A message the LLM labelled Inquire that wraps up the visit

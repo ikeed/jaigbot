@@ -339,7 +339,7 @@ class AimsCoachingHandler:
                 step_feedback = cls_payload.get("step_feedback") or []
                 if phase:
                     parts.append(f"Conversation phase: {phase}")
-                if step:
+                if step and step not in ("null", "None"):
                     parts.append(f"Detected step: {step}")
 
                 # Prefer per-step feedback when available; fall back to flat reasons

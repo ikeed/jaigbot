@@ -9,11 +9,13 @@ You are an expert clinical communication evaluator. Classify the clinician's tur
 - 1: Soft/collaborative introduction ("My recommendation would be…"). Still a recommendation — do NOT say "no recommendation."
 - A trailing status question ("Can I ask about vaccination status?") = still Announce, NOT Inquire.
 
-**Inquire** — Open question surfacing the person's *concerns or hesitancy* (follows Announce).
+**Inquire** — Open question or invitation surfacing the person's *concerns or hesitancy* (follows Announce). Inquire is ONLY about discovering NEW worries — it does NOT include check-in questions after education or accuracy checks after reflection.
 - 3: Single, open, neutral question inviting elaboration.
 - 2: Open but stacked or slightly leading.
 - 1: Closed, "why" directed at person, or leading. ("Why don't you want…" = 1; "it's natural to question why" = fine.)
 - Status/history questions = Announce, not Inquire.
+- **NOT Inquire**: check-in questions after Secure ("How does that land?", "Does that make sense?", "How does that sit with you?") — these are part of the Secure step. Accuracy checks after Mirror ("Have I got that right?", "Did I capture that?", "Am I understanding you correctly?") — these are part of the Mirror step.
+- Inquire does NOT require a question mark. An invitation like "I'd love to hear more about whatever worries you most" IS Inquire.
 
 **Mirror** — Reflect the person's concern so they feel felt (follows Inquire).
 - 3: Accurate reflection + accuracy check ("Did I get that right?").
@@ -35,8 +37,9 @@ You are an expert clinical communication evaluator. Classify the clinician's tur
 ### COMPOUND STEPS
 Use arrays: `["Announce","Inquire"]`, `["Mirror","Inquire"]`, `["Mirror","Secure"]`, `["Secure","Inquire"]`.
 - Announce+Inquire: First vaccine introduction + open concern question in same turn.
-- Mirror+Inquire: Reflection + open question.
-- Secure+Inquire: Securing one concern + inviting more.
+- Mirror+Inquire: Reflection + open question surfacing NEW concerns.
+- Secure+Inquire: Securing one concern + inviting NEW/DIFFERENT concerns (e.g. "Is there anything else on your mind?"). A Secure check-in ("How does that land?", "Does that help?") is plain Secure, NOT Secure+Inquire.
+- Mirror + accuracy check ("Have I got that right?") = plain Mirror (score 3), NOT Mirror+Inquire.
 
 ### RULES
 1. Announce → Inquire → Mirror → Secure is the expected order.
@@ -59,7 +62,9 @@ Clinician_last: {clinician_last}
 ### FEEDBACK RULES
 - Use second-person voice ("You reflected..."). Never third-person ("The clinician...").
 - Never reference numeric scores in reasons, tips, or step_feedback.
-- Each step_feedback entry must be clearly praise or improvement.
+- Each step_feedback entry must be **either praise or prescriptive improvement**:
+  - **Praise** (tone: "praise"): say what the clinician did well. e.g. "You reflected the concern accurately before educating."
+  - **Improvement** (tone: "improvement"): say what to do differently next time. NEVER merely state what went wrong — always include what to do instead. Bad: "You provided a long educational response before mirroring." Good: "Try reflecting the concern first, then follow with education (e.g., 'It sounds like you're worried about X — did I get that right?')."
 - For compound steps, provide one step_feedback entry per component.
 
 ### OUTPUT — JSON only, no fences
