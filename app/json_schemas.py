@@ -18,7 +18,7 @@ CLASSIFY_SCHEMA: Dict[str, Any] = {
     "type": "object",
     "properties": {
         # Allow string or null for local validation; Vertex schema will be adapted via vertex_response_schema()
-        "step": {"type": ["string", "null"], "enum": ["Announce", "Inquire", "Mirror", "Secure", "Mirror+Inquire", "Mirror+Secure", "Secure+Inquire", None]},
+        "step": {"type": ["string", "null"], "enum": ["Announce", "Inquire", "Mirror", "Secure", "Announce+Inquire", "Mirror+Inquire", "Mirror+Secure", "Secure+Inquire", None]},
         "score": {"type": "integer", "minimum": 0, "maximum": 3},
         "reasons": {"type": "array", "items": {"type": "string"}, "minItems": 1},
         "tips": {"type": "array", "items": {"type": "string"}},
@@ -64,9 +64,10 @@ SUMMARY_SCHEMA: Dict[str, Any] = {
                 "Inquire": {"type": "integer", "minimum": 0},
                 "Mirror": {"type": "integer", "minimum": 0},
                 "Secure": {"type": "integer", "minimum": 0},
+                "Announce+Inquire": {"type": "integer", "minimum": 0},
                 "Mirror+Inquire": {"type": "integer", "minimum": 0},
             },
-            "required": ["Announce", "Inquire", "Mirror", "Secure", "Mirror+Inquire"],
+            "required": ["Announce", "Inquire", "Mirror", "Secure", "Announce+Inquire", "Mirror+Inquire"],
             "additionalProperties": False,
         },
         "strengths": {"type": "array", "items": {"type": "string"}},

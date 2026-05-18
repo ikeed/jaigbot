@@ -88,10 +88,13 @@ class ClassifierService:
                 # Normalize steps array into single step string for legacy support
                 if len(steps) == 1:
                     step = steps[0]
+                elif "Announce" in steps and "Inquire" in steps and not prior_announced:
+                    # First vaccine introduction + open concern-surfacing question
+                    # in the same turn → compound Announce+Inquire.
+                    step = "Announce+Inquire"
                 elif "Announce" in steps and not prior_announced:
                     # First vaccine introduction: Announce dominates any other steps
-                    # the LLM detected in the same turn (e.g. ["Announce","Inquire"]).
-                    # The trailing question is the dialogue invite, not a separate Inquire.
+                    # the LLM detected in the same turn.
                     step = "Announce"
                 elif "Mirror" in steps and "Secure" in steps and "Inquire" not in steps:
                     step = "Mirror+Secure"
@@ -221,6 +224,9 @@ class ClassifierService:
         "not pushed", "continue talking", "revisit any concerns",
         "you can decide", "how you want to proceed", "whatever you choose",
         "your decision to make", "entirely up to you",
+        # Naturalistic autonomy phrasing
+        "without pressure", "no pressure", "don't have to",
+        "take your time", "not to corner", "isn't to corner",
     ]
 
     # Strong presumptive recommendation phrases that always indicate Announce,
@@ -323,11 +329,17 @@ class ClassifierService:
             # where vaccine content appears in an introductory body before the question.
             # A single-sentence question like "How are you feeling about today's vaccines?"
             # should still be flipped to Inquire; it is not a vaccine introduction.
+            #
+            # The multi-sentence+vaccine-content bypass is restricted to Announce-phase
+            # steps.  For Secure turns ending in '?' (e.g. education + "How does that
+            # sit with you?"), the trailing question IS a genuine Inquire component and
+            # should not be suppressed.
             _msg_body = msg.rstrip("?").rstrip()
             _is_multi_sentence = bool(re.search(r'[.!\n]', _msg_body))
+            _step_is_announce = result.aims.step == "Announce" or "Announce" in result.aims.steps
             has_announce_language = (
                 any(m in msg_lower for m in self._ANNOUNCE_MARKERS)
-                or (_is_multi_sentence and bool(self._SOFT_ANNOUNCE_RE.search(msg)))
+                or (_is_multi_sentence and _step_is_announce and bool(self._SOFT_ANNOUNCE_RE.search(msg)))
             )
             if not has_announce_language:
                 # If it doesn't have announce markers but was called Announce/Secure and ends in ?, 

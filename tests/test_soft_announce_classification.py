@@ -341,14 +341,13 @@ class TestSoftAnnounceDetector:
 
 class TestAnnounceInquireNormalization:
 
-    def test_announce_dominates_inquire_pre_announcement(self):
-        """When LLM returns ['Announce','Inquire'] before announcement, Announce wins.
+    def test_announce_inquire_compound_pre_announcement(self):
+        """When LLM returns ['Announce','Inquire'] before announcement, Announce+Inquire produced.
 
-        Regression: the LLM correctly detects both steps for a first-time vaccine
-        introduction ending with a concern-eliciting question, but the old priority
-        dict gave Inquire(1) > Announce(0), so Inquire was selected and the
-        Question Guard then couldn't recover it because 'about the vaccines'
-        doesn't match the keyword 'about vaccines'.
+        The LLM correctly detects both steps for a first-time vaccine
+        introduction ending with a concern-eliciting question. The system
+        now produces the compound 'Announce+Inquire' step to credit both
+        the vaccine introduction and the concern-surfacing question.
         """
         import asyncio
         import unittest.mock as mock
@@ -393,9 +392,9 @@ class TestAnnounceInquireNormalization:
                 )
 
         result = asyncio.get_event_loop().run_until_complete(_run())
-        assert result.aims.step == "Announce", (
-            f"First vaccine introduction with trailing question should be Announce, "
-            f"got {result.aims.step!r}"
+        assert result.aims.step == "Announce+Inquire", (
+            f"First vaccine introduction with trailing concern question should be "
+            f"Announce+Inquire, got {result.aims.step!r}"
         )
 
     def test_question_guard_respects_vaccine_content(self):

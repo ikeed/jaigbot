@@ -41,7 +41,7 @@ class VaccineRelevanceGate:
         "decision",
     ]
 
-    VALID_STEPS = {"Announce", "Inquire", "Mirror", "Secure", "Mirror+Inquire", "Mirror+Secure", "Secure+Inquire"}
+    VALID_STEPS = {"Announce", "Inquire", "Mirror", "Secure", "Announce+Inquire", "Mirror+Inquire", "Mirror+Secure", "Secure+Inquire"}
 
     @staticmethod
     def gate(
@@ -121,7 +121,7 @@ class AimsPostProcessor:
     @staticmethod
     def normalize_score(cls_payload: Dict) -> Dict:
         if (
-            cls_payload.get("step") in {"Announce", "Inquire", "Mirror", "Secure", "Mirror+Inquire", "Mirror+Secure", "Secure+Inquire"}
+            cls_payload.get("step") in {"Announce", "Inquire", "Mirror", "Secure", "Announce+Inquire", "Mirror+Inquire", "Mirror+Secure", "Secure+Inquire"}
             and int(cls_payload.get("score", 0)) < 1
         ):
             cls_payload = dict(cls_payload)

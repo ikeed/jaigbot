@@ -356,8 +356,11 @@ class AimsCoachingHandler:
                     parts.append(f"Tip: {tips_to_show[0]}")
                 coach_text = " | ".join(parts)
                 if coach_text:
-                    mem.setdefault("history", []).append({"role": "coach", "content": coach_text})
-                    mem["updated"] = time.time()
+                    now = time.time()
+                    coach_entry = {"role": "coach", "content": coach_text}
+                    mem.setdefault("history", []).append(coach_entry)
+                    mem.setdefault("full_history", []).append({**coach_entry, "time": now})
+                    mem["updated"] = now
                     self.memory_store[ctx.session_id] = mem
         except Exception:
             pass
@@ -602,7 +605,7 @@ class AimsCoachingHandler:
         lt = (clinician_message or "").lower()
 
         # --- Rule 1: Announce only happens once ---
-        if step == "Announce" and prior_announced:
+        if step in ("Announce", "Announce+Inquire") and prior_announced:
             has_mirror = any(s in lt for s in self._MIRROR_STEMS_FOR_GUARD)
             has_question = lt.rstrip().endswith("?")
 
@@ -629,7 +632,7 @@ class AimsCoachingHandler:
         # stays "PreAnnounce" until Inquire is detected, so we must also check
         # prior_announced to avoid reclassifying a legitimate Mirror/Mirror+Inquire
         # back to a second Announce.
-        if prior_phase == "PreAnnounce" and not prior_announced and step in ("Secure", "Mirror", "Mirror+Inquire", "Mirror+Secure", "Secure+Inquire"):
+        if prior_phase == "PreAnnounce" and not prior_announced and step in ("Secure", "Mirror", "Mirror+Inquire", "Mirror+Secure", "Secure+Inquire", "Announce+Inquire"):
             if self._VACCINE_CONTENT_RE.search(clinician_message or ""):
                 cls_payload["step"] = "Announce"
                 cls_payload["reasons"] = [
@@ -716,6 +719,27 @@ class AimsCoachingHandler:
             # warning — the Mirror component handles it. Simply mark secured.
             mark_secured_by_topic(state, clinician_message, self._TOPICAL_CUES)
         elif step_current == "Secure":
+            # Priority check: if no Inquire has ever occurred, the deeper issue is
+            # "Securing before inquiring" — the clinician is educating/reassuring
+            # before eliciting the person's actual concerns.
+            first_inquire_done = state.get("first_inquire_done", False)
+            if not first_inquire_done:
+                reason = "Securing before inquiring — try an open question first to understand the person's concerns before educating"
+                tip = "Ask what's on their mind (e.g., 'What are your thoughts about the vaccines we discussed?') before offering reassurance."
+                cls_payload["reasons"] = [reason] + (cls_payload.get("reasons") or [])
+                cls_payload.setdefault("tips", []).append(tip)
+                try:
+                    cls_payload["score"] = min(2, int(cls_payload.get("score", 2)))
+                except Exception:
+                    cls_payload["score"] = 2
+                # Track for de-duplication using existing mechanism
+                recent = state.get("recent_coaching") or []
+                recent.append("secure_before_inquire")
+                state["recent_coaching"] = recent[-3:]
+            else:
+                # Fall through to existing "secure before mirroring" check
+                pass
+
             needs_mirror = any(not c.get("is_mirrored") for c in (state.get("parent_concerns") or []))
             # Suppress the warning if Mirror turns have already been detected in this session.
             # Keyword matching sometimes fails to update is_mirrored even when genuine
@@ -723,7 +747,8 @@ class AimsCoachingHandler:
             mirrors_done = state.get("mirrors_done", 0)
             if needs_mirror and mirrors_done > 0:
                 needs_mirror = False  # mirroring happened — suppress the warning
-            if needs_mirror:
+            # Don't stack "secure before mirroring" on top of "secure before inquiring"
+            if needs_mirror and first_inquire_done:
                 # De-duplicate: check how many times the "secure before mirror"
                 # feedback has been given recently and escalate accordingly.
                 recent = state.get("recent_coaching") or []
@@ -799,9 +824,9 @@ class AimsCoachingHandler:
         if "Mirror" in all_steps or step_current in ("Mirror", "Mirror+Inquire", "Mirror+Secure"):
             state["mirrors_done"] = state.get("mirrors_done", 0) + 1
 
-        # Inquire / Mirror+Inquire / Secure+Inquire always sets phase to InquireMirror,
+        # Inquire / Announce+Inquire / Mirror+Inquire / Secure+Inquire always sets phase to InquireMirror,
         # even from Secure — AIMS is cyclical, not a one-way state machine.
-        if step_current in ("Inquire", "Mirror+Inquire", "Secure+Inquire") or "Inquire" in all_steps:
+        if step_current in ("Inquire", "Announce+Inquire", "Mirror+Inquire", "Secure+Inquire") or "Inquire" in all_steps:
             state["first_inquire_done"] = True
             state["phase"] = "InquireMirror"
         elif step_current == "Mirror+Secure":
@@ -843,8 +868,8 @@ class AimsCoachingHandler:
                 "history": [], "character": None, "scene": None, "updated": time.time()
             }
             aims = mem.setdefault("aims", {
-                "perStepCounts": {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0, "Mirror+Inquire": 0, "Mirror+Secure": 0, "Secure+Inquire": 0},
-                "scores": {"Announce": [], "Inquire": [], "Mirror": [], "Secure": [], "Mirror+Inquire": [], "Mirror+Secure": [], "Secure+Inquire": []},
+                "perStepCounts": {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0, "Announce+Inquire": 0, "Mirror+Inquire": 0, "Mirror+Secure": 0, "Secure+Inquire": 0},
+                "scores": {"Announce": [], "Inquire": [], "Mirror": [], "Secure": [], "Announce+Inquire": [], "Mirror+Inquire": [], "Mirror+Secure": [], "Secure+Inquire": []},
                 "totalTurns": 0
             })
             
@@ -852,12 +877,19 @@ class AimsCoachingHandler:
             # Always count the turn; only score/count recognized AIMS steps
             aims["totalTurns"] = int(aims.get("totalTurns", 0)) + 1
             
-            if step in {"Announce", "Inquire", "Mirror", "Secure", "Mirror+Inquire", "Mirror+Secure", "Secure+Inquire"}:
+            if step in {"Announce", "Inquire", "Mirror", "Secure", "Announce+Inquire", "Mirror+Inquire", "Mirror+Secure", "Secure+Inquire"}:
                 score_val = int(cls_payload.get("score", 2))
                 aims["perStepCounts"][step] = aims["perStepCounts"].get(step, 0) + 1
                 aims["scores"].setdefault(step, []).append(score_val)
                 
-                if step == "Mirror+Inquire":
+                if step == "Announce+Inquire":
+                    # Expand into Announce and Inquire so individual step coverage metrics work
+                    aims["perStepCounts"]["Announce"] = aims["perStepCounts"].get("Announce", 0) + 1
+                    aims["perStepCounts"]["Inquire"] = aims["perStepCounts"].get("Inquire", 0) + 1
+                    aims["scores"].setdefault("Announce", []).append(score_val)
+                    aims["scores"].setdefault("Inquire", []).append(score_val)
+
+                elif step == "Mirror+Inquire":
                     # Also expand into Mirror and Inquire for underlying coverage metrics
                     # so that we don't break logic expecting individual counts
                     aims["perStepCounts"]["Mirror"] = aims["perStepCounts"].get("Mirror", 0) + 1
@@ -1003,18 +1035,22 @@ class AimsCoachingHandler:
             return
         
         try:
+            now = time.time()
             mem = self.memory_store.get(session_id) or {
-                "history": [], "character": None, "scene": None, "updated": time.time()
+                "history": [], "full_history": [], "character": None, "scene": None, "updated": now
             }
-            mem.setdefault("history", []).append({"role": "user", "content": user_message})
-            mem["history"].append({"role": "assistant", "content": assistant_reply})
+            user_entry = {"role": "user", "content": user_message}
+            asst_entry = {"role": "assistant", "content": assistant_reply}
+            mem.setdefault("history", []).append(user_entry)
+            mem["history"].append(asst_entry)
+            mem.setdefault("full_history", []).append({**user_entry, "time": now})
+            mem["full_history"].append({**asst_entry, "time": now})
             
-            # Trim to last N pairs
-            max_items = self.memory_max_turns * 2
-            if len(mem["history"]) > max_items:
-                mem["history"] = mem["history"][-max_items:]
+            # Trim working history (coach-aware)
+            from app.services.session_service import SessionService
+            mem["history"] = SessionService._trim_history(mem["history"], self.memory_max_turns)
             
-            mem["updated"] = time.time()
+            mem["updated"] = now
             self.memory_store[session_id] = mem
             
         except Exception:
@@ -1027,7 +1063,7 @@ class AimsCoachingHandler:
         
         try:
             aims = (self.memory_store.get(session_id) or {}).get("aims") or {}
-            counts = {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0, "Mirror+Inquire": 0, "Mirror+Secure": 0, "Secure+Inquire": 0}
+            counts = {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0, "Announce+Inquire": 0, "Mirror+Inquire": 0, "Mirror+Secure": 0, "Secure+Inquire": 0}
             counts.update(aims.get("perStepCounts", {}))
             
             # Prefer precomputed runningAverage if available
