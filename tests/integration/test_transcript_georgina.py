@@ -243,7 +243,7 @@ class TranscriptStub:
 
     async def generate_text_async(self, prompt, **kwargs):
         prompt_lower = (prompt or "").lower()
-        if "unified" in prompt_lower:
+        if "classify" in prompt_lower or "unified" in prompt_lower:
             idx = min(TranscriptStub._classify_idx, len(TranscriptStub._turns) - 1)
             TranscriptStub._classify_idx += 1
             return json.dumps(TranscriptStub._turns[idx]["classify"])

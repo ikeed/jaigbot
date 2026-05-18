@@ -76,9 +76,7 @@ SESSION_COOKIE_MAX_AGE = settings.SESSION_COOKIE_MAX_AGE
 MEMORY_BACKEND = settings.MEMORY_BACKEND
 AIMS_COACHING_ENABLED = settings.AIMS_COACHING_ENABLED
 
-from .vertex import VertexClient, VertexAIError
-
-app = FastAPI(title="AIMSBot (Vertex AI)", version="0.1.0")
+app = FastAPI(title="AIMSBot (Gemini Enterprise)", version="0.2.0")
 
 # Optional CORS
 if settings.ALLOWED_ORIGINS:

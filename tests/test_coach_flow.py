@@ -67,7 +67,7 @@ def test_coach_path_with_fallback(monkeypatch, caplog):
             pass
         
         async def generate_text_async(self, prompt: str, **kwargs) -> str:
-            if "unified" in (prompt or "").lower():
+            if "unified" in (prompt or "").lower() or "classify" in (prompt or "").lower():
                 # ClassifierService's unified prompt
                 payload = {
                     "is_small_talk": False,
@@ -112,7 +112,7 @@ def test_coach_path_jailbreak_intercept(monkeypatch):
             pass
         
         async def generate_text_async(self, prompt: str, **kwargs) -> str:
-            if "unified" in (prompt or "").lower():
+            if "unified" in (prompt or "").lower() or "classify" in (prompt or "").lower():
                 # ClassifierService's unified prompt
                 payload = {
                     "is_small_talk": False,
@@ -201,7 +201,7 @@ def test_summary_endpoint(monkeypatch):
             pass
         
         async def generate_text_async(self, prompt: str, **kwargs) -> str:
-            if "unified" in (prompt or "").lower():
+            if "unified" in (prompt or "").lower() or "classify" in (prompt or "").lower():
                 # ClassifierService's unified prompt
                 payload = {
                     "is_small_talk": False,
