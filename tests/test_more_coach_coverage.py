@@ -30,7 +30,7 @@ class GWStub:
         pass
 
     async def generate_text_async(self, prompt: str, **kwargs) -> str:
-        if "unified" in (prompt or "").lower():
+        if "unified" in (prompt or "").lower() or "classify" in (prompt or "").lower():
             # ClassifierService's unified prompt
             aims_payload = GWStub.classify_payload or {"step": "None", "score": 2, "reasons": ["det"], "tips": []}
             payload = {
@@ -98,7 +98,7 @@ def test_secure_before_mirror_adds_reason_tip_and_caps_score(monkeypatch):
     # Score capped and reason/tip injected
     assert data["coaching"]["score"] <= 2
     reasons = " ".join(data["coaching"]["reasons"]).lower()
-    assert "securing before mirroring" in reasons
+    assert "reflecting" in reasons or "mirroring" in reasons
     assert any("before educating" in t.lower() for t in data["coaching"]["tips"])
 
 

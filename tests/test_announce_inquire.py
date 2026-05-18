@@ -238,7 +238,7 @@ class TestSecuringBeforeInquiringCoaching:
             character=None,
         )
 
-        assert any("Securing before inquiring" in r for r in cls_payload["reasons"])
+        assert any("reassurance before asking" in r.lower() or "open question first" in r.lower() for r in cls_payload["reasons"])
         assert cls_payload["score"] <= 2
         assert any("open question" in t.lower() or "thoughts" in t.lower() for t in cls_payload["tips"])
 
@@ -274,7 +274,7 @@ class TestSecuringBeforeInquiringCoaching:
             character=None,
         )
 
-        assert not any("Securing before inquiring" in r for r in cls_payload["reasons"])
+        assert not any("reassurance before asking" in r.lower() for r in cls_payload["reasons"])
 
 
 # ---------------------------------------------------------------------------

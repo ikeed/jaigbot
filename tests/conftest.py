@@ -153,8 +153,10 @@ def vertex_client_mock(monkeypatch):
             self.model_id = kwargs.get("model_id")
 
         async def generate_text_async(self, prompt: str, **kwargs) -> str:
-            # 1. Unified classification path
-            if "unified" in (prompt or "").lower() or "classifier" in (prompt or "").lower():
+            # Also check system_instruction for classification detection
+            sys_instr = (kwargs.get("system_instruction") or "").lower()
+            # 1. Classification path (unified prompt or system-instruction-based)
+            if "unified" in (prompt or "").lower() or "classify" in (prompt or "").lower() or "aims framework" in sys_instr:
                 payload = {
                     "is_small_talk": False,
                     "is_vaccine_relevant": True,

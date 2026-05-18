@@ -335,15 +335,26 @@ class AimsCoachingHandler:
                 phase = cls_payload.get("phase")
                 reasons = cls_payload.get("reasons") or []
                 tips = cls_payload.get("tips") or []
+                step_feedback = cls_payload.get("step_feedback") or []
                 if phase:
                     parts.append(f"Conversation phase: {phase}")
                 if step:
                     parts.append(f"Detected step: {step}")
-                # Show the first user-facing reason as feedback, skipping
-                # internal classifier/guard reasons that aren't helpful.
-                feedback = self._first_user_facing_reason(reasons, step=step)
-                if feedback:
-                    parts.append(f"Feedback: {feedback}")
+
+                # Prefer per-step feedback when available; fall back to flat reasons
+                if step_feedback:
+                    for sf in step_feedback:
+                        tone_icon = "\u2713" if sf.get("tone") == "praise" else "\u2192"
+                        sf_step = sf.get("step", "")
+                        sf_text = sf.get("feedback", "")
+                        if sf_text:
+                            parts.append(f"{sf_step}: {tone_icon} {sf_text}")
+                else:
+                    # Legacy fallback: show the first user-facing reason as feedback
+                    feedback = self._first_user_facing_reason(reasons, step=step)
+                    if feedback:
+                        parts.append(f"Feedback: {feedback}")
+
                 # Suppress tips that suggest Announce when Announce has already been done.
                 # The LLM occasionally generates these for null-step turns.
                 aims_state_now = mem.get("aims_state") or {}
@@ -352,7 +363,8 @@ class AimsCoachingHandler:
                     t for t in tips
                     if not (already_announced and "announce" in (t or "").lower())
                 ]
-                if tips_to_show:
+                # Only show tips when there's no per-step feedback (avoid redundancy)
+                if tips_to_show and not step_feedback:
                     parts.append(f"Tip: {tips_to_show[0]}")
                 coach_text = " | ".join(parts)
                 if coach_text:
@@ -436,6 +448,10 @@ class AimsCoachingHandler:
                     step=cls_payload.get("step"),
                 ),
                 "tips": cls_payload.get("tips", []),
+                "step_feedback": [
+                    sf if isinstance(sf, dict) else sf.dict()
+                    for sf in (cls_payload.get("step_feedback") or [])
+                ],
                 "phase": cls_payload.get("phase"),
             },
             "session": session_obj,
@@ -724,7 +740,7 @@ class AimsCoachingHandler:
             # before eliciting the person's actual concerns.
             first_inquire_done = state.get("first_inquire_done", False)
             if not first_inquire_done:
-                reason = "Securing before inquiring — try an open question first to understand the person's concerns before educating"
+                reason = "You moved into reassurance before asking about their concerns — try an open question first"
                 tip = "Ask what's on their mind (e.g., 'What are your thoughts about the vaccines we discussed?') before offering reassurance."
                 cls_payload["reasons"] = [reason] + (cls_payload.get("reasons") or [])
                 cls_payload.setdefault("tips", []).append(tip)
@@ -768,15 +784,15 @@ class AimsCoachingHandler:
                 if repeat_count == 0:
                     # First time: standard feedback, persona-adapted
                     if trust_style == "analytical":
-                        reason = "Securing before mirroring — validate their reasoning before educating; analytical patients feel heard when their logic is acknowledged"
+                        reason = "You're educating before reflecting — try validating their reasoning first; this person values having their logic acknowledged"
                         tip = "Reflect the reasoning (e.g., 'You want to weigh absolute vs. relative risk individually — did I capture that right?')."
                     else:
-                        reason = "Securing before mirroring — allowed, but mirror first so the person feels heard"
+                        reason = "You moved into education before reflecting the concern — try mirroring first so they feel heard"
                         tip = "Before educating, briefly reflect the concern (e.g., 'It feels like a lot at once — did I get that right?')."
                 elif repeat_count == 1:
                     # Second time: add specificity about which concern
                     topic_hint = f" ('{first_unmirrored}')" if first_unmirrored else ""
-                    reason = f"Still securing without mirroring — the concern{topic_hint} hasn't been reflected yet"
+                    reason = f"You're still educating without reflecting — the concern{topic_hint} hasn't been mirrored yet"
                     tip = f"Try reflecting the specific concern{topic_hint} before more education."
                 else:
                     # Third+ time: escalate to pattern-level observation
@@ -853,10 +869,28 @@ class AimsCoachingHandler:
             all_mirrored = all(c.get("is_mirrored") for c in pc) if pc else True
             if all_mirrored:
                 state["phase"] = "Secure"
-            # pending_concerns becomes False if all concerns are secured
-            state["pending_concerns"] = not all(
-                c.get("is_mirrored") and c.get("is_secured") for c in pc
-            ) if pc else False
+
+        # --- Global reconciliation ---
+        # Recompute pending_concerns from the actual concern list on EVERY
+        # transition, not just Secure/Mirror+Secure.  This prevents stale
+        # pending_concerns=True when all concerns have been resolved via
+        # transitions that previously skipped this check (plain Mirror,
+        # Inquire, etc.).
+        pc = state.get("parent_concerns") or []
+        all_resolved = (
+            all(c.get("is_mirrored") and c.get("is_secured") for c in pc)
+            if pc else True
+        )
+        state["pending_concerns"] = not all_resolved
+
+        # If all concerns are fully resolved and the AIMS sequence has
+        # progressed past Announce+Inquire, ensure phase reflects Secure
+        # regardless of which step triggered the transition.
+        # Only fires when there are actual tracked concerns (pc is non-empty);
+        # with no concerns, the step-specific cyclical logic governs phase
+        # (Mirror/Inquire cycle back to InquireMirror as AIMS intends).
+        if all_resolved and pc and state.get("announced") and state.get("first_inquire_done"):
+            state["phase"] = "Secure"
     
     async def _persist_aims_metrics(self, session_id: str, cls_payload: Dict[str, Any]) -> None:
         """Persist AIMS metrics for session analytics."""

@@ -30,7 +30,7 @@ class GWStub2:
         pass
 
     async def generate_text_async(self, prompt: str, **kwargs) -> str:
-        if "unified" in (prompt or "").lower():
+        if "unified" in (prompt or "").lower() or "classify" in (prompt or "").lower():
             # ClassifierService's unified prompt
             aims_payload = GWStub2.classify_payload or {"step": "None", "score": 2, "reasons": ["det"], "tips": []}
             payload = {
