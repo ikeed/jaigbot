@@ -302,6 +302,28 @@ class ClassifierService:
         "is that what you mean", "does that resonate",
     ]
 
+    # Regex patterns for check-in questions with intervening words.
+    # These catch natural variants like "How does that way of looking at it
+    # land for you?" that exact substring matching misses.
+    _CHECKIN_QUESTION_REGEXES = [
+        re.compile(r"\bhow does (?:that|this|the \w+) .{0,50}\b(land|sit|sound|feel)\b"),
+        re.compile(r"\bhow (?:are|were) you (?:feeling|doing)\b"),
+        re.compile(r"\bdoes (?:that|this|the \w+) .{0,30}\b(help|address|ease|change)\b"),
+        re.compile(r"\bwhat do you think (?:about|of) (?:that|this|the )\b"),
+        re.compile(r"\bhow do you feel (?:about|hearing)\b"),
+    ]
+
+    @classmethod
+    def _is_checkin_question(cls, msg_lower: str) -> bool:
+        """Detect check-in/landing/accuracy-check questions.
+
+        Uses both exact substring matching (for common phrases) and regex
+        patterns (for natural variants with intervening words).
+        """
+        if any(phrase in msg_lower for phrase in cls._CHECKIN_QUESTION_PHRASES):
+            return True
+        return any(rx.search(msg_lower) for rx in cls._CHECKIN_QUESTION_REGEXES)
+
     # Closing-turn cues: detect wrapping-up turns that the LLM misclassifies
     # as Inquire because of proposal-style question phrasing ("Why don't we
     # book a follow-up?").  A message offering literature + follow-up +
@@ -410,7 +432,7 @@ class ClassifierService:
         if msg.endswith("?") and (result.aims.step in {"Announce", "Secure"} or "Announce" in result.aims.steps or "Secure" in result.aims.steps):
             # Check-in exemption: if the trailing question is a landing/accuracy
             # check, it is NOT Inquire — skip the guard entirely.
-            _is_checkin = any(phrase in msg_lower for phrase in self._CHECKIN_QUESTION_PHRASES)
+            _is_checkin = self._is_checkin_question(msg_lower)
             if _is_checkin:
                 pass  # Leave step as-is; the question is part of Secure/Mirror
             else:
@@ -442,7 +464,7 @@ class ClassifierService:
         # This catches cases the Question Guard can't — the guard only fires
         # for Announce/Secure, but the LLM can return Mirror+Inquire directly.
         if "Inquire" in (result.aims.steps or []) and len(result.aims.steps) > 1:
-            if any(phrase in msg_lower for phrase in self._CHECKIN_QUESTION_PHRASES):
+            if self._is_checkin_question(msg_lower):
                 clean_steps = [s for s in result.aims.steps if s != "Inquire"]
                 if clean_steps:
                     result.aims.steps = clean_steps

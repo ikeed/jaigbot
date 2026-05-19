@@ -649,7 +649,7 @@ class AimsCoachingHandler:
         # stays "PreAnnounce" until Inquire is detected, so we must also check
         # prior_announced to avoid reclassifying a legitimate Mirror/Mirror+Inquire
         # back to a second Announce.
-        if prior_phase == "PreAnnounce" and not prior_announced and step in ("Secure", "Mirror", "Mirror+Inquire", "Mirror+Secure", "Secure+Inquire", "Announce+Inquire"):
+        if prior_phase == "PreAnnounce" and not prior_announced and step in ("Secure", "Mirror", "Mirror+Inquire", "Mirror+Secure", "Secure+Inquire"):
             if self._VACCINE_CONTENT_RE.search(clinician_message or ""):
                 cls_payload["step"] = "Announce"
                 cls_payload["reasons"] = [

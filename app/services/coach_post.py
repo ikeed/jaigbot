@@ -181,6 +181,12 @@ class EndGameDetector:
         "consent for him to get the vaccine", "consent for her to get the vaccine", "consent for my child to get the vaccine",
         "i consent for him to get the vaccine today", "i consent for her to get the vaccine today", "i consent for my child to get the vaccine today",
         "i agree to vaccinate today", "we agree to vaccinate today", "i agree to the vaccine today",
+        # Naturalistic acceptance phrasing
+        "comfortable proceeding", "i'm comfortable proceeding", "i am comfortable proceeding",
+        "comfortable with proceeding", "comfortable going ahead", "comfortable with the",
+        "i feel good about proceeding", "feel confident in proceeding",
+        "sounds good to me", "plan sounds good", "that sounds like a plan",
+        "i'm on board", "i am on board", "on board with",
     ]
 
     FOLLOWUP_CUES = [

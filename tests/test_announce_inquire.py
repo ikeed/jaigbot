@@ -283,10 +283,10 @@ class TestSecuringBeforeInquiringCoaching:
 
 class TestQuestionGuardScopeForSecure:
 
-    def test_secure_with_trailing_question_adds_inquire_post_announce(self):
-        """After Announce, a Secure turn ending in '?' with no announce markers
-        should have its step flipped to Inquire by the Question Guard.
-        The vaccine-content exemption should NOT apply to Secure steps."""
+    def test_secure_checkin_question_stays_secure(self):
+        """A Secure turn ending in a check-in question ('How does that one sit
+        with you so far?') should stay as Secure — check-in questions are part
+        of the Secure step, not concern-surfacing Inquire."""
         svc = _make_classifier()
         msg = (
             "Whooping cough can cause very severe coughing fits and trouble breathing. "
@@ -295,8 +295,19 @@ class TestQuestionGuardScopeForSecure:
         )
         result = _result("Secure", ["Secure"], score=3)
         out = svc._apply_overrides(result, msg, prior_announced=True)
-        # The Question Guard should now fire because the vaccine-content
-        # exemption is restricted to Announce-phase steps
+        assert out.aims.step == "Secure"
+
+    def test_secure_with_concern_question_flips_to_inquire(self):
+        """After Announce, a Secure turn ending with a concern-surfacing '?'
+        (not a check-in) should have its step flipped to Inquire."""
+        svc = _make_classifier()
+        msg = (
+            "Whooping cough can cause very severe coughing fits. "
+            "The vaccine helps refresh his protection. "
+            "What concerns do you have about that?"
+        )
+        result = _result("Secure", ["Secure"], score=3)
+        out = svc._apply_overrides(result, msg, prior_announced=True)
         assert out.aims.step == "Inquire"
 
     def test_announce_with_trailing_question_and_vaccine_content_stays(self):
