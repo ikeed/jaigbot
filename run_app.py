@@ -19,7 +19,7 @@ else:
     load_dotenv() # Fallback to standard loading
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from chainlit.utils import mount_chainlit
 
@@ -90,7 +90,6 @@ async def custom_login_page(request: Request):
             providers.append({"id": p_id, "name": name, "color": color})
             print(f"DEBUG: Found provider {p_id} via {env_name}")
 
-    # Prioritize Google, Facebook, Apple
     add_if_exists("google", "Google", "#4285F4")
     add_if_exists("facebook", "Facebook", "#1877F2")
     add_if_exists("apple", "Apple", "#000000")
@@ -181,6 +180,13 @@ async def custom_login_page(request: Request):
                 h1 {{ margin-bottom: 1rem; color: #333; font-size: 2.5rem; }}
                 p {{ color: #666; margin-bottom: 2rem; font-size: 1.2rem; }}
             </style>
+            <script>
+                window.addEventListener('message', (event) => {{
+                    if (event.data === 'on_logout') {{
+                        window.location.href = '/';
+                    }}
+                }});
+            </script>
         </head>
         <body>
             <div class="card">
@@ -203,6 +209,16 @@ async def custom_login_page(request: Request):
 # references like /public/doctor.svg resolve correctly even though
 # Chainlit is mounted at /chat (which serves them at /chat/public/).
 app.mount("/public", StaticFiles(directory="public"), name="public-static")
+
+@app.middleware("http")
+async def intercept_chainlit_login(request: Request, call_next):
+    if request.url.path == "/chat/login":
+        return RedirectResponse(url="/")
+    return await call_next(request)
+
+@app.get("/chat/login", response_class=RedirectResponse)
+async def redirect_chainlit_login_to_root():
+    return RedirectResponse(url="/")
 
 # Mount the Chainlit app under /chat
 # Note: This will use chainlit_app.py as the target
