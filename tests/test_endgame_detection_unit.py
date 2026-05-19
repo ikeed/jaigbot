@@ -307,8 +307,8 @@ def test_dual_consent_gate_does_not_block_literature_outcome():
     assert "Great job" in result["title"]
 
 
-def test_deferred_outcome_uses_session_complete_title():
-    """A 'deferred' resolution should produce 'Session Complete' not '🎉 Great job!'."""
+def test_deferred_outcome_does_not_trigger_endgame():
+    """A 'deferred' resolution should NOT trigger endgame (user correction)."""
     mock_svc = _MockClassifierService(
         {
             "is_endgame": True,
@@ -328,8 +328,7 @@ def test_deferred_outcome_uses_session_complete_title():
     }
     handler = _make_handler(store, mock_svc)
     result = _run(handler._check_end_game("s11", {}, None))
-    assert result is not None
-    assert result["title"] == "Session Complete"
+    assert result is None, "Deferred should no longer trigger endgame"
 
 
 # ---------------------------------------------------------------------------
@@ -456,9 +455,8 @@ def test_llm_accepted_literature_trusted_without_keyword_match():
     assert result["title"] == "\U0001f389 Great job!"
 
 
-def test_llm_deferred_trusted_without_exact_keyword():
-    """LLM says deferred — we trust the LLM, so endgame fires even without
-    exact deferral keyword matches. The improved prompt handles the semantics."""
+def test_llm_deferred_not_trusted_as_endgame():
+    """LLM says deferred — we now treat this as NOT an endgame."""
     mock_svc = _MockClassifierService(
         {
             "is_endgame": True,
@@ -478,12 +476,11 @@ def test_llm_deferred_trusted_without_exact_keyword():
     }
     handler = _make_handler(store, mock_svc)
     result = _run(handler._check_end_game("s16", {}, None))
-    assert result is not None, "LLM deferred should fire without requiring exact deferral keywords"
-    assert result["title"] == "Session Complete"
+    assert result is None, "LLM deferred should NOT fire endgame"
 
 
-def test_deferred_llm_endgame_triggers():
-    """LLM says deferred and person has clear deferral language — endgame fires."""
+def test_deferred_llm_endgame_blocked():
+    """LLM says deferred and person has clear deferral language — endgame blocked."""
     mock_svc = _MockClassifierService(
         {
             "is_endgame": True,
@@ -503,5 +500,4 @@ def test_deferred_llm_endgame_triggers():
     }
     handler = _make_handler(store, mock_svc)
     result = _run(handler._check_end_game("s17", {}, None))
-    assert result is not None, "Deferred endgame should fire when LLM and language agree"
-    assert result["title"] == "Session Complete"
+    assert result is None, "Deferred endgame should be blocked even when LLM and language agree"

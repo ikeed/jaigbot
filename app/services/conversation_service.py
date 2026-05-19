@@ -55,6 +55,48 @@ def is_duplicate_concern(concerns: List[Concern], desc: str, topic: Optional[str
     return False
 
 
+# Acceptance / agreement openers that signal the person is responding
+# positively, NOT raising a new concern.  If a message starts with one of
+# these AND contains no hedging language, it should not be registered as a
+# concern even if it incidentally contains topic keywords.
+_ACCEPTANCE_STARTS = (
+    "yes,", "yes ", "yes.", "exactly", "precisely", "absolutely",
+    "that's precisely", "that's exactly", "that's very",
+    "that's a very", "that's a great", "that's a good", "that's a fair",
+    "that's a clear", "that's a balanced",
+    "that's helpful", "that's very helpful", "that would be",
+    "that makes sense", "that sounds", "that's clear",
+    "that's reassuring", "that explanation",
+    "i appreciate", "thank you", "thanks",
+    "i'm comfortable", "i'm satisfied", "i'm convinced",
+    "i agree", "i understand", "i see",
+    "ok,", "okay,", "good to know", "fair enough",
+)
+
+# Hedging language that overrides acceptance detection — if present, the
+# message may still contain a genuine concern despite the positive opener.
+_HEDGING_CUES = (
+    " but ", " however ", " though ", " although ",
+    "still worry", "still concern", "still not sure",
+    "not sure", "not certain", "not convinced",
+    "wonder if", "wonder about", "wondering",
+    "what about", "what if",
+)
+
+
+def _is_acceptance_message(text: str) -> bool:
+    """Return True if `text` is a positive response, not a new concern."""
+    lt = (text or "").strip().lower()
+    if not lt:
+        return False
+    if not any(lt.startswith(p) for p in _ACCEPTANCE_STARTS):
+        return False
+    # Override: hedging language means there may be a real concern embedded
+    if any(h in lt for h in _HEDGING_CUES):
+        return False
+    return True
+
+
 def maybe_add_person_concern(
     state: dict, 
     person_text: str,
@@ -65,9 +107,14 @@ def maybe_add_person_concern(
 
     - Trims desc to ~240 chars (parity with existing behavior in main.py).
     - Skips affect-only mentions if no topic is detected.
+    - Skips acceptance/agreement messages that incidentally contain topic keywords.
     - Uses `llm_topic` if provided, otherwise falls back to `concern_topic` (keyword matching).
     """
     if not person_text:
+        return
+
+    # Skip positive responses that aren't actual concerns
+    if _is_acceptance_message(person_text):
         return
     
     topic = llm_topic or concern_topic(person_text, topical_cues)
@@ -156,13 +203,19 @@ def mark_best_match_mirrored(state: dict, person_text: str, topical_cues: Topica
             return
 
 
-def mark_secured_by_topic(state: dict, clinician_text: str, topical_cues: TopicalCues) -> None:
+def mark_secured_by_topic(
+    state: dict, 
+    clinician_text: str, 
+    topical_cues: TopicalCues,
+    llm_topic: Optional[str] = None
+) -> None:
     """Mark first mirrored concern matching clinician topic as secured; fallback to first mirrored.
     """
     concerns: List[Concern] = state.get("parent_concerns") or []
     if not concerns:
         return
-    topic = concern_topic(clinician_text, topical_cues)
+    
+    topic = llm_topic or concern_topic(clinician_text, topical_cues)
     if topic:
         for c in concerns:
             if (c.get("topic") == topic) and c.get("is_mirrored") and not c.get("is_secured"):

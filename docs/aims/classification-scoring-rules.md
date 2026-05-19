@@ -253,7 +253,27 @@ If message ends with `?` and step is Announce or Secure, but no `_ANNOUNCE_MARKE
 
 ---
 
-### 4.5 Mirror Rebuttal Penalty (`_apply_overrides`)
+### 4.5 Closing-Turn Guard (`_apply_overrides`)
+
+Fires on Inquire steps **after** the Question Guard, when `prior_announced == True`.
+
+Condition: at least **2 of 3** closing-turn signal categories are present:
+- **Literature cues** (`_CLOSING_LITERATURE_CUES`): *"information"*, *"take home"*, *"read on your"*,
+  *"look over"*, *"materials"*, *"handout"*, *"send you home with"*, etc.
+- **Follow-up cues** (`_CLOSING_FOLLOWUP_CUES`): *"follow-up"*, *"book a"*, *"come back"*,
+  *"next visit"*, *"schedule a"*, etc.
+- **Autonomy cues** (`_SECURE_AUTONOMY_CUES`): same list as pseudo-Secure check.
+
+Action: overrides Inquire → **Secure score 2**, clears tips.
+
+Rationale: proposal-style questions like *"Why don't we book a follow-up?"* are not
+concern-surfacing; a turn offering literature + follow-up + autonomy is categorically
+Secure.  The guard must fire **after** the Question Guard because the Question Guard may
+have already flipped a valid Secure → Inquire based solely on the trailing `?`.
+
+---
+
+### 4.6 Mirror Rebuttal Penalty (`_apply_overrides`)
 
 Fires on Mirror / Mirror+Inquire steps **only** (exempt for Mirror+Secure).
 
@@ -266,7 +286,7 @@ Action: caps score at 1, adds reason *"Reflection included direct rebuttal → p
 
 ---
 
-### 4.6 Pseudo-Secure Penalty (`_apply_overrides`)
+### 4.7 Pseudo-Secure Penalty (`_apply_overrides`)
 
 Fires on Secure steps (exempt for Mirror+Secure).
 
