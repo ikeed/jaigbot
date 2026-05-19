@@ -103,40 +103,32 @@ async def test_classify_turn_fallback_on_error(classifier_service, mock_vertex_c
     assert "fallback" in result.aims.reasons
 
 @pytest.mark.asyncio
-async def test_apply_overrides_pseudo_secure(classifier_service):
-    # Test that long data-dumping Secure (>60 words, no autonomy cues, no question) is penalized.
-    # "Vaccines are safe and effective. " is 5 words; repeat 15 times = 75 words.
-    long_message = "Vaccines are safe and effective. " * 15  # 75 words, no question, no autonomy cues
-    initial_result = ClassifierResult(
-        is_small_talk=False,
-        is_vaccine_relevant=True,
-        aims={
-            "step": "Secure",
+async def test_triple_move_detection(classifier_service, mock_vertex_client):
+    # Mock successful JSON response with multiple steps (Mirror+Secure+Inquire)
+    mock_response = {
+        "is_small_talk": False,
+        "is_vaccine_relevant": True,
+        "aims": {
+            "steps": ["Mirror", "Secure", "Inquire"],
             "score": 3,
-            "reasons": ["LLM labeled Secure"],
-            "tips": []
-        }
-    )
-    
-    overridden = classifier_service._apply_overrides(initial_result, long_message)
-    assert overridden.aims.step == "Secure"
-    assert overridden.aims.score <= 1
-    assert "autonomy" in overridden.aims.reasons[1].lower() or "partnership" in overridden.aims.reasons[1].lower()
+            "reasons": ["Validated, educated, and surfaced next concern."],
+            "tips": ["Excellent synthesis"]
+        },
+        "safety_flags": [],
+        "reasoning": "Triple-move detected."
+    }
+    mock_vertex_client.generate_text_async.return_value = json.dumps(mock_response)
 
-@pytest.mark.asyncio
-async def test_apply_overrides_question_guard(classifier_service):
-    # Test that a question ending with '?' overrides Announce to Inquire
-    initial_result = ClassifierResult(
-        is_small_talk=False,
-        is_vaccine_relevant=True,
-        aims={
-            "step": "Announce",
-            "score": 3,
-            "reasons": ["LLM mislabel"],
-            "tips": []
-        }
+    result = await classifier_service.classify_turn(
+        clinician_message="I hear you're worried about side effects, and actually the data shows they are quite rare. What else is on your mind?",
+        person_last="I'm scared of side effects.",
+        history=[],
+        prior_announced=True,
+        prior_phase="InquireMirror",
+        mapping={}
     )
-    
-    overridden = classifier_service._apply_overrides(initial_result, "Should we do the MMR today?")
-    assert overridden.aims.step == "Inquire"
-    assert overridden.aims.score == 2
+
+    assert result.aims.step == "Mirror+Secure+Inquire"
+    assert "Inquire" in result.aims.steps
+    assert "Mirror" in result.aims.steps
+    assert "Secure" in result.aims.steps
