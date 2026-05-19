@@ -40,6 +40,7 @@ class Settings(BaseSettings):
 
     # Storage and Archiving
     SESSIONS_BUCKET_NAME: Optional[str] = None
+    REPORTS_BUCKET_NAME: Optional[str] = None
 
     # Memory and Session configuration
     MEMORY_ENABLED: bool = True

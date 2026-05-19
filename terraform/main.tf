@@ -116,9 +116,27 @@ resource "google_storage_bucket" "sessions" {
   }
 }
 
-# Grant Cloud Run Runtime SA access to the bucket
+# GCS Bucket for Bug Reports
+resource "google_storage_bucket" "reports" {
+  name                        = var.reports_bucket_name
+  location                    = var.region
+  uniform_bucket_level_access = true
+  force_destroy               = false
+
+  versioning {
+    enabled = true
+  }
+}
+
+# Grant Cloud Run Runtime SA access to the buckets
 resource "google_storage_bucket_iam_member" "runtime_storage_user" {
   bucket = google_storage_bucket.sessions.name
+  role   = "roles/storage.objectUser"
+  member = "serviceAccount:${google_service_account.runtime.email}"
+}
+
+resource "google_storage_bucket_iam_member" "runtime_reports_storage_user" {
+  bucket = google_storage_bucket.reports.name
   role   = "roles/storage.objectUser"
   member = "serviceAccount:${google_service_account.runtime.email}"
 }

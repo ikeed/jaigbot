@@ -410,11 +410,12 @@ class ChatOrchestrator:
                     storage_service.upload_session,
                     session_id,
                     user_id,
-                    archive_data
+                    archive_data,
+                    is_report=True
                 )
             else:
                 # Fallback to synchronous if no background tasks (rare)
-                storage_service.upload_session(session_id, user_id, archive_data)
+                storage_service.upload_session(session_id, user_id, archive_data, is_report=True)
 
             # Clear session from memory store
             self.memory_store.pop(session_id, None)
