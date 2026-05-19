@@ -370,7 +370,24 @@ class AimsCoachingHandler:
                     now = time.time()
                     coach_entry = {"role": "coach", "content": coach_text}
                     mem.setdefault("history", []).append(coach_entry)
-                    mem.setdefault("full_history", []).append({**coach_entry, "time": now})
+                    
+                    # Store structured data in full_history for logical archive schema
+                    structured_coaching = {
+                        "step": step,
+                        "score": cls_payload.get("score"),
+                        "reasons": self._filter_user_facing_reasons(reasons, step=step),
+                        "tips": tips_to_show,
+                        "step_feedback": [
+                            sf if isinstance(sf, dict) else sf.dict()
+                            for sf in step_feedback
+                        ],
+                        "phase": phase
+                    }
+                    mem.setdefault("full_history", []).append({
+                        **coach_entry, 
+                        "time": now,
+                        "coaching_data": structured_coaching
+                    })
                     mem["updated"] = now
                     self.memory_store[ctx.session_id] = mem
         except Exception:
@@ -410,6 +427,17 @@ class AimsCoachingHandler:
         
         # Step 8: Check for end-game scenarios
         coach_post = await self._check_end_game(ctx.session_id, reply_payload, session_obj)
+        
+        # Save coach_post to memory if it exists, so it can be archived
+        if coach_post and self.memory_enabled and ctx.session_id:
+            try:
+                mem = self.memory_store.get(ctx.session_id)
+                if mem:
+                    mem["coach_post"] = coach_post
+                    mem["game_over"] = True
+                    self.memory_store[ctx.session_id] = mem
+            except Exception:
+                pass
         
         # Calculate final latency
         latency_ms = int((time.time() - started) * 1000)
