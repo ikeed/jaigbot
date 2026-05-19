@@ -159,7 +159,7 @@ class EndGameDetector:
 
     FOLLOWUP_CUES = [
         "follow up", "follow-up", "another appointment", "next visit", "come back",
-        "schedule", "set up an appointment", "later appointment", "book an appointment", 
+        "schedule", "set up an appointment", "later appointment", "book an appointment",
         "make an appointment", "schedule something", "make another", "appointment",
     ]
 
