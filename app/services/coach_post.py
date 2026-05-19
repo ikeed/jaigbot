@@ -140,6 +140,7 @@ class EndGameDetector:
         "we'll do it today", "we will do it today", "let's get the shot", "let’s get the shot",
         "ready for the shot", "ready for the vaccine", "let's get it today", "let’s get it today",
         "we're ready", "we are ready", "we're ready today", "we are ready today", "ready to proceed", "let's proceed", "proceed today",
+        "let's go ahead", "let’s go ahead",
         # Consent-based confirmations
         "i consent", "yes, i consent", "we consent", "i give consent",
         "consent to vaccinate", "consent to the vaccine", "consent to the shot",
@@ -158,16 +159,15 @@ class EndGameDetector:
 
     FOLLOWUP_CUES = [
         "follow up", "follow-up", "another appointment", "next visit", "come back",
-        "schedule", "set up an appointment", "later appointment", "set up",
-        "book an appointment", "make an appointment", "schedule something", "talk again",
-        "talk it over", "think it over", "decide later", "make another", "agree to that",
+        "schedule", "set up an appointment", "later appointment", "book an appointment",
+        "make an appointment", "schedule something", "make another", "appointment",
     ]
 
     LITERATURE_CUES = [
         "handout", "handouts", "brochure", "pamphlet", "literature", "written info",
         "information to take home", "take home", "materials", "resource", "printout", "printed info",
         "read this", "give you some literature", "leaflet", "info sheet",
-        "look over", "at home", "read over",
+        "look over", "at home", "read over", "information",
     ]
 
     @staticmethod
@@ -223,15 +223,11 @@ class EndGameDetector:
             if any(cue in lt for cue in EndGameDetector.ACCEPT_NOW_CUES):
                 return {"reason": "accepted_now"}
 
-        # Follow-up AND literature (or just one if it strongly implies deferral)
+        # Follow-up AND literature (require explicit follow-up appointment intent)
         has_followup = any(c in lt for c in EndGameDetector.FOLLOWUP_CUES)
         has_literature = any(c in lt for c in EndGameDetector.LITERATURE_CUES)
 
         if has_followup and has_literature:
-            return {"reason": "followup_literature"}
-
-        # Heuristic: if they clearly say "talk it over" or "think it over" AND "appreciate that/home", it's endgame
-        if has_literature and ("appreciate" in lt or "home" in lt):
             return {"reason": "followup_literature"}
 
         return None
