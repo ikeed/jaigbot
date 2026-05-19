@@ -109,7 +109,7 @@ custom_css = "/public/aimsbot.css"
 
 # Specify a JavaScript file that can be used to customize the user interface.
 # The JavaScript file can be served from the public directory.
-custom_js = "/public/report-issue.js"
+# custom_js = "/public/report-issue.js"
 
 # The style of alert boxes. Can be "classic" or "modern".
 alert_style = "classic"
