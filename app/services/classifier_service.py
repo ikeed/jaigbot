@@ -80,8 +80,11 @@ class ClassifierService:
             raw_json = await self._call_gemini_json(prompt, system_instruction=system_instruction)
             data = json.loads(self._strip_json_fences(raw_json))
             
+            if not data:
+                raise ValueError("LLM returned empty or null data")
+            
             # Extract and normalize AIMS coaching
-            aims_data = data.get("aims", {})
+            aims_data = data.get("aims", {}) or {}
             steps = aims_data.get("steps") or []
             step = aims_data.get("step") # support both formats during transition
             

@@ -30,7 +30,9 @@ class TestPromptContent:
             context_turns=3
         )
         assert "functional goal" in prompt.lower()
-        assert "not a punctuation mark" in prompt.lower() or "not require a question mark" in prompt.lower()
+        # The prompt uses "(statement or question)" and "NOT Inquire (CRITICAL)" section
+        assert "statement or question" in prompt.lower()
+        assert "not inquire (critical)" in prompt.lower()
 
     def test_unified_v2_contains_common_misclassifications(self):
         """unified_classify_v2.txt must contain the Common Misclassifications section."""
