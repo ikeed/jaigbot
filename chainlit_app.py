@@ -22,6 +22,7 @@ import random
 import shutil
 from pathlib import Path
 import httpx
+from fastapi import Request, Response
 import chainlit as cl
 from chainlit.input_widget import TextInput
 from app.persona import DEFAULT_CHARACTER, DEFAULT_SCENE
@@ -810,6 +811,15 @@ if is_oauth_enabled or has_auth_secret or settings.ENABLE_PASSWORD_AUTH:
             if username == "admin" and password == "admin":
                 return cl.User(identifier="admin", metadata={"name": "Admin User", "provider": "password"})
             return None
+
+    @cl.on_logout
+    async def on_logout(request: Request, response: Response):
+        # Trigger a client-side redirect to the root landing page
+        # Note: We use window messaging because returning a 303 redirect response 
+        # from a POST request (handled via fetch/XHR in Chainlit) does not
+        # always trigger a full-page redirection in the browser.
+        await cl.send_window_message("on_logout")
+        return response
 
     # We only register header_auth_callback if we detect specific headers
     # to avoid interference with other auth methods in local dev.
