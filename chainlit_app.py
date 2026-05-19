@@ -362,7 +362,7 @@ def _write_persistent_session_id(session_id: str, user_identifier: str | None = 
 @cl.set_chat_profiles
 async def chat_profiles():
     try:
-        icon = "/public/aimsbot.png"
+        icon = "/public/spinner.svg"
         return [
             cl.ChatProfile(
                 name="AIMSBot",

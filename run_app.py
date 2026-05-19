@@ -119,13 +119,15 @@ async def custom_login_page(request: Request):
                 text-decoration: none;
                 background: {p['color']};
                 color: white;
-                padding: 12px 20px;
-                border-radius: 6px;
-                margin-bottom: 10px;
+                padding: 16px 25px;
+                border-radius: 8px;
+                margin-bottom: 12px;
+                font-size: 18px;
                 font-weight: 600;
                 text-align: center;
                 box-shadow: 0 2px 4px rgba(0,0,0,0.1);
                 transition: transform 0.1s, box-shadow 0.1s;
+                width: 50%;
             " onmousedown="this.style.transform='translateY(1px)';this.style.boxShadow='none';" 
               onmouseup="this.style.transform='translateY(0)';this.style.boxShadow='0 2px 4px rgba(0,0,0,0.1)';"
               onmouseleave="this.style.transform='translateY(0)';this.style.boxShadow='0 2px 4px rgba(0,0,0,0.1)';"
@@ -147,16 +149,16 @@ async def custom_login_page(request: Request):
         
         buttons_html = f"""
             {warning}
-            <form action="/chat">
+            <form action="/chat" style="width: 50%;">
                 <button type="submit" id="continue-btn" style="
                     width: 100%;
                     background: #007bff;
                     color: white;
                     border: none;
-                    padding: 12px 20px;
-                    border-radius: 6px;
+                    padding: 16px 25px;
+                    border-radius: 8px;
                     cursor: pointer;
-                    font-size: 16px;
+                    font-size: 20px;
                     font-weight: 600;
                     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
                 ">Continue to Chat</button>
@@ -173,19 +175,19 @@ async def custom_login_page(request: Request):
             <title>AIMSBot Login</title>
             <style>
                 body {{ font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background: #f0f2f5; }}
-                .card {{ background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; width: 320px; }}
-                button {{ color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 16px; transition: opacity 0.2s; }}
+                .card {{ background: white; padding: 4rem; border-radius: 12px; box-shadow: 0 8px 16px rgba(0,0,0,0.1); text-align: center; width: 640px; }}
+                button {{ color: white; border: none; padding: 15px 30px; border-radius: 6px; cursor: pointer; font-size: 18px; transition: opacity 0.2s; }}
                 button:hover {{ opacity: 0.8; }}
-                h1 {{ margin-bottom: 0.5rem; color: #333; }}
-                p {{ color: #666; margin-bottom: 1.5rem; }}
+                h1 {{ margin-bottom: 1rem; color: #333; font-size: 2.5rem; }}
+                p {{ color: #666; margin-bottom: 2rem; font-size: 1.2rem; }}
             </style>
         </head>
         <body>
             <div class="card">
-<img src="/public/aimsbot.png" alt="AIMSBot" style="width: 256px; height: 256px; margin: 0 auto 1rem; display: block;" />
-                <h1>AIMSBot</h1>
+                <img src="/public/aimsbot.png" alt="AIMSBot" style="width: 512px; height: 512px; margin: 0 auto 1rem; display: block;" />
+                <!-- <h1>AIMSBot</h1> -->
                 <p>Welcome! Please sign in.</p>
-                <div style="margin-top: 1rem; display: flex; flex-direction: column;">
+                <div style="margin-top: 1rem; display: flex; flex-direction: column; align-items: center;">
                     {buttons_html}
                     <p style="font-size: 11px; color: #999; margin-top: 10px;">
                         Secure SSO authentication enforced.
