@@ -501,7 +501,7 @@ async def _start_chat_impl():
         url = get_backend_url()
         return url[:-5] if url.endswith("/chat") else url
 
-    # 1. Session ID management: 
+    # 1. Session ID management:
     # Attempt to recover a persistent session_id if we have an authenticated user.
     # This ensures that if the app restarts, we can resume the same session
     # instead of generating a new one (which leads to duplicate scenario cards).
@@ -518,7 +518,7 @@ async def _start_chat_impl():
             # Fallback for anonymous users or first-time loads
             session_id = str(uuid.uuid4())
             print(f"DEBUG: Generated fresh session_id: {session_id}")
-            
+
         # Ensure it's persisted and set in the session
         _write_persistent_session_id(session_id, user_identifier)
         cl.user_session.set("session_id", session_id)
@@ -815,7 +815,7 @@ if is_oauth_enabled or has_auth_secret or settings.ENABLE_PASSWORD_AUTH:
     @cl.on_logout
     async def on_logout(request: Request, response: Response):
         # Trigger a client-side redirect to the root landing page
-        # Note: We use window messaging because returning a 303 redirect response 
+        # Note: We use window messaging because returning a 303 redirect response
         # from a POST request (handled via fetch/XHR in Chainlit) does not
         # always trigger a full-page redirection in the browser.
         await cl.send_window_message("on_logout")
