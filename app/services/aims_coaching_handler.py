@@ -32,7 +32,8 @@ from app.services.coach_post import (
     VaccineRelevanceGate, 
     AimsPostProcessor, 
     EndGameDetector,
-    build_endgame_bullets_fallback
+    build_endgame_bullets_fallback,
+    endgame_title,
 )
 from app.services.coach_safety import detect_advice_patterns
 from app.services.conversation_service import (
@@ -285,15 +286,8 @@ class AimsCoachingHandler:
             cls_payload["score"] = 0
             cls_payload["reasons"] = (cls_payload.get("reasons") or []) + ["LLM flagged as small talk"]
             
-        # Legacy AimsPostProcessor (score normalization, inquire->secure, score capping)
+        # Legacy AimsPostProcessor (score normalization, score capping)
         cls_payload = AimsPostProcessor.post_process(cls_payload, body.message)
-
-        # Phase guard: enforce AIMS dependency order.
-        # Secure and Mirror are not valid before Announce; reclassify if needed.
-        # Announce only happens once; duplicates are reclassified.
-        cls_payload = self._apply_phase_guard(
-            cls_payload, body.message, prior_phase, prior_announced
-        )
 
         # Populate current phase for UI transparency
         cls_payload["phase"] = aims_state.get("phase", "PreAnnounce")
@@ -338,7 +332,7 @@ class AimsCoachingHandler:
                 step_feedback = cls_payload.get("step_feedback") or []
                 if phase:
                     parts.append(f"Conversation phase: {phase}")
-                if step:
+                if step and step not in ("null", "None"):
                     parts.append(f"Detected step: {step}")
 
                 # Prefer per-step feedback when available; fall back to flat reasons
@@ -366,6 +360,11 @@ class AimsCoachingHandler:
                 # Only show tips when there's no per-step feedback (avoid redundancy)
                 if tips_to_show and not step_feedback:
                     parts.append(f"Tip: {tips_to_show[0]}")
+                
+                # Nudge user towards endgame scenarios if conversation is stalling
+                if reply_payload.get("resolution_type") == "deferred":
+                    parts.append("Nudge: The patient is deferring. Try offering specific literature or a follow-up visit to reach a clear AIMS resolution.")
+
                 coach_text = " | ".join(parts)
                 if coach_text:
                     now = time.time()
@@ -509,10 +508,10 @@ class AimsCoachingHandler:
                     state, clinician_message, person_last,
                     self._TOPICAL_CUES, llm_topic=llm_topic
                 )
-            
+        
             # If Secure is in steps, mark matching MIRRORED concerns as secured
             if "Secure" in steps:
-                mark_secured_by_topic(state, clinician_message, self._TOPICAL_CUES)
+                mark_secured_by_topic(state, clinician_message, self._TOPICAL_CUES, llm_topic=llm_topic)
 
             # 2. Apply coaching guidance rules (legacy/heuristic fallback)
             step_main = cls_payload.get("step")
@@ -527,6 +526,10 @@ class AimsCoachingHandler:
             # Pass the full steps list so compound turns (e.g. Announce+Inquire)
             # correctly update announced even when step_main is Inquire.
             self._update_observational_state(state, step_main, steps)
+            
+            # Sync the updated phase back to the classification payload so the 
+            # coach note reflects the transition immediately.
+            cls_payload["phase"] = state.get("phase")
             
             # Persist state
             mem["aims_state"] = state
@@ -577,88 +580,6 @@ class AimsCoachingHandler:
                 continue
             out.append(r)
         return out
-
-    # Regex for detecting vaccine-related content in a clinician message.
-    _VACCINE_CONTENT_RE = re.compile(
-        r"\b(vaccin|shot|mmr|booster|immuniz|dose|measles|whooping|pertussis|"
-        r"diphtheria|tetanus|hep\s?b|polio|rotavirus|dtap|tdap|ipv|pcv|hib|"
-        r"routine vaccines|routine shots)",
-        re.IGNORECASE,
-    )
-
-    # Mirror stems used by the phase guard to detect reflective content
-    # when reclassifying backward Announce transitions.
-    _MIRROR_STEMS_FOR_GUARD = [
-        # Emotional/formulaic reflection stems
-        "it sounds like", "sounds like", "you're worried", "i'm hearing",
-        "you feel", "you want", "i hear you", "i understand",
-        "what i'm hearing", "what i hear", "i'm hearing that",
-        # Cognitive validation stems (used by phase guard only;
-        # the LLM classifier handles the concern-vs-statement distinction)
-        "that's a reasonable", "that's a good point", "that's a fair",
-        "you raise a valid", "you make a good point",
-        "that's an important distinction",
-    ]
-
-    def _apply_phase_guard(
-        self, cls_payload: Dict[str, Any], clinician_message: str,
-        prior_phase: str, prior_announced: bool = False,
-    ) -> Dict[str, Any]:
-        """Enforce AIMS dependency order.
-
-        1. Announce only happens once.  If the clinician has already
-           announced and the classifier returns Announce again,
-           reclassify based on message content (Mirror > Inquire > Secure).
-        2. PreAnnounce: Secure/Mirror not valid \u2192 reclassify as Announce.
-
-        When a reclassification happens, stale tips from the original step
-        are cleared so they don\u2019t leak into the coaching output.
-        """
-        step = cls_payload.get("step")
-        if not step:
-            return cls_payload
-
-        lt = (clinician_message or "").lower()
-
-        # --- Rule 1: Announce only happens once ---
-        if step in ("Announce", "Announce+Inquire") and prior_announced:
-            has_mirror = any(s in lt for s in self._MIRROR_STEMS_FOR_GUARD)
-            has_question = lt.rstrip().endswith("?")
-
-            if has_mirror and has_question:
-                new_step = "Mirror+Inquire"
-            elif has_mirror:
-                new_step = "Mirror"
-            elif has_question:
-                new_step = "Inquire"
-            else:
-                # Educational / recommendation content post-Announce is Secure
-                new_step = "Secure"
-
-            cls_payload["step"] = new_step
-            cls_payload["reasons"] = [
-                f"Phase guard: Announce already done "
-                f"\u2192 reclassified as {new_step}"
-            ] + (cls_payload.get("reasons") or [])
-            cls_payload["tips"] = []  # clear stale tips from wrong step
-            return cls_payload
-
-        # --- Rule 2: PreAnnounce forward guard ---
-        # Only fires when Announce has NOT yet been done.  After Announce, the phase
-        # stays "PreAnnounce" until Inquire is detected, so we must also check
-        # prior_announced to avoid reclassifying a legitimate Mirror/Mirror+Inquire
-        # back to a second Announce.
-        if prior_phase == "PreAnnounce" and not prior_announced and step in ("Secure", "Mirror", "Mirror+Inquire", "Mirror+Secure", "Secure+Inquire", "Announce+Inquire"):
-            if self._VACCINE_CONTENT_RE.search(clinician_message or ""):
-                cls_payload["step"] = "Announce"
-                cls_payload["reasons"] = [
-                    f"Phase guard: {step} not valid before Announce; "
-                    f"vaccine content detected \u2192 reclassified as Announce"
-                ] + (cls_payload.get("reasons") or [])
-                cls_payload["tips"] = []  # clear stale tips from wrong step
-            return cls_payload
-
-        return cls_payload
 
     # Trust style detection keywords and corresponding tip templates
     _ANALYTICAL_KEYWORDS = (
@@ -902,8 +823,8 @@ class AimsCoachingHandler:
                 "history": [], "character": None, "scene": None, "updated": time.time()
             }
             aims = mem.setdefault("aims", {
-                "perStepCounts": {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0, "Announce+Inquire": 0, "Mirror+Inquire": 0, "Mirror+Secure": 0, "Secure+Inquire": 0},
-                "scores": {"Announce": [], "Inquire": [], "Mirror": [], "Secure": [], "Announce+Inquire": [], "Mirror+Inquire": [], "Mirror+Secure": [], "Secure+Inquire": []},
+                "perStepCounts": {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0, "Announce+Inquire": 0, "Mirror+Inquire": 0, "Mirror+Secure": 0, "Secure+Inquire": 0, "Mirror+Secure+Inquire": 0},
+                "scores": {"Announce": [], "Inquire": [], "Mirror": [], "Secure": [], "Announce+Inquire": [], "Mirror+Inquire": [], "Mirror+Secure": [], "Secure+Inquire": [], "Mirror+Secure+Inquire": []},
                 "totalTurns": 0
             })
             
@@ -911,7 +832,7 @@ class AimsCoachingHandler:
             # Always count the turn; only score/count recognized AIMS steps
             aims["totalTurns"] = int(aims.get("totalTurns", 0)) + 1
             
-            if step in {"Announce", "Inquire", "Mirror", "Secure", "Announce+Inquire", "Mirror+Inquire", "Mirror+Secure", "Secure+Inquire"}:
+            if step in {"Announce", "Inquire", "Mirror", "Secure", "Announce+Inquire", "Mirror+Inquire", "Mirror+Secure", "Secure+Inquire", "Mirror+Secure+Inquire"}:
                 score_val = int(cls_payload.get("score", 2))
                 aims["perStepCounts"][step] = aims["perStepCounts"].get(step, 0) + 1
                 aims["scores"].setdefault(step, []).append(score_val)
@@ -942,6 +863,15 @@ class AimsCoachingHandler:
                     # Expand into Secure and Inquire so individual step coverage metrics work
                     aims["perStepCounts"]["Secure"] = aims["perStepCounts"].get("Secure", 0) + 1
                     aims["perStepCounts"]["Inquire"] = aims["perStepCounts"].get("Inquire", 0) + 1
+                    aims["scores"].setdefault("Secure", []).append(score_val)
+                    aims["scores"].setdefault("Inquire", []).append(score_val)
+
+                elif step == "Mirror+Secure+Inquire":
+                    # The "Triple-Move" expansion
+                    aims["perStepCounts"]["Mirror"] = aims["perStepCounts"].get("Mirror", 0) + 1
+                    aims["perStepCounts"]["Secure"] = aims["perStepCounts"].get("Secure", 0) + 1
+                    aims["perStepCounts"]["Inquire"] = aims["perStepCounts"].get("Inquire", 0) + 1
+                    aims["scores"].setdefault("Mirror", []).append(score_val)
                     aims["scores"].setdefault("Secure", []).append(score_val)
                     aims["scores"].setdefault("Inquire", []).append(score_val)
                 
@@ -1097,7 +1027,7 @@ class AimsCoachingHandler:
         
         try:
             aims = (self.memory_store.get(session_id) or {}).get("aims") or {}
-            counts = {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0, "Announce+Inquire": 0, "Mirror+Inquire": 0, "Mirror+Secure": 0, "Secure+Inquire": 0}
+            counts = {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0, "Announce+Inquire": 0, "Mirror+Inquire": 0, "Mirror+Secure": 0, "Secure+Inquire": 0, "Mirror+Secure+Inquire": 0}
             counts.update(aims.get("perStepCounts", {}))
             
             # Prefer precomputed runningAverage if available
@@ -1197,8 +1127,14 @@ class AimsCoachingHandler:
             outcome = result.get("resolution_type", "not_resolved")
             summary = result.get("summary", "")
 
-            # 4. Heuristic fallback: if LLM detection errored, delegate to EndGameDetector
-            if not is_endgame and result.get("reason") == "detection_error":
+            # 4. Heuristic cross-check: always consult EndGameDetector when
+            #    the LLM says no endgame.  The LLM occasionally misses clear
+            #    acceptance signals ("I'm comfortable proceeding", "I'll look
+            #    forward to reviewing that material"); the heuristic catches
+            #    these via keyword cues and provides a safety net.  This is
+            #    safe because the heuristic has high precision (requires
+            #    FOLLOWUP+LITERATURE or LITERATURE+"appreciate"/"home").
+            if not is_endgame:
                 eg_local = EndGameDetector.detect(combined_reply_text)
                 if eg_local:
                     is_endgame = True
@@ -1208,12 +1144,15 @@ class AimsCoachingHandler:
 
             # 5. High-stakes gate: require heuristic confirmation ONLY for accepted_vaccine
             # (consent to vaccinate today is irreversible, so we require a double-check).
-            # For accepted_literature and deferred we trust the LLM — natural language
-            # for deferral/follow-up is too varied for reliable keyword matching.
+            # For accepted_literature we trust the LLM.
             if is_endgame and outcome == "accepted_vaccine":
                 eg_local = EndGameDetector.detect(combined_reply_text)
                 if not eg_local or eg_local.get("reason") != "accepted_now":
                     is_endgame = False
+            
+            # 5b. Force is_endgame to false for deferred (user correction)
+            if outcome == "deferred":
+                is_endgame = False
 
             try:
                 telemetry_log_event(
@@ -1228,7 +1167,7 @@ class AimsCoachingHandler:
                 pass
 
             if is_endgame:
-                title = "🎉 Great job!" if outcome in ("accepted_vaccine", "accepted_literature") else "Session Complete"
+                title = endgame_title(session_obj, outcome=outcome)
                 lines = [f"Outcome: {summary}"] if summary else []
 
                 # Add fallback metrics bullets if available

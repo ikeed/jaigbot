@@ -41,7 +41,7 @@ class VaccineRelevanceGate:
         "decision",
     ]
 
-    VALID_STEPS = {"Announce", "Inquire", "Mirror", "Secure", "Announce+Inquire", "Mirror+Inquire", "Mirror+Secure", "Secure+Inquire"}
+    VALID_STEPS = {"Announce", "Inquire", "Mirror", "Secure", "Announce+Inquire", "Mirror+Inquire", "Mirror+Secure", "Secure+Inquire", "Mirror+Secure+Inquire"}
 
     @staticmethod
     def gate(
@@ -84,44 +84,10 @@ class AimsPostProcessor:
     Exact behavior preserved from main.py.
     """
 
-    # Tokens that strongly suggest didactic education rather than open inquiry.
-    # Deliberately narrow: broad clinical words (schedule, dose, safe, immun, risk)
-    # are common in ALL AIMS steps and must not trigger an override.
-    _DIDACTIC_TOKENS = [
-        "study shows", "studies show", "research shows", "evidence shows",
-        "the data", "data show", "statistics show", "statistically",
-        "percent of", "% of", "herd immunity",
-        "clinical trial", "randomized", "meta-analysis",
-    ]
-
-    @staticmethod
-    def correct_inquire_to_secure(cls_payload: Dict, clinician_text: str) -> Dict:
-        """Override Inquire → Secure only for clear didactic lectures with no question.
-
-        Guards:
-        1. No '?' anywhere in the message (a question indicates Inquire or Announce intent)
-        2. Message is long enough to be a lecture (> 40 words)
-        3. Contains specific strongly-didactic language (clinical trial, statistics, etc.)
-        """
-        lt = (clinician_text or "").strip().lower()
-        if cls_payload.get("step") != "Inquire":
-            return cls_payload
-        if "?" in lt:
-            return cls_payload
-        if len(lt.split()) <= 40:
-            return cls_payload
-        if any(tok in lt for tok in AimsPostProcessor._DIDACTIC_TOKENS):
-            cls_payload = dict(cls_payload)
-            cls_payload["reasons"] = [
-                "Didactic education detected; overriding Inquire to Secure"
-            ] + (cls_payload.get("reasons") or [])
-            cls_payload["step"] = "Secure"
-        return cls_payload
-
     @staticmethod
     def normalize_score(cls_payload: Dict) -> Dict:
         if (
-            cls_payload.get("step") in {"Announce", "Inquire", "Mirror", "Secure", "Announce+Inquire", "Mirror+Inquire", "Mirror+Secure", "Secure+Inquire"}
+            cls_payload.get("step") in {"Announce", "Inquire", "Mirror", "Secure", "Announce+Inquire", "Mirror+Inquire", "Mirror+Secure", "Secure+Inquire", "Mirror+Secure+Inquire"}
             and int(cls_payload.get("score", 0)) < 1
         ):
             cls_payload = dict(cls_payload)
@@ -130,7 +96,6 @@ class AimsPostProcessor:
 
     @staticmethod
     def post_process(cls_payload: Dict, clinician_text: str) -> Dict:
-        cls_payload = AimsPostProcessor.correct_inquire_to_secure(cls_payload, clinician_text)
         cls_payload = AimsPostProcessor.normalize_score(cls_payload)
         # Soften overly harsh feedback when autonomy-respecting language is present
         try:
@@ -181,6 +146,14 @@ class EndGameDetector:
         "consent for him to get the vaccine", "consent for her to get the vaccine", "consent for my child to get the vaccine",
         "i consent for him to get the vaccine today", "i consent for her to get the vaccine today", "i consent for my child to get the vaccine today",
         "i agree to vaccinate today", "we agree to vaccinate today", "i agree to the vaccine today",
+        # Naturalistic acceptance phrasing
+        "comfortable proceeding", "i'm comfortable proceeding", "i am comfortable proceeding",
+        "comfortable with proceeding", "comfortable going ahead", "comfortable with the",
+        "i feel good about proceeding", "feel confident in proceeding",
+        "sounds good to me", "plan sounds good", "that sounds like a plan",
+        "i'm on board", "i am on board", "on board with",
+        "comfortable moving forward", "comfortable with moving forward", "happy to move forward",
+        "move forward with it", "move forward today", "happy to proceed",
     ]
 
     FOLLOWUP_CUES = [
@@ -322,79 +295,120 @@ def sanitize_endgame_bullets(lines: List[str]) -> List[str]:
 
 
 
-def build_endgame_bullets_fallback(session_obj: Dict | None) -> List[str]:
-    """Deterministic, plain-text bullet guidance when LLM narrative is unavailable.
+def endgame_title(session_obj: Dict | None, outcome: str = "") -> str:
+    """Return a score-calibrated celebratory title for the end-of-session card.
 
-    Generates up to 5 actionable bullets using per-step counts and running averages.
-    Keeps language empathetic and provides concrete example phrasing.
+    Overall score (mean of core AIMS step averages, scaled to 0-100%):
+      >= 85%  -> "🎉 Excellent job!"
+      >= 70%  -> "🎉 Great job!"
+      >= 55%  -> "🎉 Good job!"
+      <  55%  -> "🎉 Nice job!"
+    Falls back to 'Great job!' when no score data is available.
     """
-    bullets: List[str] = []
+    if outcome == "deferred":
+        return "Session Complete"
+    try:
+        ra = (session_obj or {}).get("runningAverage") or {}
+        core_avgs = [
+            float(ra[s]) for s in ("Announce", "Inquire", "Mirror", "Secure")
+            if isinstance(ra.get(s), (int, float))
+        ]
+        if not core_avgs:
+            return "🎉 Great job!"
+        overall = sum(core_avgs) / (len(core_avgs) * 3.0) * 100
+        if overall >= 85:
+            return "🏆 Excellent job!"
+        if overall >= 70:
+            return "🎉 Great job!"
+        if overall >= 55:
+            return "👏 Good job!"
+        return "💪 Nice job!"
+    except Exception:
+        return "🎉 Great job!"
+
+
+def build_endgame_bullets_fallback(session_obj: Dict | None) -> List[str]:
+    """Contextual, score-aware feedback bullets for the end-of-session Great Job card.
+
+    Shows overall AIMS score percentage followed by per-step feedback calibrated
+    to the clinician's actual performance in this session.
+    """
+    # Score range helpers
+    _HIGH = 2.4    # >= 80%
+    _MID  = 1.8    # >= 60%
+
+    # Per-step messages keyed by performance tier
+    _MSGS: Dict[str, Dict[str, str]] = {
+        "Announce": {
+            "high": "clear, non-pressuring recommendation — well done.",
+            "mid":  "the recommendation was present; try making it more concise and following immediately with an open question.",
+            "low":  "lead with a brief presumptive recommendation, then invite input (e.g., \"Carter's due for MMR today — what are your thoughts?\").",
+            "absent": "introduce vaccines with a clear, non-pushy recommendation before asking for concerns.",
+        },
+        "Inquire": {
+            "high": "strong open questions that surfaced the parent's real concerns.",
+            "mid":  "good inquiry; keep questions single-barreled — avoid listing multiple options in one question.",
+            "low":  "use open-ended questions to surface concerns (e.g., \"What's on your mind about vaccines today?\") and avoid stacking multiple questions.",
+            "absent": "ask at least one open-ended question to discover the parent's specific concerns before educating.",
+        },
+        "Mirror": {
+            "high": "excellent reflections — you consistently captured the concern before moving forward.",
+            "mid":  "good reflections; make sure to capture the underlying value (not just the stated concern) and check for accuracy.",
+            "low":  "reflect the parent's concern before educating (e.g., \"It sounds like you want to be sure this is safe — did I get that right?\").",
+            "absent": "mirror the parent's concern back to them before offering any education — it makes them feel heard.",
+        },
+        "Secure": {
+            "high": "education was well-tailored to the stated concerns without overwhelming.",
+            "mid":  "solid education; try adding an explicit check-in after key facts (e.g., \"How does that land for you?\") to avoid a lecture feel.",
+            "low":  "keep Secure focused: one tailored fact, linked directly to the concern, then check in (e.g., \"Does that help with the ingredient question?\"). Avoid long explanations without pauses.",
+            "absent": "provide targeted education addressing the stated concern, then check understanding.",
+        },
+    }
+
     if not isinstance(session_obj, dict):
-        # Generic advice when no metrics available
         return [
-            "Keep Announce brief and clear, then ask an open question to invite concerns.",
-            "Inquire: use open-ended prompts (e.g., ‘What are your thoughts about today’s vaccine?’).",
-            "Mirror: reflect their words before educating (e.g., ‘It feels like a lot at once — did I get that right?’).",
-            "Secure: offer one data-backed point tailored to the specific concern (avoid firehosing).",
-        ][:5]
+            "Announce: lead with a short, non-pushy recommendation and invite input.",
+            "Inquire: ask open-ended questions to surface the parent's specific concerns.",
+            "Mirror: reflect their words and emotions before educating.",
+            "Secure: share one tailored fact linked to the concern, then check understanding.",
+        ]
 
     counts = (session_obj.get("perStepCounts") or {})
-    ra = (session_obj.get("runningAverage") or {})
+    ra     = (session_obj.get("runningAverage") or {})
 
-    def avg(step: str) -> float:
+    def _avg(step: str) -> float:
         try:
             v = ra.get(step)
             return float(v) if isinstance(v, (int, float)) else float("nan")
         except Exception:
             return float("nan")
 
-    def need_focus(step: str, min_count: int = 1, thresh: float = 2.5) -> bool:
+    def _pct(a: float) -> int:
+        """Convert a 1-3 average to a 0-100 integer percentage."""
+        return int(round((a / 3.0) * 100))
+
+    bullets: List[str] = []
+
+    # 1. Overall score from core AIMS steps that were actually used
+    core_avgs = [_avg(s) for s in ("Announce", "Inquire", "Mirror", "Secure")]
+    core_avgs = [a for a in core_avgs if a == a]  # drop NaN
+    if core_avgs:
+        overall_pct = int(round((sum(core_avgs) / (len(core_avgs) * 3.0)) * 100))
+        bullets.append(f"Overall AIMS score: {overall_pct}%")
+
+    # 2. Per-step contextual feedback
+    for step in ("Announce", "Inquire", "Mirror", "Secure"):
         c = int(counts.get(step, 0) or 0)
-        a = avg(step)
-        low_avg = (a == a) and (a < thresh)  # a==a filters NaN
-        return c < min_count or low_avg
+        a = _avg(step)
+        msgs = _MSGS[step]
 
-    # 1) Announce
-    if need_focus("Announce", min_count=1, thresh=2.5):
-        a = ra.get("Announce")
-        bullets.append(
-            "Announce: lead with a short, non-pushy plan and invite input (e.g., ‘It’s MMR today — how does that sound?’)."
-        )
+        if c == 0 or a != a:  # step not used or no score data
+            bullets.append(f"{step}: {msgs['absent']}")
+        elif a >= _HIGH:
+            bullets.append(f"{step} {_pct(a)}% \u2014 {msgs['high']}")
+        elif a >= _MID:
+            bullets.append(f"{step} {_pct(a)}% \u2014 {msgs['mid']}")
+        else:
+            bullets.append(f"{step} {_pct(a)}% \u2014 {msgs['low']}")
 
-    # 2) Inquire
-    if need_focus("Inquire", min_count=2, thresh=2.7):
-        bullets.append(
-            "Inquire: ask 1–2 open questions to surface concerns (e.g., ‘What’s top of mind about MMR?’ or ‘What have you heard?’)."
-        )
-    else:
-        bullets.append(
-        "Nice inquiry pacing — keep questions open and single-barreled, then pause for the person's full answer."
-        )
-
-    # 3) Mirror
-    if need_focus("Mirror", min_count=2, thresh=2.7):
-        bullets.append(
-            "Mirror: reflect feelings/words before educating (e.g., ‘You’re worried about fever after shots — did I get that right?’)."
-        )
-    else:
-        bullets.append(
-        "Your reflections help the person feel heard — keep mirroring the specific worry before offering facts."
-        )
-
-    # 4) Secure
-    if need_focus("Secure", min_count=1, thresh=2.6):
-        bullets.append(
-            "Secure: share one tailored fact, link it to their concern, and check understanding (e.g., ‘A brief fever is common — how does that land?’)."
-        )
-    else:
-        bullets.append(
-            "Education was on-point — continue tailoring 1–2 facts to the stated concern and avoid information overload."
-        )
-
-    # 5) Close
-    bullets.append(
-        "Close the loop: confirm plan next steps and appreciation (e.g., ‘Thanks for talking it through — we’ll proceed as discussed.’)."
-    )
-
-    # Cap to 5-6 items
     return bullets[:6]
