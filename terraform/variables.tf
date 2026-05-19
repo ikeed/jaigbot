@@ -99,3 +99,9 @@ variable "sessions_bucket_name" {
   description = "Name of the GCS bucket for chat sessions"
   default     = "aimsbot-chat-sessions"
 }
+
+variable "reports_bucket_name" {
+  type        = string
+  description = "Name of the GCS bucket for bug reports"
+  default     = "aimsbot-bug-reports"
+}

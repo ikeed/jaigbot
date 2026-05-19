@@ -166,7 +166,7 @@ class EndGameDetector:
     LITERATURE_CUES = [
         "handout", "handouts", "brochure", "pamphlet", "literature", "written info",
         "information to take home", "take home", "materials", "resource", "printout", "printed info",
-        "reading", "read this", "give you some literature", "leaflet", "info sheet",
+        "read this", "give you some literature", "leaflet", "info sheet",
         "look over", "at home", "read over",
     ]
 
