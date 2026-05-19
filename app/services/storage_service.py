@@ -62,6 +62,7 @@ class StorageService:
         target_bucket_name = self.reports_bucket_name if is_report else self.bucket_name
         bucket = self.reports_bucket if is_report else self.bucket
 
+        logger.info(f"Using bucket '{target_bucket_name}' for upload (is_report={is_report}).")
         if not target_bucket_name:
             logger.debug(f"Target bucket not configured (is_report={is_report}), skipping upload.")
             return False
@@ -91,7 +92,7 @@ class StorageService:
         """Convert messy internal memory to structured logical schema."""
         started_at = data.get("session_started")
         ended_at = data.get("session_ended") or data.get("updated")
-        
+
         duration = None
         if started_at and ended_at:
             duration = round(ended_at - started_at, 2)
@@ -103,12 +104,12 @@ class StorageService:
         # Re-group transcript into turns
         transcript = []
         full_hist = data.get("full_history") or []
-        
-        # We'll group them by scanning and looking for (user, assistant) pairs 
+
+        # We'll group them by scanning and looking for (user, assistant) pairs
         # and checking if there was a preceding or inter-turn coach message.
         # Structure: user_N -> assistant_N -> coach_feedback_N
         # (Based on current mess: [coach_0, user_1, assistant_1, coach_1, user_2, assistant_2...])
-        
+
         # Simplified: scan in order, keep roles.
         current_turn = 0
         for i, entry in enumerate(full_hist):
@@ -138,7 +139,7 @@ class StorageService:
                             "feedback": coach_entry.get("content"),
                             "timestamp": iso(coach_entry.get("time"))
                         }
-                
+
                 transcript.append({
                     "turn": current_turn,
                     "role": "assistant",
