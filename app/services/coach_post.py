@@ -41,7 +41,7 @@ class VaccineRelevanceGate:
         "decision",
     ]
 
-    VALID_STEPS = {"Announce", "Inquire", "Mirror", "Secure", "Announce+Inquire", "Mirror+Inquire", "Mirror+Secure", "Secure+Inquire"}
+    VALID_STEPS = {"Announce", "Inquire", "Mirror", "Secure", "Announce+Inquire", "Mirror+Inquire", "Mirror+Secure", "Secure+Inquire", "Mirror+Secure+Inquire"}
 
     @staticmethod
     def gate(
@@ -84,44 +84,10 @@ class AimsPostProcessor:
     Exact behavior preserved from main.py.
     """
 
-    # Tokens that strongly suggest didactic education rather than open inquiry.
-    # Deliberately narrow: broad clinical words (schedule, dose, safe, immun, risk)
-    # are common in ALL AIMS steps and must not trigger an override.
-    _DIDACTIC_TOKENS = [
-        "study shows", "studies show", "research shows", "evidence shows",
-        "the data", "data show", "statistics show", "statistically",
-        "percent of", "% of", "herd immunity",
-        "clinical trial", "randomized", "meta-analysis",
-    ]
-
-    @staticmethod
-    def correct_inquire_to_secure(cls_payload: Dict, clinician_text: str) -> Dict:
-        """Override Inquire → Secure only for clear didactic lectures with no question.
-
-        Guards:
-        1. No '?' anywhere in the message (a question indicates Inquire or Announce intent)
-        2. Message is long enough to be a lecture (> 40 words)
-        3. Contains specific strongly-didactic language (clinical trial, statistics, etc.)
-        """
-        lt = (clinician_text or "").strip().lower()
-        if cls_payload.get("step") != "Inquire":
-            return cls_payload
-        if "?" in lt:
-            return cls_payload
-        if len(lt.split()) <= 40:
-            return cls_payload
-        if any(tok in lt for tok in AimsPostProcessor._DIDACTIC_TOKENS):
-            cls_payload = dict(cls_payload)
-            cls_payload["reasons"] = [
-                "Didactic education detected; overriding Inquire to Secure"
-            ] + (cls_payload.get("reasons") or [])
-            cls_payload["step"] = "Secure"
-        return cls_payload
-
     @staticmethod
     def normalize_score(cls_payload: Dict) -> Dict:
         if (
-            cls_payload.get("step") in {"Announce", "Inquire", "Mirror", "Secure", "Announce+Inquire", "Mirror+Inquire", "Mirror+Secure", "Secure+Inquire"}
+            cls_payload.get("step") in {"Announce", "Inquire", "Mirror", "Secure", "Announce+Inquire", "Mirror+Inquire", "Mirror+Secure", "Secure+Inquire", "Mirror+Secure+Inquire"}
             and int(cls_payload.get("score", 0)) < 1
         ):
             cls_payload = dict(cls_payload)
@@ -130,7 +96,6 @@ class AimsPostProcessor:
 
     @staticmethod
     def post_process(cls_payload: Dict, clinician_text: str) -> Dict:
-        cls_payload = AimsPostProcessor.correct_inquire_to_secure(cls_payload, clinician_text)
         cls_payload = AimsPostProcessor.normalize_score(cls_payload)
         # Soften overly harsh feedback when autonomy-respecting language is present
         try:
@@ -187,6 +152,8 @@ class EndGameDetector:
         "i feel good about proceeding", "feel confident in proceeding",
         "sounds good to me", "plan sounds good", "that sounds like a plan",
         "i'm on board", "i am on board", "on board with",
+        "comfortable moving forward", "comfortable with moving forward", "happy to move forward",
+        "move forward with it", "move forward today", "happy to proceed",
     ]
 
     FOLLOWUP_CUES = [
@@ -328,16 +295,18 @@ def sanitize_endgame_bullets(lines: List[str]) -> List[str]:
 
 
 
-def endgame_title(session_obj: Dict | None) -> str:
+def endgame_title(session_obj: Dict | None, outcome: str = "") -> str:
     """Return a score-calibrated celebratory title for the end-of-session card.
 
     Overall score (mean of core AIMS step averages, scaled to 0-100%):
-      >= 85%  -> "🎉 Excellent Job!"
-      >= 70%  -> "🎉 Great Job!"
-      >= 55%  -> "🎉 Good Job!"
-      <  55%  -> "🎉 Nice Job!"
-    Falls back to 'Great Job!' when no score data is available.
+      >= 85%  -> "🎉 Excellent job!"
+      >= 70%  -> "🎉 Great job!"
+      >= 55%  -> "🎉 Good job!"
+      <  55%  -> "🎉 Nice job!"
+    Falls back to 'Great job!' when no score data is available.
     """
+    if outcome == "deferred":
+        return "Session Complete"
     try:
         ra = (session_obj or {}).get("runningAverage") or {}
         core_avgs = [
@@ -345,17 +314,17 @@ def endgame_title(session_obj: Dict | None) -> str:
             if isinstance(ra.get(s), (int, float))
         ]
         if not core_avgs:
-            return "🎉 Great Job!"
+            return "🎉 Great job!"
         overall = sum(core_avgs) / (len(core_avgs) * 3.0) * 100
         if overall >= 85:
-            return "🏆 Excellent Job!"
+            return "🏆 Excellent job!"
         if overall >= 70:
-            return "🎉 Great Job!"
+            return "🎉 Great job!"
         if overall >= 55:
-            return "👏 Good Job!"
-        return "💪 Nice Job!"
+            return "👏 Good job!"
+        return "💪 Nice job!"
     except Exception:
-        return "🎉 Great Job!"
+        return "🎉 Great job!"
 
 
 def build_endgame_bullets_fallback(session_obj: Dict | None) -> List[str]:

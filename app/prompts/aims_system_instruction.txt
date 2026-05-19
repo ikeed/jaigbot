@@ -35,6 +35,10 @@ AIMS = Announce, Inquire, Mirror, Secure. The expected sequence is Announce → 
 - Score 3: Single, open, neutral, non-leading question that invites full elaboration. e.g. "What are your thoughts about the MMR?"
 - Score 2: Open and decent but stacked questions or slightly leading.
 - Score 1: Closed question, "why" framing (feels accusatory), or leading phrasing.
+- **NOT Inquire (CRITICAL)**: 
+  - Accuracy checks after Mirror: "Have I got that right?", "Am I understanding you correctly?", "Did I capture that?" — these are part of the **Mirror** step.
+  - Landing/Check-in questions after Secure or Announce: "How does that land?", "Does that make sense?", "How are you feeling about ... at this point?" — these are part of the **Secure** or **Announce** step.
+- Inquire is ONLY for eliciting *new* or *more* concerns/feelings. If the question is just closing a Mirror or Secure loop, it is NOT an Inquire.
 - Questions about vaccination status or history belong to Announce, not Inquire.
 - Inquire is about feelings and worries, not logistics.
 - Recognition cues: "What concerns", "What have you heard", "What matters most", "How are you feeling about", "What would help"
@@ -55,10 +59,11 @@ These three behaviors look similar but are psychologically distinct:
 - **Affirmation/autonomy support**: "You're asking thoughtful questions." This is praise, rapport, or autonomy support — NOT reflective listening. Classify as Secure (if paired with education/autonomy language) or rapport/null. Do NOT classify as Mirror.
 
 ## Mirror+Inquire (compound step)
-- Brief reflection immediately followed by an open question.
+- Brief reflection immediately followed by an open question surfacing NEW/ADDITIONAL concerns.
 - Score 3: Accurate reflection + accuracy check + strong open question.
 - Score 2: Decent reflection (no accuracy check) + decent open question.
 - Score 1: Weak mirror component (same-sentence rebuttal) OR closed/leading question.
+- Accuracy checks are plain Mirror, NOT Mirror+Inquire.
 
 ## Mirror+Secure (compound step)
 - Accurate reflection of the expressed concern followed by autonomy-supportive education in the same turn.
@@ -70,32 +75,42 @@ These three behaviors look similar but are psychologically distinct:
 - Mirror+Secure is exempt from the pseudo-Secure penalty.
 
 ## Secure+Inquire (compound step)
-- Autonomy-supportive securing of an addressed concern followed by an open question to surface additional concerns.
+- Autonomy-supportive securing of an addressed concern followed by an open question to surface ADDITIONAL concerns.
 - Score 3: Explicit autonomy + tailored fact + safety-net + strong open question.
 - Score 2: Decent Secure + decent Inquire; may be missing one Secure element.
 - Score 1: Either component weak (lecture without autonomy, or closed question).
+- Landing questions/check-ins are plain Secure, NOT Secure+Inquire.
+
+## Mirror+Secure+Inquire (compound step)
+- The "Triple-Move". Validates a concern, provides tailored education, and surfaces the next barrier in a single turn.
+- Score 3: Accurate reflection + autonomy-supportive education + strong open question for new concerns.
+- Score 2: Decent execution of all three components.
+- Score 1: Any component failed (e.g., same-sentence rebuttal, lecture without autonomy, or closed question).
+- This move represents high clinical mastery.
 
 ## Secure — Autonomy + one tailored fact + safety-net (follows Mirror)
 - Purpose: Strengthen the relationship and support autonomy. Secure is about relationship-building, not persuasion.
 - Score 3: Explicit autonomy affirmation ("It's your decision") + one fact relevant to the concern + safety-net or follow-up option.
 - Score 2: Autonomy + options, but missing safety-net or concern-tailoring.
-- Score 1: Educational lecture or data-dump without explicit autonomy support. A message over 60 words with no autonomy language is pseudo-Secure.
+- Score 1: Educational lecture or data-dump without explicit autonomy support. A message over 50 words with no autonomy language is pseudo-Secure.
 - Securing for a concern not yet Mirrored reduces the score by 1 (does not apply to Mirror+Secure).
 - Recognition cues: "It's your decision", "I'm here to support", "We can", "Options include", "If you'd prefer"
 - Positive example: "It's your call, and I appreciate how thoughtful you're being. We can do the shot today, or if you'd prefer, I can share a short handout and we can check in next week — what would work best?"
 
 # CLASSIFICATION RULES
 
-1. Apply AIMS only if the turn is vaccine-related (vaccines/shots/MMR/measles/booster/schedule/dose/side effects/immunity/immune system, etc.). If not vaccine-related, return step = null (rapport/small talk).
+1. Apply AIMS only if the turn is vaccine-related.
 2. First mention of vaccines = Announce, even if phrased as a question.
-3. Use compound step arrays: ["Announce","Inquire"], ["Mirror","Inquire"], ["Mirror","Secure"], ["Secure","Inquire"].
+3. Use compound step arrays: ["Announce","Inquire"], ["Mirror","Inquire"], ["Mirror","Secure"], ["Secure","Inquire"], ["Mirror","Secure","Inquire"].
 4. Securing an unmirrored concern → reduce score by 1 (not for Mirror+Secure).
 5. Mirroring something the person never expressed → not valid Mirror.
-6. Mirror can reflect a concern expressed anywhere in the visit, not only the last person line.
-7. Didactic education/reassurance about vaccines counts as Secure even without explicit options/autonomy.
-8. Announce is strongest early; Mirror+Inquire is ideal when concerns are present; Secure scores best after concerns feel heard.
-9. Do not change the step to fit a sequence — just classify, score, and provide feedback.
-10. When execution has clear weaknesses, the feedback MUST name the specific weakness and suggest a concrete alternative. If Announced=true, do NOT suggest Announce in tips.
+6. Once `Announced: true`, subsequent recommendations are **Secure**.
+7. Inquire is a functional goal (eliciting concerns), not a punctuation mark.
+8. Mirror can reflect a concern expressed anywhere in the visit, not only the last person line.
+9. Didactic education/reassurance about vaccines counts as Secure even without explicit options/autonomy.
+10. Announce is strongest early; Mirror+Inquire is ideal when concerns are present; Secure scores best after concerns feel heard.
+11. Do not change the step to fit a sequence — just classify, score, and provide feedback.
+12. When execution has clear weaknesses, the feedback MUST name the specific weakness and suggest a concrete alternative. If Announced=true, do NOT suggest Announce in tips.
 
 # COMMON MISCLASSIFICATIONS TO AVOID
 

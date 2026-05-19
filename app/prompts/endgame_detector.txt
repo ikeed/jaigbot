@@ -16,7 +16,9 @@ A session is in "Endgame" ONLY if:
    - **accepted_vaccine**: The person consents to vaccinate today (one or more vaccines). This includes partial acceptance — agreeing to one vaccine now while taking literature on others. e.g. "Let's do it", "Go ahead", "We're ready", "I consent", "I'm comfortable proceeding", "That sounds like a reasonable plan", "I'm comfortable proceeding with the Tdap today and I'd appreciate reading material for the others".
    - **accepted_literature**: The person agrees to take home information AND continue the conversation later (follow-up appointment, return visit, or clear intent to come back). Both elements must be present (or clearly implied). Look for *intent*, not exact phrases. e.g. "I'll take a look at the information", "That sounds fair — give me a couple of weeks", "I'd like to think it over and come back", "Send me home with something to read", "two or three weeks should give me enough time".
 
-**`deferred` and `not_resolved` ALWAYS set `is_endgame: false`.** Use `deferred` when the person postpones without committing to take literature home or book a follow-up (e.g. "I need more time", "Maybe next visit", "I need to think about it"). Mid-conversation hesitation (e.g. "I need to think about it a little more" in response to an open question) is NOT endgame — use `not_resolved`.
+**`deferred` and `not_resolved` ALWAYS set `is_endgame: false`.**
+- **deferred**: The person postpones the decision to a future visit or time, but the conversation on vaccines has stalled for today. e.g. "Maybe next visit", "I'll think about it for next time", "Let's revisit this at our next appointment". **This is NOT an endgame.** We should nudge the user to keep the door open or offer literature.
+- **not_resolved**: Mid-conversation hesitation (e.g. "I need to think about it a little more" in response to an open question).
 
 ### IMPORTANT: Judge INTENT, not exact wording
 Do NOT require specific keywords. Natural language varies widely. If the person's reply clearly signals they are taking information home and planning to return, classify as **accepted_literature** even if they use informal phrasing like "look things over", "mull it over", or "give me some time to read through it".
@@ -27,7 +29,7 @@ Do NOT require specific keywords. Natural language varies widely. If the person'
 - If the person accepts one vaccine today and asks for literature on others, that IS `accepted_vaccine` — the session has reached resolution.
 - If the person says things like "that sounds fair", "I appreciate you not pushing", and "I'll take a look" in the same reply, that is **accepted_literature**.
 - Do NOT return `not_resolved` when the person has clearly agreed to a plan (vaccine today, literature to review, or both). Analytical or measured phrasing ("I'm comfortable proceeding", "that sounds like a reasonable plan") counts as acceptance.
-- Do NOT set `is_endgame: true` for `deferred`. Deferral without literature and a follow-up plan is not a completed session.
+- Do NOT set `is_endgame: true` for `not_resolved`.
 - Do NOT treat mid-conversation hesitation ("I need to think about it", "I'm still not sure") as `deferred` endgame. Those are `not_resolved` — the conversation should continue.
 
 ### IMPORTANT: Concern lists may be incomplete

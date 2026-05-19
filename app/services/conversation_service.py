@@ -203,13 +203,19 @@ def mark_best_match_mirrored(state: dict, person_text: str, topical_cues: Topica
             return
 
 
-def mark_secured_by_topic(state: dict, clinician_text: str, topical_cues: TopicalCues) -> None:
+def mark_secured_by_topic(
+    state: dict, 
+    clinician_text: str, 
+    topical_cues: TopicalCues,
+    llm_topic: Optional[str] = None
+) -> None:
     """Mark first mirrored concern matching clinician topic as secured; fallback to first mirrored.
     """
     concerns: List[Concern] = state.get("parent_concerns") or []
     if not concerns:
         return
-    topic = concern_topic(clinician_text, topical_cues)
+    
+    topic = llm_topic or concern_topic(clinician_text, topical_cues)
     if topic:
         for c in concerns:
             if (c.get("topic") == topic) and c.get("is_mirrored") and not c.get("is_secured"):
