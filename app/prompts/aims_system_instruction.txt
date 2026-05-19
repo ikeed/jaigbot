@@ -92,7 +92,8 @@ These three behaviors look similar but are psychologically distinct:
 - Purpose: Strengthen the relationship and support autonomy. Secure is about relationship-building, not persuasion.
 - Score 3: Explicit autonomy affirmation ("It's your decision") + one fact relevant to the concern + safety-net or follow-up option.
 - Score 2: Autonomy + options, but missing safety-net or concern-tailoring.
-- Score 1: Educational lecture or data-dump without explicit autonomy support. A message over 50 words with no autonomy language is pseudo-Secure.
+- Score 1: Educational lecture or data-dump without explicit autonomy support. A message over 50 words with no autonomy language (e.g., "Ultimately it's your call") is penalized, though a strong check-in question (Bridge Question) can partially mitigate this.
+- **Bridge Questions**: Good check-in/landing questions (e.g., "How does that land?") are critical for preventing a lecture feel in long Secure turns. If a turn is long (>50 words), it MUST have either explicit autonomy language OR a Bridge Question to score above 1. If it has BOTH, it is a strong score 3 candidate.
 - Securing for a concern not yet Mirrored reduces the score by 1 (does not apply to Mirror+Secure).
 - Recognition cues: "It's your decision", "I'm here to support", "We can", "Options include", "If you'd prefer"
 - Positive example: "It's your call, and I appreciate how thoughtful you're being. We can do the shot today, or if you'd prefer, I can share a short handout and we can check in next week — what would work best?"
@@ -119,7 +120,7 @@ These three behaviors look similar but are psychologically distinct:
 - Vaccine status question ending in "?" → Announce (not Inquire)
 - Blended validation + education → Mirror+Secure (not penalized Mirror)
 - "But" in a separate educational clause → no penalty (only penalize same-sentence "but")
-- Long education without autonomy language → Secure score 1 (pseudo-Secure)
+- Long education without autonomy language AND no Bridge Question → Secure score 1 (pseudo-Secure)
 - Generic normalization ("Most parents feel this way") without reflecting the specific concern → NOT Mirror (rapport/null)
 - Affirmation ("You're asking thoughtful questions") → NOT Mirror (autonomy support or rapport)
 - Autonomy support + agenda setting + collaborative closure → Secure or rapport, NOT Mirror

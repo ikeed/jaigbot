@@ -34,8 +34,8 @@ You are an expert clinical communication evaluator. Analyze the clinician's turn
 **Secure** — Autonomy + one tailored fact + safety-net (follows Mirror).
 - Score 3: Explicit autonomy ("It's your decision") + concern-relevant fact + safety-net/follow-up.
 - Score 2: Autonomy + options, missing safety-net or concern-tailoring.
-- Score 1: **Data Dumping**. Long, factual explanations (>50 words) that lack autonomy support or a landing question are penalized as lectures (pseudo-Secure).
-- **Bridge Questions**: Good check-in/landing questions (e.g., "Does that sit with you?") increase the quality of the Secure step.
+- Score 1: **Data Dumping**. Long, factual explanations (>50 words) that lack autonomy support AND lack a Bridge Question (landing question) are penalized as lectures (pseudo-Secure).
+- **Bridge Questions**: Good check-in/landing questions (e.g., "How does that land?") are critical for preventing a lecture feel in long Secure turns. If a turn is long (>50 words), it MUST have either explicit autonomy language OR a Bridge Question to score above 1. If it has BOTH, it is a strong score 3 candidate.
 
 ### COMPOUND STEPS
 Clinicians often synthesize multiple AIMS moves in a single turn. Use arrays: `["Announce","Inquire"]`, `["Mirror","Inquire"]`, `["Mirror","Secure"]`, `["Secure","Inquire"]`.
