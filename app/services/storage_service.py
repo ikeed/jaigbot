@@ -62,12 +62,13 @@ class StorageService:
         target_bucket_name = self.reports_bucket_name if is_report else self.bucket_name
         bucket = self.reports_bucket if is_report else self.bucket
 
+        logger.info(f"Using bucket '{target_bucket_name}' for upload (is_report={is_report}).")
         if not target_bucket_name:
             logger.debug(f"Target bucket not configured (is_report={is_report}), skipping upload.")
             return False
 
         if not bucket:
-            logger.error(f"GCS bucket {target_bucket_name} not available for upload.")
+            logger.error(f"GCS bucket object for '{target_bucket_name}' not initialized (is_report={is_report}).")
             return False
 
         # Transform the "messy" internal memory state into the logical archive schema

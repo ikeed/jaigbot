@@ -14,7 +14,7 @@ A session is in "Endgame" ONLY if:
    *Note*: If NO concerns were inquired/raised, this criterion is considered met after Announce and a concluding dialogue (e.g., agreeing to vaccinate or follow-up).
 3. A clear resolution has been reached — one of the following **two** outcomes (these are the ONLY outcomes that set `is_endgame: true`):
    - **accepted_vaccine**: The person consents to vaccinate today (one or more vaccines). This includes partial acceptance — agreeing to one vaccine now while taking literature on others. e.g. "Let's do it", "Go ahead", "We're ready", "I consent", "I'm comfortable proceeding", "That sounds like a reasonable plan", "I'm comfortable proceeding with the Tdap today and I'd appreciate reading material for the others".
-   - **accepted_literature**: The person agrees to take home information AND continue the conversation later (follow-up appointment, return visit, or clear intent to come back). Both elements must be present (or clearly implied). Look for *intent*, not exact phrases. e.g. "I'll take a look at the information", "That sounds fair — give me a couple of weeks", "I'd like to think it over and come back", "Send me home with something to read", "two or three weeks should give me enough time".
+   - **accepted_literature**: The person agrees to take home information AND continue the conversation later with a follow-up appointment (explicitly mentioned or strongly implied return visit). Both elements must be present. e.g. "I'll take a look at the information and we can talk about it at the next appointment", "I'd like to think it over and come back in two weeks", "Send me home with something to read and let's book a follow-up". **Mere interest in literature or appreciation of information WITHOUT intent to return is NOT an endgame.**
 
 **`deferred` and `not_resolved` ALWAYS set `is_endgame: false`.**
 - **deferred**: The person postpones the decision to a future visit or time, but the conversation on vaccines has stalled for today. e.g. "Maybe next visit", "I'll think about it for next time", "Let's revisit this at our next appointment". **This is NOT an endgame.** We should nudge the user to keep the door open or offer literature.
@@ -27,7 +27,7 @@ Do NOT require specific keywords. Natural language varies widely. If the person'
 - Do NOT return `not_resolved` just because the person didn't use formal words like "follow-up appointment" or "literature". Informal agreement is still agreement.
 - Do NOT return `accepted_vaccine` unless the person clearly consents to vaccinate *today* (at least one vaccine).
 - If the person accepts one vaccine today and asks for literature on others, that IS `accepted_vaccine` — the session has reached resolution.
-- If the person says things like "that sounds fair", "I appreciate you not pushing", and "I'll take a look" in the same reply, that is **accepted_literature**.
+- If the person says things like "that sounds fair", "I appreciate you not pushing", and "I'll take a look" in the same reply, that is NOT an endgame unless they also agree to a follow-up visit.
 - Do NOT return `not_resolved` when the person has clearly agreed to a plan (vaccine today, literature to review, or both). Analytical or measured phrasing ("I'm comfortable proceeding", "that sounds like a reasonable plan") counts as acceptance.
 - Do NOT set `is_endgame: true` for `not_resolved`.
 - Do NOT treat mid-conversation hesitation ("I need to think about it", "I'm still not sure") as `deferred` endgame. Those are `not_resolved` — the conversation should continue.

@@ -78,11 +78,12 @@ class ReplyOnlyGateway:
 
 class LiveClassifyClient(VertexClient):
     """VertexClient subclass that delegates to the real LLM for classification
-    but intercepts endgame detection prompts.
+    but optionally intercepts endgame detection prompts.
 
-    Endgame calls are mocked to always return ``is_endgame: false`` so the
-    session doesn't terminate mid-replay.
+    By default, endgame calls are mocked to return ``is_endgame: false``.
+    Set ``intercept_endgame = False`` to allow real LLM endgame detection.
     """
+    intercept_endgame: bool = True
 
     _ENDGAME_RESPONSE = json.dumps({
         "is_endgame": False,
@@ -91,7 +92,7 @@ class LiveClassifyClient(VertexClient):
     })
 
     async def generate_text_async(self, prompt: str, **kwargs) -> str:
-        if "endgame" in (prompt or "").lower():
+        if self.intercept_endgame and "endgame" in (prompt or "").lower():
             return self._ENDGAME_RESPONSE
         # Real LLM call for classification
         return await super().generate_text_async(prompt, **kwargs)
@@ -115,6 +116,7 @@ class TurnExpectation:
     max_score: Optional[int] = None
     not_steps: list[str] = field(default_factory=list)
     phase_after: Optional[str] = None
+    is_endgame: Optional[bool] = None
     label: str = ""  # human-readable description for error messages
 
 
@@ -238,6 +240,13 @@ class TranscriptReplayTest:
             )
 
         # Phase check requires SESSION_ID — handled in the test body.
+        
+        # Endgame assertion
+        if exp.is_endgame is not None:
+            actual_endgame = data.get("gameOver", False)
+            assert actual_endgame == exp.is_endgame, (
+                f"{prefix}: expected gameOver={exp.is_endgame}, got {actual_endgame}"
+            )
 
     # ---- Standard test methods ----
 
