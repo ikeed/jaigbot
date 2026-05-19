@@ -246,7 +246,8 @@ async def _replay_history(history: list[dict]):
                 txt = (content or "").strip()
                 parts: list[str] = []
                 if " | " in txt:
-                    parts = [p.strip() for p in txt.split(" | ") if p.strip()]
+                    all_parts = [p.strip() for p in txt.split(" | ") if p.strip()]
+                    parts = [p for p in all_parts if not p.lower().startswith("conversation phase:")]
                 else:
                     # Fallback: split by lines and keep common prefixes
                     cands = [ln.strip() for ln in txt.splitlines() if ln.strip()]
