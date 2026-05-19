@@ -246,7 +246,8 @@ async def _replay_history(history: list[dict]):
                 txt = (content or "").strip()
                 parts: list[str] = []
                 if " | " in txt:
-                    parts = [p.strip() for p in txt.split(" | ") if p.strip()]
+                    all_parts = [p.strip() for p in txt.split(" | ") if p.strip()]
+                    parts = [p for p in all_parts if not p.lower().startswith("conversation phase:")]
                 else:
                     # Fallback: split by lines and keep common prefixes
                     cands = [ln.strip() for ln in txt.splitlines() if ln.strip()]
@@ -499,12 +500,31 @@ async def _start_chat_impl():
         url = get_backend_url()
         return url[:-5] if url.endswith("/chat") else url
 
-    # 1. Generate a fresh Session ID for every new chat so that clicking
-    #    "New Chat" does not replay the previous conversation.
+    # 1. Session ID management: 
+    # Attempt to recover a persistent session_id if we have an authenticated user.
+    # This ensures that if the app restarts, we can resume the same session
+    # instead of generating a new one (which leads to duplicate scenario cards).
     user_identifier = app_user.identifier if app_user else None
-    session_id = str(uuid.uuid4())
-    _write_persistent_session_id(session_id, user_identifier)
-    cl.user_session.set("session_id", session_id)
+    session_id = cl.user_session.get("session_id")
+
+    if not session_id:
+        # If we have a user, try to recover their last session ID.
+        # This is critical for stability across server restarts.
+        if user_identifier:
+            session_id = _get_persistent_session_id(user_identifier)
+            print(f"DEBUG: Recovered persistent session_id for {user_identifier}: {session_id}")
+        else:
+            # Fallback for anonymous users or first-time loads
+            session_id = str(uuid.uuid4())
+            print(f"DEBUG: Generated fresh session_id: {session_id}")
+            
+        # Ensure it's persisted and set in the session
+        _write_persistent_session_id(session_id, user_identifier)
+        cl.user_session.set("session_id", session_id)
+    else:
+        # We already have an active session_id in this user_session.
+        # We keep it to avoid generating a duplicate scenario card.
+        pass
 
     # 2. Attempt to fetch existing backend history for this session
     existing_hist = []
@@ -791,18 +811,21 @@ if is_oauth_enabled or has_auth_secret or settings.ENABLE_PASSWORD_AUTH:
                 return cl.User(identifier="admin", metadata={"name": "Admin User", "provider": "password"})
             return None
 
-    @cl.header_auth_callback
-    def header_auth_callback(headers: dict) -> cl.User | None:
-        """
-        Handle authentication based on custom headers. This is useful when
-        Chainlit is mounted in a FastAPI app that handles authentication.
-        """
-        # Example: check for a 'X-User-ID' header passed by a proxy or parent app
-        user_id = headers.get("x-user-id")
-        user_name = headers.get("x-user-name")
-        if user_id:
-            return cl.User(identifier=user_id, metadata={"name": user_name or user_id, "provider": "header"})
-        return None
+    # We only register header_auth_callback if we detect specific headers
+    # to avoid interference with other auth methods in local dev.
+    if is_valid_env_val(os.environ.get("ENABLE_HEADER_AUTH")):
+        @cl.header_auth_callback
+        def header_auth_callback(headers: dict) -> cl.User | None:
+            """
+            Handle authentication based on custom headers. This is useful when
+            Chainlit is mounted in a FastAPI app that handles authentication.
+            """
+            # Example: check for a 'X-User-ID' header passed by a proxy or parent app
+            user_id = headers.get("x-user-id")
+            user_name = headers.get("x-user-name")
+            if user_id:
+                return cl.User(identifier=user_id, metadata={"name": user_name or user_id, "provider": "header"})
+            return None
 
 if is_oauth_enabled:
     @cl.oauth_callback

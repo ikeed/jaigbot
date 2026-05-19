@@ -330,8 +330,6 @@ class AimsCoachingHandler:
                 reasons = cls_payload.get("reasons") or []
                 tips = cls_payload.get("tips") or []
                 step_feedback = cls_payload.get("step_feedback") or []
-                if phase:
-                    parts.append(f"Conversation phase: {phase}")
                 if step and step not in ("null", "None"):
                     parts.append(f"Detected step: {step}")
 
