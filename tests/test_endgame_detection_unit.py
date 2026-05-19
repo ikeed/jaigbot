@@ -61,7 +61,7 @@ def _history_with_coach(include_coach: bool = True) -> list:
     if include_coach:
         hist.insert(
             1,
-            {"role": "coach", "content": "Conversation phase: InquireMirror | Detected step: Announce"},
+            {"role": "coach", "content": "Detected step: Announce"},
         )
     return hist
 
