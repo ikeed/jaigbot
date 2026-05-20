@@ -634,9 +634,7 @@ async def _start_chat_impl():
 
         try:
             # Render a scenario summary card at the top (not persisted anew) for consistent context after refresh
-            # Add native Report Issue action to the action bar of this message
-            report_action = cl.Action(name="report_issue", value="report", label="Report Issue", icon="bug")
-            await _send_html("Patient", _render_scenario_card_html(card), actions=[report_action])
+            await _send_html("Patient", _render_scenario_card_html(card))
         except Exception:
             pass
         try:
@@ -671,9 +669,7 @@ async def _start_chat_impl():
     if not has_card:
         history.append({"role": "assistant", "content": card})
         cl.user_session.set("history", history)
-        # Add native Report Issue action to the action bar of this message
-        report_action = cl.Action(name="report_issue", value="report", label="Report Issue", icon="bug")
-        await _send_html("Patient", _render_scenario_card_html(card), actions=[report_action])
+        await _send_html("Patient", _render_scenario_card_html(card))
     
     # Inject the scenario into the scene context for grounding
     try:
@@ -897,21 +893,24 @@ if is_oauth_enabled:
         return default_user
 
 
+def _report_issue_action() -> cl.Action:
+    """Build a reusable Report Issue action button."""
+    return cl.Action(name="report_issue", payload={"action": "report"},
+                     label="🪲 Report Issue",
+                     tooltip="End the session and log a report")
+
+
 @cl.action_callback("report_issue")
 async def on_report_issue(action: cl.Action):
-    """Handle the report issue action. If clicked from the action bar, we prompt for a reason."""
-    reason = action.value
-    if not reason or reason == "report":
-        # Prompt the user for a reason if none was provided in the action value
-        res = await cl.AskUserMessage(
-            content="Please describe the issue you encountered. This will end the session and log a report.",
-            timeout=120
-        ).send()
-        if res:
-            reason = res.get("output")
-        else:
-            # User cancelled or timed out
-            return
+    """Handle the report issue action. Prompt the user for a reason, then submit."""
+    res = await cl.AskUserMessage(
+        content="Please describe the issue you encountered. This will end the session and log a report.",
+        timeout=120,
+    ).send()
+    if res:
+        reason = res.content.strip() if hasattr(res, "content") else str(res)
+    else:
+        return  # cancelled / timed out
 
     if reason:
         await _submit_report(reason)

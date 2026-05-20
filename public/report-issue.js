@@ -64,34 +64,45 @@
   setTimeout(tweakSplash, 1500);
 
   /* ── button ────────────────────────────────────────────────────── */
-  var btn = document.createElement("div");
-  btn.id = "sidebar-report-button";
-  btn.innerHTML = '<span style="font-size:18px">🪲</span> Report Issue';
-  Object.assign(btn.style, {
-    position: "fixed",
-    left: "16px",
-    bottom: "80px",
-    zIndex: "1000",
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-    padding: "10px 16px",
-    background: "#f0f4f8",
-    border: "1px solid #d1d9e0",
-    borderRadius: "20px",
-    cursor: "pointer",
-    fontFamily: "sans-serif",
-    color: "#333",
-    fontWeight: "500",
-    boxShadow: "0 2px 5px rgba(0,0,0,0.1)",
-    transition: "background 0.2s",
-  });
-  btn.addEventListener("mouseenter", function () {
-    btn.style.background = "#e2e8f0";
-  });
-  btn.addEventListener("mouseleave", function () {
-    btn.style.background = "#f0f4f8";
-  });
+  function injectButton() {
+    var header = document.getElementById("header");
+    if (!header) return;
+    if (document.getElementById("sidebar-report-button")) return;
+
+    // The right-side container is the last child div with flex layout.
+    // Chainlit 2.11 uses: className="flex items-center gap-1"
+    var rightContainer = header.querySelector('div.flex.items-center.gap-1')
+      || header.lastElementChild;
+    if (!rightContainer) return;
+
+    var btn = document.createElement("button");
+    btn.id = "sidebar-report-button";
+    btn.type = "button";
+    btn.className = "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-accent h-9 w-9 text-muted-foreground hover:text-muted-foreground";
+    btn.innerHTML = '<span style="font-size:18px">🪲</span>';
+    btn.title = "Report Issue";
+
+    // Insert at the beginning of the right container (before light mode button)
+    rightContainer.insertBefore(btn, rightContainer.firstChild);
+
+    btn.addEventListener("click", function () {
+      modal.style.display = "flex";
+      // Focus the textarea when modal opens
+      setTimeout(function() {
+        var input = document.getElementById("report-reason-input-shared");
+        if (input) input.focus();
+      }, 100);
+    });
+  }
+
+  // Poll for header availability
+  var buttonInterval = setInterval(function() {
+    if (document.getElementById("header")) {
+      injectButton();
+      // We don't clear interval immediately because Chainlit might re-render
+      // but injectButton has a guard against double-init.
+    }
+  }, 1000);
 
   /* ── modal ─────────────────────────────────────────────────────── */
   var modal = document.createElement("div");
@@ -122,14 +133,9 @@
     "</div>";
 
   /* ── append to DOM ─────────────────────────────────────────────── */
-  document.body.appendChild(btn);
   document.body.appendChild(modal);
 
   /* ── event listeners ───────────────────────────────────────────── */
-  btn.addEventListener("click", function () {
-    modal.style.display = "flex";
-  });
-
   document.getElementById("report-cancel-btn").addEventListener("click", function () {
     modal.style.display = "none";
   });
