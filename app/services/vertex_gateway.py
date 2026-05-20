@@ -1,5 +1,5 @@
 import json
-from typing import List, Optional
+from typing import List, Optional, Callable
 
 from ..vertex import VertexClient as DefaultVertexClient
 
@@ -45,7 +45,7 @@ class VertexGateway:
         self,
         prompt: str,
         system_instruction: Optional[str] = None,
-        log_fallback: Optional[callable] = None,
+        log_fallback: Optional[Callable] = None,
     ) -> str:
         last_err = None
         for mid in self._models_to_try():
@@ -78,7 +78,7 @@ class VertexGateway:
         prompt: str,
         response_schema: dict,
         system_instruction: Optional[str] = None,
-        log_fallback: Optional[callable] = None,
+        log_fallback: Optional[Callable] = None,
     ) -> str:
         last_err = None
         for mid in self._models_to_try():
