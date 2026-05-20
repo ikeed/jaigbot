@@ -428,7 +428,7 @@ class TestMainBranches:
         
         async def test_preflight():
             app.state = mock_state
-            await _model_preflight()
+            await _model_preflight(app)
             assert app.state.model_check["available"] == "unknown"
             assert app.state.model_check["reason"] == "disabled_by_env"
         
@@ -443,7 +443,7 @@ class TestMainBranches:
         from app.main import _model_preflight
         
         async def test_preflight():
-            await _model_preflight()
+            await _model_preflight(app)
             assert app.state.model_check["available"] == "unknown"
             assert app.state.model_check["reason"] == "no_project_id"
         
@@ -474,7 +474,7 @@ class TestMainBranches:
         from app.main import _model_preflight
         
         async def test_preflight():
-            await _model_preflight()
+            await _model_preflight(app)
             assert app.state.model_check["available"] is True
             assert app.state.model_check["httpStatus"] == 200
         
@@ -517,7 +517,7 @@ class TestMainBranches:
         from app.main import _model_preflight
         
         async def test_preflight():
-            await _model_preflight()
+            await _model_preflight(app)
             assert app.state.model_check["available"] is True
             assert app.state.model_check["listMatched"] is True
         

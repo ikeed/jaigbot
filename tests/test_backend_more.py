@@ -14,7 +14,7 @@ client = TestClient(app)
 
 def _unset_secure_cookie_for_tests(monkeypatch):
     # Allow cookie roundtrip over HTTP in TestClient
-    monkeypatch.setattr(m, "SESSION_COOKIE_SECURE", False)
+    monkeypatch.setattr(settings, "SESSION_COOKIE_SECURE", False)
 
 
 def test_healthz_config_diagnostics(monkeypatch):
@@ -35,7 +35,7 @@ def test_healthz_config_diagnostics(monkeypatch):
     assert d.status_code == 200
     diag = d.json()
     assert "generationConfig" in diag
-    assert diag["memory"]["backend"] == m.MEMORY_BACKEND
+    assert diag["memory"]["backend"] == settings.MEMORY_BACKEND
 
 
 class FakeVertexEcho:
@@ -68,30 +68,30 @@ class FakeVertexUpstreamError:
 
 def test_session_cookie_and_memory_persistence(monkeypatch):
     # Arrange
-    from app.services import legacy_chat_handler
+    from app.services import vertex_helpers
     
-    monkeypatch.setattr(m, "PROJECT_ID", "proj")
-    monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", False)
+    monkeypatch.setattr(settings, "PROJECT_ID", "proj")
+    monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", False)
     _unset_secure_cookie_for_tests(monkeypatch)
     
-    # Mock vertex helper to echo the prompt
-    def mock_echo_call(*args, **kwargs):
-        prompt = args[5] if len(args) > 5 else kwargs.get('prompt', 'hello')
+    # Mock async vertex helper to echo the prompt
+    async def mock_echo_call(*args, **kwargs):
+        prompt = kwargs.get('prompt', 'hello')
         return f"echo: {prompt}"
     
-    # Mock the function in the handler's module where it's actually imported and used
-    monkeypatch.setattr(legacy_chat_handler, "vertex_call_with_fallback_text", mock_echo_call)
+    # Mock the async function used by the handler
+    monkeypatch.setattr(vertex_helpers, "avertex_call_with_fallback_text", mock_echo_call)
 
     # First call: no sessionId provided, backend should issue Set-Cookie
     r1 = client.post("/chat", json={"message": "hello"})
     assert r1.status_code == 200
     set_cookie = r1.headers.get("set-cookie")
-    assert set_cookie and m.SESSION_COOKIE_NAME in set_cookie
+    assert set_cookie and settings.SESSION_COOKIE_NAME in set_cookie
 
     # Parse cookie value
     c = cookies.SimpleCookie()
     c.load(set_cookie)
-    sess = c[m.SESSION_COOKIE_NAME].value
+    sess = c[settings.SESSION_COOKIE_NAME].value
     assert sess
 
     # Verify memory has been created and has one user+assistant turn (2 entries)
@@ -110,21 +110,20 @@ def test_session_cookie_and_memory_persistence(monkeypatch):
 def test_model_fallback_success(monkeypatch):
     # Arrange: primary fails with 404, fallback succeeds
     import app.main as m
-    from app.services import legacy_chat_handler
+    from app.services import vertex_helpers
     
-    monkeypatch.setattr(m, "PROJECT_ID", "proj")
-    monkeypatch.setattr(m, "MODEL_ID", "bad-primary")
-    monkeypatch.setattr(m, "MODEL_FALLBACKS", ["good-fallback"]) 
-    monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", False)
+    monkeypatch.setattr(settings, "PROJECT_ID", "proj")
+    monkeypatch.setattr(settings, "MODEL_ID", "bad-primary")
+    monkeypatch.setattr(settings, "MODEL_FALLBACKS", ["good-fallback"]) 
+    monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", False)
     _unset_secure_cookie_for_tests(monkeypatch)
     
-    # Mock the vertex helper to simulate primary failure and fallback success
-    def mock_fallback_call(*args, **kwargs):
-        # Return a response that simulates successful fallback
+    # Mock the async vertex helper to simulate fallback success
+    async def mock_fallback_call(*args, **kwargs):
         return "ok-from-fallback"
     
-    # Mock the function in the handler's module where it's actually imported and used
-    monkeypatch.setattr(legacy_chat_handler, "vertex_call_with_fallback_text", mock_fallback_call)
+    # Mock the async function used by the handler
+    monkeypatch.setattr(vertex_helpers, "avertex_call_with_fallback_text", mock_fallback_call)
 
     r = client.post("/chat", json={"message": "hi"})
     assert r.status_code == 200
@@ -135,32 +134,32 @@ def test_model_fallback_success(monkeypatch):
     assert isinstance(data["model"], str)
     assert data["reply"] == "ok-from-fallback"
     # Cookie should still be present for session continuity
-    assert m.SESSION_COOKIE_NAME in r.headers.get("set-cookie", "")
+    assert settings.SESSION_COOKIE_NAME in r.headers.get("set-cookie", "")
 
 
 
 def test_upstream_error_maps_to_502_and_sets_cookie(monkeypatch):
     # Arrange
     import app.main as m
-    from app.services import legacy_chat_handler
+    from app.services import vertex_helpers
     from app.vertex import VertexAIError
     
-    monkeypatch.setattr(m, "PROJECT_ID", "proj")
-    monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", False)
+    monkeypatch.setattr(settings, "PROJECT_ID", "proj")
+    monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", False)
     _unset_secure_cookie_for_tests(monkeypatch)
     
-    # Mock vertex helper to raise upstream error
-    def mock_error_call(*args, **kwargs):
+    # Mock async vertex helper to raise upstream error
+    async def mock_error_call(*args, **kwargs):
         raise VertexAIError("boom", status_code=500)
     
-    # Mock the function in the handler's module where it's actually imported and used
-    monkeypatch.setattr(legacy_chat_handler, "vertex_call_with_fallback_text", mock_error_call)
+    # Mock the async function used by the handler
+    monkeypatch.setattr(vertex_helpers, "avertex_call_with_fallback_text", mock_error_call)
 
     r = client.post("/chat", json={"message": "hi"})
     assert r.status_code == 502
     data = r.json()
     assert data["error"]["code"] == 502
-    assert m.SESSION_COOKIE_NAME in r.headers.get("set-cookie", "")
+    assert settings.SESSION_COOKIE_NAME in r.headers.get("set-cookie", "")
 
 
 
@@ -185,24 +184,24 @@ def test_config_session_cookie_fields_reflect_env(monkeypatch):
 
 def test_model_not_found_no_fallback_returns_404(monkeypatch):
     import app.main as m
-    from app.services import legacy_chat_handler
+    from app.services import vertex_helpers
     from app.vertex import VertexAIError
     
-    monkeypatch.setattr(m, "PROJECT_ID", "proj")
-    monkeypatch.setattr(m, "MODEL_FALLBACKS", [])
-    monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", False)
+    monkeypatch.setattr(settings, "PROJECT_ID", "proj")
+    monkeypatch.setattr(settings, "MODEL_FALLBACKS", [])
+    monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", False)
     _unset_secure_cookie_for_tests(monkeypatch)
     
-    # Mock vertex helper to raise 404 error
-    def mock_404_call(*args, **kwargs):
+    # Mock async vertex helper to raise 404 error
+    async def mock_404_call(*args, **kwargs):
         raise VertexAIError("missing", status_code=404)
     
-    # Mock the function in the handler's module where it's actually imported and used
-    monkeypatch.setattr(legacy_chat_handler, "vertex_call_with_fallback_text", mock_404_call)
+    # Mock the async function used by the handler
+    monkeypatch.setattr(vertex_helpers, "avertex_call_with_fallback_text", mock_404_call)
 
     r = client.post("/chat", json={"message": "hi"})
     assert r.status_code == 404
     body = r.json()
     assert body["error"]["code"] == 404
     # Cookie should still be set on error
-    assert m.SESSION_COOKIE_NAME in r.headers.get("set-cookie", "")
+    assert settings.SESSION_COOKIE_NAME in r.headers.get("set-cookie", "")

@@ -107,3 +107,62 @@ class VertexGateway:
         if last_err:
             raise last_err
         raise RuntimeError("Vertex call failed with no models attempted")
+
+    async def agenerate_text(
+        self,
+        prompt: str,
+        system_instruction: Optional[str] = None,
+        log_fallback: Optional[Callable] = None,
+    ) -> str:
+        """Async variant of generate_text using VertexClient.generate_text_async()."""
+        last_err = None
+        for mid in self._models_to_try():
+            client = self.client_cls(project=self.project, region=self.region, model_id=mid)
+            try:
+                result = await client.generate_text_async(
+                    prompt=prompt,
+                    temperature=self.temperature,
+                    max_tokens=self.max_tokens,
+                    system_instruction=system_instruction,
+                )
+                self.last_model_used = mid
+                return result
+            except Exception as e:
+                last_err = e
+                if log_fallback:
+                    log_fallback(mid)
+                continue
+        if last_err:
+            raise last_err
+        raise RuntimeError("Vertex call failed with no models attempted")
+
+    async def agenerate_text_json(
+        self,
+        prompt: str,
+        response_schema: dict,
+        system_instruction: Optional[str] = None,
+        log_fallback: Optional[Callable] = None,
+    ) -> str:
+        """Async variant of generate_text_json using VertexClient.generate_text_async()."""
+        last_err = None
+        for mid in self._models_to_try():
+            client = self.client_cls(project=self.project, region=self.region, model_id=mid)
+            try:
+                result = await client.generate_text_async(
+                    prompt=prompt,
+                    temperature=self.temperature,
+                    max_tokens=self.max_tokens,
+                    system_instruction=system_instruction,
+                    response_mime_type="application/json",
+                    response_schema=response_schema,
+                )
+                self.last_model_used = mid
+                return result
+            except Exception as e:
+                last_err = e
+                if log_fallback:
+                    log_fallback(mid)
+                continue
+        if last_err:
+            raise last_err
+        raise RuntimeError("Vertex call failed with no models attempted")

@@ -3,6 +3,7 @@ import re
 import pytest
 from fastapi.testclient import TestClient
 
+from app.config import settings
 from app.main import app
 from app.vertex import VertexAIError
 
@@ -151,13 +152,20 @@ def test_coach_path_safety_violation(monkeypatch, caplog):
         def __init__(self, *args, **kwargs):
             pass
         
+        async def generate_text_async(self, prompt: str, **kwargs) -> str:
+            return json.dumps({"patient_reply": "You should take 5 mg every 6 hours."})
+        
         def generate_text(self, *args, **kwargs):
-            # Valid JSON envelope but with advice-like content
             return json.dumps({"patient_reply": "You should take 5 mg every 6 hours."})
         
         def generate_text_json(self, *args, **kwargs):
-            # Valid JSON envelope but with advice-like content
             return json.dumps({"patient_reply": "You should take 5 mg every 6 hours."})
+
+        async def agenerate_text_json(self, **kwargs) -> str:
+            return self.generate_text_json(**kwargs)
+
+        async def agenerate_text(self, **kwargs) -> str:
+            return self.generate_text(**kwargs)
     
     monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", FakeGatewayAdviceJSON)
     monkeypatch.setattr(m, "VertexClient", FakeGatewayAdviceJSON)
@@ -173,16 +181,16 @@ def test_coach_path_safety_violation(monkeypatch, caplog):
 
 def test_flag_off_hides_coaching(monkeypatch):
     import app.main as m
-    from app.services import legacy_chat_handler
+    from app.services import vertex_helpers
 
     # Force coaching off at the module level where chat() reads it
-    monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", False)
+    monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", False)
     
-    # Mock the vertex function in the legacy handler since coaching is disabled
-    def fake_vertex_call(*args, **kwargs):
+    # Mock the async vertex function since coaching is disabled (legacy path)
+    async def fake_vertex_call(*args, **kwargs):
         return "fake response"
     
-    monkeypatch.setattr(legacy_chat_handler, "vertex_call_with_fallback_text", fake_vertex_call)
+    monkeypatch.setattr(vertex_helpers, "avertex_call_with_fallback_text", fake_vertex_call)
 
     r = client.post("/chat", json={"message": "ping", "coach": True})
     assert r.status_code == 200
@@ -193,7 +201,7 @@ def test_flag_off_hides_coaching(monkeypatch):
 
 def test_summary_endpoint(monkeypatch):
     import app.main as m
-    monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", True)
+    monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", True)
     
     # Mock at the VertexGateway level to return invalid JSON
     class FakeGatewayInvalidJSON:
@@ -243,7 +251,7 @@ def test_coach_path_model_not_found_maps_to_404(monkeypatch):
     from app.vertex import VertexAIError
     
     # Force coached path and Vertex 404
-    monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", True)
+    monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", True)
     
     # Mock at the VertexGateway level to ensure 404 propagates through all fallback mechanisms
     class FakeGateway404:

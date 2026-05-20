@@ -162,6 +162,163 @@ def vertex_call_with_fallback_text(
         return result
 
 
+async def avertex_call_with_fallback_text(
+    *,
+    project: str,
+    region: str,
+    primary_model: str,
+    fallbacks: list[str],
+    temperature: float,
+    max_tokens: int,
+    prompt: str,
+    system_instruction: Optional[str],
+    log_path: str,
+    logger,
+    client_cls: type = VertexClient,
+) -> str:
+    """Async variant of vertex_call_with_fallback_text.
+
+    Uses native async gateway calls instead of blocking threads.
+    """
+    global _LAST_MODEL_USED
+    from .vertex_gateway import VertexGateway
+
+    models_to_try = [primary_model] + [m for m in fallbacks if m and m != primary_model]
+    tried: list[str] = []
+
+    def _on_fallback(failed_mid: str):
+        tried.append(failed_mid)
+        next_model = models_to_try[len(tried):][:1] or None
+        logger.info(
+            json.dumps(
+                {
+                    "event": "vertex_model_fallback",
+                    "path": log_path,
+                    "failedModel": failed_mid,
+                    "next": next_model,
+                }
+            )
+        )
+
+    gateway = VertexGateway(
+        project=project,
+        region=region,
+        primary_model=primary_model,
+        fallbacks=fallbacks,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        client_cls=client_cls,
+    )
+
+    # Prefer async JSON path if supported, else async non-JSON fallback
+    try:
+        from ..json_schemas import REPLY_SCHEMA
+
+        result = await gateway.agenerate_text_json(
+            prompt=prompt,
+            response_schema=REPLY_SCHEMA,
+            system_instruction=system_instruction,
+            log_fallback=_on_fallback,
+        )
+        obj = _extract_json_payload(result)
+        reply = _maybe_extract_patient_reply(obj)
+        if reply:
+            _LAST_MODEL_USED = getattr(gateway, "last_model_used", primary_model)
+            path = (log_path or "").lower()
+            if "legacy" in path:
+                return reply
+            return json.dumps({"patient_reply": reply}, separators=(",", ":"))
+        _LAST_MODEL_USED = getattr(gateway, "last_model_used", primary_model)
+        try:
+            path = (log_path or "").lower()
+            if "legacy" in path and ("```" in result or "json" in (result or "").lower()):
+                plain = await gateway.agenerate_text(
+                    prompt=prompt,
+                    system_instruction=system_instruction,
+                    log_fallback=_on_fallback,
+                )
+                return plain
+            return result
+        except Exception:
+            return result
+    except VertexAIError:
+        raise
+    except Exception:
+        result = await gateway.agenerate_text(
+            prompt=prompt,
+            system_instruction=system_instruction,
+            log_fallback=_on_fallback,
+        )
+        _LAST_MODEL_USED = getattr(gateway, "last_model_used", primary_model)
+        return result
+
+
+async def avertex_call_with_fallback_json(
+    *,
+    project: str,
+    region: str,
+    primary_model: str,
+    fallbacks: list[str],
+    temperature: float,
+    max_tokens: int,
+    prompt: str,
+    system_instruction: Optional[str],
+    schema: dict,
+    log_path: str,
+    logger,
+    client_cls: type = VertexClient,
+) -> str:
+    """Async variant of vertex_call_with_fallback_json."""
+    global _LAST_MODEL_USED
+    from .vertex_gateway import VertexGateway
+    from ..json_schemas import vertex_response_schema
+
+    models_to_try = [primary_model] + [m for m in fallbacks if m and m != primary_model]
+    tried: list[str] = []
+
+    def _on_fallback(failed_mid: str):
+        tried.append(failed_mid)
+        next_model = models_to_try[len(tried):][:1] or None
+        logger.info(
+            json.dumps(
+                {
+                    "event": "vertex_model_fallback",
+                    "path": log_path,
+                    "failedModel": failed_mid,
+                    "next": next_model,
+                }
+            )
+        )
+
+    gateway = VertexGateway(
+        project=project,
+        region=region,
+        primary_model=primary_model,
+        fallbacks=fallbacks,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        client_cls=client_cls,
+    )
+
+    result = await gateway.agenerate_text_json(
+        prompt=prompt,
+        response_schema=vertex_response_schema(schema),
+        system_instruction=system_instruction,
+        log_fallback=_on_fallback,
+    )
+    _LAST_MODEL_USED = getattr(gateway, "last_model_used", primary_model)
+    obj = _extract_json_payload(result)
+    if obj is not None:
+        try:
+            reply = _maybe_extract_patient_reply(obj)
+            if reply:
+                return json.dumps({"patient_reply": reply}, separators=(",", ":"))
+            return json.dumps(obj, separators=(",", ":"))
+        except Exception:
+            pass
+    return result
+
+
 def vertex_call_with_fallback_json(
     *,
     project: str,

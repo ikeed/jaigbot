@@ -35,7 +35,7 @@ from fastapi.testclient import TestClient
 
 import app.main as m
 from app.config import settings
-from app.vertex import VertexClient
+from app.vertex import VertexAIError, VertexClient
 
 
 # ---------------------------------------------------------------------------
@@ -63,6 +63,17 @@ class ReplyOnlyGateway:
     def __init__(self, **kwargs) -> None:
         # Swallow all kwargs VertexGateway normally takes
         self.last_model_used = "scripted-reply"
+
+    async def agenerate_text_json(self, *, prompt: str, **kwargs) -> str:
+        idx = min(self._reply_idx, len(self._replies) - 1)
+        ReplyOnlyGateway._reply_idx += 1
+        return json.dumps({"patient_reply": self._replies[idx]})
+
+    async def agenerate_text(self, prompt: str, **kwargs) -> str:
+        # Fallback text path — return same scripted reply
+        idx = min(self._reply_idx, len(self._replies) - 1)
+        ReplyOnlyGateway._reply_idx += 1
+        return json.dumps({"patient_reply": self._replies[idx]})
 
     def generate_text_json(self, *, prompt: str, **kwargs) -> str:
         idx = min(self._reply_idx, len(self._replies) - 1)
