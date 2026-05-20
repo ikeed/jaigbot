@@ -4,6 +4,7 @@ import os
 import time
 import uuid
 import asyncio
+from contextlib import asynccontextmanager
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
@@ -64,19 +65,15 @@ except Exception:
     _MEMORY_STORE = InMemoryStore()
     settings.MEMORY_BACKEND = "memory"
 
-# Export for legacy tests/code that expect these on app.main directly
-PROJECT_ID = settings.PROJECT_ID
-REGION = settings.REGION
-MODEL_ID = settings.MODEL_ID
-MODEL_FALLBACKS = settings.MODEL_FALLBACKS
-SESSION_COOKIE_NAME = settings.SESSION_COOKIE_NAME
-SESSION_COOKIE_SECURE = settings.SESSION_COOKIE_SECURE
-SESSION_COOKIE_SAMESITE = settings.SESSION_COOKIE_SAMESITE
-SESSION_COOKIE_MAX_AGE = settings.SESSION_COOKIE_MAX_AGE
-MEMORY_BACKEND = settings.MEMORY_BACKEND
-AIMS_COACHING_ENABLED = settings.AIMS_COACHING_ENABLED
 
-app = FastAPI(title="AIMSBot (Gemini Enterprise)", version="0.2.0")
+@asynccontextmanager
+async def _lifespan(application: FastAPI):
+    """Application lifespan: run startup tasks before yielding, cleanup after."""
+    await _model_preflight(application)
+    yield
+
+
+app = FastAPI(title="AIMSBot (Gemini Enterprise)", version="0.2.0", lifespan=_lifespan)
 
 # Optional CORS
 if settings.ALLOWED_ORIGINS:
@@ -90,19 +87,17 @@ if settings.ALLOWED_ORIGINS:
     )
 
 
-# Model availability preflight (diagnostics-only)
-@app.on_event("startup")
-async def _model_preflight():
+async def _model_preflight(application: FastAPI):
     """Best-effort check whether the configured settings.MODEL_ID exists in the selected Vertex location.
     Stores tri-state availability in app.state.model_check: { available: true|false|"unknown", ... }.
     Never raises; only logs.
     """
-    app.state.model_check = {"available": "unknown", "modelId": settings.MODEL_ID, "region": settings.VERTEX_LOCATION}
+    application.state.model_check = {"available": "unknown", "modelId": settings.MODEL_ID, "region": settings.VERTEX_LOCATION}
     if not settings.VALIDATE_MODEL_ON_STARTUP:
-        app.state.model_check["reason"] = "disabled_by_env"
+        application.state.model_check["reason"] = "disabled_by_env"
         return
     if not settings.PROJECT_ID:
-        app.state.model_check["reason"] = "no_project_id"
+        application.state.model_check["reason"] = "no_project_id"
         return
     try:
         import google.auth  # type: ignore
@@ -126,19 +121,19 @@ async def _model_preflight():
         # Use stable v1 endpoint only (skip beta)
         primary = "v1"
         code, url_primary = try_get(primary)
-        app.state.model_check["apiVersion"] = primary
-        app.state.model_check["urlPrimary"] = url_primary
-        app.state.model_check["httpStatusPrimary"] = code
+        application.state.model_check["apiVersion"] = primary
+        application.state.model_check["urlPrimary"] = url_primary
+        application.state.model_check["httpStatusPrimary"] = code
 
         if code == 404:
             # Default to unknown on 404; do a v1 models list to avoid false negatives
-            app.state.model_check["available"] = "unknown"
+            application.state.model_check["available"] = "unknown"
             loc = settings.VERTEX_LOCATION
             host = "aiplatform.googleapis.com" if str(loc).lower() == "global" else f"{loc}-aiplatform.googleapis.com"
             list_url = f"https://{host}/v1/projects/{settings.PROJECT_ID}/locations/{loc}/publishers/google/models"
-            app.state.model_check["listUrl"] = list_url
+            application.state.model_check["listUrl"] = list_url
             rlist = session.get(list_url)
-            app.state.model_check["listHttpStatus"] = rlist.status_code
+            application.state.model_check["listHttpStatus"] = rlist.status_code
             matched = False
             if rlist.status_code == 200:
                 try:
@@ -146,24 +141,24 @@ async def _model_preflight():
                 except Exception:
                     data = {}
                 models = data.get("models", []) or []
-                app.state.model_check["listCount"] = len(models)
+                application.state.model_check["listCount"] = len(models)
                 matched = any(((m.get("name", "").split("/models/")[-1]) == settings.MODEL_ID) for m in models)
-            app.state.model_check["listMatched"] = matched
+            application.state.model_check["listMatched"] = matched
             if matched:
-                app.state.model_check["available"] = True
+                application.state.model_check["available"] = True
         else:
-            app.state.model_check["httpStatus"] = code
-            app.state.model_check["available"] = True if code == 200 else "unknown"
+            application.state.model_check["httpStatus"] = code
+            application.state.model_check["available"] = True if code == 200 else "unknown"
 
         # Record all attempts for debugging
-        app.state.model_check["urlsTried"] = attempts
+        application.state.model_check["urlsTried"] = attempts
         # Precompute the generateContent base URL(s) that the Vertex client would use
         try:
             loc = settings.VERTEX_LOCATION
             host = "aiplatform.googleapis.com" if str(loc).lower() == "global" else f"{loc}-aiplatform.googleapis.com"
             gen_primary = "v1"
             base_gen_url = f"https://{host}/{gen_primary}/projects/{settings.PROJECT_ID}/locations/{loc}/publishers/google/models/{settings.MODEL_ID}:generateContent"
-            app.state.model_check["baseGenerateUrlPrimary"] = base_gen_url
+            application.state.model_check["baseGenerateUrlPrimary"] = base_gen_url
         except Exception:
             pass
 
@@ -179,8 +174,8 @@ async def _model_preflight():
             }))
         except Exception:
             logger.info("model preflight error: %s", e)
-        app.state.model_check["available"] = "unknown"
-        app.state.model_check["error"] = str(e)
+        application.state.model_check["available"] = "unknown"
+        application.state.model_check["error"] = str(e)
 
 
 # Exception handlers to surface better errors with request correlation
@@ -576,7 +571,7 @@ def _get_request_id(request: Request) -> Optional[str]:
 async def chat(req: Request, body: ChatRequest, background_tasks: BackgroundTasks):
     """Main chat endpoint using the new ChatOrchestrator."""
     # Enforce settings.PROJECT_ID presence for live calls to align with tests/contract
-    if not PROJECT_ID:
+    if not settings.PROJECT_ID:
         # Raise HTTPException to be normalized by our exception handler
         raise HTTPException(status_code=500, detail={
             "error": {"message": "settings.PROJECT_ID not set — configure the settings.PROJECT_ID environment variable.", "code": 500}
@@ -584,11 +579,11 @@ async def chat(req: Request, body: ChatRequest, background_tasks: BackgroundTask
 
     # Build config structures for orchestrator
     vertex_config = {
-        "project_id": PROJECT_ID,
-        "region": REGION,
+        "project_id": settings.PROJECT_ID,
+        "region": settings.REGION,
         "vertex_location": settings.VERTEX_LOCATION,
-        "model_id": MODEL_ID,
-        "model_fallbacks": MODEL_FALLBACKS,
+        "model_id": settings.MODEL_ID,
+        "model_fallbacks": settings.MODEL_FALLBACKS,
         "temperature": settings.TEMPERATURE,
         "max_tokens": settings.MAX_TOKENS,
         # Pass client class from app.main so tests can monkeypatch m.VertexClient
@@ -602,14 +597,14 @@ async def chat(req: Request, body: ChatRequest, background_tasks: BackgroundTask
     }
     
     session_cookie_settings = {
-        "name": SESSION_COOKIE_NAME,
-        "secure": SESSION_COOKIE_SECURE,
-        "samesite": SESSION_COOKIE_SAMESITE,
-        "max_age": SESSION_COOKIE_MAX_AGE,
+        "name": settings.SESSION_COOKIE_NAME,
+        "secure": settings.SESSION_COOKIE_SECURE,
+        "samesite": settings.SESSION_COOKIE_SAMESITE,
+        "max_age": settings.SESSION_COOKIE_MAX_AGE,
     }
     
     aims_config = {
-        "enabled": AIMS_COACHING_ENABLED,
+        "enabled": settings.AIMS_COACHING_ENABLED,
         "force_default": (os.getenv("AIMS_COACHING_DEFAULT", "false").lower() == "true"),
     }
     
@@ -665,7 +660,7 @@ async def init_session(body: SessionInitRequest):
         mem.setdefault("session_started", now)
         mem["updated"] = now
         _MEMORY_STORE[sid] = mem
-    logger.info(f"Session initialized: {sid}")
+    logger.info("Session initialized: %s", sid)
     return {"status": "ok", "sessionId": sid}
 
 
@@ -678,10 +673,10 @@ async def report(req: Request, body: ReportRequest, background_tasks: Background
     # Minimal config for report path (mostly needs memory_store and session_service)
     # Reusing the same session cookie settings as /chat
     session_cookie_settings = {
-        "name": SESSION_COOKIE_NAME,
-        "secure": SESSION_COOKIE_SECURE,
-        "samesite": SESSION_COOKIE_SAMESITE,
-        "max_age": SESSION_COOKIE_MAX_AGE,
+        "name": settings.SESSION_COOKIE_NAME,
+        "secure": settings.SESSION_COOKIE_SECURE,
+        "samesite": settings.SESSION_COOKIE_SAMESITE,
+        "max_age": settings.SESSION_COOKIE_MAX_AGE,
     }
     
     orchestrator = ChatOrchestrator(
@@ -692,8 +687,8 @@ async def report(req: Request, body: ReportRequest, background_tasks: Background
             "max_turns": settings.MEMORY_MAX_TURNS,
             "ttl_seconds": settings.MEMORY_TTL_SECONDS,
         },
-        aims_config={"enabled": AIMS_COACHING_ENABLED},
-        vertex_config={"project_id": PROJECT_ID, "region": REGION},
+        aims_config={"enabled": settings.AIMS_COACHING_ENABLED},
+        vertex_config={"project_id": settings.PROJECT_ID, "region": settings.REGION},
         debug_config={"expose_upstream_error": settings.EXPOSE_UPSTREAM_ERROR},
         logger=logger,
     )

@@ -1,3 +1,4 @@
+from app.config import settings
 import json
 import pytest
 from fastapi.testclient import TestClient
@@ -64,10 +65,10 @@ def test_session_metrics_counts_and_snapshot(monkeypatch):
     # Patch gateway and basic settings
     monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", GWStub2)
     monkeypatch.setattr(m, "VertexClient", GWStub2)
-    monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", True, raising=False)
+    monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", True, raising=False)
     monkeypatch.setattr(m, "MEMORY_ENABLED", True, raising=False)
-    monkeypatch.setattr(m, "PROJECT_ID", "p", raising=False)
-    monkeypatch.setattr(m, "REGION", "us-central1", raising=False)
+    monkeypatch.setattr(settings, "PROJECT_ID", "p", raising=False)
+    monkeypatch.setattr(settings, "REGION", "us-central1", raising=False)
     monkeypatch.setattr(m, "VERTEX_LOCATION", "us-central1", raising=False)
     
     # AIMS mapping mock is now handled globally by conftest.py

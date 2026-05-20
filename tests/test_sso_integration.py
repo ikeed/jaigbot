@@ -13,10 +13,11 @@ def test_chat_with_user_info(monkeypatch):
     monkeypatch.setattr(settings, "PROJECT_ID", "test-project")
     monkeypatch.setattr(settings, "REGION", "us-central1")
     
-    # Mock Vertex call to avoid real API calls
-    mock_vertex = MagicMock(return_value="Hello! I am a clinical assistant.")
-    monkeypatch.setattr("app.services.legacy_chat_handler.vertex_call_with_fallback_text", mock_vertex)
-    monkeypatch.setattr("app.services.aims_coaching_handler.vertex_call_with_fallback_text", mock_vertex)
+    # Mock async Vertex call to avoid real API calls
+    async def mock_vertex(*args, **kwargs):
+        return "Hello! I am a clinical assistant."
+    monkeypatch.setattr("app.services.vertex_helpers.avertex_call_with_fallback_text", mock_vertex)
+    monkeypatch.setattr("app.services.vertex_helpers.avertex_call_with_fallback_json", mock_vertex)
     
     # Capture logs to verify userInfo is present
     # We catch logs from ALL loggers that might use telemetry

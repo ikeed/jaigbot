@@ -1,3 +1,4 @@
+from app.config import settings
 import json
 from fastapi.testclient import TestClient
 import app.main as m
@@ -50,10 +51,10 @@ class GWStub:
 def setup_env(monkeypatch):
     monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", GWStub)
     monkeypatch.setattr(m, "VertexClient", GWStub)
-    monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", True, raising=False)
+    monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", True, raising=False)
     monkeypatch.setattr(m, "MEMORY_ENABLED", True, raising=False)
-    monkeypatch.setattr(m, "PROJECT_ID", "p", raising=False)
-    monkeypatch.setattr(m, "REGION", "us-central1", raising=False)
+    monkeypatch.setattr(settings, "PROJECT_ID", "p", raising=False)
+    monkeypatch.setattr(settings, "REGION", "us-central1", raising=False)
     monkeypatch.setattr(m, "VERTEX_LOCATION", "us-central1", raising=False)
 
 

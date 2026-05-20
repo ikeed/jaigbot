@@ -1,3 +1,4 @@
+from app.config import settings
 import json
 from typing import Any
 
@@ -69,6 +70,12 @@ class GWStub:
         payload = {"patient_reply": "ok"}
         return json.dumps(payload)
 
+    async def agenerate_text_json(self, *, prompt: str, response_schema: dict, system_instruction=None, log_fallback=None) -> str:
+        return self.generate_text_json(prompt=prompt, response_schema=response_schema, system_instruction=system_instruction, log_fallback=log_fallback)
+
+    async def agenerate_text(self, *, prompt: str, system_instruction=None, log_fallback=None) -> str:
+        return self.generate_text(prompt=prompt, system_instruction=system_instruction, log_fallback=log_fallback)
+
 
 @pytest.fixture(autouse=True)
 def reset_gw(monkeypatch):
@@ -77,15 +84,15 @@ def reset_gw(monkeypatch):
     # Patch VertexClient so ClassifierService (which uses client_cls directly) also uses the stub
     monkeypatch.setattr(m, "VertexClient", GWStub)
     # Sensible defaults for env flags
-    monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", True, raising=False)
+    monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", True, raising=False)
     monkeypatch.setattr(m, "MEMORY_ENABLED", True, raising=False)
     # Ensure project/region/model vars are present to avoid early 500s
-    monkeypatch.setattr(m, "PROJECT_ID", "test-project", raising=False)
-    monkeypatch.setattr(m, "REGION", "us-central1", raising=False)
+    monkeypatch.setattr(settings, "PROJECT_ID", "test-project", raising=False)
+    monkeypatch.setattr(settings, "REGION", "us-central1", raising=False)
     monkeypatch.setattr(m, "VERTEX_LOCATION", "us-central1", raising=False)
     # Ensure model/fallbacks are set to avoid None
-    monkeypatch.setattr(m, "MODEL_ID", "primary", raising=False)
-    monkeypatch.setattr(m, "MODEL_FALLBACKS", ["fallback"], raising=False)
+    monkeypatch.setattr(settings, "MODEL_ID", "primary", raising=False)
+    monkeypatch.setattr(settings, "MODEL_FALLBACKS", ["fallback"], raising=False)
     # Reset stub controls each test
     GWStub.classify_payload = None
     GWStub.classify_raises = None
