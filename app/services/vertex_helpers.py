@@ -241,6 +241,8 @@ async def avertex_call_with_fallback_text(
             return result
         except Exception:
             return result
+    except VertexAIError:
+        raise
     except Exception:
         result = await gateway.agenerate_text(
             prompt=prompt,

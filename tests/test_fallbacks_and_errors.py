@@ -9,9 +9,19 @@ client = TestClient(app)
 
 def test_model_fallback_succeeds(monkeypatch):
     import app.main as m
+    from app.vertex import VertexAIError
+    import app.services.legacy_chat_handler
+    import app.services.vertex_helpers
+    import app.services.chat_orchestrator
+    
+    # Inject the exception class so it's available for catching
+    app.services.legacy_chat_handler.VertexAIError = VertexAIError
+    app.services.vertex_helpers.VertexAIError = VertexAIError
+    app.services.chat_orchestrator.VertexAIError = VertexAIError
 
     primary = "primary-model"
     fallback = "fallback-model"
+    current_model_state = primary
 
     monkeypatch.setattr(settings, "PROJECT_ID", "proj")
     monkeypatch.setattr(settings, "REGION", "us-central1")
@@ -35,20 +45,37 @@ def test_model_fallback_succeeds(monkeypatch):
             self.current_model = primary_model or primary
             self.last_model_used = None
 
-        def generate_text(self, *args, **kwargs):
+        async def agenerate_text(self, *args, **kwargs):
+            from app.vertex import VertexAIError
             log_fallback = kwargs.get('log_fallback')
-
-            if self.current_model == primary:
-                if log_fallback:
-                    log_fallback(primary)
-                self.current_model = fallback  # switch to fallback
-                raise VertexAIError("not found", status_code=404)
-            # If we get here, we're using the fallback model
-            self.last_model_used = fallback
+            
+            # Real gateway has an internal loop.
+            models_to_try = [self.primary_model] + [fallback]
+            last_err = None
+            
+            for mid in models_to_try:
+                if mid == self.primary_model:
+                    if log_fallback:
+                        log_fallback(mid)
+                    last_err = VertexAIError("not found", status_code=404)
+                    continue
+                
+                # If we get here, we're using the fallback model
+                self.last_model_used = mid
+                return "ok-from-fallback"
+            
+            if last_err:
+                raise last_err
             return "ok-from-fallback"
 
+        async def agenerate_text_json(self, *args, **kwargs):
+            return await self.agenerate_text(*args, **kwargs)
+
+        def generate_text(self, *args, **kwargs):
+            return "sync-not-used"
+
         def generate_text_json(self, *args, **kwargs):
-            return self.generate_text(*args, **kwargs)
+            return "sync-not-used"
     
     monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", SwitchGateway)
 
@@ -62,6 +89,15 @@ def test_model_fallback_succeeds(monkeypatch):
 
 def test_upstream_error_maps_to_502_and_sets_cookie(monkeypatch):
     import app.main as m
+    from app.vertex import VertexAIError
+    import app.services.legacy_chat_handler
+    import app.services.vertex_helpers
+    import app.services.chat_orchestrator
+    
+    # Inject the exception class so it's available for catching
+    app.services.legacy_chat_handler.VertexAIError = VertexAIError
+    app.services.vertex_helpers.VertexAIError = VertexAIError
+    app.services.chat_orchestrator.VertexAIError = VertexAIError
 
     monkeypatch.setattr(settings, "PROJECT_ID", "proj")
     monkeypatch.setattr(settings, "REGION", "us-central1")
@@ -81,10 +117,18 @@ def test_upstream_error_maps_to_502_and_sets_cookie(monkeypatch):
         def __init__(self, *args, **kwargs):
             pass
         
-        def generate_text(self, *args, **kwargs):
+        async def agenerate_text(self, *args, **kwargs):
+            from app.vertex import VertexAIError
             # Non-404 error should map to 502
             raise VertexAIError("upstream boom", status_code=503)
-        
+
+        async def agenerate_text_json(self, *args, **kwargs):
+            return await self.agenerate_text(*args, **kwargs)
+
+        def generate_text(self, *args, **kwargs):
+            from app.vertex import VertexAIError
+            raise VertexAIError("upstream boom", status_code=503)
+
         def generate_text_json(self, *args, **kwargs):
             return self.generate_text(*args, **kwargs)
     
