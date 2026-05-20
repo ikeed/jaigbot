@@ -63,7 +63,6 @@ from app.json_schemas import (
     validate_json
 )
 from app.services.chat_helpers import strip_appointment_headers
-from app.main import app
 
 
 class AimsCoachingHandler:
@@ -490,17 +489,12 @@ class AimsCoachingHandler:
         return result
     
     async def _load_aims_mapping(self) -> Dict[str, Any]:
-        """Load and cache AIMS mapping."""
-        mapping = getattr(app.state, "aims_mapping", None)
-        if mapping is None:
-            try:
-                mapping = load_mapping()
-            except Exception as e:
-                self.logger.warning("AIMS mapping failed to load: %s", e)
-                mapping = {}
-            app.state.aims_mapping = mapping
-        
-        return mapping
+        """Load and cache AIMS mapping via lru_cache on load_mapping()."""
+        try:
+            return load_mapping()
+        except Exception as e:
+            self.logger.warning("AIMS mapping failed to load: %s", e)
+            return {}
     
     async def _update_aims_state(
         self, session_id: str, cls_payload: Dict[str, Any], 

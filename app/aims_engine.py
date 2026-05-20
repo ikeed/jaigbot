@@ -10,6 +10,7 @@ markers and tie-breakers described in the mapping meta section.
 """
 from __future__ import annotations
 
+import functools
 import json
 import os
 import re
@@ -59,6 +60,7 @@ class ScoreResult:
     reasons: List[str]
 
 
+@functools.lru_cache(maxsize=1)
 def load_mapping(path: Optional[str] = None) -> Dict[str, Any]:
     """Load aims_mapping.json.
 
