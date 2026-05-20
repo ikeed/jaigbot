@@ -15,3 +15,18 @@ node_modules
 build
 dist
 *.egg-info
+
+# Non-runtime assets
+docs/
+tests/
+terraform/
+scripts/
+skills/
+*.pdf
+*.md
+!chainlit.md
+.coverage*
+.pytest_cache/
+.coveragerc
+pytest.ini
+.junie/
