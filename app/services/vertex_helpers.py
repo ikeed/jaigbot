@@ -1,15 +1,20 @@
+import contextvars
 import json
 import re
 from typing import Callable, Optional
 
 from ..vertex import VertexClient
 
-# Track last model used by the most recent gateway call for tests/telemetry
-_LAST_MODEL_USED: Optional[str] = None
+# Track the model that produced the most recent response, per async task.
+# Using ContextVar instead of a module-level global avoids race conditions
+# when multiple requests are handled concurrently in the same event loop.
+_last_model_used_var: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    "_last_model_used", default=None
+)
 
 
 def get_last_model_used() -> Optional[str]:
-    return _LAST_MODEL_USED
+    return _last_model_used_var.get()
 
 
 def _extract_json_payload(text: str) -> Optional[object]:
@@ -83,7 +88,6 @@ def vertex_call_with_fallback_text(
     (reply schema embedded via gateway) and falls back to plain text generation when
     unsupported.
     """
-    global _LAST_MODEL_USED
     from .vertex_gateway import VertexGateway
 
     models_to_try = [primary_model] + [m for m in fallbacks if m and m != primary_model]
@@ -113,6 +117,9 @@ def vertex_call_with_fallback_text(
         client_cls=client_cls,
     )
 
+    def _record_model():
+        _last_model_used_var.set(getattr(gateway, "last_model_used", primary_model))
+
     # Prefer JSON path if supported, else non-JSON fallback
     try:
         from ..json_schemas import REPLY_SCHEMA
@@ -123,23 +130,17 @@ def vertex_call_with_fallback_text(
             system_instruction=system_instruction,
             log_fallback=_on_fallback,
         )
-        # If the model wrapped the JSON in prose/fences, extract the JSON and return patient_reply
         obj = _extract_json_payload(result)
         reply = _maybe_extract_patient_reply(obj)
         if reply:
-            _LAST_MODEL_USED = getattr(gateway, "last_model_used", primary_model)
-            # For legacy chat paths, return plain text so UIs don't see JSON wrappers
+            _record_model()
             path = (log_path or "").lower()
             if "legacy" in path:
                 return reply
-            # For coaching paths, maintain existing contract: return a JSON string envelope
             return json.dumps({"patient_reply": reply}, separators=(",", ":"))
-        # If JSON mode returned but could not be parsed, handle per-path fallback.
-        _LAST_MODEL_USED = getattr(gateway, "last_model_used", primary_model)
+        _record_model()
         try:
             path = (log_path or "").lower()
-            # For legacy chat, avoid returning wrapper preambles. If the result looks like a wrapper
-            # (contains code fences or mentions json), retry with plain text generation once.
             if "legacy" in path and ("```" in result or "json" in (result or "").lower()):
                 plain = gateway.generate_text(
                     prompt=prompt,
@@ -147,10 +148,8 @@ def vertex_call_with_fallback_text(
                     log_fallback=_on_fallback,
                 )
                 return plain
-            # For coaching paths, return raw result and let the handler's JSON validation/retry take over.
             return result
         except Exception:
-            # As a last resort, return the raw result
             return result
     except Exception:
         result = gateway.generate_text(
@@ -158,7 +157,7 @@ def vertex_call_with_fallback_text(
             system_instruction=system_instruction,
             log_fallback=_on_fallback,
         )
-        _LAST_MODEL_USED = getattr(gateway, "last_model_used", primary_model)
+        _record_model()
         return result
 
 
@@ -180,7 +179,6 @@ async def avertex_call_with_fallback_text(
 
     Uses native async gateway calls instead of blocking threads.
     """
-    global _LAST_MODEL_USED
     from .vertex_gateway import VertexGateway
 
     models_to_try = [primary_model] + [m for m in fallbacks if m and m != primary_model]
@@ -220,15 +218,18 @@ async def avertex_call_with_fallback_text(
             system_instruction=system_instruction,
             log_fallback=_on_fallback,
         )
+        def _record_model():
+            _last_model_used_var.set(getattr(gateway, "last_model_used", primary_model))
+
         obj = _extract_json_payload(result)
         reply = _maybe_extract_patient_reply(obj)
         if reply:
-            _LAST_MODEL_USED = getattr(gateway, "last_model_used", primary_model)
+            _record_model()
             path = (log_path or "").lower()
             if "legacy" in path:
                 return reply
             return json.dumps({"patient_reply": reply}, separators=(",", ":"))
-        _LAST_MODEL_USED = getattr(gateway, "last_model_used", primary_model)
+        _record_model()
         try:
             path = (log_path or "").lower()
             if "legacy" in path and ("```" in result or "json" in (result or "").lower()):
@@ -249,7 +250,7 @@ async def avertex_call_with_fallback_text(
             system_instruction=system_instruction,
             log_fallback=_on_fallback,
         )
-        _LAST_MODEL_USED = getattr(gateway, "last_model_used", primary_model)
+        _last_model_used_var.set(getattr(gateway, "last_model_used", primary_model))
         return result
 
 
@@ -269,7 +270,6 @@ async def avertex_call_with_fallback_json(
     client_cls: type = VertexClient,
 ) -> str:
     """Async variant of vertex_call_with_fallback_json."""
-    global _LAST_MODEL_USED
     from .vertex_gateway import VertexGateway
     from ..json_schemas import vertex_response_schema
 
@@ -306,7 +306,7 @@ async def avertex_call_with_fallback_json(
         system_instruction=system_instruction,
         log_fallback=_on_fallback,
     )
-    _LAST_MODEL_USED = getattr(gateway, "last_model_used", primary_model)
+    _last_model_used_var.set(getattr(gateway, "last_model_used", primary_model))
     obj = _extract_json_payload(result)
     if obj is not None:
         try:
@@ -335,7 +335,6 @@ def vertex_call_with_fallback_json(
     client_cls: type = VertexClient,
 ) -> str:
     """Generate a JSON-constrained response using Vertex with model fallback logging."""
-    global _LAST_MODEL_USED
     from .vertex_gateway import VertexGateway
     from ..json_schemas import vertex_response_schema
 
@@ -372,7 +371,7 @@ def vertex_call_with_fallback_json(
         system_instruction=system_instruction,
         log_fallback=_on_fallback,
     )
-    _LAST_MODEL_USED = getattr(gateway, "last_model_used", primary_model)
+    _last_model_used_var.set(getattr(gateway, "last_model_used", primary_model))
     # If JSON is wrapped, extract and re-serialize compactly for consumers that expect raw JSON
     obj = _extract_json_payload(result)
     if obj is not None:
