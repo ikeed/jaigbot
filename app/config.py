@@ -19,6 +19,14 @@ class Settings(BaseSettings):
     SUPPRESS_VERTEXAI_DEPRECATION: bool = True
     VALIDATE_MODEL_ON_STARTUP: bool = True
 
+    # Continuation strategy tuning
+    CONTINUE_TAIL_CHARS: int = 500
+    CONTINUE_INSTRUCTION_ENABLED: bool = True
+    MIN_CONTINUE_GROWTH: int = 10
+
+    # Transport flag (REST vs SDK — currently always REST via genai SDK)
+    USE_VERTEX_REST: bool = True
+
     # App Settings
     PORT: int = 8080
     LOG_LEVEL: str = "INFO"
@@ -34,6 +42,7 @@ class Settings(BaseSettings):
     
     # AIMS Coaching configuration
     AIMS_COACHING_ENABLED: bool = True
+    AIMS_COACHING_DEFAULT: bool = False
     AIMS_CLASSIFIER_MODE: str = "hybrid"
     AIMS_CLASSIFY_CONTEXT_TURNS: int = 6
     AIMS_CLASSIFY_MAX_CONCERNS: int = 3
