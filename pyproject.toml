@@ -1,0 +1,15 @@
+[project]
+name = "aimsbot"
+version = "0.2.0"
+description = "AIMS coaching chatbot powered by Gemini on Vertex AI"
+requires-python = ">=3.11"
+# All dependencies live in requirements.txt (single source of truth).
+# This file provides PEP 621 project metadata only.
+dynamic = ["dependencies"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}

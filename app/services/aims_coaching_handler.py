@@ -188,10 +188,12 @@ class AimsCoachingHandler:
             modelId=self.model_id,
         )
 
-        # Get prior state for context
-        prior_state = await self._get_prior_state(ctx.session_id) if self.memory_enabled else None
-        prior_announced = bool((prior_state or {}).get("announced", False))
-        prior_phase = (prior_state or {}).get("phase", "PreAnnounce")
+        # Load session memory once for the entire request; all sub-methods
+        # mutate this dict in place and we write back once at the end.
+        mem = self._load_mem(ctx.session_id)
+        prior_state = mem.get("aims_state") or {} if mem else {}
+        prior_announced = bool(prior_state.get("announced", False))
+        prior_phase = prior_state.get("phase", "PreAnnounce")
 
         # Launch classification and reply generation in parallel
         task_cls = asyncio.create_task(
@@ -311,20 +313,17 @@ class AimsCoachingHandler:
 
         # Step 3: Update AIMS state and provide coaching guidance (after classification completes)
         llm_topic = classification_result.person_topic if classification_result else None
-        await self._update_aims_state(
-            ctx.session_id, cls_payload, body.message, ctx.person_last, llm_topic
+        self._update_aims_state(
+            mem, cls_payload, body.message, ctx.person_last, llm_topic
         )
 
         # Step 4: Persist AIMS metrics (after state update)
-        await self._persist_aims_metrics(ctx.session_id, cls_payload)
+        self._persist_aims_metrics(mem, cls_payload)
 
         # Persist a compact coaching note into conversation history before assistant reply,
         # so the order is: user -> coach -> assistant. This helps the UI retain coaching on refresh.
         try:
-            if self.memory_enabled and ctx.session_id:
-                mem = self.memory_store.get(ctx.session_id) or {
-                    "history": [], "character": None, "scene": None, "updated": time.time()
-                }
+            if self.memory_enabled and ctx.session_id and mem is not None:
                 parts: list[str] = []
                 step = cls_payload.get("step")
                 phase = cls_payload.get("phase")
@@ -388,7 +387,6 @@ class AimsCoachingHandler:
                         "coaching_data": structured_coaching
                     })
                     mem["updated"] = now
-                    self.memory_store[ctx.session_id] = mem
         except Exception:
             pass
 
@@ -417,26 +415,23 @@ class AimsCoachingHandler:
             pass
         
         # Step 6: Update conversation history
-        await self._update_conversation_history(
-            ctx.session_id, body.message, reply_payload.get("patient_reply", "")
-        )
+        self._append_history(mem, body.message, reply_payload.get("patient_reply", ""))
         
         # Step 7: Build session metrics
-        session_obj = await self._build_session_metrics(ctx.session_id)
+        session_obj = self._build_session_metrics(mem)
         
         # Step 8: Check for end-game scenarios
-        coach_post = await self._check_end_game(ctx.session_id, reply_payload, session_obj)
+        coach_post = await self._check_end_game(mem, reply_payload, session_obj)
         
         # Save coach_post to memory if it exists, so it can be archived
-        if coach_post and self.memory_enabled and ctx.session_id:
-            try:
-                mem = self.memory_store.get(ctx.session_id)
-                if mem:
-                    mem["coach_post"] = coach_post
-                    mem["game_over"] = True
-                    self.memory_store[ctx.session_id] = mem
-            except Exception:
-                pass
+        if coach_post and mem is not None:
+            mem["coach_post"] = coach_post
+            mem["game_over"] = True
+        
+        # Single write-back of all accumulated mutations
+        if mem is not None and self.memory_enabled and ctx.session_id:
+            mem["updated"] = time.time()
+            self.memory_store[ctx.session_id] = mem
         
         # Calculate final latency
         latency_ms = int((time.time() - started) * 1000)
@@ -496,19 +491,29 @@ class AimsCoachingHandler:
             self.logger.warning("AIMS mapping failed to load: %s", e)
             return {}
     
-    async def _update_aims_state(
-        self, session_id: str, cls_payload: Dict[str, Any], 
+    def _load_mem(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """Load session memory once. Returns None if memory is disabled."""
+        if not (self.memory_enabled and session_id):
+            return None
+        mem = self.memory_store.get(session_id)
+        if mem is None:
+            mem = {
+                "history": [], "full_history": [], "character": None,
+                "scene": None, "updated": time.time(),
+            }
+        mem.setdefault("full_history", [])
+        return mem
+
+    def _update_aims_state(
+        self, mem: Optional[Dict[str, Any]], cls_payload: Dict[str, Any],
         clinician_message: str, person_last: str,
         llm_topic: Optional[str] = None
     ) -> None:
-        """Update AIMS state and provide coaching guidance."""
-        if not (self.memory_enabled and session_id):
+        """Update AIMS state and coaching guidance. Mutates mem in place."""
+        if mem is None:
             return
         
         try:
-            mem = self.memory_store.get(session_id) or {
-                "history": [], "character": None, "scene": None, "updated": time.time()
-            }
             state = mem.setdefault("aims_state", {
                 "announced": False, "phase": "PreAnnounce", 
                 "first_inquire_done": False, "pending_concerns": True, 
@@ -519,25 +524,19 @@ class AimsCoachingHandler:
             
             # Add latest person concern if any, avoiding duplicates by topic
             if person_last:
-                # Use LLM topic if available, otherwise fall back to static cues
                 maybe_add_person_concern(state, person_last, self._TOPICAL_CUES, llm_topic)
             
             # 1. Update Mirror/Secure status based on clinician message
-            # If Mirror is in steps, mark matching concerns as mirrored.
-            # Pass llm_topic as a semantic tiebreaker when keyword matching fails.
             if "Mirror" in steps:
                 mark_mirrored_multi(
                     state, clinician_message, person_last,
                     self._TOPICAL_CUES, llm_topic=llm_topic
                 )
-        
-            # If Secure is in steps, mark matching MIRRORED concerns as secured
             if "Secure" in steps:
                 mark_secured_by_topic(state, clinician_message, self._TOPICAL_CUES, llm_topic=llm_topic)
 
-            # 2. Apply coaching guidance rules (legacy/heuristic fallback)
+            # 2. Apply coaching guidance rules
             step_main = cls_payload.get("step")
-            # Pass character for persona-adaptive tips
             character = mem.get("character")
             self._apply_coaching_guidance(
                 cls_payload, step_main, state, clinician_message, person_last,
@@ -545,21 +544,14 @@ class AimsCoachingHandler:
             )
             
             # 3. Update observational state (announced, phase)
-            # Pass the full steps list so compound turns (e.g. Announce+Inquire)
-            # correctly update announced even when step_main is Inquire.
             self._update_observational_state(state, step_main, steps)
             
-            # Sync the updated phase back to the classification payload so the 
-            # coach note reflects the transition immediately.
+            # Sync the updated phase back to the classification payload
             cls_payload["phase"] = state.get("phase")
-            
-            # Persist state
             mem["aims_state"] = state
-            mem["updated"] = time.time()
-            self.memory_store[session_id] = mem
             
         except Exception:
-            self.logger.exception("AIMS state persistence failed for session %s", session_id)
+            self.logger.exception("AIMS state update failed")
     
     # Prefixes that mark a reason as internal/debug rather than user-facing
     # coaching feedback.  These are filtered out when building the coach note.
@@ -835,15 +827,12 @@ class AimsCoachingHandler:
         if all_resolved and pc and state.get("announced") and state.get("first_inquire_done"):
             state["phase"] = "Secure"
     
-    async def _persist_aims_metrics(self, session_id: str, cls_payload: Dict[str, Any]) -> None:
-        """Persist AIMS metrics for session analytics."""
-        if not (self.memory_enabled and session_id):
+    def _persist_aims_metrics(self, mem: Optional[Dict[str, Any]], cls_payload: Dict[str, Any]) -> None:
+        """Update AIMS metrics in mem dict. Mutates mem in place."""
+        if mem is None:
             return
         
         try:
-            mem = self.memory_store.get(session_id) or {
-                "history": [], "character": None, "scene": None, "updated": time.time()
-            }
             aims = mem.setdefault("aims", {
                 "perStepCounts": {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0, "Announce+Inquire": 0, "Mirror+Inquire": 0, "Mirror+Secure": 0, "Secure+Inquire": 0, "Mirror+Secure+Inquire": 0},
                 "scores": {"Announce": [], "Inquire": [], "Mirror": [], "Secure": [], "Announce+Inquire": [], "Mirror+Inquire": [], "Mirror+Secure": [], "Secure+Inquire": [], "Mirror+Secure+Inquire": []},
@@ -908,11 +897,9 @@ class AimsCoachingHandler:
                 aims["runningAverage"] = ra
             
             mem["aims"] = aims
-            mem["updated"] = time.time()
-            self.memory_store[session_id] = mem
             
         except Exception:
-            self.logger.debug("AIMS metrics persistence failed for session %s", session_id)
+            self.logger.debug("AIMS metrics update failed")
     
     async def _generate_patient_reply(
         self, clinician_message: str, history_text: str, req: Request, session_id: str, *, character: str | None = None, scene: str | None = None
@@ -1013,18 +1000,15 @@ class AimsCoachingHandler:
         # Should not reach here, but provide fallback
         return {"patient_reply": "Okay."}
     
-    async def _update_conversation_history(
-        self, session_id: str, user_message: str, assistant_reply: str
+    def _append_history(
+        self, mem: Optional[Dict[str, Any]], user_message: str, assistant_reply: str
     ) -> None:
-        """Update conversation history in memory."""
-        if not (self.memory_enabled and session_id):
+        """Append user+assistant turn to history. Mutates mem in place."""
+        if mem is None:
             return
         
         try:
             now = time.time()
-            mem = self.memory_store.get(session_id) or {
-                "history": [], "full_history": [], "character": None, "scene": None, "updated": now
-            }
             user_entry = {"role": "user", "content": user_message}
             asst_entry = {"role": "assistant", "content": assistant_reply}
             mem.setdefault("history", []).append(user_entry)
@@ -1036,19 +1020,16 @@ class AimsCoachingHandler:
             from app.services.session_service import SessionService
             mem["history"] = SessionService._trim_history(mem["history"], self.memory_max_turns)
             
-            mem["updated"] = now
-            self.memory_store[session_id] = mem
-            
         except Exception:
-            self.logger.debug("Memory persistence failed for session %s", session_id)
+            self.logger.debug("History append failed")
     
-    async def _build_session_metrics(self, session_id: str) -> Dict[str, Any] | None:
-        """Build session metrics snapshot."""
-        if not (self.memory_enabled and session_id):
+    def _build_session_metrics(self, mem: Optional[Dict[str, Any]]) -> Dict[str, Any] | None:
+        """Build session metrics snapshot from mem dict."""
+        if mem is None:
             return None
         
         try:
-            aims = (self.memory_store.get(session_id) or {}).get("aims") or {}
+            aims = mem.get("aims") or {}
             counts = {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0, "Announce+Inquire": 0, "Mirror+Inquire": 0, "Mirror+Secure": 0, "Secure+Inquire": 0, "Mirror+Secure+Inquire": 0}
             counts.update(aims.get("perStepCounts", {}))
             
@@ -1072,15 +1053,14 @@ class AimsCoachingHandler:
             return None
     
     async def _check_end_game(
-        self, session_id: str, reply_payload: Dict[str, Any], session_obj: Dict[str, Any] | None
+        self, mem: Optional[Dict[str, Any]], reply_payload: Dict[str, Any], session_obj: Dict[str, Any] | None
     ) -> Dict[str, Any] | None:
         """Check for end-game scenarios using LLM-centric detection with heuristic fallback."""
         eg_begin_time = time.time()
         try:
-            if not (self.memory_enabled and session_id):
+            if mem is None:
                 return None
 
-            mem = self.memory_store.get(session_id) or {}
             hist = mem.get("history") or []
             aims_state = mem.get("aims_state") or {}
 
@@ -1206,14 +1186,6 @@ class AimsCoachingHandler:
 
         except Exception as e:
             self.logger.exception("LLM endgame detection failed: %s", e)
-            return None
-    
-    async def _get_prior_state(self, session_id: str) -> Dict[str, Any] | None:
-        """Get prior AIMS state for context."""
-        try:
-            mem = self.memory_store.get(session_id) or {}
-            return mem.get("aims_state") or {}
-        except Exception:
             return None
     
     async def _call_vertex_text(self, prompt: str) -> str:
