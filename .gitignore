@@ -1,8 +1,7 @@
+# Chainlit generated files
 /.chainlit/translations/
 /.chainlit/public/
 /.chainlit/session_id*
-/.coverage
-/.vscode/
 
 # Terraform
 terraform/.terraform/
@@ -11,36 +10,23 @@ terraform/terraform.tfstate
 terraform/terraform.tfstate.*
 terraform/crash.log
 
-# JetBrains IDE configs (do not commit local run configurations)
+# IDE configs
 /.idea/
-
-# Chainlit
-/.chainlit/translations/
-/.coverage
-/.chainlit/session_id
 /.vscode/
 
-# Terraform
-terraform/.terraform/
-terraform/.terraform.*
-terraform/terraform.tfstate
-terraform/terraform.tfstate.*
-terraform/crash.log
-
-# JetBrains IDE configs (do not commit local run configurations)
-/.idea/
-
-# IDE-specific coverage database (used by PyCharm runs)
+# Coverage & test cache
+/.coverage
 /.coverage.ide
-/.coverage
 /.coveragerc
 tests/.coverage
-
-# Python cache & pytest cache
-__pycache__/
 /.pytest_cache/
 
-# macOS Finder metadata
-.DS_Store
+# Python cache
+__pycache__/
+
+# Environment & OS
 .env
+.DS_Store
+
+# Large media
 /docs/aims_videos/

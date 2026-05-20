@@ -827,6 +827,20 @@ class AimsCoachingHandler:
         if all_resolved and pc and state.get("announced") and state.get("first_inquire_done"):
             state["phase"] = "Secure"
     
+    # Compound step → individual steps to expand into for coverage metrics
+    _COMPOUND_EXPANSIONS: Dict[str, List[str]] = {
+        "Announce+Inquire": ["Announce", "Inquire"],
+        "Mirror+Inquire": ["Mirror", "Inquire"],
+        "Mirror+Secure": ["Mirror", "Secure"],
+        "Secure+Inquire": ["Secure", "Inquire"],
+        "Mirror+Secure+Inquire": ["Mirror", "Secure", "Inquire"],
+    }
+
+    _VALID_STEPS = frozenset({
+        "Announce", "Inquire", "Mirror", "Secure",
+        *_COMPOUND_EXPANSIONS.keys(),
+    })
+
     def _persist_aims_metrics(self, mem: Optional[Dict[str, Any]], cls_payload: Dict[str, Any]) -> None:
         """Update AIMS metrics in mem dict. Mutates mem in place."""
         if mem is None:
@@ -834,66 +848,32 @@ class AimsCoachingHandler:
         
         try:
             aims = mem.setdefault("aims", {
-                "perStepCounts": {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0, "Announce+Inquire": 0, "Mirror+Inquire": 0, "Mirror+Secure": 0, "Secure+Inquire": 0, "Mirror+Secure+Inquire": 0},
-                "scores": {"Announce": [], "Inquire": [], "Mirror": [], "Secure": [], "Announce+Inquire": [], "Mirror+Inquire": [], "Mirror+Secure": [], "Secure+Inquire": [], "Mirror+Secure+Inquire": []},
+                "perStepCounts": {s: 0 for s in self._VALID_STEPS},
+                "scores": {s: [] for s in self._VALID_STEPS},
                 "totalTurns": 0
             })
             
             step = cls_payload.get("step")
-            # Always count the turn; only score/count recognized AIMS steps
             aims["totalTurns"] = int(aims.get("totalTurns", 0)) + 1
             
-            if step in {"Announce", "Inquire", "Mirror", "Secure", "Announce+Inquire", "Mirror+Inquire", "Mirror+Secure", "Secure+Inquire", "Mirror+Secure+Inquire"}:
+            if step in self._VALID_STEPS:
                 score_val = int(cls_payload.get("score", 2))
                 aims["perStepCounts"][step] = aims["perStepCounts"].get(step, 0) + 1
                 aims["scores"].setdefault(step, []).append(score_val)
                 
-                if step == "Announce+Inquire":
-                    # Expand into Announce and Inquire so individual step coverage metrics work
-                    aims["perStepCounts"]["Announce"] = aims["perStepCounts"].get("Announce", 0) + 1
-                    aims["perStepCounts"]["Inquire"] = aims["perStepCounts"].get("Inquire", 0) + 1
-                    aims["scores"].setdefault("Announce", []).append(score_val)
-                    aims["scores"].setdefault("Inquire", []).append(score_val)
-
-                elif step == "Mirror+Inquire":
-                    # Also expand into Mirror and Inquire for underlying coverage metrics
-                    # so that we don't break logic expecting individual counts
-                    aims["perStepCounts"]["Mirror"] = aims["perStepCounts"].get("Mirror", 0) + 1
-                    aims["perStepCounts"]["Inquire"] = aims["perStepCounts"].get("Inquire", 0) + 1
-                    aims["scores"].setdefault("Mirror", []).append(score_val)
-                    aims["scores"].setdefault("Inquire", []).append(score_val)
+                # Expand compound steps into individual components
+                for component in self._COMPOUND_EXPANSIONS.get(step, []):
+                    aims["perStepCounts"][component] = aims["perStepCounts"].get(component, 0) + 1
+                    aims["scores"].setdefault(component, []).append(score_val)
                 
-                elif step == "Mirror+Secure":
-                    # Expand into Mirror and Secure so individual step coverage metrics work
-                    aims["perStepCounts"]["Mirror"] = aims["perStepCounts"].get("Mirror", 0) + 1
-                    aims["perStepCounts"]["Secure"] = aims["perStepCounts"].get("Secure", 0) + 1
-                    aims["scores"].setdefault("Mirror", []).append(score_val)
-                    aims["scores"].setdefault("Secure", []).append(score_val)
-
-                elif step == "Secure+Inquire":
-                    # Expand into Secure and Inquire so individual step coverage metrics work
-                    aims["perStepCounts"]["Secure"] = aims["perStepCounts"].get("Secure", 0) + 1
-                    aims["perStepCounts"]["Inquire"] = aims["perStepCounts"].get("Inquire", 0) + 1
-                    aims["scores"].setdefault("Secure", []).append(score_val)
-                    aims["scores"].setdefault("Inquire", []).append(score_val)
-
-                elif step == "Mirror+Secure+Inquire":
-                    # The "Triple-Move" expansion
-                    aims["perStepCounts"]["Mirror"] = aims["perStepCounts"].get("Mirror", 0) + 1
-                    aims["perStepCounts"]["Secure"] = aims["perStepCounts"].get("Secure", 0) + 1
-                    aims["perStepCounts"]["Inquire"] = aims["perStepCounts"].get("Inquire", 0) + 1
-                    aims["scores"].setdefault("Mirror", []).append(score_val)
-                    aims["scores"].setdefault("Secure", []).append(score_val)
-                    aims["scores"].setdefault("Inquire", []).append(score_val)
-                
-                # Maintain running averages per step for quick snapshot reads
+                # Maintain running averages per step
                 ra: dict[str, float] = {}
                 for k, arr in (aims.get("scores", {}) or {}).items():
                     if arr:
                         try:
                             ra[k] = sum(arr) / len(arr)
                         except Exception:
-                            pass  # ignore non-numeric entries gracefully
+                            pass
                 aims["runningAverage"] = ra
             
             mem["aims"] = aims
