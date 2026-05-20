@@ -136,11 +136,10 @@ class LegacyChatHandler:
     async def _generate_reply(self, prompt: str) -> str:
         """Generate reply using Vertex AI with fallbacks."""
         from app.vertex import VertexAIError
-        import asyncio
+        from app.services.vertex_helpers import avertex_call_with_fallback_text
         
         try:
-            raw_response = await asyncio.to_thread(
-                vertex_call_with_fallback_text,
+            raw_response = await avertex_call_with_fallback_text(
                 project=self.project_id,
                 region=self.vertex_location,
                 primary_model=self.model_id,

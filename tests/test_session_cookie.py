@@ -16,12 +16,12 @@ def test_cookie_issued_and_memory_persists(monkeypatch):
     from app.config import settings
 
     # Ensure env values are present for route checks
-    monkeypatch.setattr(m, "PROJECT_ID", "test-project")
-    monkeypatch.setattr(m, "REGION", "us-central1")
-    monkeypatch.setattr(m, "MODEL_ID", "gemini-2.5-pro")
-    monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", False)
+    monkeypatch.setattr(settings, "PROJECT_ID", "test-project")
+    monkeypatch.setattr(settings, "REGION", "us-central1")
+    monkeypatch.setattr(settings, "MODEL_ID", "gemini-2.5-pro")
+    monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", False)
     # Ensure cookies work over http in TestClient by disabling the Secure flag
-    monkeypatch.setattr(m, "SESSION_COOKIE_SECURE", False)
+    monkeypatch.setattr(settings, "SESSION_COOKIE_SECURE", False)
 
     prompts = []
 
@@ -41,10 +41,24 @@ def test_cookie_issued_and_memory_persists(monkeypatch):
         def __init__(self, *args, **kwargs):
             pass
         
-        def generate_text(self, prompt: str, *args, **kwargs):
+        async def agenerate_text(self, prompt: str, *args, **kwargs):
             prompts.append(prompt)
             # Return a small reply to ensure it's stored in memory too
             return "ack"
+        
+        async def agenerate_text_json(self, prompt: str, *args, **kwargs):
+            return await self.agenerate_text(prompt, *args, **kwargs)
+
+        def generate_text(self, prompt: str, *args, **kwargs):
+            import asyncio
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    prompts.append(prompt)
+                    return "ack"
+            except Exception:
+                pass
+            return "sync-not-used"
         
         def generate_text_json(self, prompt: str, *args, **kwargs):
             return self.generate_text(prompt, *args, **kwargs)

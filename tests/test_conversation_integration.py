@@ -1,3 +1,4 @@
+from app.config import settings
 import json
 from fastapi.testclient import TestClient
 
@@ -16,13 +17,13 @@ def test_whole_conversation_multi_turns(monkeypatch):
     import app.main as m
 
     # Ensure env values are present for route checks
-    monkeypatch.setattr(m, "PROJECT_ID", "test-project")
-    monkeypatch.setattr(m, "REGION", "us-central1")
-    monkeypatch.setattr(m, "MODEL_ID", "gemini-2.5-pro")
-    monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", False)
+    monkeypatch.setattr(settings, "PROJECT_ID", "test-project")
+    monkeypatch.setattr(settings, "REGION", "us-central1")
+    monkeypatch.setattr(settings, "MODEL_ID", "gemini-2.5-pro")
+    monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", False)
 
     # Allow cookies over http in TestClient
-    monkeypatch.setattr(m, "SESSION_COOKIE_SECURE", False)
+    monkeypatch.setattr(settings, "SESSION_COOKIE_SECURE", False)
 
     prompts = []
     replies = []
@@ -46,12 +47,31 @@ def test_whole_conversation_multi_turns(monkeypatch):
         def __init__(self, *args, **kwargs):
             pass
         
-        def generate_text(self, prompt: str, *args, **kwargs):
+        async def agenerate_text(self, prompt: str, *args, **kwargs):
             prompts.append(prompt)
             counter["n"] += 1
             reply = f"reply{counter['n']}"
             replies.append(reply)
             return reply
+        
+        async def agenerate_text_json(self, prompt: str, *args, **kwargs):
+            return await self.agenerate_text(prompt, *args, **kwargs)
+
+        def generate_text(self, prompt: str, *args, **kwargs):
+            # Fallback for sync calls if any
+            import asyncio
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # This is tricky in tests, but let's just duplicate the logic
+                    prompts.append(prompt)
+                    counter["n"] += 1
+                    reply = f"reply{counter['n']}"
+                    replies.append(reply)
+                    return reply
+            except Exception:
+                pass
+            return "sync-not-used"
         
         def generate_text_json(self, prompt: str, *args, **kwargs):
             return self.generate_text(prompt, *args, **kwargs)
