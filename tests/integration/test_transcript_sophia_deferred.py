@@ -7,6 +7,7 @@ Uses live LLM for classification.
 import pytest
 from unittest.mock import patch
 
+from app.config import settings
 import app.main as m
 from .base import (
     TranscriptReplayTest,

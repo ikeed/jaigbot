@@ -26,6 +26,7 @@ def local_aims_mapping_mock():
 class GWStub:
     classify_payload = None
     reply_json_payload = None
+    person_topic = None
 
     def __init__(self, *args, **kwargs):
         pass
@@ -39,7 +40,8 @@ class GWStub:
                 "is_vaccine_relevant": True,
                 "aims": aims_payload,
                 "safety_flags": [],
-                "reasoning": "mock"
+                "reasoning": "mock",
+                "person_topic": GWStub.person_topic
             }
             return json.dumps(payload)
         
@@ -109,16 +111,32 @@ def test_topic_mirroring_and_securing_state_updates(monkeypatch):
     sess = "topic-flow"
     # Turn 1: Parent expresses a concern in reply to seed state
     GWStub.classify_payload = {"step": "Announce", "score": 2, "reasons": ["llm"], "tips": []}
+    GWStub.person_topic = "side_effects"
     GWStub.reply_json_payload = {"patient_reply": "I'm worried about vaccine side effects."}
     r1 = c.post("/chat", json={"message": "We recommend vaccines today.", "coach": True, "sessionId": sess})
     assert r1.status_code == 200
+    
     # Turn 2: Mirror via clinician topic mention
+    # We now need another turn to actually seed the concern from the previous turn's reply
+    GWStub.classify_payload = {"step": "Inquire", "score": 3, "reasons": ["llm"], "tips": []}
+    GWStub.person_topic = "side_effects"
+    GWStub.reply_json_payload = {"patient_reply": "ok"}
+    r1b = c.post("/chat", json={"message": "What have you heard about side effects?", "coach": True, "sessionId": sess})
+    assert r1b.status_code == 200
+
+    # Verify that the concern is now seeded
+    assert sess in m._MEMORY_STORE
+    assert m._MEMORY_STORE[sess]["aims_state"]["parent_concerns"], "Turn 1b should have seeded parent_concerns from Turn 1's reply"
+    
+    # Turn 3: Mirror via clinician topic mention
     GWStub.classify_payload = {"step": "Mirror", "score": 3, "reasons": ["llm"], "tips": []}
+    GWStub.person_topic = "side_effects"
     GWStub.reply_json_payload = {"patient_reply": "ok"}
     r2 = c.post("/chat", json={"message": "It sounds like the side effects worry you.", "coach": True, "sessionId": sess})
     assert r2.status_code == 200
-    # Turn 3: Secure via clinician topic mention
+    # Turn 4: Secure via clinician topic mention
     GWStub.classify_payload = {"step": "Secure", "score": 3, "reasons": ["llm"], "tips": []}
+    GWStub.person_topic = None
     GWStub.reply_json_payload = {"patient_reply": "ok"}
     r3 = c.post("/chat", json={"message": "For side effects, here is what to expect.", "coach": True, "sessionId": sess})
     assert r3.status_code == 200

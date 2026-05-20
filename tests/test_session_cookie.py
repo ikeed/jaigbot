@@ -41,10 +41,24 @@ def test_cookie_issued_and_memory_persists(monkeypatch):
         def __init__(self, *args, **kwargs):
             pass
         
-        def generate_text(self, prompt: str, *args, **kwargs):
+        async def agenerate_text(self, prompt: str, *args, **kwargs):
             prompts.append(prompt)
             # Return a small reply to ensure it's stored in memory too
             return "ack"
+        
+        async def agenerate_text_json(self, prompt: str, *args, **kwargs):
+            return await self.agenerate_text(prompt, *args, **kwargs)
+
+        def generate_text(self, prompt: str, *args, **kwargs):
+            import asyncio
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    prompts.append(prompt)
+                    return "ack"
+            except Exception:
+                pass
+            return "sync-not-used"
         
         def generate_text_json(self, prompt: str, *args, **kwargs):
             return self.generate_text(prompt, *args, **kwargs)
