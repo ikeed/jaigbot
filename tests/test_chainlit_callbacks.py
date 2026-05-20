@@ -37,18 +37,25 @@ with patch("app.config.settings") as mock_settings:
     from chainlit_app import auth_callback, on_logout, oauth_callback, _submit_report, on_window_message
 
 @pytest.mark.asyncio
-async def test_auth_callback_success():
-    # Test valid credentials
-    user = auth_callback("admin", "admin")
+async def test_auth_callback_success(monkeypatch):
+    # AUTH_PASSWORD must be set for password auth to accept anyone
+    monkeypatch.setenv("AUTH_PASSWORD", "secret")
+    user = auth_callback("admin", "secret")
     assert user is not None
     assert user.identifier == "admin"
-    assert user.metadata["name"] == "Admin User"
+    assert user.metadata["name"] == "admin"
 
 @pytest.mark.asyncio
-async def test_auth_callback_failure():
-    # Test invalid credentials
+async def test_auth_callback_failure(monkeypatch):
+    monkeypatch.setenv("AUTH_PASSWORD", "secret")
     user = auth_callback("wrong", "password")
     assert user is None
+
+@pytest.mark.asyncio
+async def test_auth_callback_rejects_when_no_password_set(monkeypatch):
+    monkeypatch.delenv("AUTH_PASSWORD", raising=False)
+    user = auth_callback("admin", "admin")
+    assert user is None, "Should reject all logins when AUTH_PASSWORD is not set"
 
 @pytest.mark.asyncio
 async def test_on_logout():
