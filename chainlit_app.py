@@ -806,8 +806,13 @@ if is_oauth_enabled or has_auth_secret or settings.ENABLE_PASSWORD_AUTH:
     if should_enable_password:
         @cl.password_auth_callback
         def auth_callback(username: str, password: str) -> cl.User | None:
-            if username == "admin" and password == "admin":
-                return cl.User(identifier="admin", metadata={"name": "Admin User", "provider": "password"})
+            expected_user = os.getenv("AUTH_USERNAME", "admin")
+            expected_pass = os.getenv("AUTH_PASSWORD")
+            if not expected_pass:
+                # Password auth enabled but no AUTH_PASSWORD set — reject all
+                return None
+            if username == expected_user and password == expected_pass:
+                return cl.User(identifier=username, metadata={"name": username, "provider": "password"})
             return None
 
     @cl.on_logout
