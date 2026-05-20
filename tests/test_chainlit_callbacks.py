@@ -26,6 +26,7 @@ mock_cl.password_auth_callback = mock_decorator
 mock_cl.header_auth_callback = mock_decorator
 mock_cl.oauth_callback = mock_decorator
 mock_cl.on_logout = mock_decorator
+mock_cl.on_window_message = mock_decorator
 
 sys.modules["chainlit"] = mock_cl
 sys.modules["chainlit.input_widget"] = MagicMock()
@@ -33,7 +34,7 @@ sys.modules["chainlit.input_widget"] = MagicMock()
 # Mock settings
 with patch("app.config.settings") as mock_settings:
     mock_settings.ENABLE_PASSWORD_AUTH = True
-    from chainlit_app import auth_callback, on_logout, oauth_callback, _submit_report
+    from chainlit_app import auth_callback, on_logout, oauth_callback, _submit_report, on_window_message
 
 @pytest.mark.asyncio
 async def test_auth_callback_success():
@@ -114,3 +115,26 @@ async def test_submit_report_success():
         # Verify success message sent
         mock_cl.Message.assert_called()
         mock_message_instance.send.assert_called()
+
+@pytest.mark.asyncio
+async def test_on_window_message_report_issue():
+    # Mock _submit_report
+    with patch("chainlit_app._submit_report", new_callable=AsyncMock) as mock_submit:
+        message = '{"type": "report_issue", "reason": "Test UI Reason"}'
+        await on_window_message(message)
+        mock_submit.assert_called_once_with("Test UI Reason")
+
+@pytest.mark.asyncio
+async def test_on_window_message_invalid_json():
+    # Mock _submit_report
+    with patch("chainlit_app._submit_report", new_callable=AsyncMock) as mock_submit:
+        await on_window_message("invalid json")
+        mock_submit.assert_not_called()
+
+@pytest.mark.asyncio
+async def test_on_window_message_wrong_type():
+    # Mock _submit_report
+    with patch("chainlit_app._submit_report", new_callable=AsyncMock) as mock_submit:
+        message = '{"type": "other_type", "reason": "Test UI Reason"}'
+        await on_window_message(message)
+        mock_submit.assert_not_called()
