@@ -84,16 +84,17 @@ class TestMainBranches:
 
     def test_diagnostics_endpoint(self, monkeypatch):
         """Test diagnostics endpoint"""
-        # Test with different environment configurations
-        monkeypatch.setenv("USE_VERTEX_REST", "false")
-        monkeypatch.setenv("CONTINUE_TAIL_CHARS", "300")
-        monkeypatch.setenv("CONTINUE_INSTRUCTION_ENABLED", "false")
-        monkeypatch.setenv("MIN_CONTINUE_GROWTH", "20")
+        # Patch the settings object directly (env vars are read at import time)
+        from app.config import settings
+        monkeypatch.setattr(settings, "USE_VERTEX_REST", False)
+        monkeypatch.setattr(settings, "CONTINUE_TAIL_CHARS", 300)
+        monkeypatch.setattr(settings, "CONTINUE_INSTRUCTION_ENABLED", False)
+        monkeypatch.setattr(settings, "MIN_CONTINUE_GROWTH", 20)
         
         r = client.get("/diagnostics")
         assert r.status_code == 200
         data = r.json()
-        assert data["transport"] == "sdk"  # USE_VERTEX_REST=false
+        assert data["transport"] == "sdk"  # USE_VERTEX_REST=False
         assert data["continueTailChars"] == 300
         assert data["continuationInstructionEnabled"] is False
         assert data["minContinueGrowth"] == 20
