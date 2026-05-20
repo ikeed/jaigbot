@@ -153,6 +153,10 @@ img[alt="AIMSBot"] {
   font-weight: 500;
 }
 
+/* 9) Hide default Chainlit confirmation dialog (MUI Dialog) 
+   We rely on JS interception to prevent the default dialog.
+*/
+
 /* Fallback: treat user_message bubbles as Doctor when author annotation missing */
 .step[data-step-type="user_message"] .message-avatar,
 [data-step-type="user_message"] .message-avatar { background: url('/public/doctor.svg') center/cover no-repeat !important; }
