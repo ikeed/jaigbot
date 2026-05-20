@@ -159,9 +159,9 @@ class TestMetricsExpansionAnnounceInquire:
         handler.memory_store = {"test-session": mem}
 
         cls_payload = {"step": "Announce+Inquire", "score": 3, "reasons": [], "tips": []}
-        await handler._persist_aims_metrics("test-session", cls_payload)
+        handler._persist_aims_metrics(mem, cls_payload)
 
-        aims = handler.memory_store["test-session"]["aims"]
+        aims = mem["aims"]
         assert aims["perStepCounts"]["Announce+Inquire"] == 1
         assert aims["perStepCounts"]["Announce"] == 1
         assert aims["perStepCounts"]["Inquire"] == 1
