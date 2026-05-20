@@ -120,7 +120,7 @@ EXPECTED = [
 def setup_env(monkeypatch):
     monkeypatch.setattr(m, "VertexClient", SophiaClassifyClient)
     monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", ReplyOnlyGateway)
-    monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", True, raising=False)
+    monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", True, raising=False)
     monkeypatch.setattr(m, "MEMORY_ENABLED", True, raising=False)
     yield
 

@@ -1,3 +1,4 @@
+from app.config import settings
 import json
 from fastapi.testclient import TestClient
 
@@ -16,13 +17,13 @@ def test_whole_conversation_multi_turns(monkeypatch):
     import app.main as m
 
     # Ensure env values are present for route checks
-    monkeypatch.setattr(m, "PROJECT_ID", "test-project")
-    monkeypatch.setattr(m, "REGION", "us-central1")
-    monkeypatch.setattr(m, "MODEL_ID", "gemini-2.5-pro")
-    monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", False)
+    monkeypatch.setattr(settings, "PROJECT_ID", "test-project")
+    monkeypatch.setattr(settings, "REGION", "us-central1")
+    monkeypatch.setattr(settings, "MODEL_ID", "gemini-2.5-pro")
+    monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", False)
 
     # Allow cookies over http in TestClient
-    monkeypatch.setattr(m, "SESSION_COOKIE_SECURE", False)
+    monkeypatch.setattr(settings, "SESSION_COOKIE_SECURE", False)
 
     prompts = []
     replies = []

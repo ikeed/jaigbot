@@ -44,8 +44,10 @@ from app.services.conversation_service import (
 from app.services.prompt_builders import AimsPromptBuilder
 from app.services.security_guard import JailbreakGuard
 from app.services.vertex_helpers import (
-    vertex_call_with_fallback_text, 
+    vertex_call_with_fallback_text,
     vertex_call_with_fallback_json,
+    avertex_call_with_fallback_text,
+    avertex_call_with_fallback_json,
     get_last_model_used
 )
 from app.prompts.aims import build_patient_reply_prompt
@@ -247,7 +249,7 @@ class AimsCoachingHandler:
 
         if classification_result:
             # Use dictionary for compatibility with legacy post-processors
-            cls_payload = classification_result.aims.dict()
+            cls_payload = classification_result.aims.model_dump()
             is_vax = classification_result.is_vaccine_relevant
             is_small_talk = classification_result.is_small_talk
         else:
@@ -376,7 +378,7 @@ class AimsCoachingHandler:
                         "reasons": self._filter_user_facing_reasons(reasons, step=step),
                         "tips": tips_to_show,
                         "step_feedback": [
-                            sf if isinstance(sf, dict) else sf.dict()
+                            sf if isinstance(sf, dict) else sf.model_dump()
                             for sf in step_feedback
                         ],
                         "phase": phase
@@ -474,7 +476,7 @@ class AimsCoachingHandler:
                 ),
                 "tips": cls_payload.get("tips", []),
                 "step_feedback": [
-                    sf if isinstance(sf, dict) else sf.dict()
+                    sf if isinstance(sf, dict) else sf.model_dump()
                     for sf in (cls_payload.get("step_feedback") or [])
                 ],
                 "phase": cls_payload.get("phase"),
@@ -1221,9 +1223,8 @@ class AimsCoachingHandler:
             return None
     
     async def _call_vertex_text(self, prompt: str) -> str:
-        """Call Vertex for text generation with fallbacks (run in thread pool)."""
-        return await asyncio.to_thread(
-            vertex_call_with_fallback_text,
+        """Call Vertex for text generation with fallbacks (native async)."""
+        return await avertex_call_with_fallback_text(
             project=self.project_id,
             region=self.vertex_location,
             primary_model=self.model_id,
@@ -1259,11 +1260,9 @@ class AimsCoachingHandler:
         return flash, fb
 
     async def _call_vertex_json(self, prompt: str, schema: dict, log_path: str, *, temperature: float | None = None, max_tokens: int | None = None) -> str:
-        """Call Vertex for JSON generation with fallbacks (non-blocking via thread pool)."""
+        """Call Vertex for JSON generation with fallbacks (native async)."""
         primary, fb = self._primary_for_json(log_path)
-        # Run blocking SDK call in a worker thread to avoid blocking the event loop
-        return await asyncio.to_thread(
-            vertex_call_with_fallback_json,
+        return await avertex_call_with_fallback_json(
             project=self.project_id,
             region=self.vertex_location,
             primary_model=primary,

@@ -284,10 +284,10 @@ SESSION_ID = "georgina-transcript-test"
 def setup_env(monkeypatch):
     monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", TranscriptStub)
     monkeypatch.setattr(m, "VertexClient", TranscriptStub)
-    monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", True, raising=False)
+    monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", True, raising=False)
     monkeypatch.setattr(m, "MEMORY_ENABLED", True, raising=False)
-    monkeypatch.setattr(m, "PROJECT_ID", "p", raising=False)
-    monkeypatch.setattr(m, "REGION", "us-central1", raising=False)
+    monkeypatch.setattr(settings, "PROJECT_ID", "p", raising=False)
+    monkeypatch.setattr(settings, "REGION", "us-central1", raising=False)
     monkeypatch.setattr(m, "VERTEX_LOCATION", "us-central1", raising=False)
     with patch("app.aims_engine.load_mapping", return_value=MOCK_MAPPING):
         yield

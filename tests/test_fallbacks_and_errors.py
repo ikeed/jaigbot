@@ -1,3 +1,4 @@
+from app.config import settings
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -12,11 +13,11 @@ def test_model_fallback_succeeds(monkeypatch):
     primary = "primary-model"
     fallback = "fallback-model"
 
-    monkeypatch.setattr(m, "PROJECT_ID", "proj")
-    monkeypatch.setattr(m, "REGION", "us-central1")
-    monkeypatch.setattr(m, "MODEL_ID", primary)
-    monkeypatch.setattr(m, "MODEL_FALLBACKS", [fallback])
-    monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", False)
+    monkeypatch.setattr(settings, "PROJECT_ID", "proj")
+    monkeypatch.setattr(settings, "REGION", "us-central1")
+    monkeypatch.setattr(settings, "MODEL_ID", primary)
+    monkeypatch.setattr(settings, "MODEL_FALLBACKS", [fallback])
+    monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", False)
 
     class SwitchVertex:
         def __init__(self, project: str, region: str, model_id: str):
@@ -62,10 +63,10 @@ def test_model_fallback_succeeds(monkeypatch):
 def test_upstream_error_maps_to_502_and_sets_cookie(monkeypatch):
     import app.main as m
 
-    monkeypatch.setattr(m, "PROJECT_ID", "proj")
-    monkeypatch.setattr(m, "REGION", "us-central1")
-    monkeypatch.setattr(m, "MODEL_ID", "some-model")
-    monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", False)
+    monkeypatch.setattr(settings, "PROJECT_ID", "proj")
+    monkeypatch.setattr(settings, "REGION", "us-central1")
+    monkeypatch.setattr(settings, "MODEL_ID", "some-model")
+    monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", False)
 
     class ErrorVertex:
         def __init__(self, project: str, region: str, model_id: str):

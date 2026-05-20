@@ -40,15 +40,22 @@ class VertexClient:
         self.project = project
         self.region = region
         self.model_id = model_id
+        self._client: Optional[genai.Client] = None
 
     def _get_client(self) -> genai.Client:
-        """Create a Gen AI client configured for Vertex AI."""
-        return genai.Client(
-            vertexai=True,
-            project=self.project,
-            location=self.region,
-            http_options=types.HttpOptions(api_version="v1"),
-        )
+        """Return a cached Gen AI client configured for Vertex AI.
+
+        The client is created on first call and reused for subsequent
+        requests, avoiding redundant HTTP session and auth setup.
+        """
+        if self._client is None:
+            self._client = genai.Client(
+                vertexai=True,
+                project=self.project,
+                location=self.region,
+                http_options=types.HttpOptions(api_version="v1"),
+            )
+        return self._client
 
     @staticmethod
     def _sanitize_response_schema(schema: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:

@@ -363,7 +363,7 @@ def setup_env(monkeypatch):
     # Reply generation: ReplyOnlyGateway returns scripted patient replies
     monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", ReplyOnlyGateway)
     # Ensure coaching is enabled
-    monkeypatch.setattr(m, "AIMS_COACHING_ENABLED", True, raising=False)
+    monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", True, raising=False)
     monkeypatch.setattr(m, "MEMORY_ENABLED", True, raising=False)
     yield
 
