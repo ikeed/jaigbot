@@ -605,7 +605,7 @@ async def chat(req: Request, body: ChatRequest, background_tasks: BackgroundTask
     
     aims_config = {
         "enabled": settings.AIMS_COACHING_ENABLED,
-        "force_default": (os.getenv("AIMS_COACHING_DEFAULT", "false").lower() == "true"),
+        "force_default": settings.AIMS_COACHING_DEFAULT,
     }
     
     debug_config = {
@@ -722,12 +722,11 @@ async def config():
         "suppressVertexAIDeprecation": settings.SUPPRESS_VERTEXAI_DEPRECATION,
         # Coaching toggles
         "aimsCoachingEnabled": settings.AIMS_COACHING_ENABLED,
-        "aimsCoachingDefault": (os.getenv("AIMS_COACHING_DEFAULT", "false").lower() == "true"),
-        # Reflect effective default here (Vertex client defaults to true now)
-        "useVertexRest": os.getenv("USE_VERTEX_REST", "true").lower() == "true",
-        "continueTailChars": int(os.getenv("CONTINUE_TAIL_CHARS", "500")),
-        "continuationInstructionEnabled": os.getenv("CONTINUE_INSTRUCTION_ENABLED", "true").lower() == "true",
-        "minContinueGrowth": int(os.getenv("MIN_CONTINUE_GROWTH", "10")),
+        "aimsCoachingDefault": settings.AIMS_COACHING_DEFAULT,
+        "useVertexRest": settings.USE_VERTEX_REST,
+        "continueTailChars": settings.CONTINUE_TAIL_CHARS,
+        "continuationInstructionEnabled": settings.CONTINUE_INSTRUCTION_ENABLED,
+        "minContinueGrowth": settings.MIN_CONTINUE_GROWTH,
         # Memory settings
         "memoryEnabled": settings.MEMORY_ENABLED,
         "memoryBackend": settings.MEMORY_BACKEND,
@@ -756,9 +755,8 @@ async def modelcheck():
 @app.get("/diagnostics")
 async def diagnostics():
     """Expose effective generation settings to help root-cause truncation issues."""
-    use_rest = os.getenv("USE_VERTEX_REST", "true").lower() == "true"
     diag = {
-        "transport": "rest" if use_rest else "sdk",
+        "transport": "rest" if settings.USE_VERTEX_REST else "sdk",
         "generationConfig": {
             "temperature": settings.TEMPERATURE,
             "maxOutputTokens": settings.MAX_TOKENS,
@@ -768,9 +766,9 @@ async def diagnostics():
         },
         "autoContinueOnMaxTokens": settings.AUTO_CONTINUE_ON_MAX_TOKENS,
         "maxContinuations": settings.MAX_CONTINUATIONS,
-        "continueTailChars": int(os.getenv("CONTINUE_TAIL_CHARS", "500")),
-        "continuationInstructionEnabled": os.getenv("CONTINUE_INSTRUCTION_ENABLED", "true").lower() == "true",
-        "minContinueGrowth": int(os.getenv("MIN_CONTINUE_GROWTH", "10")),
+        "continueTailChars": settings.CONTINUE_TAIL_CHARS,
+        "continuationInstructionEnabled": settings.CONTINUE_INSTRUCTION_ENABLED,
+        "minContinueGrowth": settings.MIN_CONTINUE_GROWTH,
         "memory": {
             "enabled": settings.MEMORY_ENABLED,
             "backend": settings.MEMORY_BACKEND,
