@@ -106,14 +106,12 @@ async def _inject_custom_css_once() -> None:
             await _send_html("System", html)
             cl.user_session.set("_css_injected", True)
 
-        # Report Issue button & modal are now handled by public/report-issue.js
-        # (loaded via custom_js in .chainlit/config.toml) to avoid inline-JS
-        # sanitisation by Chainlit's HTML rendering pipeline.
+        # Custom styles for the AIMSBot UI
     except Exception:
         # best-effort only
         pass
 
-async def _send_html(author: str, html: str) -> None:
+async def _send_html(author: str, html: str, actions: list[cl.Action] | None = None) -> None:
     """
     Try to render HTML reliably across Chainlit versions:
     - Prefer the HTML element (cl.HTML / cl.Html) if available.
@@ -123,21 +121,21 @@ async def _send_html(author: str, html: str) -> None:
         HtmlElem = getattr(cl, "HTML", None) or getattr(cl, "Html", None)
         if HtmlElem is not None:
             elem = HtmlElem(name="block", content=html)
-            await cl.Message(content="", author=author, elements=[elem]).send()
+            await cl.Message(content="", author=author, elements=[elem], actions=actions or []).send()
             return
     except Exception:
         pass
     # Fallback: send as content (requires unsafe_allow_html=true to style)
     try:
-        await cl.Message(html, author=author).send()
+        await cl.Message(html, author=author, actions=actions or []).send()
     except Exception:
         # Last resort: strip tags (very minimal)
         try:
             import re
             text = re.sub(r"<[^>]+>", "", html)
-            await cl.Message(text, author=author).send()
+            await cl.Message(text, author=author, actions=actions or []).send()
         except Exception:
-            await cl.Message(html, author=author).send()
+            await cl.Message(html, author=author, actions=actions or []).send()
 
 
 async def _update_message_html(message: cl.Message, author: str, html: str) -> None:
@@ -414,7 +412,7 @@ def _load_robust_persona(name: str | None = None) -> dict:
                 "visit_reason": "Well-baby check",
                 "detailed_instructions": "Assure her of vaccine safety.",
                 "user_sketch": "You are at the clinic for a well-baby checkup.",
-                "vaccine_related": true
+                "vaccine_related": True
             }
         }
 
@@ -895,19 +893,32 @@ if is_oauth_enabled:
         return default_user
 
 
+def _report_issue_action() -> cl.Action:
+    """Build a reusable Report Issue action button."""
+    return cl.Action(name="report_issue", payload={"action": "report"},
+                     label="🪲 Report Issue",
+                     tooltip="End the session and log a report")
+
+
 @cl.action_callback("report_issue")
 async def on_report_issue(action: cl.Action):
-    """Handle the report issue action submitted from the custom HTML modal."""
-    reason = action.value
-    if not reason or reason == "report":
-        # This was the old action call or empty reason
-        return
-    await _submit_report(reason)
+    """Handle the report issue action. Prompt the user for a reason, then submit."""
+    res = await cl.AskUserMessage(
+        content="Please describe the issue you encountered. This will end the session and log a report.",
+        timeout=120,
+    ).send()
+    if res:
+        reason = res.content.strip() if hasattr(res, "content") else str(res)
+    else:
+        return  # cancelled / timed out
+
+    if reason:
+        await _submit_report(reason)
 
 
 @cl.on_window_message
 async def on_window_message(message: str):
-    """Handle messages from the browser via window.postMessage (used by report-issue.js)."""
+    """Handle messages from the browser via window.postMessage (legacy support)."""
     try:
         data = json.loads(message)
     except (json.JSONDecodeError, TypeError):
