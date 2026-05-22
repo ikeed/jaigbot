@@ -550,9 +550,11 @@ from pydantic import BaseModel as _BaseModel
 
 class SessionInitRequest(_BaseModel):
     sessionId: str
+    personaId: Optional[str] = None
     character: Optional[str] = None
     scene: Optional[str] = None
     userInfo: Optional[dict] = None
+    initialCard: Optional[str] = None
 
 
 def _get_request_id(request: Request) -> Optional[str]:
@@ -637,31 +639,113 @@ async def init_session(body: SessionInitRequest):
     sid = body.sessionId
     now = time.time()
     mem = _MEMORY_STORE.get(sid)
+
+    character = body.character
+    scene = body.scene
+    initial_card = body.initialCard
+
+    # If personaId is provided, the backend generates the character/scene/card
+    if body.personaId:
+        try:
+            from .services.chat_helpers import load_robust_persona
+            persona = load_robust_persona(name=body.personaId)
+            
+            # Use standard template if character/scene not already provided
+            if not character:
+                from .config import DEFAULT_CHARACTER
+                base_char = settings.CHARACTER_SYSTEM or DEFAULT_CHARACTER
+                character = (
+                    f"{base_char}\n\n"
+                    f"Specific Persona: {persona['name']}\n"
+                    f"Detailed Biography and Motivations: {persona['detailed']}"
+                )
+            if not scene:
+                from .config import DEFAULT_SCENE
+                base_scene = settings.SCENE_OBJECTIVES or DEFAULT_SCENE
+                scene = (
+                    f"{base_scene}\n\n"
+                    f"Current Scenario: {persona['scenario']['visit_reason']}\n"
+                    f"Scenario Objectives: {persona['scenario']['detailed_instructions']}"
+                )
+            if not initial_card:
+                lines = [
+                    f"Person: {persona['name']}",
+                    f"Background: {persona['brief']}",
+                    f"Reason for visit: {persona['scenario']['user_sketch']}"
+                ]
+                is_pediatric = any(k in persona['brief'].lower() for k in ["parent", "child", "son", "daughter"])
+                if not persona['scenario'].get('vaccine_related') and not is_pediatric:
+                    lines.append("\n(Note: You might want to mention vaccines during this visit.)")
+                initial_card = "\n".join(lines)
+        except Exception as e:
+            logger.error("Failed to load persona %s: %s", body.personaId, e)
+
     if not mem:
         mem = {
             "history": [],
             "full_history": [],
-            "character": body.character,
-            "scene": body.scene,
+            "character": character,
+            "scene": scene,
             "user_info": body.userInfo,
             "updated": now,
             "session_started": now,
         }
+        
+        # If we have a character (either passed or generated), seed the history with a scenario card.
+        if character:
+            if initial_card:
+                card_content = initial_card
+            else:
+                persona_name = "Person"
+                for line in character.splitlines():
+                    if "Specific Persona:" in line:
+                        persona_name = line.split("Specific Persona:")[1].strip()
+                        break
+                card_content = f"Person: {persona_name}\n(Scenario initialized)"
+            mem["history"].append({"role": "assistant", "content": card_content})
+            mem["full_history"].append({"role": "assistant", "content": card_content})
+            
         _MEMORY_STORE[sid] = mem
     else:
-        # Update persona/scene if provided and not already set
-        if body.character and not mem.get("character"):
-            mem["character"] = body.character
-        if body.scene and not mem.get("scene"):
-            mem["scene"] = body.scene
+        # Update persona/scene if provided/generated and not already set
+        if character and not mem.get("character"):
+            mem["character"] = character
+        if scene and not mem.get("scene"):
+            mem["scene"] = scene
         if body.userInfo and not mem.get("user_info"):
             mem["user_info"] = body.userInfo
+        
+        # IDEMPOTENCY: ONLY seed history if it is absolutely empty.
+        # This prevents re-seeding on page refresh if the backend already has history.
+        if not mem.get("history") and character:
+            # Check if there is anything in full_history too, just to be safe.
+            if not mem.get("full_history"):
+                if initial_card:
+                    card_content = initial_card
+                else:
+                    persona_name = "Person"
+                    for line in character.splitlines():
+                        if "Specific Persona:" in line:
+                            persona_name = line.split("Specific Persona:")[1].strip()
+                            break
+                    card_content = f"Person: {persona_name}\n(Scenario initialized)"
+                
+                mem["history"].append({"role": "assistant", "content": card_content})
+                mem["full_history"].append({"role": "assistant", "content": card_content})
+
         mem.setdefault("full_history", [])
         mem.setdefault("session_started", now)
         mem["updated"] = now
         _MEMORY_STORE[sid] = mem
+
     logger.info("Session initialized: %s", sid)
-    return {"status": "ok", "sessionId": sid}
+    return {
+        "status": "ok", 
+        "sessionId": sid,
+        "character": mem.get("character"),
+        "scene": mem.get("scene"),
+        "initialCard": next((m["content"] for m in mem["history"] if m.get("role") == "assistant" and ("Person: " in m["content"] or "Persona: " in m["content"] or "Parent: " in m["content"])), initial_card)
+    }
 
 
 @app.post("/report")

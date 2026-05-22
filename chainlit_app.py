@@ -207,7 +207,7 @@ def _author_from_role(role: str) -> str:
     r = (role or "").lower().strip()
     if r in ("user", "doctor", "clinician"):
         return "Doctor"
-    if r in ("assistant", "parent", "model"):
+    if r in ("assistant", "person", "parent", "model"):
         return "Patient"
     if r in ("coach", "system"):
         return "Coach"
@@ -217,7 +217,7 @@ def _author_from_role(role: str) -> str:
 async def _replay_history(history: list[dict]):
     """
     Replay all prior messages to the UI without making any backend calls.
-    Each history item is a dict like {"role": "user"|"assistant"|"coach", "content": str}.
+    Each history item is a dict like {"role": "user"|"assistant"|"coach"|"scenario", "content": str}.
     Prefer an explicit 'author' field if present, otherwise map from 'role'.
 
     Additionally, render 'coach' entries as a styled HTML coaching block so that
@@ -238,6 +238,14 @@ async def _replay_history(history: list[dict]):
         role = item.get("role", "assistant")
         if not author:
             author = _author_from_role(role)
+
+        # Scenario card persisted in history
+        if role == "assistant" and ("Persona: " in (content or "") or "Person: " in (content or "") or "Parent: " in (content or "")):
+            try:
+                await _send_html("Patient", _render_scenario_card_html(content))
+                continue
+            except Exception:
+                pass
 
         # Coach entries: render as the same inline HTML block we use during live turns
         if author == "Coach":
@@ -464,7 +472,7 @@ def _build_scenario_card() -> list[str]:
     """
     persona = _load_robust_persona()
     lines = [
-        f"Parent/Patient: {persona['name']}",
+        f"Person: {persona['name']}",
         f"Background: {persona['brief']}",
         f"Reason for visit: {persona['scenario']['user_sketch']}"
     ]
@@ -506,6 +514,15 @@ async def _start_chat_impl():
     user_identifier = app_user.identifier if app_user else None
     session_id = cl.user_session.get("session_id")
 
+    # If the user explicitly requested a new chat (e.g. via cl.on_chat_start after a reload)
+    # or if we don't have a session_id, we create a fresh one.
+    # Note: Chainlit 2.x's "New Chat" button usually triggers cl.on_chat_start
+    # but we need a way to distinguish between "reload/resume" and "explicit new chat".
+    # For now, if we are in start_chat and session_id is NOT in cl.user_session, 
+    # it's definitely a fresh start. If it IS there, it might be a re-init from Chainlit.
+    # However, our JS now forces a full page reload to /chat, which should clear 
+    # the Chainlit user_session in most cases, or at least start a fresh on_chat_start.
+    
     if not session_id:
         # If we have a user, try to recover their last session ID.
         # This is critical for stability across server restarts.
@@ -536,17 +553,19 @@ async def _start_chat_impl():
     except Exception:
         existing_hist = []
 
-    # 3. Robust Persona Selection
-    # If history exists, try to recover the persona name from the first assistant message (scenario card)
+    # 3. Recover persona name from history if it exists
     recovered_name = None
     if existing_hist:
         for msg in existing_hist:
             content = msg.get("content") or ""
-            if msg.get("role") == "assistant" and ("Persona: " in content or "Parent: " in content):
-                # Extract name e.g. "Persona: Jasmine\nBackground: ..." or "Parent: Jasmine\n..."
+            if msg.get("role") == "assistant" and ("Persona: " in content or "Person: " in content or "Parent: " in content):
+                # Extract name e.g. "Persona: Jasmine\nBackground: ..." or "Person: Jasmine\n..."
                 for line in content.splitlines():
                     if line.startswith("Persona: "):
                         recovered_name = line.replace("Persona: ", "").strip()
+                        break
+                    if line.startswith("Person: "):
+                        recovered_name = line.replace("Person: ", "").strip()
                         break
                     if line.startswith("Parent: "):
                         recovered_name = line.replace("Parent: ", "").strip()
@@ -556,99 +575,110 @@ async def _start_chat_impl():
                         break
             if recovered_name:
                 break
-    
-    persona_data = _load_robust_persona(name=recovered_name)
-    
-    # Detailed information passed to the role-playing LLM
-    # We combine with DEFAULT_CHARACTER/SCENE to preserve core guardrails if not overridden by ENV
-    base_char = settings.CHARACTER_SYSTEM or DEFAULT_CHARACTER
-    base_scene = settings.SCENE_OBJECTIVES or DEFAULT_SCENE
-    
-    character_detailed = (
-        f"{base_char}\n\n"
-        f"Specific Persona: {persona_data['name']}\n"
-        f"Detailed Biography and Motivations: {persona_data['detailed']}"
-    )
-    scene_detailed = (
-        f"{base_scene}\n\n"
-        f"Current Scenario: {persona_data['scenario']['visit_reason']}\n"
-        f"Scenario Objectives: {persona_data['scenario']['detailed_instructions']}"
-    )
-    
-    # Information displayed to the user: basic biographical and sparse personality/motivation
-    # User Scenario: just a sketch of the reason for the visit.
-    user_card_lines = [
-        f"Persona: {persona_data['name']}",
-        f"Background: {persona_data['brief']}",
-        f"Reason for visit: {persona_data['scenario']['user_sketch']}"
-    ]
-    # If the reason for the visit is unrelated to vaccines, hint that the user mention vaccines.
-    # We don't need to hint for pediatric visits (parent/child) as it's natural for the doctor.
-    is_pediatric = any(k in persona_data['brief'].lower() for k in ["parent", "child", "son", "daughter"])
-    if not persona_data['scenario'].get('vaccine_related') and not is_pediatric:
-        user_card_lines.append("\n(Note: You might want to mention vaccines during this visit.)")
-    
-    user_card = "\n".join(user_card_lines)
 
-    # Set detailed persona/scene for the backend orchestration
-    cl.user_session.set("character", character_detailed)
-    cl.user_session.set("scene", scene_detailed)
+    # 4. Backend-led Session Initialization
+    # We send the recovered_name as personaId. If None, the backend picks one.
+    # The backend returns the character, scene, and initialCard.
+    character_detailed = None
+    scene_detailed = None
+    user_card = None
 
-    # Register session with the backend so /report can find it even before
-    # the first /chat message is sent.
     try:
         user = cl.user_session.get("user")
         user_info = {"identifier": user.identifier} if user else None
         async with httpx.AsyncClient(timeout=settings.CHAINLIT_HTTP_TIMEOUT) as client:
-            await client.post(
+            resp = await client.post(
                 f"{_base_url()}/session",
                 json={
                     "sessionId": session_id,
-                    "character": character_detailed,
-                    "scene": scene_detailed,
+                    "personaId": recovered_name,
                     "userInfo": user_info,
                 },
             )
-    except Exception:
-        pass  # best-effort; /chat will create the session on first message anyway
+            if resp.status_code == 200:
+                data = resp.json()
+                character_detailed = data.get("character")
+                scene_detailed = data.get("scene")
+                user_card = data.get("initialCard")
+    except Exception as e:
+        print(f"DEBUG: Failed to initialize session with backend: {e}")
+
+    # Fallback if backend initialization failed or returned empty
+    if not character_detailed or not scene_detailed or not user_card:
+        persona_data = _load_robust_persona(name=recovered_name)
+        base_char = settings.CHARACTER_SYSTEM or DEFAULT_CHARACTER
+        base_scene = settings.SCENE_OBJECTIVES or DEFAULT_SCENE
+        
+        character_detailed = (
+            f"{base_char}\n\n"
+            f"Specific Persona: {persona_data['name']}\n"
+            f"Detailed Biography and Motivations: {persona_data['detailed']}"
+        )
+        scene_detailed = (
+            f"{base_scene}\n\n"
+            f"Current Scenario: {persona_data['scenario']['visit_reason']}\n"
+            f"Scenario Objectives: {persona_data['scenario']['detailed_instructions']}"
+        )
+        
+        user_card_lines = [
+            f"Person: {persona_data['name']}",
+            f"Background: {persona_data['brief']}",
+            f"Reason for visit: {persona_data['scenario']['user_sketch']}"
+        ]
+        is_pediatric = any(k in persona_data['brief'].lower() for k in ["parent", "child", "son", "daughter"])
+        if not persona_data['scenario'].get('vaccine_related') and not is_pediatric:
+            user_card_lines.append("\n(Note: You might want to mention vaccines during this visit.)")
+        user_card = "\n".join(user_card_lines)
+
+    # Set state for the session
+    cl.user_session.set("character", character_detailed)
+    cl.user_session.set("scene", scene_detailed)
 
     # Always start with a clean local history for a new chat
     cl.user_session.set("history", [])
 
     # If there is prior history on the backend, mirror it into the UI and prepend the scenario summary for context
     if existing_hist:
-        card = None
-        # Try to find the original scenario card in the history
-        for msg in existing_hist:
-            content = msg.get("content") or ""
-            if msg.get("role") == "assistant" and ("Persona: " in content or "Parent: " in content):
-                card = content
-                break
-
-        # Fallback to a new card only if none found in history
-        if not card:
+        # If the history DOES NOT contain a scenario card, we show it at the TOP before replaying history.
+        # We also check for Parent: and Persona: for legacy compatibility.
+        has_card_in_history = any(
+            msg.get("role") == "assistant" and (
+                "Persona: " in (msg.get("content") or "") or 
+                "Person: " in (msg.get("content") or "") or 
+                "Parent: " in (msg.get("content") or "") or
+                "Parent/Patient: " in (msg.get("content") or "")
+            )
+            for msg in existing_hist
+        )
+        if not has_card_in_history:
             try:
+                # Use the user_card (scenario briefing) returned from backend or generated locally
                 card = user_card
+                # Render a scenario summary card at the top (not persisted anew) for consistent context after refresh
+                await _send_html("Patient", _render_scenario_card_html(card))
             except Exception:
-                card = "Scenario: Pediatric visit"
+                pass
 
         try:
-            # Render a scenario summary card at the top (not persisted anew) for consistent context after refresh
-            await _send_html("Patient", _render_scenario_card_html(card))
-        except Exception:
-            pass
-        try:
+            # Important: we update the local history session state to match backend
             cl.user_session.set("history", existing_hist)
             await _replay_history(existing_hist)
         except Exception:
             pass
+
         # Also inject the scenario lines into the scene context once if not present
         try:
             if "Scenario details (use these exact names; do not change them):" not in (cl.user_session.get("scene") or ""):
                 prev_scene = cl.user_session.get("scene")
+                card_to_inject = user_card
+                for msg in existing_hist:
+                    content = msg.get("content") or ""
+                    if msg.get("role") == "assistant" and ("Persona: " in content or "Person: " in content or "Parent: " in content):
+                        card_to_inject = content
+                        break
                 scenario_scene_suffix = (
-                    "\n\nScenario details (use these exact names; do not change them):\n" + card +
-                    "\n\nIf asked for names, respond naturally but keep the same parent and child names."
+                    "\n\nScenario details (use these exact names; do not change them):\n" + card_to_inject +
+                    "\n\nIf asked for names, respond naturally but keep the same names."
                 )
                 new_scene = (prev_scene + scenario_scene_suffix) if prev_scene else scenario_scene_suffix
                 cl.user_session.set("scene", new_scene)
@@ -663,7 +693,7 @@ async def _start_chat_impl():
     # Defensive check: if the local history already contains a scenario card (even if the backend
     # lost its state), do not append or send a new one.
     has_card = any(
-        msg.get("role") == "assistant" and ("Persona: " in (msg.get("content") or ""))
+        msg.get("role") == "assistant" and ("Persona: " in (msg.get("content") or "") or "Person: " in (msg.get("content") or ""))
         for msg in history
     )
     if not has_card:
@@ -932,6 +962,26 @@ async def on_window_message(message: str):
         reason = (data.get("reason") or "").strip()
         if reason:
             await _submit_report(reason)
+    elif data.get("type") == "new_chat":
+        # Force session reset for "New Chat" confirmed in custom modal
+        cl.user_session.set("session_id", None)
+        cl.user_session.set("history", [])
+        cl.user_session.set("session_ended", False)
+        
+        # Also clear the persistent session id for this user if they are logged in.
+        # We generate a NEW one and write it so it doesn't just recover the old one.
+        app_user = cl.user_session.get("user")
+        if app_user and app_user.identifier:
+            import uuid
+            new_id = str(uuid.uuid4())
+            _write_persistent_session_id(new_id, app_user.identifier)
+            print(f"DEBUG: Reset persistent session_id for {app_user.identifier} to {new_id}")
+            
+        # We don't need to manually call start_chat as the browser will reload
+    elif data.get("type") == "on_logout":
+        # Ensure on_logout window message is forwarded to the parent window
+        # so that run_app.py can redirect to the login screen.
+        await cl.send_window_message("on_logout")
 
 
 async def _submit_report(reason: str):

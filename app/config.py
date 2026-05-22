@@ -161,3 +161,14 @@ class Settings(BaseSettings):
         return ttl if ttl > 0 else 30*24*60*60
 
 settings = Settings()
+
+# Default prompt fragments to avoid circular imports or missing definitions
+DEFAULT_CHARACTER = (
+    "You are roleplaying as a person in a clinical setting. "
+    "Maintain your character and respond naturally to the clinician."
+)
+
+DEFAULT_SCENE = (
+    "You are in a medical clinic for a routine visit. "
+    "The clinician is here to discuss health and recommendations."
+)

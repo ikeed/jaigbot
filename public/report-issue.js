@@ -182,13 +182,15 @@
     false,
     "Confirm",
     function() {
-      // Find the real hidden button and click it to trigger Chainlit's internal reset
-      var realBtn = document.getElementById("new-chat-button");
-      if (realBtn) {
-        // We need to bypass our own interception
-        realBtn._aimsConfirmBypass = true;
-        realBtn.click();
-      }
+      // 1. Notify the backend to clear the session state for this user_session
+      var payload = JSON.stringify({ type: "new_chat" });
+      window.postMessage(payload, "*");
+      
+      // 2. Force a full reload to /chat which will trigger cl.on_chat_start
+      // with the cleared session state.
+      setTimeout(function() {
+        window.location.href = window.location.origin + "/chat";
+      }, 100);
     }
   );
 
@@ -200,15 +202,22 @@
     false,
     "Logout",
     function() {
-      // Find the logout link and trigger it
-      var logoutBtn = document.querySelector('a[href*="logout"], button[id*="logout"]');
-      if (logoutBtn) {
-        logoutBtn._aimsLogoutBypass = true;
-        logoutBtn.click();
-      } else {
-        // Fallback: just redirect to logout if we can't find the button but were in the modal
-        window.location.href = "/chat/logout";
-      }
+      // 1. Notify the backend to clear the session state for this user_session
+      var payload = JSON.stringify({ type: "on_logout" });
+      window.postMessage(payload, "*");
+      
+      // 2. Fallback in case window message isn't picked up by parent (unlikely but safe)
+      // We give some time for the message to be processed and for Chainlit to do its own logout
+      setTimeout(function() {
+        // Trigger the original logout button if found
+        var logoutBtn = document.querySelector('a[href*="logout"], button[id*="logout"]');
+        if (logoutBtn) {
+          logoutBtn._aimsLogoutBypass = true;
+          logoutBtn.click();
+        } else {
+          window.location.href = "/chat/logout";
+        }
+      }, 500);
     }
   );
 
