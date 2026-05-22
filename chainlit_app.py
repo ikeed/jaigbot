@@ -507,7 +507,13 @@ async def _start_chat_impl():
         url = get_backend_url()
         return url[:-5] if url.endswith("/chat") else url
 
-    # 1. Session ID management:
+    # 1. Connection and Session ID management:
+    # Generate a unique connection ID for this specific tab/websocket
+    connection_id = cl.user_session.get("connection_id")
+    if not connection_id:
+        connection_id = str(uuid.uuid4())
+        cl.user_session.set("connection_id", connection_id)
+
     # Attempt to recover a persistent session_id if we have an authenticated user.
     # This ensures that if the app restarts, we can resume the same session
     # instead of generating a new one (which leads to duplicate scenario cards).
@@ -582,21 +588,40 @@ async def _start_chat_impl():
     character_detailed = None
     scene_detailed = None
     user_card = None
+    
+    # Check for force flag in query params
+    query_params = cl.user_session.get("query_params") or {}
+    force_takeover = query_params.get("force") == "true"
+    if force_takeover:
+        print(f"DEBUG: Force takeover requested for session {session_id}")
 
     try:
         user = cl.user_session.get("user")
         user_info = {"identifier": user.identifier} if user else None
+        print(f"DEBUG: Initializing session {session_id} with connection {connection_id} for user {user_identifier} (force={force_takeover})")
         async with httpx.AsyncClient(timeout=settings.CHAINLIT_HTTP_TIMEOUT) as client:
             resp = await client.post(
                 f"{_base_url()}/session",
                 json={
                     "sessionId": session_id,
+                    "connectionId": connection_id,
                     "personaId": recovered_name,
                     "userInfo": user_info,
+                    "force": force_takeover,
                 },
             )
             if resp.status_code == 200:
                 data = resp.json()
+                print(f"DEBUG: Backend init response for {session_id}: {data}")
+                
+                # Check if this session is already active in another tab
+                if data.get("alreadyActive"):
+                    print(f"DEBUG: Duplicate tab detected for session {session_id} in start_chat")
+                    # Signal the UI to redirect to the duplicate tab warning page
+                    # We still do this as a fallback in case the middleware missed it
+                    await on_window_message(json.dumps({"type": "on_duplicate_tab"}))
+                    return True
+
                 character_detailed = data.get("character")
                 scene_detailed = data.get("scene")
                 user_card = data.get("initialCard")
@@ -684,7 +709,7 @@ async def _start_chat_impl():
                 cl.user_session.set("scene", new_scene)
         except Exception:
             pass
-        return
+        return True
 
     # Otherwise, present a single scenario card as before
     card = user_card
@@ -743,7 +768,7 @@ async def _start_chat_impl():
                 await cl.Message(
                     f"Backend at {base_url} is not reachable. Ensure it is running (e.g. `uvicorn app.main:app` or using `run_app.py`)."
                 ).send()
-                return
+                return True
             # Try to fetch /config; if it reveals a missing PROJECT_ID, warn helpfully.
             try:
                 r2 = await client.get(f"{base_url}/config")
@@ -779,6 +804,7 @@ async def _start_chat_impl():
     except Exception:
         # httpx not available or some unexpected error; skip preflight.
         pass
+    return True
 
 # Helper to check if an environment variable has a valid (non-empty, non-placeholder) value
 def is_valid_env_val(val: str | None) -> bool:
@@ -962,6 +988,9 @@ async def on_window_message(message: str):
         reason = (data.get("reason") or "").strip()
         if reason:
             await _submit_report(reason)
+    elif data.get("type") == "on_duplicate_tab":
+        # Forward duplicate tab signal to the parent window
+        await cl.send_window_message({"type": "on_duplicate_tab"})
     elif data.get("type") == "new_chat":
         # Force session reset for "New Chat" confirmed in custom modal
         cl.user_session.set("session_id", None)
@@ -1042,6 +1071,31 @@ async def _report_error_silently(error: Exception, context: str = "general"):
     except Exception:
         # Best effort only
         pass
+
+
+@cl.on_chat_end
+async def on_chat_end():
+    """Notify the backend when a session ends/tab is closed."""
+    session_id = cl.user_session.get("session_id")
+    connection_id = cl.user_session.get("connection_id")
+    
+    if session_id and connection_id:
+        def _base_url() -> str:
+            url = get_backend_url()
+            return url[:-5] if url.endswith("/chat") else url
+
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                await client.post(
+                    f"{_base_url()}/session/deregister",
+                    json={
+                        "sessionId": session_id,
+                        "connectionId": connection_id,
+                    },
+                )
+        except Exception as e:
+            # Silent fail on deregister is usually okay (server cleanup will handle it)
+            pass
 
 
 @cl.on_message

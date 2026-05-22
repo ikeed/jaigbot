@@ -313,6 +313,13 @@
     }
   }, true);
 
+  // Handle signals from the backend (via cl.send_window_message)
+  window.addEventListener("message", function(event) {
+    if (event.data === "on_duplicate_tab" || (event.data && event.data.type === "on_duplicate_tab")) {
+      window.location.href = "/duplicate";
+    }
+  });
+
   setInterval(function() {
     interceptNewChat();
     interceptLogout();

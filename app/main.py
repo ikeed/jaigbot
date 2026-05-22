@@ -550,11 +550,13 @@ from pydantic import BaseModel as _BaseModel
 
 class SessionInitRequest(_BaseModel):
     sessionId: str
+    connectionId: Optional[str] = None
     personaId: Optional[str] = None
     character: Optional[str] = None
     scene: Optional[str] = None
     userInfo: Optional[dict] = None
     initialCard: Optional[str] = None
+    force: Optional[bool] = False
 
 
 def _get_request_id(request: Request) -> Optional[str]:
@@ -644,11 +646,21 @@ async def init_session(body: SessionInitRequest):
     scene = body.scene
     initial_card = body.initialCard
 
-    # If personaId is provided, the backend generates the character/scene/card
-    if body.personaId:
+    # If personaId is NOT provided, but we have an existing session,
+    # try to RECOVER the personaId from the existing memory so we don't pick a new random one.
+    persona_id = body.personaId
+    if not persona_id and mem and mem.get("character"):
+        for line in mem["character"].splitlines():
+            if "Specific Persona:" in line:
+                persona_id = line.split("Specific Persona:")[1].strip()
+                logger.info("Recovered personaId '%s' from existing memory for session %s", persona_id, sid)
+                break
+
+    # If persona_id is provided or recovered, the backend generates the character/scene/card
+    if persona_id:
         try:
             from .services.chat_helpers import load_robust_persona
-            persona = load_robust_persona(name=body.personaId)
+            persona = load_robust_persona(name=persona_id)
             
             # Use standard template if character/scene not already provided
             if not character:
@@ -678,7 +690,7 @@ async def init_session(body: SessionInitRequest):
                     lines.append("\n(Note: You might want to mention vaccines during this visit.)")
                 initial_card = "\n".join(lines)
         except Exception as e:
-            logger.error("Failed to load persona %s: %s", body.personaId, e)
+            logger.error("Failed to load persona %s: %s", persona_id, e)
 
     if not mem:
         mem = {
@@ -739,13 +751,73 @@ async def init_session(body: SessionInitRequest):
         _MEMORY_STORE[sid] = mem
 
     logger.info("Session initialized: %s", sid)
+    
+    # Connection tracking
+    active_connections = mem.get("active_connections", [])
+    already_active = False
+
+    # If force is true, we clear existing connections and takeover
+    if body.force:
+        logger.info("Force flag detected for session %s. Clearing active connections: %s", sid, active_connections)
+        active_connections = []
+        mem["active_connections"] = active_connections
+        # We don't return alreadyActive=True in this case because we are forcing it.
+
+    if body.connectionId:
+        logger.debug("Checking connectionId: %s for session %s. Existing: %s", body.connectionId, sid, active_connections)
+        if body.connectionId not in active_connections:
+            # If there are active connections and we are adding a NEW one, mark it as alreadyActive
+            if active_connections:
+                already_active = True
+                logger.info("Session %s is already active with connections: %s. Blocking new connection: %s", sid, active_connections, body.connectionId)
+            
+            # We still add the connectionId so that if the user refreshes THIS tab, 
+            # it stays as part of the session, but it will be blocked until other tabs are closed.
+            active_connections.append(body.connectionId)
+            mem["active_connections"] = active_connections
+            _MEMORY_STORE[sid] = mem
+        else:
+            # If THIS connectionId is already in active_connections, but it's not the ONLY one,
+            # it should still be considered "already active" unless it was the first one.
+            # Actually, if it's already there, it means this tab is RECONNECTING.
+            # If it was already blocked before, it should stay blocked? 
+            # No, if it's reconnecting, we should check if it's the "primary" one.
+            # For simplicity: if it's already in the list, and it's not the first one, it's already active.
+            if active_connections and active_connections[0] != body.connectionId:
+                already_active = True
+            logger.debug("connectionId %s already registered for session %s. alreadyActive=%s", body.connectionId, sid, already_active)
+
     return {
         "status": "ok", 
         "sessionId": sid,
+        "alreadyActive": already_active,
         "character": mem.get("character"),
         "scene": mem.get("scene"),
-        "initialCard": next((m["content"] for m in mem["history"] if m.get("role") == "assistant" and ("Person: " in m["content"] or "Persona: " in m["content"] or "Parent: " in m["content"])), initial_card)
+        "initialCard": next((m["content"] for m in mem["history"] if m.get("role") == "assistant" and ("Person: " in m["content"] or "Persona: " in m["content"] or "Parent: " in m["content"] or "Parent/Patient: " in m["content"])), initial_card)
     }
+
+
+class SessionDeregisterRequest(_BaseModel):
+    sessionId: str
+    connectionId: str
+
+
+@app.post("/session/deregister")
+async def deregister_session(body: SessionDeregisterRequest):
+    """Remove a connectionId from the active connections list."""
+    if not settings.MEMORY_ENABLED:
+        return {"status": "ok"}
+    sid = body.sessionId
+    mem = _MEMORY_STORE.get(sid)
+    if mem:
+        active = mem.get("active_connections", [])
+        if body.connectionId in active:
+            active.remove(body.connectionId)
+            mem["active_connections"] = active
+            mem["updated"] = time.time()
+            _MEMORY_STORE[sid] = mem
+            logger.info("Connection deregistered: %s for session %s", body.connectionId, sid)
+    return {"status": "ok"}
 
 
 @app.post("/report")
