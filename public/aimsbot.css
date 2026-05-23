@@ -18,8 +18,16 @@
 
 /* 1) Coaching message bubble highlight */
 /* Preferred: a message container annotated with data-author="Coach" */
+.aims-coach-bubble,
 [data-author="Coach"] .message-content,
-.cl-message[data-author="Coach"] .message-content {
+.cl-message[data-author="Coach"] .message-content,
+.cl-step[data-author="Coach"] .message-content,
+[data-author="System"] .message-content,
+.cl-message[data-author="System"] .message-content,
+.cl-step[data-author="System"] .message-content,
+[data-author="Briefing"] .message-content,
+.cl-message[data-author="Briefing"] .message-content,
+.cl-step[data-author="Briefing"] .message-content {
   background: var(--coach-bg) !important;
   border-left: 4px solid var(--coach-border) !important;
 }
@@ -27,7 +35,12 @@
 /* Fallback: containers that include the Coach avatar image */
 /* Using :has() for modern browsers; ignored in older browsers without harm */
 .message:has(img[src*="/public/coach.svg"]) .message-content,
-.message:has(img[alt="Coach"]) .message-content {
+.message:has(img[alt="Coach"]) .message-content,
+.cl-message:has(img[src*="/public/coach.svg"]) .message-content,
+.cl-step:has(img[src*="/public/coach.svg"]) .message-content,
+.message:has(img[src*="/public/patient.svg"]) .message-content:not([data-author]),
+.cl-message:has(.cl-avatar[data-author="System"]) .message-content,
+.cl-message:has(.cl-avatar[data-author="Briefing"]) .message-content {
   background: var(--coach-bg) !important;
   border-left: 4px solid var(--coach-border) !important;
 }
@@ -51,29 +64,32 @@
 [data-author="Doctor"] .message-content,
 [data-author="You"] .message-content { border-top: 2px solid color-mix(in srgb, var(--doctor-accent), transparent 80%); }
 
-/* User bubble enhancements when Chainlit doesn’t render a gutter avatar */
-/* High-specificity targeting of the user bubble container */
+/* User bubble enhancements - applied to Doctor turns */
+[data-author="Doctor"] .cl-message,
+[data-author="You"] .cl-message,
+.cl-message[data-author="Doctor"],
+.cl-message[data-author="You"] {
+  justify-content: flex-end !important;
+}
+
+[data-author="Doctor"] .message-content,
+[data-author="You"] .message-content,
+.cl-message[data-author="Doctor"] .message-content,
+.cl-message[data-author="You"] .message-content,
 [data-step-type="user_message"] .bg-accent,
 div[data-step-type="user_message"] div.bg-accent {
   position: relative !important;
   overflow: visible !important;
   z-index: 1;
-  /* Force right alignment and blue background akin to live styled bubble */
-  margin-left: auto !important;
   background: #e6f0ff !important;
   color: #123 !important;
+  border-radius: 8px !important;
 }
+
+
+/* Hide the absolute positioned icon that was in the upper right corner */
 [data-step-type="user_message"] .bg-accent::before {
-  content: "";
-  position: absolute;
-  right: 6px; /* inside the bubble to avoid clipping */
-  top: -10px;
-  width: 28px;
-  height: 28px;
-  border-radius: 9999px;
-  background: url('/public/doctor.svg') center/cover no-repeat;
-  box-shadow: 0 0 0 2px var(--background, #fff); /* ring to separate from bubble */
-  pointer-events: none;
+  display: none !important;
 }
 
 /* Add a subtle teal top border to the user bubble */
@@ -85,12 +101,20 @@ div[data-step-type="user_message"] div.bg-accent {
 /* Replace the user (You) avatar with the Doctor icon via CSS if available */
 [data-author="You"] .cl-avatar,
 [data-author="You"] .avatar,
-[data-author="You"] .message-avatar {
+[data-author="You"] .message-avatar,
+.cl-message[data-author="You"] .cl-avatar,
+.cl-message[data-author="You"] .avatar,
+.cl-message[data-author="You"] .message-avatar,
+.cl-avatar[data-author="You"] {
   background: url('/public/doctor.svg') center/cover no-repeat !important;
 }
 [data-author="You"] .cl-avatar img,
 [data-author="You"] .avatar img,
-[data-author="You"] .message-avatar img {
+[data-author="You"] .message-avatar img,
+.cl-message[data-author="You"] .cl-avatar img,
+.cl-message[data-author="You"] .avatar img,
+.cl-message[data-author="You"] .message-avatar img,
+.cl-avatar[data-author="You"] img {
   opacity: 0 !important;
 }
 
@@ -106,33 +130,111 @@ div[data-step-type="user_message"] div.bg-accent {
 /* Doctor avatar */
 [data-author="Doctor"] .cl-avatar,
 [data-author="Doctor"] .avatar,
-[data-author="Doctor"] .message-avatar { background: url('/public/doctor.svg') center/cover no-repeat !important; }
+[data-author="Doctor"] .message-avatar,
+.cl-message[data-author="Doctor"] .cl-avatar,
+.cl-message[data-author="Doctor"] .avatar,
+.cl-message[data-author="Doctor"] .message-avatar { 
+    background: url('/public/doctor.svg') center/cover no-repeat !important; 
+}
 [data-author="Doctor"] .cl-avatar img,
 [data-author="Doctor"] .avatar img,
-[data-author="Doctor"] .message-avatar img { opacity: 0 !important; }
+[data-author="Doctor"] .message-avatar img,
+.cl-message[data-author="Doctor"] .cl-avatar img,
+.cl-message[data-author="Doctor"] .avatar img,
+.cl-message[data-author="Doctor"] .message-avatar img { opacity: 0 !important; }
 
 /* Patient avatar */
 [data-author="Patient"] .cl-avatar,
 [data-author="Patient"] .avatar,
-[data-author="Patient"] .message-avatar { background: url('/public/patient.svg') center/cover no-repeat !important; }
+[data-author="Patient"] .message-avatar,
+.cl-message[data-author="Patient"] .cl-avatar,
+.cl-message[data-author="Patient"] .avatar,
+.cl-message[data-author="Patient"] .message-avatar { background: url('/public/patient.svg') center/cover no-repeat !important; }
 [data-author="Patient"] .cl-avatar img,
 [data-author="Patient"] .avatar img,
-[data-author="Patient"] .message-avatar img { opacity: 0 !important; }
+[data-author="Patient"] .message-avatar img,
+.cl-message[data-author="Patient"] .cl-avatar img,
+.cl-message[data-author="Patient"] .avatar img,
+.cl-message[data-author="Patient"] .message-avatar img { opacity: 0 !important; }
 
-/* Coach avatar */
-[data-author="Coach"] .cl-avatar,
-[data-author="Coach"] .avatar,
-[data-author="Coach"] .message-avatar { background: url('/public/coach.svg') center/cover no-repeat !important; }
-[data-author="Coach"] .cl-avatar img,
-[data-author="Coach"] .avatar img,
-[data-author="Coach"] .message-avatar img { opacity: 0 !important; }
 
-/* 5) Hide the Chainlit "Readme" button in the header */
+/* 5) Hide default avatars for System and Briefing — they use inline icons only.
+   Coach is intentionally NOT hidden here; we want the native avatar to show coach.svg.
+*/
+.cl-message[data-author="System"] .cl-avatar,
+.cl-message[data-author="System"] .avatar,
+.cl-message[data-author="System"] .message-avatar,
+.cl-message[data-author="Briefing"] .cl-avatar,
+.cl-message[data-author="Briefing"] .avatar,
+.cl-message[data-author="Briefing"] .message-avatar,
+.cl-step[data-author="System"] .cl-avatar,
+.cl-step[data-author="Briefing"] .cl-avatar,
+[data-author="System"] .cl-avatar,
+[data-author="Briefing"] .cl-avatar,
+[data-author="System"] .avatar,
+[data-author="Briefing"] .avatar,
+[data-author="System"] .message-avatar,
+[data-author="Briefing"] .message-avatar,
+.cl-avatar[data-author="System"],
+.cl-avatar[data-author="Briefing"],
+.avatar[data-author="System"],
+.avatar[data-author="Briefing"] {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  margin: 0 !important;
+  visibility: hidden !important;
+}
+
+/* 5b) DO NOT hide Doctor/You/clinician avatars - we want them visible on the right. 
+   We also ensure that the img tag we manually insert in HTML is NOT hidden.
+*/
+.cl-message[data-author="Doctor"] .cl-avatar,
+.cl-message[data-author="You"] .cl-avatar,
+.cl-message[data-author="clinician"] .cl-avatar,
+[data-author="Doctor"] .cl-avatar,
+[data-author="You"] .cl-avatar,
+[data-author="clinician"] .cl-avatar,
+.cl-avatar[data-author="Doctor"],
+.cl-avatar[data-author="You"],
+.cl-avatar[data-author="clinician"] {
+  display: none !important;
+}
+
+/* Ensure our manually inserted icons in HTML bubbles are ALWAYS visible 
+   and not affected by general avatar hiding rules.
+*/
+.message-content img[src*="/public/doctor.svg"],
+.message-content img[src*="/public/coach.svg"],
+.cl-message img[src*="/public/doctor.svg"],
+.cl-message img[src*="/public/coach.svg"],
+img.aims-doctor-icon {
+  display: inline-block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  max-width: none !important;
+}
+
+/* Also hide standard img avatars inside these containers if they manage to show */
+.cl-message[data-author="System"] .cl-avatar img,
+.cl-message[data-author="Coach"] .cl-avatar img,
+.cl-message[data-author="Briefing"] .cl-avatar img,
+.cl-message[data-author="System"] img.avatar,
+.cl-message[data-author="Coach"] img.avatar,
+.cl-message[data-author="Briefing"] img.avatar,
+.cl-step[data-author="System"] img,
+.cl-step[data-author="Coach"] img,
+.cl-step[data-author="Briefing"] img {
+  display: none !important;
+  opacity: 0 !important;
+}
+
+/* 6) Hide the Chainlit "Readme" button in the header */
 #readme-button {
   display: none !important;
 }
 
-/* 6) Make the chat profile / splash icon much larger */
+/* 7) Make the chat profile / splash icon much larger */
 img[alt="AIMSBot"] {
   width: 256px !important;
   height: 256px !important;
@@ -159,6 +261,8 @@ img[alt="AIMSBot"] {
 
 /* Fallback: treat user_message bubbles as Doctor when author annotation missing */
 .step[data-step-type="user_message"] .message-avatar,
-[data-step-type="user_message"] .message-avatar { background: url('/public/doctor.svg') center/cover no-repeat !important; }
+[data-step-type="user_message"] .message-avatar { 
+    background: url('/public/doctor.svg') center/cover no-repeat !important; 
+}
 .step[data-step-type="user_message"] .message-avatar img,
 [data-step-type="user_message"] .message-avatar img { opacity: 0 !important; }

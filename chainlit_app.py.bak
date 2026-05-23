@@ -31,16 +31,39 @@ from app.persona import DEFAULT_CHARACTER, DEFAULT_SCENE
 
 
 def _register_avatars_once() -> None:
-    """Register avatars globally so /avatars/* resolves consistently."""
+    """Register avatars globally at import time so /avatars/* resolves
+    even before the first chat starts (avoids default-cache on first load)."""
     try:
-        cl.Avatar(name="Patient", path="public/patient.svg").save()
-        cl.Avatar(name="Doctor", path="public/doctor.svg").save()
-        cl.Avatar(name="You", path="public/doctor.svg").save()
-        cl.Avatar(name="Coach", path=".chainlit/public/coach.svg").save()
-        cl.Avatar(name="System", path="public/avatars/system.svg").save()
-        cl.Avatar(name="Briefing", path="public/avatars/briefing.svg").save()
-        # Ensure clinician also has the doctor avatar
-        cl.Avatar(name="clinician", path="public/doctor.svg").save()
+        root = Path(__file__).resolve().parent
+
+        def _abs_existing(path_like: str | None) -> str | None:
+            if not path_like:
+                return None
+            p = Path(path_like)
+            if not p.is_absolute():
+                p = root / p
+            return str(p.resolve()) if p.exists() else None
+
+        def _pick_avatar(name: str, env_path_var: str, defaults: list[str], env_url_var: str):
+            path = _abs_existing(getattr(settings, env_path_var, None))
+            if not path:
+                for d in defaults:
+                    path = _abs_existing(d)
+                    if path:
+                        break
+            if path:
+                cl.Avatar(id=name, name=name, path=path).save()
+                return
+            url = getattr(settings, env_url_var, None)
+            if url and (url.startswith("http://") or url.startswith("https://")):
+                cl.Avatar(id=name, name=name, url=url).save()
+
+        _pick_avatar("Patient", "PATIENT_AVATAR_PATH", ["public/patient.svg"], "PATIENT_AVATAR_URL")
+        _pick_avatar("Doctor", "DOCTOR_AVATAR_PATH", ["public/doctor.svg"], "DOCTOR_AVATAR_URL")
+        # Include top-level Coach.svg fallback in case assets are placed at repo root
+        _pick_avatar("Coach", "COACH_AVATAR_PATH", ["public/coach.svg", "Coach.svg"], "COACH_AVATAR_URL")
+        # Map System to a non-existent or transparent icon to avoid Patient fallback
+        cl.Avatar(name="System", path=str(Path(__file__).resolve().parent / "public" / "coach.svg")).save()
     except Exception:
         pass
 
@@ -48,6 +71,88 @@ def _register_avatars_once() -> None:
 _register_avatars_once()
 
 
+# Inject our public CSS into the page at session start to ensure consistent styling
+async def _inject_custom_css_once() -> None:
+    try:
+        if cl.user_session.get("_css_injected"):
+            return
+        root = Path(__file__).resolve().parent
+        css_path = root / "public" / "aimsbot.css"
+        css_text = None
+        if css_path.exists():
+            css_text = css_path.read_text(encoding="utf-8")
+        
+        if css_text:
+            # Add a timestamp or hash to the CSS to force browser re-evaluation
+            import time
+            css_text += f"\n/* Cache buster: {time.time()} */"
+            html = f"<style>{css_text}</style>"
+            await _send_html("System", html)
+            cl.user_session.set("_css_injected", True)
+
+        # Custom styles for the AIMSBot UI
+    except Exception:
+        # best-effort only
+        pass
+
+async def _send_html(author: str, html: str, actions: list[cl.Action] | None = None) -> None:
+    """
+    Try to render HTML reliably across Chainlit versions:
+    - Prefer the HTML element (cl.HTML / cl.Html) if available.
+    - Fallback to plain content rendering (which may be sanitized) as a last resort.
+    """
+    try:
+        HtmlElem = getattr(cl, "HTML", None) or getattr(cl, "Html", None)
+        if HtmlElem is not None:
+            elem = HtmlElem(name="block", content=html)
+            await cl.Message(content="", author=author, elements=[elem], actions=actions or []).send()
+            return
+    except Exception:
+        pass
+    # Fallback: send as content (requires unsafe_allow_html=true to style)
+    try:
+        await cl.Message(html, author=author, actions=actions or []).send()
+    except Exception:
+        # Last resort: strip tags (very minimal)
+        try:
+            import re
+            text = re.sub(r"<[^>]+>", "", html)
+            await cl.Message(text, author=author, actions=actions or []).send()
+        except Exception:
+            await cl.Message(html, author=author, actions=actions or []).send()
+
+
+async def _update_message_html(message: cl.Message, author: str, html: str) -> None:
+    """Update an existing Chainlit message with HTML content in a version-resilient way.
+    We try to use the HTML element first; if not supported, fall back to setting raw
+    content; and finally to stripped text.
+    """
+    # Attempt with HTML Element
+    try:
+        HtmlElem = getattr(cl, "HTML", None) or getattr(cl, "Html", None)
+        if HtmlElem is not None:
+            elem = HtmlElem(name="block", content=html)
+            await message.update(content="", author=author, elements=[elem])
+            return
+    except Exception:
+        pass
+    # Fallback to raw HTML content update
+    try:
+        await message.update(content=html, author=author)
+        return
+    except Exception:
+        pass
+    # Final fallback: strip tags
+    try:
+        import re
+        text = re.sub(r"<[^>]+>", "", html)
+        await message.update(content=text, author=author)
+    except Exception:
+        # give up silently
+        try:
+            await message.update(author=author)
+        except Exception:
+            pass
 
 from app.config import settings
 
@@ -118,16 +223,11 @@ async def _replay_history(history: list[dict]):
         if not author:
             author = _author_from_role(role)
 
-        # For Doctor turns, ensure they map to "Doctor"
-        # We want the native avatar to show, and CSS to style based on [data-author="Doctor"]
-        if author == "You":
-            author = "Doctor"
-
         # Scenario card persisted in history
         if role == "assistant" and ("Persona: " in (content or "") or "Person: " in (content or "") or "Parent: " in (content or "")):
             try:
                 # Use a specific author for the briefing card to help CSS targeting
-                await cl.Message(content=_render_scenario_card_html(content), author="Briefing").send()
+                await _send_html("Briefing", _render_scenario_card_html(content))
                 continue
             except Exception:
                 pass
@@ -149,43 +249,39 @@ async def _replay_history(history: list[dict]):
                 if parts:
                     items_html = "".join([f"<li>{p}</li>" for p in parts])
                     html = (
-                        '<div class="aims-coach-bubble" style="background:#fff7e6;border-left:4px solid #ffb020;padding:10px 12px;'
+                        '<div style="background:#fff7e6;border-left:4px solid #ffb020;padding:10px 12px;'
                         'border-radius:6px;color:#8a5a00;opacity:1;">'
                         '<div style="display:flex;align-items:center;font-weight:700;margin-bottom:4px;">'
+                        '  <img src="/public/coach.svg" alt="Coach" style="width:16px;height:16px;margin-right:6px;flex-shrink:0;" />'
                         '  Coaching'
                         '</div>'
                         f'<ul style="margin:4px 0 0 18px;padding:0;color:inherit;opacity:1;">{items_html}</ul>'
                         '</div>'
                     )
-                    await cl.Message(content=html, author="Coach").send()
+                    await _send_html("Coach", html)
                     continue
             except Exception:
                 # If anything goes wrong, fall back to plain text message
                 pass
 
-        # Check for congratulatory post (Scenario complete)
-        if author == "Coach" and ("✅ Scenario complete" in content or "Scenario complete" in content):
+        # Non-coach (or coach fallback): strip possible export artifacts and send with basic styling.
+        content_clean = _strip_export_artifacts(content)
+
+        # For Doctor turns, emulate right-aligned bubble with inline styles so replay matches live look.
+        if author == "Doctor":
             try:
-                title = "✅ Scenario complete"
-                lines = [ln.strip() for ln in content.splitlines() if ln.strip() and ln.strip() != title]
-                items_html = "".join([f"<li>{ln}</li>" for ln in lines])
                 html = (
-                    '<div class="aims-coach-bubble" style="background:#fff7e6;border-left:4px solid #ffb020;padding:10px 12px;'
-                    'border-radius:6px;color:#8a5a00;opacity:1;">'
-                    f'<div style="display:flex;align-items:center;font-weight:700;margin-bottom:4px;">{title}</div>'
-                    f'<ul style="margin:4px 0 0 18px;padding:0;color:inherit;opacity:1;">{items_html}</ul>'
+                    '<div class="aims-doctor-bubble" style="display:flex; justify-content:flex-start; align-items:flex-start; gap:8px; margin:6px 0; width:100%;">'
+                    '  <img src="/public/doctor.svg" alt="Doctor" class="aims-doctor-icon" style="width:40px;height:40px; border-radius:50%; flex-shrink:0; margin-top:4px; display:inline-block !important; visibility:visible !important; opacity:1 !important;" />'
+                    '  <div style="max-width:80%; background:#e6f0ff; color:#123; padding:10px 12px; border-radius:8px; position:relative;">{}</div>'
                     '</div>'
-                )
-                await cl.Message(content=html, author="Coach").send()
+                ).format(content_clean.replace("\n", "<br>"))
+                await _send_html(author, html)
                 continue
             except Exception:
                 pass
 
-        # Non-coach (or coach fallback): strip possible export artifacts and send with basic styling.
-        content_clean = _strip_export_artifacts(content)
-
-        msg_type = "user_message" if author == "Doctor" else "assistant_message"
-        await cl.Message(content=content_clean, author=author, type=msg_type).send()
+        await cl.Message(content=content_clean, author=author).send()
 
 
 def _get_persistent_session_id(user_identifier: str | None = None) -> str:
@@ -384,9 +480,6 @@ async def _start_chat_impl():
     this sessionId, replay it instead of stacking a new scenario card. Otherwise,
     show the scenario card to seed the scene and names.
     """
-    # Ensure avatars are registered for this session
-    _register_avatars_once()
-
     # Chainlit 2.8+ session handling: ensure we have an authenticated user if auth is required
     app_user = cl.user_session.get("user")
     if (is_oauth_enabled or has_auth_secret) and not app_user:
@@ -572,7 +665,7 @@ async def _start_chat_impl():
                 # Use the user_card (scenario briefing) returned from backend or generated locally
                 card = user_card
                 # Render a scenario summary card at the top (not persisted anew) for consistent context after refresh
-                await cl.Message(content=_render_scenario_card_html(card), author="System").send()
+                await _send_html("System", _render_scenario_card_html(card))
             except Exception:
                 pass
 
@@ -616,7 +709,7 @@ async def _start_chat_impl():
     if not has_card:
         history.append({"role": "assistant", "content": card})
         cl.user_session.set("history", history)
-        await cl.Message(content=_render_scenario_card_html(card), author="System").send()
+        await _send_html("System", _render_scenario_card_html(card))
     
     # Inject the scenario into the scene context for grounding
     try:
@@ -998,7 +1091,6 @@ async def handle_message(message: cl.Message):
         await _report_error_silently(e, "handle_message")
         await cl.Message("An error occurred while processing your message. The issue has been reported.").send()
 
-
 async def _handle_message_impl(message: cl.Message):
     """
     Handle an incoming user message by forwarding it to the FastAPI backend
@@ -1016,11 +1108,23 @@ async def _handle_message_impl(message: cl.Message):
         await cl.Message("Please enter a message.").send()
         return
 
-    # In Chainlit 2.x, Message.update() only supports 'content'. 
-    # To change the author after the message was sent, we have to modify the attribute directly
-    # before calling update().
-    message.author = "Doctor"
-    await message.update()
+    # Update the live-rendered doctor (user) message to match the post-reload styling:
+    # right-aligned bubble with a light blue background. This keeps the "before" view
+    # consistent with the "after" replay look, including distinct Doctor avatar.
+    try:
+        doctor_html = (
+            '<div class="aims-doctor-bubble" style="display:flex; justify-content:flex-start; align-items:flex-start; gap:8px; margin:6px 0; width:100%;">'
+            '  <img src="/public/doctor.svg" alt="Doctor" class="aims-doctor-icon" style="width:40px;height:40px; border-radius:50%; flex-shrink:0; margin-top:4px; display:inline-block !important; visibility:visible !important; opacity:1 !important;" />'
+            '  <div style="max-width:80%; background:#e6f0ff; color:#123; padding:10px 12px; border-radius:8px; position:relative;">{}</div>'
+            '</div>'
+        ).format(content.replace("\n", "<br>"))
+        await _update_message_html(message, "Doctor", doctor_html)
+    except Exception:
+        # If HTML update fails, keep the plain message but ensure author label
+        try:
+            await message.update(author="Doctor")
+        except Exception:
+            pass
 
     # Retrieve history and append the user's message.  This is not sent to
     # the backend yet but can be used to build context in the future.
@@ -1129,20 +1233,21 @@ async def _handle_message_impl(message: cl.Message):
                     cl.user_session.set("history", history)
                 except Exception:
                     pass
-                
-                # In Chainlit 2.11+, using author="Coach" with a cl.Avatar registered for "Coach"
-                # should automatically show the avatar.
+                # Render a clearly differentiated coaching block using inline HTML so it does not
+                # rely on external CSS or DOM-specific selectors. This requires
+                # features.unsafe_allow_html=true in .chainlit/config.toml.
                 items_html = "".join([f"<li>{p}</li>" for p in parts])
                 html = (
-                    '<div class="aims-coach-bubble" style="background:#fff7e6;border-left:4px solid #ffb020;padding:10px 12px;'
+                    '<div style="background:#fff7e6;border-left:4px solid #ffb020;padding:10px 12px;'
                     'border-radius:6px;color:#8a5a00;opacity:1;">'
                     '<div style="display:flex;align-items:center;font-weight:700;margin-bottom:4px;">'
+                    '  <img src="/public/coach.svg" alt="Coach" style="width:16px;height:16px;margin-right:6px;flex-shrink:0;" />'
                     '  Coaching'
                     '</div>'
                     f'<ul style="margin:4px 0 0 18px;padding:0;color:inherit;opacity:1;">{items_html}</ul>'
                     '</div>'
                 )
-                await cl.Message(content=html, author="Coach").send()
+                await _send_html("Coach", html)
 
 
     # Append assistant reply to history and send to UI after coaching
@@ -1158,13 +1263,13 @@ async def _handle_message_impl(message: cl.Message):
         lines = coach_post.get("lines") or []
         items_html = "".join([f"<li>{p}</li>" for p in lines])
         html = (
-            '<div class="aims-coach-bubble" style="background:#fff7e6;border-left:4px solid #ffb020;padding:10px 12px;'
+            '<div style="background:#fff7e6;border-left:4px solid #ffb020;padding:10px 12px;'
             'border-radius:6px;color:#8a5a00;opacity:1;">'
-            f'<div style="display:flex;align-items:center;font-weight:700;margin-bottom:4px;">{title}</div>'
+            f'<div style="display:flex;align-items:center;font-weight:700;margin-bottom:4px;"><img src="/public/coach.svg" alt="Coach" style="width:16px;height:16px;margin-right:6px;flex-shrink:0;" />{title}</div>'
             f'<ul style="margin:4px 0 0 18px;padding:0;color:inherit;opacity:1;">{items_html}</ul>'
             '</div>'
         )
-        await cl.Message(content=html, author="Coach").send()
+        await _send_html("Coach", html)
 
 
 
@@ -1182,9 +1287,6 @@ async def _resume_chat_impl():
     history is empty (e.g., after a server restart), fetch it from the backend
     using the persistent session id and replay it, avoiding duplicate scenario cards.
     """
-    # Ensure avatars are registered for this session
-    _register_avatars_once()
-
     # Keep the same session id established in start_chat
     session_id = cl.user_session.get("session_id") or _get_persistent_session_id()
     cl.user_session.set("session_id", session_id)

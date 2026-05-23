@@ -3,7 +3,8 @@ uvicorn[standard]~=0.30
 google-genai>=1.10
 google-cloud-storage~=2.18
 pydantic-settings>=2.0
-chainlit>=2.1.0
+pydantic==2.10.1
+chainlit==2.11.1
 httpx>=0.27
 PyJWT>=2.8
 python-dotenv>=1.0.0
