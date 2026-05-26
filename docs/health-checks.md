@@ -13,8 +13,13 @@ You may see two different hostnames for the same Cloud Run service during or aft
 Both hostnames are managed by Google (DNS + certs) and point to the same revision once healthy.
 
 ## Why 404/503 right after deploy?
-- If you deploy the combined UI+API container (Chainlit on $PORT, FastAPI on 8000), Cloud Run’s default URL (on $PORT) serves the Chainlit UI. In that case, probe "/" for health, not "/healthz" (which the UI won’t serve).
-- If you deploy API-first (FastAPI on $PORT), then "/api/healthz" is the correct probe.
+- If you deploy a UI-first container where Chainlit serves `$PORT`, Cloud Run's
+  default URL serves the Chainlit UI. In that case, probe `/` for UI health or
+  the mounted backend path, such as `/api/healthz`, for backend health.
+- If you deploy API-only (FastAPI on `$PORT`), then `/healthz` is the correct
+  probe.
+- If you deploy the unified app from `run_app.py`, the FastAPI backend is
+  mounted under `/api`, so `/api/healthz` is the correct backend probe.
 - Immediately after a deploy, you can briefly see 404/503 while the new revision warms up and traffic shifts.
 
 ## Best practice: wait_for_health.sh
@@ -61,10 +66,10 @@ Replace any one‑shot curl like `curl "$URL/api/healthz"` with this script to a
 
 ---
 
-## WebSocket sessions and “conversation restarting”
+## WebSocket sessions and "conversation restarting"
 
-Symptoms you might see in production with the combined UI+API container (Chainlit on $PORT):
-- The UI periodically shows the initial card again (e.g., the “Parent: Sarah Jenkins …” intro), as if the chat restarted.
+Symptoms you might see in production with a Chainlit UI on Cloud Run:
+- The UI periodically shows the initial card again (e.g., the "Parent: Sarah Jenkins ..." intro), as if the chat restarted.
 - Logs show many Socket.IO polling and `transport=websocket` entries. Each WebSocket entry lasts ~61 seconds and then ends (HTTP 101 upgraded → closed) before a new `sid` is created.
 - Immediately after each close, Chainlit re-fetches `/config`, `/modelcheck`, and often sets the session cookie again.
 
@@ -76,7 +81,9 @@ How to fix (choose one):
 - Increase the Cloud Run request timeout to cover expected session length (e.g., 10–60 minutes):
   - `gcloud run services update <SERVICE> --region <REGION> --timeout=1800`
   - Maximum is 3600 seconds (60 minutes) on Cloud Run.
-- Or adopt the API‑first deployment (FastAPI on $PORT) and run Chainlit separately (locally or as a separate service) — this avoids long‑lived WS on the same service as the API.
+- Or adopt the API-only deployment (FastAPI on `$PORT`) and run Chainlit
+  separately, locally or as a separate service. This avoids long-lived
+  WebSocket traffic on the same service as the API.
 
 Operational tips:
 - If you keep the combined container, use a health probe that hits `/` (Chainlit) on `$PORT`.
