@@ -30,24 +30,6 @@ from app.persona import DEFAULT_CHARACTER, DEFAULT_SCENE
 
 
 
-def _register_avatars_once() -> None:
-    """Register avatars globally so /avatars/* resolves consistently."""
-    try:
-        cl.Avatar(name="Patient", path="public/patient.svg").save()
-        cl.Avatar(name="Doctor", path="public/doctor.svg").save()
-        cl.Avatar(name="You", path="public/doctor.svg").save()
-        cl.Avatar(name="Coach", path=".chainlit/public/coach.svg").save()
-        cl.Avatar(name="System", path="public/avatars/system.svg").save()
-        cl.Avatar(name="Briefing", path="public/avatars/briefing.svg").save()
-        # Ensure clinician also has the doctor avatar
-        cl.Avatar(name="clinician", path="public/doctor.svg").save()
-    except Exception:
-        pass
-
-# Perform an early registration so avatars are ready on first render
-_register_avatars_once()
-
-
 
 from app.config import settings
 
@@ -79,18 +61,21 @@ def _author_from_role(role: str) -> str:
     """
     Map backend role strings to Chainlit author labels.
     - user/doctor/clinician -> Doctor
-    - assistant/parent/model -> Patient
-    - coach/system -> Coach
-    Unknown roles fall back to 'Patient'.
+    - assistant/person/parent/model/patient -> Assistant
+    - coach -> Coach
+    - system -> System
+    Unknown roles fall back to 'Assistant'.
     """
     r = (role or "").lower().strip()
     if r in ("user", "doctor", "clinician"):
         return "Doctor"
-    if r in ("assistant", "person", "parent", "model"):
-        return "Patient"
-    if r in ("coach", "system"):
+    if r in ("assistant", "person", "parent", "model", "patient"):
+        return "Assistant"
+    if r in ("coach",):
         return "Coach"
-    return "Patient"
+    if r in ("system", "scenario"):
+        return "System"
+    return "Assistant"
 
 
 async def _replay_history(history: list[dict]):
@@ -127,7 +112,7 @@ async def _replay_history(history: list[dict]):
         if role == "assistant" and ("Persona: " in (content or "") or "Person: " in (content or "") or "Parent: " in (content or "")):
             try:
                 # Use a specific author for the briefing card to help CSS targeting
-                await cl.Message(content=_render_scenario_card_html(content), author="Briefing").send()
+                await cl.Message(content=_render_scenario_card_html(content), author="System").send()
                 continue
             except Exception:
                 pass
@@ -149,12 +134,9 @@ async def _replay_history(history: list[dict]):
                 if parts:
                     items_html = "".join([f"<li>{p}</li>" for p in parts])
                     html = (
-                        '<div class="aims-coach-bubble" style="background:#fff7e6;border-left:4px solid #ffb020;padding:10px 12px;'
-                        'border-radius:6px;color:#8a5a00;opacity:1;">'
-                        '<div style="display:flex;align-items:center;font-weight:700;margin-bottom:4px;">'
-                        '  Coaching'
-                        '</div>'
-                        f'<ul style="margin:4px 0 0 18px;padding:0;color:inherit;opacity:1;">{items_html}</ul>'
+                        '<div class="aims-coach-bubble">'
+                        '<div class="aims-coach-header">Coaching</div>'
+                        f'<ul>{items_html}</ul>'
                         '</div>'
                     )
                     await cl.Message(content=html, author="Coach").send()
@@ -170,10 +152,9 @@ async def _replay_history(history: list[dict]):
                 lines = [ln.strip() for ln in content.splitlines() if ln.strip() and ln.strip() != title]
                 items_html = "".join([f"<li>{ln}</li>" for ln in lines])
                 html = (
-                    '<div class="aims-coach-bubble" style="background:#fff7e6;border-left:4px solid #ffb020;padding:10px 12px;'
-                    'border-radius:6px;color:#8a5a00;opacity:1;">'
-                    f'<div style="display:flex;align-items:center;font-weight:700;margin-bottom:4px;">{title}</div>'
-                    f'<ul style="margin:4px 0 0 18px;padding:0;color:inherit;opacity:1;">{items_html}</ul>'
+                    '<div class="aims-coach-bubble">'
+                    f'<div class="aims-coach-header">{title}</div>'
+                    f'<ul>{items_html}</ul>'
                     '</div>'
                 )
                 await cl.Message(content=html, author="Coach").send()
@@ -384,9 +365,6 @@ async def _start_chat_impl():
     this sessionId, replay it instead of stacking a new scenario card. Otherwise,
     show the scenario card to seed the scene and names.
     """
-    # Ensure avatars are registered for this session
-    _register_avatars_once()
-
     # Chainlit 2.8+ session handling: ensure we have an authenticated user if auth is required
     app_user = cl.user_session.get("user")
     if (is_oauth_enabled or has_auth_secret) and not app_user:
@@ -1123,33 +1101,29 @@ async def _handle_message_impl(message: cl.Message):
         if tips:
             parts.append(f"Tip: {tips[0]}")
         if parts:
-                # Append a plain-text coaching note to local history for persistence across refresh
-                try:
-                    history.append({"role": "coach", "content": " | ".join(parts)})
-                    cl.user_session.set("history", history)
-                except Exception:
-                    pass
-                
-                # In Chainlit 2.11+, using author="Coach" with a cl.Avatar registered for "Coach"
-                # should automatically show the avatar.
-                items_html = "".join([f"<li>{p}</li>" for p in parts])
-                html = (
-                    '<div class="aims-coach-bubble" style="background:#fff7e6;border-left:4px solid #ffb020;padding:10px 12px;'
-                    'border-radius:6px;color:#8a5a00;opacity:1;">'
-                    '<div style="display:flex;align-items:center;font-weight:700;margin-bottom:4px;">'
-                    '  Coaching'
-                    '</div>'
-                    f'<ul style="margin:4px 0 0 18px;padding:0;color:inherit;opacity:1;">{items_html}</ul>'
-                    '</div>'
-                )
-                await cl.Message(content=html, author="Coach").send()
+            # Append a plain-text coaching note to local history for persistence across refresh
+            try:
+                history.append({"role": "coach", "content": " | ".join(parts)})
+                cl.user_session.set("history", history)
+            except Exception:
+                pass
+
+            # Chainlit 2.11+ resolves avatars from public/avatars/{author_lowercase}.svg
+            items_html = "".join([f"<li>{p}</li>" for p in parts])
+            html = (
+                '<div class="aims-coach-bubble">'
+                '<div class="aims-coach-header">Coaching</div>'
+                f'<ul>{items_html}</ul>'
+                '</div>'
+            )
+            await cl.Message(content=html, author="Coach").send()
 
 
     # Append assistant reply to history and send to UI after coaching
     history.append({"role": "assistant", "content": reply})
     cl.user_session.set("history", history)
 
-    await cl.Message(reply, author="Patient").send()
+    await cl.Message(reply, author="Assistant").send()
 
     # If a coachPost is present (end-of-game), render a congratulatory block with summary AFTER patient reply
     coach_post = data.get("coachPost") if isinstance(data, dict) else None
@@ -1158,10 +1132,9 @@ async def _handle_message_impl(message: cl.Message):
         lines = coach_post.get("lines") or []
         items_html = "".join([f"<li>{p}</li>" for p in lines])
         html = (
-            '<div class="aims-coach-bubble" style="background:#fff7e6;border-left:4px solid #ffb020;padding:10px 12px;'
-            'border-radius:6px;color:#8a5a00;opacity:1;">'
-            f'<div style="display:flex;align-items:center;font-weight:700;margin-bottom:4px;">{title}</div>'
-            f'<ul style="margin:4px 0 0 18px;padding:0;color:inherit;opacity:1;">{items_html}</ul>'
+            '<div class="aims-coach-bubble">'
+            f'<div class="aims-coach-header">{title}</div>'
+            f'<ul>{items_html}</ul>'
             '</div>'
         )
         await cl.Message(content=html, author="Coach").send()
@@ -1182,9 +1155,6 @@ async def _resume_chat_impl():
     history is empty (e.g., after a server restart), fetch it from the backend
     using the persistent session id and replay it, avoiding duplicate scenario cards.
     """
-    # Ensure avatars are registered for this session
-    _register_avatars_once()
-
     # Keep the same session id established in start_chat
     session_id = cl.user_session.get("session_id") or _get_persistent_session_id()
     cl.user_session.set("session_id", session_id)

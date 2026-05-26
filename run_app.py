@@ -257,7 +257,10 @@ async def duplicate_tab_page(request: Request):
 # Serve static assets (SVGs, CSS, JS) at /public so that inline HTML
 # references like /public/doctor.svg resolve correctly even though
 # Chainlit is mounted at /chat (which serves them at /chat/public/).
-app.mount("/public", StaticFiles(directory="public"), name="public-static")
+if os.path.exists("public"):
+    app.mount("/public", StaticFiles(directory="public"), name="public-static")
+elif os.path.exists(".chainlit/public"):
+    app.mount("/public", StaticFiles(directory=".chainlit/public"), name="public-static")
 
 @app.middleware("http")
 async def intercept_chainlit_login(request: Request, call_next):

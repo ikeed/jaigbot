@@ -13,61 +13,6 @@
   /* ── guard against double-init ─────────────────────────────────── */
   if (document.getElementById("sidebar-report-button")) return;
 
-  /* ── data-author injection ──────────────────────────────────────── */
-  /* Chainlit 2.x (shadcn) does NOT emit data-author attributes.       */
-  /* We inject data-author on the message row wrapper so CSS can       */
-  /* target [data-author="X"] descendants for role-based styling.      */
-
-  function injectDataAuthors() {
-    // 1. Tag messages that have avatars (Assistant, Coach, System)
-    document.querySelectorAll('img[alt^="Avatar for "]').forEach(function (img) {
-      var author = img.alt.replace("Avatar for ", "").trim();
-      if (!author || author === "default") return;
-
-      var el = img.parentElement;
-      for (var i = 0; i < 6 && el; i++) {
-        if (el === document.body) break;
-        if (el.getAttribute("data-author") === author) break;
-        if (el.children && el.children.length >= 2 && el.tagName === "DIV") {
-          el.setAttribute("data-author", author);
-          break;
-        }
-        el = el.parentElement;
-      }
-    });
-
-    // 2. Tag user/Doctor messages (no avatar, right-aligned bubbles)
-    var tagged = document.querySelector('[data-author]');
-    if (tagged && tagged.parentElement) {
-      var list = tagged.parentElement;
-      Array.from(list.children).forEach(function (child) {
-        if (child.getAttribute('data-author')) return;
-        if (child.tagName !== 'DIV') return;
-        // Skip empty / non-message elements
-        if (!child.textContent || child.textContent.trim().length === 0) return;
-        // Skip elements that are clearly not messages (very small, no block children)
-        if (!child.querySelector('div, p')) return;
-        child.setAttribute('data-author', 'Doctor');
-      });
-    }
-  }
-
-  // Run on DOM mutations to catch dynamically added messages
-  var _aimsDebounce = null;
-  var authorObserver = new MutationObserver(function () {
-    // Debounce to avoid layout thrashing
-    if (_aimsDebounce) return;
-    _aimsDebounce = setTimeout(function () {
-      _aimsDebounce = null;
-      injectDataAuthors();
-    }, 100);
-  });
-  authorObserver.observe(document.body, { childList: true, subtree: true });
-  // Also run on short delays for initial render
-  setTimeout(injectDataAuthors, 300);
-  setTimeout(injectDataAuthors, 1000);
-  setTimeout(injectDataAuthors, 3000);
-
   /* ── splash screen tweaks: enlarge icon & hide composer ──────── */
   function tweakSplash() {
     // Enlarge the chat profile icon (find by src containing "aimsbot")

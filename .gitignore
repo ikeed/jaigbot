@@ -1,6 +1,5 @@
 # Chainlit generated files
 /.chainlit/translations/
-/.chainlit/public/
 /.chainlit/session_id*
 
 # Terraform
