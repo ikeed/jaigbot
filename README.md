@@ -24,8 +24,22 @@ with deterministic fallbacks and session-level metrics.
 
 ## Running locally
 
-1. Install dependencies (Python 3.11):
+### First-time setup
+
+For a new checkout, run the bootstrap script:
+
+```bash
+./scripts/setup_dev.sh
+```
+
+It creates `.venv`, installs `requirements.txt`, creates `.env` from `.env.example` if needed, creates `.chainlit/`, and enables local session persistence with `MEMORY_PERSIST_PATH=.chainlit/session_memory.json`.
+
+Manual setup is also fine:
+
+1. Install dependencies (Python 3.11):
    ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate
    pip install -r requirements.txt
    ```
 2. Set up environment variables. `PROJECT_ID` and `REGION` are auto-detected
@@ -40,11 +54,11 @@ with deterministic fallbacks and session-level metrics.
    ```
 
 ### PyCharm Run Configurations
-The project includes pre-configured PyCharm run configurations (found in `.idea/runConfigurations`):
-- **AIMSBot (Unified)**: Runs `run_app.py`, which includes the FastAPI backend, the custom SSO landing page, and the Chainlit UI in a single process. **Recommended for testing SSO/Login flow.**
-- **AIMSBot**: A Compound configuration that starts the Backend and Chainlit UI separately.
-- **Backend (Uvicorn)**: Runs only the FastAPI backend on port 8080.
-- **Chainlit UI**: Runs only the Chainlit interface (requires Backend to be running separately).
+The repo tracks one shared PyCharm configuration:
+
+- **AIMSBot (Unified)**: Runs `run_app.py`, which includes the FastAPI backend, the custom SSO landing page, and the Chainlit UI in a single process. This is the recommended local development configuration.
+
+The shared config sets `MEMORY_PERSIST_PATH=.chainlit/session_memory.json` so IDE reruns preserve the active conversation. Other `.idea` files remain ignored because they are usually machine-specific.
 
 ### SSO Authentication
 AIMSBot supports SSO via Chainlit's built-in OAuth or a custom FastAPI-based landing page.

@@ -16,14 +16,17 @@ else:
         print("DEBUG: No .env file found by python-dotenv")
     load_dotenv()
 
+import asyncio
 import uuid
 import json
 import random
 import shutil
+from http.cookies import SimpleCookie
 from pathlib import Path
 import httpx
 from fastapi import Request, Response
 import chainlit as cl
+from chainlit.context import context as cl_context
 from chainlit.input_widget import TextInput
 from app.chat_roles import (
     AUTHOR_ASSISTANT,
@@ -221,6 +224,67 @@ def _write_persistent_session_id(session_id: str, user_identifier: str | None = 
         pass
 
 
+def _clear_persistent_session_id(user_identifier: str | None = None) -> None:
+    """Remove the persisted session id for a user and the legacy global fallback."""
+    store_dir = Path(".chainlit")
+    filenames = ["session_id"]
+    if user_identifier:
+        safe_id = "".join([c if c.isalnum() else "_" for c in user_identifier])
+        filenames.insert(0, f"session_id_{safe_id}")
+
+    for filename in filenames:
+        try:
+            (store_dir / filename).unlink(missing_ok=True)
+        except Exception:
+            pass
+
+
+def _browser_has_transcript() -> bool | None:
+    """Read the browser transcript flag from the websocket handshake cookies."""
+    try:
+        environ = getattr(getattr(cl_context, "session", None), "environ", None) or {}
+        cookie_header = environ.get("HTTP_COOKIE") or environ.get("Cookie") or ""
+        if not cookie_header:
+            return None
+
+        cookie = SimpleCookie()
+        cookie.load(cookie_header)
+        morsel = cookie.get("aims_has_transcript")
+        if morsel is None:
+            return None
+
+        value = (morsel.value or "").strip().lower()
+        if value in {"1", "true", "yes", "on"}:
+            return True
+        if value in {"0", "false", "no", "off"}:
+            return False
+    except Exception:
+        return None
+    return None
+
+
+async def _wait_for_browser_transcript_flag(timeout_s: float = 0.35) -> bool | None:
+    """Give the browser a moment to report whether transcript already exists."""
+    deadline = asyncio.get_running_loop().time() + timeout_s
+
+    def _current_flag() -> bool | None:
+        session_flag = cl.user_session.get("browser_has_transcript")
+        if session_flag is not None:
+            return bool(session_flag)
+        return _browser_has_transcript()
+
+    flag = _current_flag()
+    if flag is not None:
+        return flag
+
+    while asyncio.get_running_loop().time() < deadline:
+        await asyncio.sleep(0.05)
+        flag = _current_flag()
+        if flag is not None:
+            return flag
+    return None
+
+
 # Chat profile: shown as a splash/loading screen while on_chat_start runs.
 @cl.set_chat_profiles
 async def chat_profiles():
@@ -357,6 +421,7 @@ async def _start_chat_impl():
     # instead of generating a new one (which leads to duplicate scenario cards).
     user_identifier = app_user.identifier if app_user else None
     session_id = cl.user_session.get("session_id")
+    preexisting_history = cl.user_session.get("history") or []
 
     # If the user explicitly requested a new chat (e.g. via cl.on_chat_start after a reload)
     # or if we don't have a session_id, we create a fresh one.
@@ -396,6 +461,8 @@ async def _start_chat_impl():
                 existing_hist = (r.json() or {}).get("history") or []
     except Exception:
         existing_hist = []
+
+    browser_has_transcript = await _wait_for_browser_transcript_flag(timeout_s=1.0)
 
     # 3. Recover persona name from history if it exists
     recovered_name = None
@@ -498,7 +565,8 @@ async def _start_chat_impl():
     cl.user_session.set("scene", scene_detailed)
 
     # Always start with a clean local history for a new chat
-    cl.user_session.set("history", [])
+    if not preexisting_history:
+        cl.user_session.set("history", [])
 
     # If there is prior history on the backend, mirror it into the UI and prepend the scenario summary for context
     if existing_hist:
@@ -509,7 +577,32 @@ async def _start_chat_impl():
             and is_scenario_card(msg.get("content"))
             for msg in existing_hist
         )
-        if not has_card_in_history:
+        if preexisting_history:
+            try:
+                cl.user_session.set("history", existing_hist)
+            except Exception:
+                pass
+
+            try:
+                if "Scenario details (use these exact names; do not change them):" not in (cl.user_session.get("scene") or ""):
+                    prev_scene = cl.user_session.get("scene")
+                    card_to_inject = user_card
+                    for msg in existing_hist:
+                        content = msg.get("content") or ""
+                        if normalize_role(msg.get("role")) in {ROLE_SYSTEM, ROLE_ASSISTANT} and is_scenario_card(content):
+                            card_to_inject = content
+                            break
+                    scenario_scene_suffix = (
+                        "\n\nScenario details (use these exact names; do not change them):\n" + card_to_inject +
+                        "\n\nIf asked for names, respond naturally but keep the same names."
+                    )
+                    new_scene = (prev_scene + scenario_scene_suffix) if prev_scene else scenario_scene_suffix
+                    cl.user_session.set("scene", new_scene)
+            except Exception:
+                pass
+            return True
+
+        if browser_has_transcript is not True and not has_card_in_history:
             try:
                 # Use the user_card (scenario briefing) returned from backend or generated locally
                 card = user_card
@@ -521,7 +614,8 @@ async def _start_chat_impl():
         try:
             # Important: we update the local history session state to match backend
             cl.user_session.set("history", existing_hist)
-            await _replay_history(existing_hist)
+            if browser_has_transcript is not True:
+                await _replay_history(existing_hist)
         except Exception:
             pass
 
@@ -712,6 +806,12 @@ if is_oauth_enabled or has_auth_secret or settings.ENABLE_PASSWORD_AUTH:
         # Note: We use window messaging because returning a 303 redirect response
         # from a POST request (handled via fetch/XHR in Chainlit) does not
         # always trigger a full-page redirection in the browser.
+        app_user = cl.user_session.get("user")
+        if app_user and app_user.identifier:
+            _clear_persistent_session_id(app_user.identifier)
+        cl.user_session.set("session_id", None)
+        cl.user_session.set("history", [])
+        cl.user_session.set("browser_has_transcript", False)
         await cl.send_window_message("on_logout")
         return response
 
@@ -831,6 +931,7 @@ async def on_window_message(message: str):
         cl.user_session.set("session_id", None)
         cl.user_session.set("history", [])
         cl.user_session.set("session_ended", False)
+        cl.user_session.set("browser_has_transcript", False)
         
         # Also clear the persistent session id for this user if they are logged in.
         # We generate a NEW one and write it so it doesn't just recover the old one.
@@ -846,6 +947,8 @@ async def on_window_message(message: str):
         # Ensure on_logout window message is forwarded to the parent window
         # so that run_app.py can redirect to the login screen.
         await cl.send_window_message("on_logout")
+    elif data.get("type") == "browser_state":
+        cl.user_session.set("browser_has_transcript", bool(data.get("hasTranscript")))
 
 
 async def _submit_report(reason: str):
@@ -1119,8 +1222,7 @@ async def _resume_chat_impl():
     # If we already have local history, just replay it
     history = cl.user_session.get("history") or []
     if history:
-        await _replay_history(history)
-        return
+        return True
 
     # Otherwise, try to fetch history from the backend for this session
     def _base_url() -> str:

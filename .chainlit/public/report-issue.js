@@ -14,6 +14,22 @@
   if (document.getElementById("sidebar-report-button")) return;
 
   /* ── splash screen tweaks: enlarge icon & hide composer ──────── */
+  var TRANSCRIPT_COOKIE = "aims_has_transcript";
+
+  function setCookie(name, value) {
+    document.cookie = name + "=" + encodeURIComponent(value) + "; path=/; SameSite=Lax";
+  }
+
+  function clearCookie(name) {
+    document.cookie = name + "=; Max-Age=0; path=/; SameSite=Lax";
+  }
+
+  function reportTranscriptState() {
+    var hasTranscript = !!document.querySelector('[data-step-type], [data-author]');
+    setCookie(TRANSCRIPT_COOKIE, hasTranscript ? "1" : "0");
+    window.postMessage(JSON.stringify({ type: "browser_state", hasTranscript: hasTranscript }), "*");
+  }
+
   function tweakSplash() {
     // Enlarge the chat profile icon (find by src containing "aimsbot")
     document.querySelectorAll("img").forEach(function (img) {
@@ -48,6 +64,7 @@
             var hasMsg = document.querySelector('[data-step-type], [data-author]');
             if (hasMsg) {
               form.style.display = "";
+              reportTranscriptState();
               obs.disconnect();
             }
           });
@@ -55,6 +72,8 @@
         }
       });
     }
+
+    reportTranscriptState();
   }
 
   // Run immediately and retry (Chainlit renders asynchronously)
@@ -182,10 +201,11 @@
     false,
     "Confirm",
     function() {
+      clearCookie(TRANSCRIPT_COOKIE);
       // 1. Notify the backend to clear the session state for this user_session
       var payload = JSON.stringify({ type: "new_chat" });
       window.postMessage(payload, "*");
-      
+
       // 2. Force a full reload to /chat which will trigger cl.on_chat_start
       // with the cleared session state.
       setTimeout(function() {
@@ -202,22 +222,19 @@
     false,
     "Logout",
     function() {
-      // 1. Notify the backend to clear the session state for this user_session
-      var payload = JSON.stringify({ type: "on_logout" });
-      window.postMessage(payload, "*");
-      
-      // 2. Fallback in case window message isn't picked up by parent (unlikely but safe)
-      // We give some time for the message to be processed and for Chainlit to do its own logout
-      setTimeout(function() {
-        // Trigger the original logout button if found
-        var logoutBtn = document.querySelector('a[href*="logout"], button[id*="logout"]');
-        if (logoutBtn) {
-          logoutBtn._aimsLogoutBypass = true;
-          logoutBtn.click();
-        } else {
-          window.location.href = "/chat/logout";
-        }
-      }, 500);
+      clearCookie(TRANSCRIPT_COOKIE);
+      fetch("/chat/logout", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: "{}"
+      }).catch(function() {
+        // Ignore transport errors and still leave the chat page.
+      }).finally(function() {
+        window.location.replace("/");
+      });
     }
   );
 
@@ -317,6 +334,8 @@
   window.addEventListener("message", function(event) {
     if (event.data === "on_duplicate_tab" || (event.data && event.data.type === "on_duplicate_tab")) {
       window.location.href = "/duplicate";
+    } else if (event.data === "on_logout" || (event.data && event.data.type === "on_logout")) {
+      window.location.href = "/";
     }
   });
 

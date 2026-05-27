@@ -17,6 +17,8 @@ mock_cl.Message = MagicMock()
 mock_cl.Action = MagicMock()
 mock_cl.send_window_message = AsyncMock()
 mock_cl.AskUserMessage = MagicMock()
+mock_context = MagicMock()
+mock_context.session = MagicMock(restored=False, environ={})
 
 # Decorators
 def mock_decorator(func):
@@ -29,6 +31,7 @@ mock_cl.on_logout = mock_decorator
 mock_cl.on_window_message = mock_decorator
 
 sys.modules["chainlit"] = mock_cl
+sys.modules["chainlit.context"] = MagicMock(context=mock_context)
 sys.modules["chainlit.input_widget"] = MagicMock()
 
 # Mock settings
@@ -62,10 +65,19 @@ async def test_on_logout():
     # Test logout callback
     mock_request = MagicMock()
     mock_response = MagicMock()
-    
-    await on_logout(mock_request, mock_response)
-    
+
+    mock_user = MagicMock(identifier="test-user")
+    mock_cl.user_session.get.side_effect = lambda key: {"user": mock_user}.get(key)
+
+    with patch("chainlit_app._clear_persistent_session_id") as mock_clear:
+        await on_logout(mock_request, mock_response)
+
+    mock_clear.assert_called_once_with("test-user")
     mock_cl.send_window_message.assert_called_once_with("on_logout")
+    mock_cl.user_session.set.assert_any_call("session_id", None)
+    mock_cl.user_session.set.assert_any_call("history", [])
+    mock_cl.user_session.set.assert_any_call("browser_has_transcript", False)
+    mock_cl.user_session.get.side_effect = None
 
 def test_oauth_callback_google():
     from chainlit_app import oauth_callback
@@ -145,3 +157,11 @@ async def test_on_window_message_wrong_type():
         message = '{"type": "other_type", "reason": "Test UI Reason"}'
         await on_window_message(message)
         mock_submit.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_on_window_message_browser_state():
+    mock_cl.user_session.set.reset_mock()
+    message = '{"type": "browser_state", "hasTranscript": true}'
+    await on_window_message(message)
+    mock_cl.user_session.set.assert_any_call("browser_has_transcript", True)

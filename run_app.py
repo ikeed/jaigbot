@@ -23,6 +23,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 import jwt # pip install PyJWT
 from chainlit.utils import mount_chainlit
+from chainlit.auth import clear_auth_cookie, get_token_from_cookies, decode_jwt
 
 # Import the existing backend app
 from app.main import app as backend_app
@@ -67,6 +68,20 @@ else:
 if not os.getenv("CHAINLIT_AUTH_SECRET"):
     os.environ["CHAINLIT_AUTH_SECRET"] = "local-dev-secret-12345"
     print("DEBUG: Using default CHAINLIT_AUTH_SECRET for local development.")
+
+
+def _clear_persistent_session_id(user_identifier: str | None = None) -> None:
+    try:
+        filenames = ["session_id"]
+        if user_identifier:
+            safe_name = "".join([c if c.isalnum() else "_" for c in user_identifier])
+            filenames.insert(0, f"session_id_{safe_name}")
+        for filename in filenames:
+            path = os.path.join(".chainlit", filename)
+            if os.path.exists(path):
+                os.remove(path)
+    except Exception:
+        pass
 
 # A simple custom login page that shows SSO buttons
 @app.get("/", response_class=HTMLResponse)
@@ -270,6 +285,27 @@ async def intercept_chainlit_login(request: Request, call_next):
 @app.get("/chat/login", response_class=RedirectResponse)
 async def redirect_chainlit_login_to_root():
     return RedirectResponse(url="/")
+
+
+@app.api_route("/chat/logout", methods=["GET", "POST"], response_class=RedirectResponse)
+async def unified_logout(request: Request):
+    """
+    Handle logout at the FastAPI layer so both GET and POST logout flows clear
+    the auth cookie and return the browser to the SSO page.
+    """
+    response = RedirectResponse(url="/", status_code=303)
+    clear_auth_cookie(request, response)
+
+    token = get_token_from_cookies(request.cookies)
+    if token:
+        try:
+            user = decode_jwt(token)
+            if user and user.identifier:
+                _clear_persistent_session_id(user.identifier)
+        except Exception:
+            pass
+
+    return response
 
 # Mount the Chainlit app under /chat
 # Note: This will use chainlit_app.py as the target

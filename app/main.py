@@ -61,9 +61,9 @@ try:
             prefix=settings.REDIS_PREFIX,
         )
     else:
-        _MEMORY_STORE = InMemoryStore()
+        _MEMORY_STORE = InMemoryStore(persist_path=settings.MEMORY_PERSIST_PATH)
 except Exception:
-    _MEMORY_STORE = InMemoryStore()
+    _MEMORY_STORE = InMemoryStore(persist_path=settings.MEMORY_PERSIST_PATH)
     settings.MEMORY_BACKEND = "memory"
 
 

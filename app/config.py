@@ -56,6 +56,7 @@ class Settings(BaseSettings):
     MEMORY_MAX_TURNS: int = 8
     MEMORY_TTL_SECONDS: int = 3600
     MEMORY_BACKEND: str = "memory"  # memory or redis
+    MEMORY_PERSIST_PATH: Optional[str] = None
     REDIS_URL: Optional[str] = None
     REDIS_HOST: Optional[str] = None
     REDIS_PORT: int = 6379

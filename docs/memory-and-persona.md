@@ -20,10 +20,19 @@ Notes:
 - Chainlit calls the backend from the server via httpx; browser cookies for the backend are not used in that path. Use Chainlit’s persisted session id instead (see docs/chainlit-ui.md).
 - For cross‑origin browser calls, configure CORS and include credentials. You may need `SESSION_COOKIE_SAMESITE=none` and `SESSION_COOKIE_SECURE=true` to allow third‑party cookies.
 
-## Redis / Google Memorystore (shared memory)
-On Cloud Run, instances scale up/down and are reaped, which resets the default in‑process memory. To persist conversation history across instances and avoid duplicate scenario initialization, use the Redis backend (Google Memorystore).
+## Local file persistence
+The default `MEMORY_BACKEND=memory` store is process-local. If the Python process restarts, active sessions disappear unless you opt into local file persistence:
 
-**Note on Duplicate Scenarios:** If using the default in-memory storage, a new Cloud Run instance will not know about the history of an existing session. When the Chainlit UI checks for history upon a reconnect/redeploy, the new instance returns empty, causing the UI to re-send the scenario card. While the UI now includes defensive logic to prevent display duplication, the underlying history state will still be reset unless Redis is used.
+```bash
+export MEMORY_PERSIST_PATH=.chainlit/session_memory.json
+```
+
+This is intended for local development, including IDE reruns. The app still uses the in-process store at runtime, but writes the session map to disk whenever a session is saved and reloads it on startup. Do not use this for production or multiple app instances; use Redis instead.
+
+## Redis / Google Memorystore (shared memory)
+On Cloud Run, instances scale up/down and are reaped, which resets non-persistent in-process memory. To persist conversation history across instances and avoid duplicate scenario initialization, use the Redis backend (Google Memorystore).
+
+**Note on Duplicate Scenarios:** If using the default in-memory storage without `MEMORY_PERSIST_PATH`, a new process or Cloud Run instance will not know about the history of an existing session. When the Chainlit UI checks for history upon a reconnect/redeploy, the new instance returns empty, causing a fresh scenario to be initialized.
 
 ### Production Setup (GCP Memorystore)
 To use Redis in production:

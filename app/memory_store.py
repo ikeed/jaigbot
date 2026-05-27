@@ -11,6 +11,7 @@ configuration values via the constructor in app.main.
 from __future__ import annotations
 
 import json
+import os
 from typing import Any, Dict, List, Optional, Tuple
 
 
@@ -20,8 +21,43 @@ class InMemoryStore:
     Implements a minimal dict-like interface that the app expects.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, persist_path: Optional[str] = None) -> None:
+        self._persist_path = persist_path
         self._store: Dict[str, Dict[str, Any]] = {}
+        self._load()
+
+    def _load(self) -> None:
+        if not self._persist_path:
+            return
+        try:
+            with open(self._persist_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                self._store = {
+                    str(k): v
+                    for k, v in data.items()
+                    if isinstance(v, dict)
+                }
+                for value in self._store.values():
+                    value["active_connections"] = []
+        except FileNotFoundError:
+            return
+        except Exception:
+            self._store = {}
+
+    def _persist(self) -> None:
+        if not self._persist_path:
+            return
+        try:
+            directory = os.path.dirname(self._persist_path)
+            if directory:
+                os.makedirs(directory, exist_ok=True)
+            tmp_path = f"{self._persist_path}.tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(self._store, f, ensure_ascii=False)
+            os.replace(tmp_path, self._persist_path)
+        except Exception:
+            pass
 
     def get(self, key: str) -> Optional[Dict[str, Any]]:
         return self._store.get(key)
@@ -31,6 +67,7 @@ class InMemoryStore:
 
     def __setitem__(self, key: str, value: Dict[str, Any]) -> None:
         self._store[key] = value
+        self._persist()
 
     def __contains__(self, key: str) -> bool:  # pragma: no cover - trivial
         return key in self._store
@@ -39,7 +76,9 @@ class InMemoryStore:
         return list(self._store.items())
 
     def pop(self, key: str, default: Any = None) -> Any:
-        return self._store.pop(key, default)
+        value = self._store.pop(key, default)
+        self._persist()
+        return value
 
     def __len__(self) -> int:  # pragma: no cover - trivial
         return len(self._store)

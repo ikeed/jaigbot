@@ -1,6 +1,7 @@
 # Chainlit generated files
 /.chainlit/translations/
 /.chainlit/session_id*
+/.chainlit/session_memory*.json
 
 # Terraform
 terraform/.terraform/
@@ -10,7 +11,10 @@ terraform/terraform.tfstate.*
 terraform/crash.log
 
 # IDE configs
-/.idea/
+/.idea/*
+!/.idea/runConfigurations/
+/.idea/runConfigurations/*
+!/.idea/runConfigurations/AIMSBot__Unified_.xml
 /.vscode/
 
 # Coverage & test cache
