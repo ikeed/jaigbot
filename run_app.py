@@ -18,9 +18,10 @@ else:
         print("DEBUG: No .env file found by python-dotenv")
     load_dotenv() # Fallback to standard loading
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+import jwt # pip install PyJWT
 from chainlit.utils import mount_chainlit
 
 # Import the existing backend app
@@ -184,6 +185,8 @@ async def custom_login_page(request: Request):
                 window.addEventListener('message', (event) => {{
                     if (event.data === 'on_logout') {{
                         window.location.href = '/';
+                    }} else if (event.data === 'on_duplicate_tab' || (event.data && event.data.type === 'on_duplicate_tab')) {{
+                        window.location.href = '/duplicate';
                     }}
                 }});
             </script>
@@ -205,10 +208,58 @@ async def custom_login_page(request: Request):
     """
     return HTMLResponse(content=html_content)
 
-# Serve static assets (SVGs, CSS, JS) at /public so that inline HTML
-# references like /public/doctor.svg resolve correctly even though
-# Chainlit is mounted at /chat (which serves them at /chat/public/).
-app.mount("/public", StaticFiles(directory="public"), name="public-static")
+@app.get("/duplicate", response_class=HTMLResponse)
+async def duplicate_tab_page(request: Request):
+    html_content = f"""
+    <html>
+        <head>
+            <title>AIMSBot - Duplicate Tab</title>
+            <style>
+                body {{ font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background: #f0f2f5; margin: 0; }}
+                .card {{ background: white; padding: 3rem; border-radius: 12px; box-shadow: 0 8px 16px rgba(0,0,0,0.1); text-align: center; width: 500px; }}
+                h2 {{ color: #856404; margin-top: 1rem; }}
+                p {{ color: #666; line-height: 1.6; margin: 1.5rem 0; }}
+                .btn {{ 
+                    display: inline-block;
+                    background: #007bff;
+                    color: white;
+                    text-decoration: none;
+                    padding: 12px 24px;
+                    border-radius: 6px;
+                    font-weight: 600;
+                    transition: background 0.2s;
+                    cursor: pointer;
+                    border: none;
+                }}
+                .btn:hover {{ background: #0056b3; }}
+                .icon {{ font-size: 48px; margin-bottom: 1rem; }}
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <img src="/public/aimsbot.png" alt="AIMSBot" style="width: 256px; height: 256px; margin: 0 auto 1rem; display: block;" />
+                <div class="icon">⚠️</div>
+                <h2>Duplicate Tab Detected</h2>
+                <p>
+                    It looks like you've got another tab open already. 
+                    To ensure the accuracy of the simulation, only one active tab is allowed at a time.
+                </p>
+                <p style="font-size: 0.9em; color: #888;">
+                    Please use your other open tab, or close it and click the button below to resume here.
+                </p>
+                <button onclick="window.location.href='/chat?force=true'" class="btn">Refresh This Tab</button>
+            </div>
+        </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
+
+# Serve static assets (CSS, JS, avatars, images) at /public so references
+# resolve correctly even though Chainlit is mounted at /chat.
+if os.path.exists("public"):
+    app.mount("/public", StaticFiles(directory="public"), name="public-static")
+elif os.path.exists(".chainlit/public"):
+    app.mount("/public", StaticFiles(directory=".chainlit/public"), name="public-static")
 
 @app.middleware("http")
 async def intercept_chainlit_login(request: Request, call_next):
@@ -224,11 +275,91 @@ async def redirect_chainlit_login_to_root():
 # Note: This will use chainlit_app.py as the target
 mount_chainlit(app=app, target="chainlit_app.py", path="/chat")
 
-# WORKAROUND for 'oauth state does not correspond' when mounting on a subpath.
-# Chainlit's OAuth initiation sets a cookie. If the initiation happens via /chat/auth/oauth/google
-# but the callback is also under /chat, everything should work.
-# However, if there are multiple Starlette apps or midleware, cookies can get lost.
-# We ensure that the top-level app allows credentials and has no conflicting session middleware.
+def _get_persistent_session_id(user_identifier: str | None = None) -> str | None:
+    """
+    Recover a persistent session ID from the local .chainlit directory.
+    This logic mirrors chainlit_app.py's implementation.
+    """
+    import re
+    # 1) Specific file for this user identifier
+    if user_identifier:
+        # Match chainlit_app.py: safe_id = "".join([c if c.isalnum() else "_" for c in user_identifier])
+        safe_name = "".join([c if c.isalnum() else "_" for c in user_identifier])
+        path = os.path.join(".chainlit", f"session_id_{safe_name}")
+        if os.path.exists(path):
+            with open(path, "r") as f:
+                return f.read().strip()
+    
+    # 2) Global fallback
+    path = os.path.join(".chainlit", "session_id")
+    if os.path.exists(path):
+        with open(path, "r") as f:
+            return f.read().strip()
+            
+    return None
+
+@app.middleware("http")
+async def early_duplicate_tab_detection(request: Request, call_next):
+    # Only intercept GET requests to the main /chat page
+    # Chainlit's assets and API calls should not be blocked here
+    if request.method == "GET" and request.url.path in ["/chat", "/chat/"]:
+        # Check for force flag in query parameters
+        if request.query_params.get("force") == "true":
+            print("DEBUG: Force flag detected in query params. Bypassing duplicate detection.")
+            return await call_next(request)
+
+        # Extract user from cl-user-session cookie (Chainlit's default name)
+        token = request.cookies.get("cl-user-session")
+        user_identifier = None
+        
+        if token:
+            try:
+                # Chainlit's JWT is signed with CHAINLIT_AUTH_SECRET
+                secret = os.environ.get("CHAINLIT_AUTH_SECRET")
+                if secret:
+                    # We don't necessarily need to verify the full JWT here if we just want a hint,
+                    # but verifying is safer. Chainlit uses HS256 by default.
+                    decoded = jwt.decode(token, secret, algorithms=["HS256"], options={"verify_signature": False})
+                    user_identifier = decoded.get("sub") or decoded.get("email")
+                    print(f"DEBUG: Middleware decoded user_identifier: {user_identifier}")
+                else:
+                    print("DEBUG: Middleware found cl-user-session but CHAINLIT_AUTH_SECRET is not set.")
+            except Exception as e:
+                print(f"DEBUG: Middleware failed to decode cl-user-session: {e}")
+
+        if user_identifier:
+            session_id = _get_persistent_session_id(user_identifier)
+            if session_id:
+                # Access the memory store from the backend app
+                from app.main import _MEMORY_STORE
+                import time
+                mem = _MEMORY_STORE.get(session_id)
+                if mem:
+                    active_connections = mem.get("active_connections", [])
+                    if active_connections:
+                        # Check if the session is stale (e.g. not updated in 60 seconds)
+                        updated = mem.get("updated", 0)
+                        if time.time() - updated > 60:
+                            print(f"DEBUG: Session {session_id} has active connections {active_connections} but is STALE (last update {time.time() - updated:.1f}s ago). Allowing connection.")
+                            # We don't redirect to duplicate page if it's stale
+                            return await call_next(request)
+
+                        # Redirect to the duplicate tab warning page
+                        print(f"DEBUG: Early duplicate detection for {user_identifier} on {session_id}. Active: {active_connections}")
+                        return RedirectResponse(url="/duplicate")
+                    else:
+                        print(f"DEBUG: Session {session_id} found but has no active connections.")
+                else:
+                    print(f"DEBUG: No active backend session found for {session_id}.")
+            else:
+                print(f"DEBUG: No persistent session_id found for user {user_identifier}.")
+        else:
+            if token:
+                print(f"DEBUG: Middleware found token but could not extract user_identifier.")
+            else:
+                print(f"DEBUG: Middleware did not find cl-user-session cookie.")
+
+    return await call_next(request)
 
 if __name__ == "__main__":
     # Use localhost as default for local development to match typical OAuth client configs.

@@ -43,7 +43,7 @@ Repository Settings → Secrets and variables:
   - GCP_REGION     = terraform var region (e.g., us-west4)
   - GAR_REPO       = terraform var gar_repo (e.g., cr-demo)
   - SERVICE_NAME   = terraform var service_name (e.g., aimsbot)
-  - MODEL_ID       = gemini-1.5-pro-002
+  - MODEL_ID       = gemini-2.5-pro
   - TEMPERATURE    = 0.2
   - MAX_TOKENS     = 256
 

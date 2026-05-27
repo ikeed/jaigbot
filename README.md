@@ -1,18 +1,24 @@
-# AIMSBot — Hello World: Cloud Run ↔ Vertex AI (Gemini Pro)
+# AIMSBot — AIMS coaching simulator on Cloud Run and Vertex AI
 
-This repository contains a tiny FastAPI backend that exposes a simple /chat endpoint which proxies a single message to Vertex AI (Gemini Pro). The chat UI is provided by Chainlit (see `chainlit_app.py`).  No auth, no storage, no streaming.
+This repository contains a FastAPI + Chainlit application for simulated
+vaccine-hesitancy conversations and AIMS communication coaching. The backend
+uses Gemini on Vertex AI for patient/parent replies and AIMS classification,
+with deterministic fallbacks and session-level metrics.
 
 **TL;DR — Where things are:**
 
-- UI: Chainlit (see `chainlit_app.py`).
+- UI: Chainlit (see `chainlit_app.py`) or the unified login/UI/API app in
+  `run_app.py`.
 - API endpoints (FastAPI backend):
   - **POST /chat** → calls Vertex AI and returns `{ reply, model, latencyMs }`. When `AIMS_COACHING_ENABLED=true` and the request includes `coach=true`, the response may also include optional `coaching` and `session` fields (see AIMS coaching docs).
+  - **GET  /history?sessionId=...** → returns stored session history for UI replay/debugging.
   - **GET  /summary?sessionId=...** → returns an aggregated AIMS summary for a session (overallScore, stepCoverage, strengths, growthAreas, narrative). Present even if coaching is disabled; contents may be minimal.
+  - **POST /session**, **/session/deregister**, **/report** → session initialization, duplicate-tab cleanup, and issue reporting/archive flow.
   - **GET  /healthz** → simple health check.
-  - **GET  /config**, **/diagnostics**, **/models** for configuration/diagnostics.
-- Backend code: `app/main.py` and `app/vertex.py`.
+  - **GET  /config**, **/modelcheck**, **/diagnostics**, **/models** for configuration/diagnostics.
+- Backend code: `app/main.py`, `app/services/chat_orchestrator.py`, and `app/vertex.py`.
 - Run/setup docs: `docs/developer-setup.md` (step‑by‑step).
-- Architecture/plan: `docs/plan.md`.
+- Architecture/map: `docs/plan.md`.
 - SSO Setup Guide: `docs/sso-setup.md` (step-by-step for Google, Facebook, Apple).
 - Note: `app/static/index.html` is deprecated and no longer served; the backend does not mount a static UI.
 
@@ -22,11 +28,15 @@ This repository contains a tiny FastAPI backend that exposes a simple /chat endp
    ```bash
    pip install -r requirements.txt
    ```
-2. Set up environment variables (Optional: `PROJECT_ID` and `REGION` are auto-detected if `gcloud` or standard GCP variables are configured):
+2. Set up environment variables. `PROJECT_ID` and `REGION` are auto-detected
+   if `gcloud` or standard GCP variables are configured. `VERTEX_LOCATION` can
+   be set separately when the model is served from a different Vertex location.
    ```bash
    # Only required if not configured via gcloud or GOOGLE_CLOUD_PROJECT
    export PROJECT_ID=your-gcp-project-id
-   export REGION=us-central1
+   export REGION=us-west4
+   export VERTEX_LOCATION=global
+   export MODEL_ID=gemini-2.5-pro
    ```
 
 ### PyCharm Run Configurations
@@ -119,7 +129,10 @@ Environment overrides:
 This script prints the model, latency, reply text, and includes coaching/session sections if the server returns them.
 
 ## Cloud Run health checks
-During deploys Cloud Run may show two different but valid URLs, and hitting "/" can 404 if not served. Use the helper script to probe /healthz with backoff instead of a one‑shot curl.
+During deploys Cloud Run may show two different but valid URLs. Probe paths
+depend on deployment shape: API-only uses `/healthz`, while the unified app
+mounts backend health at `/api/healthz` and serves Chainlit/login at `/`.
+Use the helper script with backoff instead of a one-shot curl.
 
 - See docs/health-checks.md
 

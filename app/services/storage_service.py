@@ -5,6 +5,7 @@ import subprocess
 from typing import Dict, Any, Optional
 from google.cloud import storage
 from app.config import settings
+from app.chat_roles import ROLE_ASSISTANT, ROLE_COACH, ROLE_SYSTEM, ROLE_USER, normalize_role
 
 logger = logging.getLogger(__name__)
 
@@ -113,19 +114,26 @@ class StorageService:
         # Simplified: scan in order, keep roles.
         current_turn = 0
         for i, entry in enumerate(full_hist):
-            role = entry.get("role")
-            if role == "user":
-                current_turn += 1
+            role = normalize_role(entry.get("role"))
+            if role == ROLE_SYSTEM:
                 transcript.append({
                     "turn": current_turn,
-                    "role": "user",
+                    "role": ROLE_SYSTEM,
                     "content": entry.get("content"),
                     "timestamp": iso(entry.get("time"))
                 })
-            elif role == "assistant":
+            elif role == ROLE_USER:
+                current_turn += 1
+                transcript.append({
+                    "turn": current_turn,
+                    "role": ROLE_USER,
+                    "content": entry.get("content"),
+                    "timestamp": iso(entry.get("time"))
+                })
+            elif role == ROLE_ASSISTANT:
                 # Look for coach feedback that follows this assistant reply
                 coaching = None
-                if i + 1 < len(full_hist) and full_hist[i+1].get("role") == "coach":
+                if i + 1 < len(full_hist) and normalize_role(full_hist[i+1].get("role")) == ROLE_COACH:
                     coach_entry = full_hist[i+1]
                     # If we have structured data, use it; otherwise fall back to content string
                     coaching_data = coach_entry.get("coaching_data")
@@ -142,17 +150,17 @@ class StorageService:
 
                 transcript.append({
                     "turn": current_turn,
-                    "role": "assistant",
+                    "role": ROLE_ASSISTANT,
                     "content": entry.get("content"),
                     "timestamp": iso(entry.get("time")),
                     "coaching": coaching
                 })
-            elif role == "coach":
+            elif role == ROLE_COACH:
                 # If it's the very first message (pre-intro)
                 if current_turn == 0:
                      transcript.append({
                         "turn": 0,
-                        "role": "coach",
+                        "role": ROLE_COACH,
                         "content": entry.get("content"),
                         "timestamp": iso(entry.get("time"))
                     })

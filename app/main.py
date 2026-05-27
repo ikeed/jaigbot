@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .vertex import VertexClient, VertexAIError
+from .chat_roles import ROLE_ASSISTANT, ROLE_SYSTEM, is_scenario_card, normalize_role
 
 # Lazy, cached Vertex client per (project, region, model, class) to avoid re-initializing
 # a new SDK client on every request while still allowing tests to monkeypatch VertexClient.
@@ -550,9 +551,13 @@ from pydantic import BaseModel as _BaseModel
 
 class SessionInitRequest(_BaseModel):
     sessionId: str
+    connectionId: Optional[str] = None
+    personaId: Optional[str] = None
     character: Optional[str] = None
     scene: Optional[str] = None
     userInfo: Optional[dict] = None
+    initialCard: Optional[str] = None
+    force: Optional[bool] = False
 
 
 def _get_request_id(request: Request) -> Optional[str]:
@@ -637,31 +642,191 @@ async def init_session(body: SessionInitRequest):
     sid = body.sessionId
     now = time.time()
     mem = _MEMORY_STORE.get(sid)
+
+    character = body.character
+    scene = body.scene
+    initial_card = body.initialCard
+
+    # If personaId is NOT provided, but we have an existing session,
+    # try to RECOVER the personaId from the existing memory so we don't pick a new random one.
+    persona_id = body.personaId
+    if not persona_id and mem and mem.get("character"):
+        for line in mem["character"].splitlines():
+            if "Specific Persona:" in line:
+                persona_id = line.split("Specific Persona:")[1].strip()
+                logger.info("Recovered personaId '%s' from existing memory for session %s", persona_id, sid)
+                break
+
+    # If persona_id is provided or recovered, the backend generates the character/scene/card
+    if persona_id:
+        try:
+            from .services.chat_helpers import load_robust_persona
+            persona = load_robust_persona(name=persona_id)
+            
+            # Use standard template if character/scene not already provided
+            if not character:
+                from .config import DEFAULT_CHARACTER
+                base_char = settings.CHARACTER_SYSTEM or DEFAULT_CHARACTER
+                character = (
+                    f"{base_char}\n\n"
+                    f"Specific Persona: {persona['name']}\n"
+                    f"Detailed Biography and Motivations: {persona['detailed']}"
+                )
+            if not scene:
+                from .config import DEFAULT_SCENE
+                base_scene = settings.SCENE_OBJECTIVES or DEFAULT_SCENE
+                scene = (
+                    f"{base_scene}\n\n"
+                    f"Current Scenario: {persona['scenario']['visit_reason']}\n"
+                    f"Scenario Objectives: {persona['scenario']['detailed_instructions']}"
+                )
+            if not initial_card:
+                lines = [
+                    f"Person: {persona['name']}",
+                    f"Background: {persona['brief']}",
+                    f"Reason for visit: {persona['scenario']['user_sketch']}"
+                ]
+                is_pediatric = any(k in persona['brief'].lower() for k in ["parent", "child", "son", "daughter"])
+                if not persona['scenario'].get('vaccine_related') and not is_pediatric:
+                    lines.append("\n(Note: You might want to mention vaccines during this visit.)")
+                initial_card = "\n".join(lines)
+        except Exception as e:
+            logger.error("Failed to load persona %s: %s", persona_id, e)
+
     if not mem:
         mem = {
             "history": [],
             "full_history": [],
-            "character": body.character,
-            "scene": body.scene,
+            "character": character,
+            "scene": scene,
             "user_info": body.userInfo,
             "updated": now,
             "session_started": now,
         }
+        
+        # If we have a character (either passed or generated), seed the history with a scenario card.
+        if character:
+            if initial_card:
+                card_content = initial_card
+            else:
+                persona_name = "Person"
+                for line in character.splitlines():
+                    if "Specific Persona:" in line:
+                        persona_name = line.split("Specific Persona:")[1].strip()
+                        break
+                card_content = f"Person: {persona_name}\n(Scenario initialized)"
+            mem["history"].append({"role": ROLE_SYSTEM, "content": card_content})
+            mem["full_history"].append({"role": ROLE_SYSTEM, "content": card_content, "time": now})
+            
         _MEMORY_STORE[sid] = mem
     else:
-        # Update persona/scene if provided and not already set
-        if body.character and not mem.get("character"):
-            mem["character"] = body.character
-        if body.scene and not mem.get("scene"):
-            mem["scene"] = body.scene
+        # Update persona/scene if provided/generated and not already set
+        if character and not mem.get("character"):
+            mem["character"] = character
+        if scene and not mem.get("scene"):
+            mem["scene"] = scene
         if body.userInfo and not mem.get("user_info"):
             mem["user_info"] = body.userInfo
+        
+        # IDEMPOTENCY: ONLY seed history if it is absolutely empty.
+        # This prevents re-seeding on page refresh if the backend already has history.
+        if not mem.get("history") and character:
+            # Check if there is anything in full_history too, just to be safe.
+            if not mem.get("full_history"):
+                if initial_card:
+                    card_content = initial_card
+                else:
+                    persona_name = "Person"
+                    for line in character.splitlines():
+                        if "Specific Persona:" in line:
+                            persona_name = line.split("Specific Persona:")[1].strip()
+                            break
+                    card_content = f"Person: {persona_name}\n(Scenario initialized)"
+                
+                mem["history"].append({"role": ROLE_SYSTEM, "content": card_content})
+                mem["full_history"].append({"role": ROLE_SYSTEM, "content": card_content, "time": now})
+
         mem.setdefault("full_history", [])
         mem.setdefault("session_started", now)
         mem["updated"] = now
         _MEMORY_STORE[sid] = mem
+
     logger.info("Session initialized: %s", sid)
-    return {"status": "ok", "sessionId": sid}
+    
+    # Connection tracking
+    active_connections = mem.get("active_connections", [])
+    already_active = False
+
+    # If force is true, we clear existing connections and takeover
+    if body.force:
+        logger.info("Force flag detected for session %s. Clearing active connections: %s", sid, active_connections)
+        active_connections = []
+        mem["active_connections"] = active_connections
+        # We don't return alreadyActive=True in this case because we are forcing it.
+
+    if body.connectionId:
+        logger.debug("Checking connectionId: %s for session %s. Existing: %s", body.connectionId, sid, active_connections)
+        if body.connectionId not in active_connections:
+            # If there are active connections and we are adding a NEW one, mark it as alreadyActive
+            if active_connections:
+                already_active = True
+                logger.info("Session %s is already active with connections: %s. Blocking new connection: %s", sid, active_connections, body.connectionId)
+            
+            # We still add the connectionId so that if the user refreshes THIS tab, 
+            # it stays as part of the session, but it will be blocked until other tabs are closed.
+            active_connections.append(body.connectionId)
+            mem["active_connections"] = active_connections
+            _MEMORY_STORE[sid] = mem
+        else:
+            # If THIS connectionId is already in active_connections, but it's not the ONLY one,
+            # it should still be considered "already active" unless it was the first one.
+            # Actually, if it's already there, it means this tab is RECONNECTING.
+            # If it was already blocked before, it should stay blocked? 
+            # No, if it's reconnecting, we should check if it's the "primary" one.
+            # For simplicity: if it's already in the list, and it's not the first one, it's already active.
+            if active_connections and active_connections[0] != body.connectionId:
+                already_active = True
+            logger.debug("connectionId %s already registered for session %s. alreadyActive=%s", body.connectionId, sid, already_active)
+
+    return {
+        "status": "ok", 
+        "sessionId": sid,
+        "alreadyActive": already_active,
+        "character": mem.get("character"),
+        "scene": mem.get("scene"),
+        "initialCard": next(
+            (
+                m["content"]
+                for m in mem["history"]
+                if normalize_role(m.get("role")) in {ROLE_SYSTEM, ROLE_ASSISTANT}
+                and is_scenario_card(m.get("content"))
+            ),
+            initial_card,
+        )
+    }
+
+
+class SessionDeregisterRequest(_BaseModel):
+    sessionId: str
+    connectionId: str
+
+
+@app.post("/session/deregister")
+async def deregister_session(body: SessionDeregisterRequest):
+    """Remove a connectionId from the active connections list."""
+    if not settings.MEMORY_ENABLED:
+        return {"status": "ok"}
+    sid = body.sessionId
+    mem = _MEMORY_STORE.get(sid)
+    if mem:
+        active = mem.get("active_connections", [])
+        if body.connectionId in active:
+            active.remove(body.connectionId)
+            mem["active_connections"] = active
+            mem["updated"] = time.time()
+            _MEMORY_STORE[sid] = mem
+            logger.info("Connection deregistered: %s for session %s", body.connectionId, sid)
+    return {"status": "ok"}
 
 
 @app.post("/report")
