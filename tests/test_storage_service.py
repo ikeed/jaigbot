@@ -57,11 +57,10 @@ def test_storage_service_structured_archive(mock_storage_client):
         "full_history": [
             {"role": "system", "content": "Person: Test\nBackground: Brief", "time": 1716000001.0},
             {"role": "user", "content": "Hello", "time": 1716000100.0},
-            {"role": "assistant", "content": "Hi there", "time": 1716000200.0},
             {
                 "role": "coach", 
                 "content": "Coach string", 
-                "time": 1716000201.0,
+                "time": 1716000101.0,
                 "coaching_data": {
                     "step": "Announce",
                     "score": 3,
@@ -69,7 +68,8 @@ def test_storage_service_structured_archive(mock_storage_client):
                     "tips": ["Keep it up"],
                     "phase": "Announce"
                 }
-            }
+            },
+            {"role": "assistant", "content": "Hi there", "time": 1716000200.0},
         ],
         "aims": {
             "totalTurns": 1,
@@ -93,11 +93,14 @@ def test_storage_service_structured_archive(mock_storage_client):
     assert system_entry["turn"] == 0
     assert "Person: Test" in system_entry["content"]
     
-    # Verify transcript turn 1 has structured coaching
-    turn1_assistant = next(t for t in payload["transcript"] if t["role"] == "assistant")
-    assert turn1_assistant["coaching"]["step"] == "Announce"
-    assert turn1_assistant["coaching"]["score"] == 3
-    assert "Keep it up" in turn1_assistant["coaching"]["tips"]
+    # Verify transcript preserves visible order and structured coaching
+    roles = [t["role"] for t in payload["transcript"]]
+    assert roles == ["system", "user", "coach", "assistant"]
+    turn1_coach = next(t for t in payload["transcript"] if t["role"] == "coach")
+    assert turn1_coach["turn"] == 1
+    assert turn1_coach["coaching"]["step"] == "Announce"
+    assert turn1_coach["coaching"]["score"] == 3
+    assert "Keep it up" in turn1_coach["coaching"]["tips"]
     
     # Verify analytics has summary (coach_post)
     assert payload["analytics"]["summary"]["title"] == "Nice job!"
