@@ -100,8 +100,20 @@ variable "sessions_bucket_name" {
   default     = "aimsbot-chat-sessions"
 }
 
+variable "sessions_bucket_public_read" {
+  type        = bool
+  description = "Allow anonymous public read access to objects in the chat sessions bucket."
+  default     = false
+}
+
 variable "reports_bucket_name" {
   type        = string
   description = "Name of the GCS bucket for bug reports"
   default     = "aimsbot-bug-reports"
+}
+
+variable "reports_bucket_public_read" {
+  type        = bool
+  description = "Allow anonymous public read access to objects in the bug reports bucket."
+  default     = false
 }
