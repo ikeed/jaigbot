@@ -320,6 +320,10 @@ class AimsCoachingHandler:
         # Step 4: Persist AIMS metrics (after state update)
         self._persist_aims_metrics(mem, cls_payload)
 
+        # Record the clinician turn before any coaching note so replay keeps
+        # the same order the live UI showed: user -> coach -> assistant.
+        self._append_user_history(mem, body.message)
+
         # Persist a compact coaching note into conversation history before assistant reply,
         # so the order is: user -> coach -> assistant. This helps the UI retain coaching on refresh.
         try:
@@ -415,7 +419,7 @@ class AimsCoachingHandler:
             pass
         
         # Step 6: Update conversation history
-        self._append_history(mem, body.message, reply_payload.get("patient_reply", ""))
+        self._append_assistant_history(mem, reply_payload.get("patient_reply", ""))
         
         # Step 7: Build session metrics
         session_obj = self._build_session_metrics(mem)
@@ -984,24 +988,41 @@ class AimsCoachingHandler:
         self, mem: Optional[Dict[str, Any]], user_message: str, assistant_reply: str
     ) -> None:
         """Append user+assistant turn to history. Mutates mem in place."""
+        self._append_user_history(mem, user_message)
+        self._append_assistant_history(mem, assistant_reply)
+
+    def _append_user_history(self, mem: Optional[Dict[str, Any]], user_message: str) -> None:
+        """Append a user message to history. Mutates mem in place."""
         if mem is None:
             return
-        
+
         try:
             now = time.time()
             user_entry = {"role": "user", "content": user_message}
-            asst_entry = {"role": "assistant", "content": assistant_reply}
             mem.setdefault("history", []).append(user_entry)
-            mem["history"].append(asst_entry)
             mem.setdefault("full_history", []).append({**user_entry, "time": now})
-            mem["full_history"].append({**asst_entry, "time": now})
-            
-            # Trim working history (coach-aware)
+            mem["updated"] = now
+        except Exception:
+            self.logger.debug("User history append failed")
+
+    def _append_assistant_history(self, mem: Optional[Dict[str, Any]], assistant_reply: str) -> None:
+        """Append an assistant message to history. Mutates mem in place."""
+        if mem is None:
+            return
+
+        try:
+            now = time.time()
+            asst_entry = {"role": "assistant", "content": assistant_reply}
+            mem.setdefault("history", []).append(asst_entry)
+            mem.setdefault("full_history", []).append({**asst_entry, "time": now})
+            mem["updated"] = now
+
+            # Trim working history (coach-aware) after the full turn is present.
             from app.services.session_service import SessionService
             mem["history"] = SessionService._trim_history(mem["history"], self.memory_max_turns)
-            
+
         except Exception:
-            self.logger.debug("History append failed")
+            self.logger.debug("Assistant history append failed")
     
     def _build_session_metrics(self, mem: Optional[Dict[str, Any]]) -> Dict[str, Any] | None:
         """Build session metrics snapshot from mem dict."""

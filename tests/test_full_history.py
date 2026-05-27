@@ -7,6 +7,7 @@ import logging
 import time
 
 from app.services.session_service import SessionService, CookieSettings
+from app.services.aims_coaching_handler import AimsCoachingHandler
 
 
 # ---------------------------------------------------------------------------
@@ -148,8 +149,23 @@ class TestFullHistory:
         for entry in store[sid]["history"]:
             assert "time" not in entry
 
+    def test_coaching_handler_appends_visible_order(self):
+        handler = AimsCoachingHandler.__new__(AimsCoachingHandler)
+        handler.memory_max_turns = 8
+        handler.logger = logging.getLogger("test")
+        mem = {"history": [], "full_history": []}
+
+        handler._append_user_history(mem, "doctor")
+        coach_entry = {"role": "coach", "content": "coach"}
+        mem["history"].append(coach_entry)
+        mem["full_history"].append({**coach_entry, "time": time.time()})
+        handler._append_assistant_history(mem, "patient")
+
+        assert [m["role"] for m in mem["history"]] == ["user", "coach", "assistant"]
+        assert [m["role"] for m in mem["full_history"]] == ["user", "coach", "assistant"]
+
     def test_coaching_handler_full_history(self):
-        """Simulate the coaching handler flow: coach + user + assistant entries
+        """Simulate the coaching handler flow: user + coach + assistant entries
         all appear in full_history with timestamps, while history is trimmed."""
         store = {}
         svc = _svc(store, max_turns=2)
@@ -159,18 +175,20 @@ class TestFullHistory:
         for i in range(4):
             now = time.time()
             mem = store[sid]
+            # User
+            user_entry = {"role": "user", "content": f"u{i}"}
+            mem.setdefault("history", []).append(user_entry)
+            mem.setdefault("full_history", []).append({**user_entry, "time": now})
+
             # Coach entry (mirrors aims_coaching_handler inline append)
             coach_entry = {"role": "coach", "content": f"coach-{i}"}
-            mem.setdefault("history", []).append(coach_entry)
-            mem.setdefault("full_history", []).append({**coach_entry, "time": now})
+            mem["history"].append(coach_entry)
+            mem["full_history"].append({**coach_entry, "time": now})
             store[sid] = mem
 
-            # User + assistant (mirrors _update_conversation_history)
-            user_entry = {"role": "user", "content": f"u{i}"}
+            # Assistant
             asst_entry = {"role": "assistant", "content": f"a{i}"}
-            mem["history"].append(user_entry)
             mem["history"].append(asst_entry)
-            mem["full_history"].append({**user_entry, "time": now})
             mem["full_history"].append({**asst_entry, "time": now})
             mem["history"] = SessionService._trim_history(mem["history"], 2)
             store[sid] = mem
@@ -185,6 +203,7 @@ class TestFullHistory:
         assert all("time" in e for e in mem["full_history"])
         # No history entries have time
         assert all("time" not in e for e in mem["history"])
+        assert [e["role"] for e in mem["full_history"][:3]] == ["user", "coach", "assistant"]
 
 
 # ---------------------------------------------------------------------------
@@ -243,16 +262,15 @@ class TestOriginalBugRegression:
         for i in range(11):
             now = time.time()
             mem = store[sid]
-            # Coach
-            coach_entry = {"role": "coach", "content": f"coach-{i}"}
-            mem.setdefault("history", []).append(coach_entry)
-            mem.setdefault("full_history", []).append({**coach_entry, "time": now})
-            # User + assistant
+            # User + coach + assistant
             user_entry = {"role": "user", "content": f"doctor-{i}"}
+            coach_entry = {"role": "coach", "content": f"coach-{i}"}
             asst_entry = {"role": "assistant", "content": f"patient-{i}"}
-            mem["history"].append(user_entry)
+            mem.setdefault("history", []).append(user_entry)
+            mem["history"].append(coach_entry)
             mem["history"].append(asst_entry)
-            mem["full_history"].append({**user_entry, "time": now})
+            mem.setdefault("full_history", []).append({**user_entry, "time": now})
+            mem["full_history"].append({**coach_entry, "time": now})
             mem["full_history"].append({**asst_entry, "time": now})
             mem["history"] = SessionService._trim_history(mem["history"], 8)
             store[sid] = mem
@@ -271,3 +289,4 @@ class TestOriginalBugRegression:
         # The EARLIEST entries in trimmed history should be from turn 3 (0-indexed)
         assert dialogue[0]["content"] == "doctor-3"
         assert dialogue[1]["content"] == "patient-3"
+        assert [m["role"] for m in mem["history"][:3]] == ["user", "coach", "assistant"]
