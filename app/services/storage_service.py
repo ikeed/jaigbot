@@ -106,14 +106,10 @@ class StorageService:
         transcript = []
         full_hist = data.get("full_history") or []
 
-        # We'll group them by scanning and looking for (user, assistant) pairs
-        # and checking if there was a preceding or inter-turn coach message.
-        # Structure: user_N -> assistant_N -> coach_feedback_N
-        # (Based on current mess: [coach_0, user_1, assistant_1, coach_1, user_2, assistant_2...])
-
-        # Simplified: scan in order, keep roles.
+        # Scan in order and keep visible roles. The live UI renders each turn as
+        # user -> coach -> assistant, so archives should preserve that order too.
         current_turn = 0
-        for i, entry in enumerate(full_hist):
+        for entry in full_hist:
             role = normalize_role(entry.get("role"))
             if role == ROLE_SYSTEM:
                 transcript.append({
@@ -131,41 +127,28 @@ class StorageService:
                     "timestamp": iso(entry.get("time"))
                 })
             elif role == ROLE_ASSISTANT:
-                # Look for coach feedback that follows this assistant reply
-                coaching = None
-                if i + 1 < len(full_hist) and normalize_role(full_hist[i+1].get("role")) == ROLE_COACH:
-                    coach_entry = full_hist[i+1]
-                    # If we have structured data, use it; otherwise fall back to content string
-                    coaching_data = coach_entry.get("coaching_data")
-                    if coaching_data:
-                        coaching = {
-                            **coaching_data,
-                            "timestamp": iso(coach_entry.get("time"))
-                        }
-                    else:
-                        coaching = {
-                            "feedback": coach_entry.get("content"),
-                            "timestamp": iso(coach_entry.get("time"))
-                        }
-
                 transcript.append({
                     "turn": current_turn,
                     "role": ROLE_ASSISTANT,
                     "content": entry.get("content"),
                     "timestamp": iso(entry.get("time")),
-                    "coaching": coaching
+                    "coaching": None
                 })
             elif role == ROLE_COACH:
-                # If it's the very first message (pre-intro)
-                if current_turn == 0:
-                     transcript.append({
-                        "turn": 0,
-                        "role": ROLE_COACH,
-                        "content": entry.get("content"),
+                coaching_data = entry.get("coaching_data")
+                coaching = None
+                if coaching_data:
+                    coaching = {
+                        **coaching_data,
                         "timestamp": iso(entry.get("time"))
-                    })
-                # Otherwise it's feedback that was already handled by the "assistant" logic above
-                continue
+                    }
+                transcript.append({
+                    "turn": current_turn,
+                    "role": ROLE_COACH,
+                    "content": entry.get("content"),
+                    "timestamp": iso(entry.get("time")),
+                    "coaching": coaching,
+                })
 
         metadata = {
             "sessionId": session_id,
