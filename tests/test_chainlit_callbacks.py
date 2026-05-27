@@ -1,15 +1,48 @@
 import sys
+import types
+from importlib.machinery import ModuleSpec
 from unittest.mock import MagicMock, AsyncMock, patch
 import pytest
 
 # Mock chainlit before importing the app
 mock_cl = MagicMock()
 mock_cl.__path__ = [] # Make it look like a package
+mock_cl.__spec__ = ModuleSpec("chainlit", loader=None, is_package=True)
 
 class User:
     def __init__(self, identifier=None, metadata=None):
         self.identifier = identifier
+        self.display_name = None
         self.metadata = metadata or {}
+
+class PersistedUser(User):
+    def __init__(self, id, createdAt, identifier, display_name=None, metadata=None):
+        super().__init__(identifier=identifier, metadata=metadata)
+        self.id = id
+        self.createdAt = createdAt
+        self.display_name = display_name
+
+class PageInfo:
+    def __init__(self, hasNextPage=False, startCursor=None, endCursor=None):
+        self.hasNextPage = hasNextPage
+        self.startCursor = startCursor
+        self.endCursor = endCursor
+
+class PaginatedResponse:
+    def __init__(self, pageInfo, data):
+        self.pageInfo = pageInfo
+        self.data = data
+
+class Pagination:
+    def __init__(self, first, cursor=None):
+        self.first = first
+        self.cursor = cursor
+
+class ThreadFilter:
+    def __init__(self, feedback=None, userId=None, search=None):
+        self.feedback = feedback
+        self.userId = userId
+        self.search = search
 
 mock_cl.User = User
 mock_cl.user_session = MagicMock()
@@ -29,10 +62,37 @@ mock_cl.header_auth_callback = mock_decorator
 mock_cl.oauth_callback = mock_decorator
 mock_cl.on_logout = mock_decorator
 mock_cl.on_window_message = mock_decorator
+mock_cl.data_layer = mock_decorator
 
 sys.modules["chainlit"] = mock_cl
 sys.modules["chainlit.context"] = MagicMock(context=mock_context)
 sys.modules["chainlit.input_widget"] = MagicMock()
+
+mock_chainlit_data_base = types.ModuleType("chainlit.data.base")
+mock_chainlit_data_base.__spec__ = ModuleSpec("chainlit.data.base", loader=None)
+mock_chainlit_data_base.BaseDataLayer = object
+sys.modules["chainlit.data.base"] = mock_chainlit_data_base
+
+mock_chainlit_types = types.ModuleType("chainlit.types")
+mock_chainlit_types.__spec__ = ModuleSpec("chainlit.types", loader=None)
+mock_chainlit_types.Feedback = object
+mock_chainlit_types.PageInfo = PageInfo
+mock_chainlit_types.PaginatedResponse = PaginatedResponse
+mock_chainlit_types.Pagination = Pagination
+mock_chainlit_types.ThreadDict = dict
+mock_chainlit_types.ThreadFilter = ThreadFilter
+sys.modules["chainlit.types"] = mock_chainlit_types
+
+mock_chainlit_user = types.ModuleType("chainlit.user")
+mock_chainlit_user.__spec__ = ModuleSpec("chainlit.user", loader=None)
+mock_chainlit_user.PersistedUser = PersistedUser
+mock_chainlit_user.User = User
+sys.modules["chainlit.user"] = mock_chainlit_user
+
+mock_chainlit_utils = types.ModuleType("chainlit.utils")
+mock_chainlit_utils.__spec__ = ModuleSpec("chainlit.utils", loader=None)
+mock_chainlit_utils.utc_now = lambda: "2026-01-01T00:00:00Z"
+sys.modules["chainlit.utils"] = mock_chainlit_utils
 
 # Mock settings
 with patch("app.config.settings") as mock_settings:
@@ -76,7 +136,6 @@ async def test_on_logout():
     mock_cl.send_window_message.assert_called_once_with("on_logout")
     mock_cl.user_session.set.assert_any_call("session_id", None)
     mock_cl.user_session.set.assert_any_call("history", [])
-    mock_cl.user_session.set.assert_any_call("browser_has_transcript", False)
     mock_cl.user_session.get.side_effect = None
 
 def test_oauth_callback_google():
@@ -160,8 +219,8 @@ async def test_on_window_message_wrong_type():
 
 
 @pytest.mark.asyncio
-async def test_on_window_message_browser_state():
+async def test_on_window_message_ignores_browser_state():
     mock_cl.user_session.set.reset_mock()
     message = '{"type": "browser_state", "hasTranscript": true}'
     await on_window_message(message)
-    mock_cl.user_session.set.assert_any_call("browser_has_transcript", True)
+    mock_cl.user_session.set.assert_not_called()

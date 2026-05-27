@@ -21,13 +21,13 @@ import uuid
 import json
 import random
 import shutil
-from http.cookies import SimpleCookie
 from pathlib import Path
 import httpx
 from fastapi import Request, Response
 import chainlit as cl
 from chainlit.context import context as cl_context
 from chainlit.input_widget import TextInput
+from app.chainlit_memory_data_layer import MemoryDataLayer
 from app.chat_roles import (
     AUTHOR_ASSISTANT,
     AUTHOR_COACH,
@@ -48,6 +48,13 @@ from app.persona import DEFAULT_CHARACTER, DEFAULT_SCENE
 
 
 from app.config import settings
+
+
+@cl.data_layer
+def get_chainlit_data_layer():
+    from app.main import _MEMORY_STORE
+
+    return MemoryDataLayer(_MEMORY_STORE)
 
 def get_backend_url() -> str:
     """Dynamically resolve BACKEND_URL from settings, with a fallback heuristic."""
@@ -76,6 +83,37 @@ CHAINLIT_COACH_DEFAULT = settings.CHAINLIT_COACH_DEFAULT if settings.CHAINLIT_CO
 def _author_from_role(role: str) -> str:
     """Backward-compatible wrapper around the canonical role mapping."""
     return author_for_role(role)
+
+
+def _scenario_card_from_history(history: list[dict] | None) -> str | None:
+    for msg in history or []:
+        content = msg.get("content") or ""
+        if normalize_role(msg.get("role")) in {ROLE_SYSTEM, ROLE_ASSISTANT} and is_scenario_card(content):
+            return content
+    return None
+
+
+async def _bind_chainlit_thread(thread_id: str | None, session_id: str, app_user) -> None:
+    """Persist minimal thread ownership/metadata before the first user turn."""
+    if not thread_id or not app_user:
+        return
+    try:
+        from chainlit.data import get_data_layer
+
+        data_layer = get_data_layer()
+        if not data_layer:
+            return
+        persisted_user = await data_layer.get_user(app_user.identifier)
+        if not persisted_user:
+            persisted_user = await data_layer.create_user(app_user)
+        if persisted_user:
+            await data_layer.update_thread(
+                thread_id=thread_id,
+                user_id=persisted_user.id,
+                metadata={"session_id": session_id},
+            )
+    except Exception as e:
+        print(f"DEBUG: Failed to bind Chainlit thread {thread_id}: {e}")
 
 
 async def _replay_history(history: list[dict]):
@@ -110,6 +148,10 @@ async def _replay_history(history: list[dict]):
         if role == ROLE_ASSISTANT and is_scenario_card(content):
             author = AUTHOR_SYSTEM
 
+        if author == AUTHOR_SYSTEM and is_scenario_card(content):
+            await cl.Message(content=_render_scenario_card_html(content), author=AUTHOR_SYSTEM).send()
+            continue
+
         # Coach entries: normalize the archived pipe-delimited text into plain
         # markdown. CSS handles bubble styling by author.
         if author == AUTHOR_COACH:
@@ -135,6 +177,7 @@ async def _replay_history(history: list[dict]):
 
         msg_type = "user_message" if author == AUTHOR_DOCTOR else "assistant_message"
         await cl.Message(content=content_clean, author=author, type=msg_type).send()
+    print(f"DEBUG: replay_history sent {len(history or [])} messages")
 
 
 def _format_coach_message(text: str) -> str:
@@ -208,6 +251,27 @@ def _get_persistent_session_id(user_identifier: str | None = None) -> str:
         return str(uuid.uuid4())
 
 
+def _read_persistent_session_id(user_identifier: str | None = None) -> str | None:
+    """Read a persisted session id if it exists, without creating a new one."""
+    try:
+        store_dir = Path(os.getcwd()) / ".chainlit"
+        filenames = []
+        if user_identifier:
+            safe_id = "".join([c if c.isalnum() else "_" for c in user_identifier])
+            filenames.append(f"session_id_{safe_id}")
+        filenames.append("session_id")
+
+        for filename in filenames:
+            f = store_dir / filename
+            if f.exists():
+                sid = f.read_text(encoding="utf-8").strip()
+                if sid:
+                    return sid
+    except Exception:
+        return None
+    return None
+
+
 def _write_persistent_session_id(session_id: str, user_identifier: str | None = None) -> None:
     """Persist the given session id to disk so on_chat_resume can recover it."""
     try:
@@ -237,52 +301,6 @@ def _clear_persistent_session_id(user_identifier: str | None = None) -> None:
             (store_dir / filename).unlink(missing_ok=True)
         except Exception:
             pass
-
-
-def _browser_has_transcript() -> bool | None:
-    """Read the browser transcript flag from the websocket handshake cookies."""
-    try:
-        environ = getattr(getattr(cl_context, "session", None), "environ", None) or {}
-        cookie_header = environ.get("HTTP_COOKIE") or environ.get("Cookie") or ""
-        if not cookie_header:
-            return None
-
-        cookie = SimpleCookie()
-        cookie.load(cookie_header)
-        morsel = cookie.get("aims_has_transcript")
-        if morsel is None:
-            return None
-
-        value = (morsel.value or "").strip().lower()
-        if value in {"1", "true", "yes", "on"}:
-            return True
-        if value in {"0", "false", "no", "off"}:
-            return False
-    except Exception:
-        return None
-    return None
-
-
-async def _wait_for_browser_transcript_flag(timeout_s: float = 0.35) -> bool | None:
-    """Give the browser a moment to report whether transcript already exists."""
-    deadline = asyncio.get_running_loop().time() + timeout_s
-
-    def _current_flag() -> bool | None:
-        session_flag = cl.user_session.get("browser_has_transcript")
-        if session_flag is not None:
-            return bool(session_flag)
-        return _browser_has_transcript()
-
-    flag = _current_flag()
-    if flag is not None:
-        return flag
-
-    while asyncio.get_running_loop().time() < deadline:
-        await asyncio.sleep(0.05)
-        flag = _current_flag()
-        if flag is not None:
-            return flag
-    return None
 
 
 # Chat profile: shown as a splash/loading screen while on_chat_start runs.
@@ -416,12 +434,14 @@ async def _start_chat_impl():
         connection_id = str(uuid.uuid4())
         cl.user_session.set("connection_id", connection_id)
 
-    # Attempt to recover a persistent session_id if we have an authenticated user.
-    # This ensures that if the app restarts, we can resume the same session
-    # instead of generating a new one (which leads to duplicate scenario cards).
+    # Use the Chainlit thread id as the backend session id for new conversations.
+    # With a Chainlit data layer, the frontend can resume this thread after a
+    # refresh or Cloud Run restart, and the backend uses the same durable key.
     user_identifier = app_user.identifier if app_user else None
+    thread_id = getattr(getattr(cl_context, "session", None), "thread_id", None)
     session_id = cl.user_session.get("session_id")
     preexisting_history = cl.user_session.get("history") or []
+    replay_existing_history = False
 
     # If the user explicitly requested a new chat (e.g. via cl.on_chat_start after a reload)
     # or if we don't have a session_id, we create a fresh one.
@@ -433,11 +453,19 @@ async def _start_chat_impl():
     # the Chainlit user_session in most cases, or at least start a fresh on_chat_start.
     
     if not session_id:
-        # If we have a user, try to recover their last session ID.
-        # This is critical for stability across server restarts.
-        if user_identifier:
-            session_id = _get_persistent_session_id(user_identifier)
-            print(f"DEBUG: Recovered persistent session_id for {user_identifier}: {session_id}")
+        if settings.FIXED_SESSION_ID or settings.SESSION_ID:
+            session_id = settings.FIXED_SESSION_ID or settings.SESSION_ID
+            print(f"DEBUG: Using configured session_id: {session_id}")
+        elif user_identifier and (last_session_id := _read_persistent_session_id(user_identifier)):
+            session_id = last_session_id
+            replay_existing_history = bool(thread_id and thread_id != session_id)
+            print(
+                "DEBUG: Using persisted user session_id "
+                f"{session_id} for new Chainlit thread {thread_id}"
+            )
+        elif thread_id:
+            session_id = thread_id
+            print(f"DEBUG: Using Chainlit thread_id as session_id: {session_id}")
         else:
             # Fallback for anonymous users or first-time loads
             session_id = str(uuid.uuid4())
@@ -450,6 +478,7 @@ async def _start_chat_impl():
         # We already have an active session_id in this user_session.
         # We keep it to avoid generating a duplicate scenario card.
         pass
+    await _bind_chainlit_thread(thread_id, session_id, app_user)
 
     # 2. Attempt to fetch existing backend history for this session
     existing_hist = []
@@ -462,7 +491,14 @@ async def _start_chat_impl():
     except Exception:
         existing_hist = []
 
-    browser_has_transcript = await _wait_for_browser_transcript_flag(timeout_s=1.0)
+    print(
+        "DEBUG: start_chat inputs "
+        f"session_id={session_id} "
+        f"thread_id={thread_id} "
+        f"preexisting_history={len(preexisting_history)} "
+        f"existing_hist={len(existing_hist)} "
+        f"replay_existing_history={replay_existing_history}"
+    )
 
     # 3. Recover persona name from history if it exists
     recovered_name = None
@@ -560,6 +596,25 @@ async def _start_chat_impl():
             user_card_lines.append("\n(Note: You might want to mention vaccines during this visit.)")
         user_card = "\n".join(user_card_lines)
 
+        try:
+            user = cl.user_session.get("user")
+            user_info = {"identifier": user.identifier} if user else None
+            async with httpx.AsyncClient(timeout=settings.CHAINLIT_HTTP_TIMEOUT) as client:
+                await client.post(
+                    f"{_base_url()}/session",
+                    json={
+                        "sessionId": session_id,
+                        "connectionId": connection_id,
+                        "character": character_detailed,
+                        "scene": scene_detailed,
+                        "initialCard": user_card,
+                        "userInfo": user_info,
+                        "force": force_takeover,
+                    },
+                )
+        except Exception as e:
+            print(f"DEBUG: Failed to persist fallback scenario for {session_id}: {e}")
+
     # Set state for the session
     cl.user_session.set("character", character_detailed)
     cl.user_session.set("scene", scene_detailed)
@@ -568,53 +623,12 @@ async def _start_chat_impl():
     if not preexisting_history:
         cl.user_session.set("history", [])
 
-    # If there is prior history on the backend, mirror it into the UI and prepend the scenario summary for context
+    # If there is prior backend history, keep local state aligned but do not
+    # repaint the transcript. Chainlit's data layer owns UI restoration.
     if existing_hist:
-        # If the history DOES NOT contain a scenario card, we show it at the TOP before replaying history.
-        # We also check for Parent: and Persona: for legacy compatibility.
-        has_card_in_history = any(
-            normalize_role(msg.get("role")) in {ROLE_SYSTEM, ROLE_ASSISTANT}
-            and is_scenario_card(msg.get("content"))
-            for msg in existing_hist
-        )
-        if preexisting_history:
-            try:
-                cl.user_session.set("history", existing_hist)
-            except Exception:
-                pass
-
-            try:
-                if "Scenario details (use these exact names; do not change them):" not in (cl.user_session.get("scene") or ""):
-                    prev_scene = cl.user_session.get("scene")
-                    card_to_inject = user_card
-                    for msg in existing_hist:
-                        content = msg.get("content") or ""
-                        if normalize_role(msg.get("role")) in {ROLE_SYSTEM, ROLE_ASSISTANT} and is_scenario_card(content):
-                            card_to_inject = content
-                            break
-                    scenario_scene_suffix = (
-                        "\n\nScenario details (use these exact names; do not change them):\n" + card_to_inject +
-                        "\n\nIf asked for names, respond naturally but keep the same names."
-                    )
-                    new_scene = (prev_scene + scenario_scene_suffix) if prev_scene else scenario_scene_suffix
-                    cl.user_session.set("scene", new_scene)
-            except Exception:
-                pass
-            return True
-
-        if browser_has_transcript is not True and not has_card_in_history:
-            try:
-                # Use the user_card (scenario briefing) returned from backend or generated locally
-                card = user_card
-                # Render a scenario summary card at the top (not persisted anew) for consistent context after refresh
-                await cl.Message(content=_render_scenario_card_html(card), author=AUTHOR_SYSTEM).send()
-            except Exception:
-                pass
-
         try:
-            # Important: we update the local history session state to match backend
             cl.user_session.set("history", existing_hist)
-            if browser_has_transcript is not True:
+            if replay_existing_history:
                 await _replay_history(existing_hist)
         except Exception:
             pass
@@ -637,6 +651,10 @@ async def _start_chat_impl():
                 cl.user_session.set("scene", new_scene)
         except Exception:
             pass
+        if replay_existing_history:
+            print(f"DEBUG: start_chat replayed {len(existing_hist)} history items into fresh Chainlit thread")
+        else:
+            print(f"DEBUG: start_chat restored backend state without replaying {len(existing_hist)} history items")
         return True
 
     # Otherwise, present a single scenario card as before
@@ -811,7 +829,6 @@ if is_oauth_enabled or has_auth_secret or settings.ENABLE_PASSWORD_AUTH:
             _clear_persistent_session_id(app_user.identifier)
         cl.user_session.set("session_id", None)
         cl.user_session.set("history", [])
-        cl.user_session.set("browser_has_transcript", False)
         await cl.send_window_message("on_logout")
         return response
 
@@ -931,24 +948,18 @@ async def on_window_message(message: str):
         cl.user_session.set("session_id", None)
         cl.user_session.set("history", [])
         cl.user_session.set("session_ended", False)
-        cl.user_session.set("browser_has_transcript", False)
-        
-        # Also clear the persistent session id for this user if they are logged in.
-        # We generate a NEW one and write it so it doesn't just recover the old one.
+
+        # Clear the legacy user-level session pointer. New conversations now use
+        # the Chainlit thread id as the backend session id.
         app_user = cl.user_session.get("user")
         if app_user and app_user.identifier:
-            import uuid
-            new_id = str(uuid.uuid4())
-            _write_persistent_session_id(new_id, app_user.identifier)
-            print(f"DEBUG: Reset persistent session_id for {app_user.identifier} to {new_id}")
-            
+            _clear_persistent_session_id(app_user.identifier)
+
         # We don't need to manually call start_chat as the browser will reload
     elif data.get("type") == "on_logout":
         # Ensure on_logout window message is forwarded to the parent window
         # so that run_app.py can redirect to the login screen.
         await cl.send_window_message("on_logout")
-    elif data.get("type") == "browser_state":
-        cl.user_session.set("browser_has_transcript", bool(data.get("hasTranscript")))
 
 
 async def _submit_report(reason: str):
@@ -1196,35 +1207,26 @@ async def _handle_message_impl(message: cl.Message):
 
 
 @cl.on_chat_resume
-async def resume_chat():
+async def resume_chat(thread: dict | None = None):
     try:
-        return await _resume_chat_impl()
+        return await _resume_chat_impl(thread)
     except Exception as e:
         await _report_error_silently(e, "resume_chat")
         await cl.Message("An error occurred while resuming the chat. The issue has been reported.").send()
 
-async def _resume_chat_impl():
+async def _resume_chat_impl(thread: dict | None = None):
     """
-    When an existing session is resumed, display the conversation. If local
-    history is empty (e.g., after a server restart), fetch it from the backend
-    using the persistent session id and replay it, avoiding duplicate scenario cards.
+    Rehydrate server-side state for a Chainlit-resumed thread.
+
+    Chainlit emits the stored thread steps after this callback returns, so this
+    function must not send or replay messages. Its job is only to reconnect the
+    Chainlit thread to the backend session/persona state used for new turns.
     """
-    # Keep the same session id established in start_chat
-    session_id = cl.user_session.get("session_id") or _get_persistent_session_id()
+    metadata = (thread or {}).get("metadata") or {}
+    thread_id = (thread or {}).get("id") or getattr(getattr(cl_context, "session", None), "thread_id", None)
+    session_id = cl.user_session.get("session_id") or metadata.get("session_id") or thread_id or _get_persistent_session_id()
     cl.user_session.set("session_id", session_id)
 
-    # Ensure persona/scene keys exist
-    if cl.user_session.get("character") is None:
-        cl.user_session.set("character", settings.CHARACTER_SYSTEM or (DEFAULT_CHARACTER or None))
-    if cl.user_session.get("scene") is None:
-        cl.user_session.set("scene", settings.SCENE_OBJECTIVES or (DEFAULT_SCENE or None))
-
-    # If we already have local history, just replay it
-    history = cl.user_session.get("history") or []
-    if history:
-        return True
-
-    # Otherwise, try to fetch history from the backend for this session
     def _base_url() -> str:
         url = get_backend_url()
         return url[:-5] if url.endswith("/chat") else url
@@ -1233,6 +1235,35 @@ async def _resume_chat_impl():
     try:
         timeout = settings.CHAINLIT_HTTP_TIMEOUT
         async with httpx.AsyncClient(timeout=timeout) as client:
+            connection_id = cl.user_session.get("connection_id")
+            if not connection_id:
+                connection_id = str(uuid.uuid4())
+                cl.user_session.set("connection_id", connection_id)
+
+            user = cl.user_session.get("user")
+            user_info = {"identifier": user.identifier} if user else None
+            metadata_history = metadata.get("history") if isinstance(metadata.get("history"), list) else []
+            init = await client.post(
+                f"{_base_url()}/session",
+                json={
+                    "sessionId": session_id,
+                    "connectionId": connection_id,
+                    "character": metadata.get("character"),
+                    "scene": metadata.get("scene"),
+                    "initialCard": _scenario_card_from_history(metadata_history),
+                    "userInfo": user_info,
+                },
+            )
+            if init.status_code == 200 and init.headers.get("content-type", "").startswith("application/json"):
+                data = init.json() or {}
+                if data.get("alreadyActive"):
+                    await on_window_message(json.dumps({"type": "on_duplicate_tab"}))
+                    return True
+                if data.get("character"):
+                    cl.user_session.set("character", data.get("character"))
+                if data.get("scene"):
+                    cl.user_session.set("scene", data.get("scene"))
+
             r = await client.get(f"{_base_url()}/history", params={"sessionId": session_id})
             if r.status_code == 200 and r.headers.get("content-type", "").startswith("application/json"):
                 fetched = (r.json() or {}).get("history") or []
@@ -1241,8 +1272,16 @@ async def _resume_chat_impl():
 
     if fetched:
         cl.user_session.set("history", fetched)
-        await _replay_history(fetched)
-        return
+    else:
+        cl.user_session.set("history", cl.user_session.get("history") or [])
 
-    # Nothing to replay; do nothing and wait for the next message
-    return
+    if cl.user_session.get("character") is None:
+        cl.user_session.set("character", settings.CHARACTER_SYSTEM or (DEFAULT_CHARACTER or None))
+    if cl.user_session.get("scene") is None:
+        cl.user_session.set("scene", settings.SCENE_OBJECTIVES or (DEFAULT_SCENE or None))
+
+    print(
+        "DEBUG: resume_chat restored server state "
+        f"session_id={session_id} thread_id={thread_id} history={len(fetched)}"
+    )
+    return True

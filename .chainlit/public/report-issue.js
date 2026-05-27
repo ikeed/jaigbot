@@ -14,21 +14,6 @@
   if (document.getElementById("sidebar-report-button")) return;
 
   /* ── splash screen tweaks: enlarge icon & hide composer ──────── */
-  var TRANSCRIPT_COOKIE = "aims_has_transcript";
-
-  function setCookie(name, value) {
-    document.cookie = name + "=" + encodeURIComponent(value) + "; path=/; SameSite=Lax";
-  }
-
-  function clearCookie(name) {
-    document.cookie = name + "=; Max-Age=0; path=/; SameSite=Lax";
-  }
-
-  function reportTranscriptState() {
-    var hasTranscript = !!document.querySelector('[data-step-type], [data-author]');
-    setCookie(TRANSCRIPT_COOKIE, hasTranscript ? "1" : "0");
-    window.postMessage(JSON.stringify({ type: "browser_state", hasTranscript: hasTranscript }), "*");
-  }
 
   function tweakSplash() {
     // Enlarge the chat profile icon (find by src containing "aimsbot")
@@ -64,7 +49,6 @@
             var hasMsg = document.querySelector('[data-step-type], [data-author]');
             if (hasMsg) {
               form.style.display = "";
-              reportTranscriptState();
               obs.disconnect();
             }
           });
@@ -73,7 +57,6 @@
       });
     }
 
-    reportTranscriptState();
   }
 
   // Run immediately and retry (Chainlit renders asynchronously)
@@ -201,7 +184,6 @@
     false,
     "Confirm",
     function() {
-      clearCookie(TRANSCRIPT_COOKIE);
       // 1. Notify the backend to clear the session state for this user_session
       var payload = JSON.stringify({ type: "new_chat" });
       window.postMessage(payload, "*");
@@ -222,7 +204,6 @@
     false,
     "Logout",
     function() {
-      clearCookie(TRANSCRIPT_COOKIE);
       fetch("/chat/logout", {
         method: "POST",
         credentials: "include",

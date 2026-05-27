@@ -39,7 +39,8 @@ class InMemoryStore:
                     if isinstance(v, dict)
                 }
                 for value in self._store.values():
-                    value["active_connections"] = []
+                    if "history" in value:
+                        value["active_connections"] = []
         except FileNotFoundError:
             return
         except Exception:

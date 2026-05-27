@@ -25,15 +25,21 @@ pip install chainlit httpx
 
 ## Session persistence (refresh‑safe)
 - Chainlit runs server‑side and calls the backend via httpx, so browser cookies issued by the backend are not used in this path.
-- To keep your conversation across browser refreshes, the Chainlit app persists a session id in a local file `.chainlit/session_id` and sends it with every /chat call.
+- Chainlit uses a custom data layer backed by the app memory store. This lets Chainlit restore the visible thread after browser refreshes and Cloud Run instance restarts.
+- For new conversations, the Chainlit thread id is also used as the backend `sessionId`, so the UI thread and backend persona/history share one durable key.
+- Local development can persist this store with:
+  ```bash
+  export MEMORY_PERSIST_PATH=.chainlit/session_memory.json
+  ```
+- Production Cloud Run deployments should use `MEMORY_BACKEND=redis` with Google Memorystore so multiple instances share the same Chainlit thread and backend session state.
 - You can override the persisted id:
   ```bash
   export FIXED_SESSION_ID=my-stable-id   # or SESSION_ID
   ```
 
 Caveats for multi‑user deployments:
-- The simple persisted id approach will make all users share the same backend session.
-- For per‑user isolation, enable authentication in Chainlit and derive a unique, persistent session id per user (e.g., from a login or signed token).
+- Do not use `FIXED_SESSION_ID` or `SESSION_ID` in multi-user deployments; those intentionally force a shared backend session id.
+- Normal authenticated Chainlit use isolates threads by Chainlit user and thread id.
 
 ## Tuning long responses and timeouts
 - Increase output token cap:

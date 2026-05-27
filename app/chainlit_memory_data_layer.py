@@ -1,0 +1,245 @@
+from __future__ import annotations
+
+import hashlib
+import uuid
+from typing import Any, Dict, List, Optional
+
+from chainlit.data.base import BaseDataLayer
+from chainlit.types import Feedback, PageInfo, PaginatedResponse, Pagination, ThreadDict, ThreadFilter
+from chainlit.user import PersistedUser, User
+from chainlit.utils import utc_now
+
+
+USER_KEY_PREFIX = "chainlit:user:"
+THREAD_KEY_PREFIX = "chainlit:thread:"
+
+
+def _user_id(identifier: str) -> str:
+    return hashlib.sha256(identifier.encode("utf-8")).hexdigest()
+
+
+def _user_key(identifier: str) -> str:
+    return f"{USER_KEY_PREFIX}{identifier}"
+
+
+def _thread_key(thread_id: str) -> str:
+    return f"{THREAD_KEY_PREFIX}{thread_id}"
+
+
+def _step_time(step: Dict[str, Any]) -> str:
+    return step.get("start") or step.get("createdAt") or step.get("end") or ""
+
+
+def _ordered_steps(steps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Return steps in the order Chainlit's resume renderer expects.
+
+    Chainlit can persist run steps after the messages created inside those runs.
+    On resume, child messages need their parent run available first or the UI can
+    hide them. Sorting by step start/created time restores that relationship.
+    """
+    return sorted(steps or [], key=lambda step: (_step_time(step), step.get("id") or ""))
+
+
+class MemoryDataLayer(BaseDataLayer):
+    """Chainlit data layer backed by the app memory store.
+
+    The app already supports process-local memory, file-backed local memory, and
+    Redis/Memorystore through one small dict-like abstraction. Reusing that store
+    lets Chainlit persist threads across Cloud Run instance churn without adding
+    another database just for UI transcript restoration.
+    """
+
+    def __init__(self, store: Any) -> None:
+        self.store = store
+
+    def _get(self, key: str) -> Dict[str, Any] | None:
+        value = self.store.get(key)
+        return dict(value) if isinstance(value, dict) else None
+
+    def _put(self, key: str, value: Dict[str, Any]) -> None:
+        self.store[key] = value
+
+    def _ensure_thread(self, thread_id: str) -> Dict[str, Any]:
+        key = _thread_key(thread_id)
+        thread = self._get(key)
+        if thread:
+            thread.setdefault("steps", [])
+            thread.setdefault("elements", [])
+            thread.setdefault("metadata", {})
+            thread["steps"] = _ordered_steps(thread["steps"])
+            return thread
+
+        thread = {
+            "id": thread_id,
+            "createdAt": utc_now(),
+            "name": None,
+            "userId": None,
+            "userIdentifier": None,
+            "tags": None,
+            "metadata": {},
+            "steps": [],
+            "elements": [],
+        }
+        self._put(key, thread)
+        return thread
+
+    def _find_user_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
+        for key, value in self.store.items():
+            if key.startswith(USER_KEY_PREFIX) and value.get("id") == user_id:
+                return value
+        return None
+
+    async def get_user(self, identifier: str) -> Optional[PersistedUser]:
+        user = self._get(_user_key(identifier))
+        if not user:
+            return None
+        return PersistedUser(
+            id=user["id"],
+            createdAt=user["createdAt"],
+            identifier=user["identifier"],
+            display_name=user.get("display_name"),
+            metadata=user.get("metadata") or {},
+        )
+
+    async def create_user(self, user: User) -> Optional[PersistedUser]:
+        existing = await self.get_user(user.identifier)
+        if existing:
+            return existing
+
+        persisted = {
+            "id": _user_id(user.identifier),
+            "createdAt": utc_now(),
+            "identifier": user.identifier,
+            "display_name": user.display_name,
+            "metadata": user.metadata or {},
+        }
+        self._put(_user_key(user.identifier), persisted)
+        return PersistedUser(**persisted)
+
+    async def delete_feedback(self, feedback_id: str) -> bool:
+        return True
+
+    async def upsert_feedback(self, feedback: Feedback) -> str:
+        return feedback.id or str(uuid.uuid4())
+
+    async def create_element(self, element: Any):
+        thread = self._ensure_thread(element.thread_id)
+        elements = [e for e in thread.get("elements", []) if e.get("id") != element.id]
+        elements.append(element.to_dict())
+        thread["elements"] = elements
+        self._put(_thread_key(thread["id"]), thread)
+
+    async def get_element(self, thread_id: str, element_id: str) -> Optional[Dict[str, Any]]:
+        thread = self._get(_thread_key(thread_id))
+        if not thread:
+            return None
+        for element in thread.get("elements", []) or []:
+            if element.get("id") == element_id:
+                return element
+        return None
+
+    async def delete_element(self, element_id: str, thread_id: Optional[str] = None):
+        if not thread_id:
+            return
+        thread = self._get(_thread_key(thread_id))
+        if not thread:
+            return
+        thread["elements"] = [e for e in thread.get("elements", []) if e.get("id") != element_id]
+        self._put(_thread_key(thread_id), thread)
+
+    async def create_step(self, step_dict: Dict[str, Any]):
+        thread_id = step_dict["threadId"]
+        thread = self._ensure_thread(thread_id)
+        steps = [s for s in thread.get("steps", []) if s.get("id") != step_dict.get("id")]
+        steps.append(step_dict)
+        thread["steps"] = _ordered_steps(steps)
+        self._put(_thread_key(thread_id), thread)
+
+    async def update_step(self, step_dict: Dict[str, Any]):
+        await self.create_step(step_dict)
+
+    async def delete_step(self, step_id: str):
+        for key, thread in self.store.items():
+            if not key.startswith(THREAD_KEY_PREFIX):
+                continue
+            thread["steps"] = [s for s in thread.get("steps", []) if s.get("id") != step_id]
+            self._put(key, thread)
+
+    async def get_thread_author(self, thread_id: str) -> str:
+        thread = self._get(_thread_key(thread_id)) or {}
+        return thread.get("userIdentifier") or ""
+
+    async def delete_thread(self, thread_id: str):
+        self.store.pop(_thread_key(thread_id), None)
+
+    async def list_threads(
+        self, pagination: Pagination, filters: ThreadFilter
+    ) -> PaginatedResponse[ThreadDict]:
+        threads: List[ThreadDict] = []
+        for key, value in self.store.items():
+            if not key.startswith(THREAD_KEY_PREFIX):
+                continue
+            if filters.userId and value.get("userId") != filters.userId:
+                continue
+            value = dict(value)
+            value["steps"] = _ordered_steps(value.get("steps", []))
+            threads.append(value)
+
+        threads.sort(key=lambda t: t.get("createdAt") or "", reverse=True)
+        first = pagination.first or len(threads)
+        page = threads[:first]
+        return PaginatedResponse(
+            pageInfo=PageInfo(
+                hasNextPage=len(threads) > len(page),
+                startCursor=page[0]["id"] if page else None,
+                endCursor=page[-1]["id"] if page else None,
+            ),
+            data=page,
+        )
+
+    async def get_thread(self, thread_id: str) -> Optional[ThreadDict]:
+        thread = self._get(_thread_key(thread_id))
+        if not thread:
+            return None
+        thread.setdefault("steps", [])
+        thread.setdefault("elements", [])
+        thread.setdefault("metadata", {})
+        thread["steps"] = _ordered_steps(thread["steps"])
+        return thread
+
+    async def update_thread(
+        self,
+        thread_id: str,
+        name: Optional[str] = None,
+        user_id: Optional[str] = None,
+        metadata: Optional[Dict] = None,
+        tags: Optional[List[str]] = None,
+    ):
+        thread = self._ensure_thread(thread_id)
+        if name is not None:
+            thread["name"] = name
+        if user_id is not None:
+            thread["userId"] = user_id
+            if user := self._find_user_by_id(user_id):
+                thread["userIdentifier"] = user.get("identifier")
+        if metadata is not None:
+            thread["metadata"] = metadata
+        if tags is not None:
+            thread["tags"] = tags
+        self._put(_thread_key(thread_id), thread)
+
+    async def build_debug_url(self) -> str:
+        return ""
+
+    async def close(self) -> None:
+        return None
+
+    async def get_favorite_steps(self, user_id: str) -> List[Dict[str, Any]]:
+        favorites: List[Dict[str, Any]] = []
+        for key, value in self.store.items():
+            if not key.startswith(THREAD_KEY_PREFIX) or value.get("userId") != user_id:
+                continue
+            for step in value.get("steps", []) or []:
+                if (step.get("metadata") or {}).get("favorite"):
+                    favorites.append(step)
+        return favorites
