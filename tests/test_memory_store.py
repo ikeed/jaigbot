@@ -88,3 +88,20 @@ async def test_chainlit_memory_data_layer_lists_user_threads_only():
     result = await layer.list_threads(Pagination(first=10), ThreadFilter(userId=user_a.id))
 
     assert [thread["id"] for thread in result.data] == ["thread-a"]
+
+
+@pytest.mark.asyncio
+async def test_chainlit_memory_data_layer_hides_alias_threads():
+    store = InMemoryStore()
+    layer = MemoryDataLayer(store)
+
+    user = await layer.create_user(User(identifier="doctor@example.com"))
+    other_user = await layer.create_user(User(identifier="other@example.com"))
+    await layer.update_thread("thread-original", user_id=user.id, metadata={"session_id": "thread-original"})
+    await layer.update_thread("thread-alias", user_id=user.id, metadata={"session_id": "thread-original"})
+    await layer.update_thread("other-original", user_id=other_user.id, metadata={"session_id": "other-original"})
+    await layer.update_thread("other-alias", user_id=user.id, metadata={"session_id": "other-original"})
+
+    result = await layer.list_threads(Pagination(first=10), ThreadFilter(userId=user.id))
+
+    assert {thread["id"] for thread in result.data} == {"other-alias", "thread-original"}

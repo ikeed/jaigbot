@@ -12,6 +12,7 @@
 
   /* ── guard against double-init ─────────────────────────────────── */
   if (document.getElementById("sidebar-report-button")) return;
+  var logoutInProgress = false;
 
   /* ── splash screen tweaks: enlarge icon & hide composer ──────── */
 
@@ -140,7 +141,9 @@
 
     document.body.appendChild(modal);
 
-    modal.querySelector(".modal-cancel-btn").addEventListener("click", function () {
+    modal.querySelector(".modal-cancel-btn").addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
       modal.style.display = "none";
     });
 
@@ -148,7 +151,10 @@
       if (e.target === modal) modal.style.display = "none";
     });
 
-    modal.querySelector(".modal-confirm-btn").addEventListener("click", function () {
+    modal.querySelector(".modal-confirm-btn").addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
       var textarea = modal.querySelector("textarea");
       var value = textarea ? textarea.value.trim() : "";
       if (showTextarea && !value) {
@@ -204,6 +210,14 @@
     false,
     "Logout",
     function() {
+      if (logoutInProgress) return;
+      logoutInProgress = true;
+      var confirmBtn = logoutModal.querySelector(".modal-confirm-btn");
+      if (confirmBtn) {
+        confirmBtn.disabled = true;
+        confirmBtn.style.cursor = "default";
+        confirmBtn.textContent = "Logging out";
+      }
       fetch("/chat/logout", {
         method: "POST",
         credentials: "include",
@@ -218,6 +232,12 @@
       });
     }
   );
+
+  function showLogoutModal() {
+    if (logoutInProgress) return;
+    if (logoutModal.style.display === "flex") return;
+    logoutModal.style.display = "flex";
+  }
 
   /* ── intercept new chat ────────────────────────────────────────── */
   function interceptNewChat() {
@@ -273,7 +293,7 @@
         e.stopPropagation();
         e.stopImmediatePropagation();
 
-        logoutModal.style.display = "flex";
+        showLogoutModal();
       }, true);
 
       btn._aimsIntercepted = true;
@@ -304,7 +324,7 @@
       e.stopPropagation();
       e.stopImmediatePropagation();
       
-      logoutModal.style.display = "flex";
+      showLogoutModal();
       
       // Mark as intercepted to avoid double modals if the interval also finds it
       target._aimsIntercepted = true;

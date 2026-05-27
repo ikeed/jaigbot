@@ -40,6 +40,11 @@ def _ordered_steps(steps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return sorted(steps or [], key=lambda step: (_step_time(step), step.get("id") or ""))
 
 
+def _canonical_session_id(thread: Dict[str, Any]) -> str:
+    metadata = thread.get("metadata") or {}
+    return metadata.get("session_id") or thread.get("id")
+
+
 class MemoryDataLayer(BaseDataLayer):
     """Chainlit data layer backed by the app memory store.
 
@@ -176,10 +181,21 @@ class MemoryDataLayer(BaseDataLayer):
         self, pagination: Pagination, filters: ThreadFilter
     ) -> PaginatedResponse[ThreadDict]:
         threads: List[ThreadDict] = []
+        canonical_thread_ids = {
+            value.get("id")
+            for key, value in self.store.items()
+            if key.startswith(THREAD_KEY_PREFIX)
+            and value.get("id") == _canonical_session_id(value)
+            and (not filters.userId or value.get("userId") == filters.userId)
+        }
         for key, value in self.store.items():
             if not key.startswith(THREAD_KEY_PREFIX):
                 continue
             if filters.userId and value.get("userId") != filters.userId:
+                continue
+            thread_id = value.get("id")
+            session_id = _canonical_session_id(value)
+            if session_id != thread_id and session_id in canonical_thread_ids:
                 continue
             value = dict(value)
             value["steps"] = _ordered_steps(value.get("steps", []))
