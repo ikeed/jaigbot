@@ -135,10 +135,24 @@ resource "google_storage_bucket_iam_member" "runtime_storage_user" {
   member = "serviceAccount:${google_service_account.runtime.email}"
 }
 
+resource "google_storage_bucket_iam_member" "sessions_public_viewer" {
+  count  = var.sessions_bucket_public_read ? 1 : 0
+  bucket = google_storage_bucket.sessions.name
+  role   = "roles/storage.objectViewer"
+  member = "allUsers"
+}
+
 resource "google_storage_bucket_iam_member" "runtime_reports_storage_user" {
   bucket = google_storage_bucket.reports.name
   role   = "roles/storage.objectUser"
   member = "serviceAccount:${google_service_account.runtime.email}"
+}
+
+resource "google_storage_bucket_iam_member" "reports_public_viewer" {
+  count  = var.reports_bucket_public_read ? 1 : 0
+  bucket = google_storage_bucket.reports.name
+  role   = "roles/storage.objectViewer"
+  member = "allUsers"
 }
 
 # Project-level IAM for deployer SA
