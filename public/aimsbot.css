@@ -1,71 +1,163 @@
 /* AIMSBot custom UI tweaks for Chainlit (v2.11.1)
-   Role-based bubble styling via [data-author] attributes injected by report-issue.js.
-   Only override background-color, accent border, and color.
-   Do NOT set padding / border-radius / box-shadow — Chainlit handles those.
+   report-issue.js tags message rows with data-author and aims-* classes so
+   these selectors can avoid Chainlit's action buttons and layout controls.
 */
 
 :root {
-  --coach-bg: #fff7e6;      /* soft amber */
-  --coach-border: #ffb020;  /* amber */
-  --coach-text: #8a5a00;
+  --coach-bg: #fff7e6;
+  --coach-border: #ffb020;
+  --coach-text: #704600;
 
-  --doctor-bg: #e6ffed;     /* light green background */
-  --doctor-accent: #27c499; /* teal */
+  --doctor-bg: #e6ffed;
+  --doctor-accent: #27c499;
+  --doctor-border: #7bdcb5;
+  --doctor-text: #123528;
 
-  --assistant-bg: #e6f0ff;      /* light blue background */
-  --assistant-border: #5dadec;  /* blue accent */
-  --assistant-text: #004080;
+  --assistant-bg: #e6f0ff;
+  --assistant-border: #5dadec;
+  --assistant-text: #073763;
+
+  --system-bg: #f5f7fb;
+  --system-accent: #7b8794;
+  --system-border: #c9d2df;
+  --system-text: #263241;
+
+  --aims-bubble-radius: 14px;
+  --aims-bubble-padding-y: 10px;
+  --aims-bubble-padding-x: 14px;
 }
 
-/* --- 1. Role-Based Bubble Styling --- */
-/* data-author is set on the message row wrapper by report-issue.js.  */
-/* We target all descendant divs broadly — the Chainlit bubble is one */
-/* of them. Only bg/color/border overrides; no padding/radius.        */
+/* --- Role-Based Bubble Styling --- */
 
-/* 1.1 Assistant + System — Light Blue */
-[data-author="Assistant"] > div > div,
-[data-author="System"] > div > div {
+.aims-message-bubble {
+  border-radius: var(--aims-bubble-radius) !important;
+  padding: var(--aims-bubble-padding-y) var(--aims-bubble-padding-x) !important;
+  line-height: 1.55 !important;
+  box-shadow: none !important;
+}
+
+.aims-message-bubble .prose,
+.aims-message-bubble [role="article"] {
+  color: inherit !important;
+}
+
+[data-author="Doctor"] .aims-message-bubble {
+  background-color: var(--doctor-bg) !important;
+  border: 1px solid var(--doctor-border) !important;
+  border-right: 4px solid var(--doctor-accent) !important;
+  color: var(--doctor-text) !important;
+}
+
+.ai-message[data-author="Assistant"] .aims-message-bubble {
   background-color: var(--assistant-bg) !important;
+  border: 1px solid var(--assistant-border) !important;
   border-left: 4px solid var(--assistant-border) !important;
   color: var(--assistant-text) !important;
 }
 
-/* 1.2 Doctor (User) — Light Green */
-[data-author="Doctor"] > div > div,
-[data-author="Doctor"] > div:first-child {
-  background-color: var(--doctor-bg) !important;
-  border-top: 2px solid var(--doctor-accent) !important;
-  color: #1a2a3a !important;
-}
-
-/* 1.3 Coach — Soft Amber */
-[data-author="Coach"] > div > div {
+.ai-message[data-author="Coach"] .aims-message-bubble {
   background-color: var(--coach-bg) !important;
+  border: 1px solid var(--coach-border) !important;
   border-left: 4px solid var(--coach-border) !important;
   color: var(--coach-text) !important;
 }
 
-/* Coach HTML block (inline content from Python — .aims-coach-bubble) */
-.aims-coach-bubble {
-  background-color: var(--coach-bg) !important;
-  border-left: 4px solid var(--coach-border) !important;
-  color: var(--coach-text) !important;
+.ai-message[data-author="System"] .aims-message-bubble {
+  background-color: var(--system-bg) !important;
+  border: 1px solid var(--system-border) !important;
+  border-left: 4px solid var(--system-accent) !important;
+  color: var(--system-text) !important;
 }
 
-/* Coach Header styling */
-.aims-coach-header {
+/* Match the right edge of non-user bubbles to Doctor bubbles, which reserve
+   space for the injected Doctor avatar on the right. */
+.ai-message[data-author="Assistant"],
+.ai-message[data-author="Coach"],
+.ai-message[data-author="System"] {
+  padding-right: 28px !important;
+  box-sizing: border-box !important;
+}
+
+/* Older sessions may contain an inline-styled scenario card inside the System
+   message. Flatten that legacy inner frame so it does not render as a
+   bubble-within-a-bubble. */
+.ai-message[data-author="System"] .aims-message-bubble .prose > div[style*="background"] {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.aims-scenario-title {
+  color: #1d4ed8 !important;
   font-weight: 700 !important;
-  margin-bottom: 4px !important;
-  display: flex !important;
-  align-items: center !important;
+  margin-bottom: 0.75rem !important;
 }
 
-.aims-coach-header::before {
-  content: "🧭 " !important;
-  margin-right: 4px !important;
+.aims-scenario-title::before {
+  content: "📋 ";
 }
 
-/* --- 2. Miscellaneous UI Fixes --- */
+.aims-scenario-line {
+  margin-bottom: 0.45rem !important;
+}
+
+.aims-scenario-label {
+  font-weight: 700 !important;
+  color: #374151 !important;
+}
+
+.aims-scenario-note {
+  color: #6b7280 !important;
+  font-style: italic !important;
+}
+
+.aims-message-bubble ul {
+  margin: 0.5rem 0 0.25rem 1rem !important;
+  padding-left: 0.75rem !important;
+}
+
+.aims-message-bubble li {
+  margin-top: 0.25rem !important;
+}
+
+.aims-message-bubble strong:first-child {
+  display: inline-block !important;
+  margin-bottom: 0.25rem !important;
+}
+
+/* Keep Chainlit's message action buttons, including copy-to-clipboard, neutral. */
+.ai-message [class*="items-center"] > button {
+  background-color: transparent !important;
+  border: none !important;
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.ai-message [class*="items-center"] > button:hover {
+  background-color: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
+}
+
+.aims-doctor-avatar {
+  display: inline-flex !important;
+  width: 20px !important;
+  height: 20px !important;
+  margin-top: 3px !important;
+  margin-left: 8px !important;
+  align-self: flex-start !important;
+  flex-shrink: 0 !important;
+  overflow: hidden !important;
+  border-radius: 9999px !important;
+}
+
+.aims-doctor-avatar img {
+  width: 100% !important;
+  height: 100% !important;
+  background: transparent !important;
+}
+
+/* --- Miscellaneous UI Fixes --- */
 
 #readme-button {
   display: none !important;
@@ -80,6 +172,7 @@ img[alt="AIMSBot"] {
   width: auto !important;
   padding-right: 12px !important;
 }
+
 #new-chat-button::after {
   content: "New Scenario" !important;
   margin-left: 4px !important;

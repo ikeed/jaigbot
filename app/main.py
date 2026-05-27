@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .vertex import VertexClient, VertexAIError
+from .chat_roles import ROLE_ASSISTANT, ROLE_SYSTEM, is_scenario_card, normalize_role
 
 # Lazy, cached Vertex client per (project, region, model, class) to avoid re-initializing
 # a new SDK client on every request while still allowing tests to monkeypatch VertexClient.
@@ -714,8 +715,8 @@ async def init_session(body: SessionInitRequest):
                         persona_name = line.split("Specific Persona:")[1].strip()
                         break
                 card_content = f"Person: {persona_name}\n(Scenario initialized)"
-            mem["history"].append({"role": "assistant", "content": card_content})
-            mem["full_history"].append({"role": "assistant", "content": card_content})
+            mem["history"].append({"role": ROLE_SYSTEM, "content": card_content})
+            mem["full_history"].append({"role": ROLE_SYSTEM, "content": card_content, "time": now})
             
         _MEMORY_STORE[sid] = mem
     else:
@@ -742,8 +743,8 @@ async def init_session(body: SessionInitRequest):
                             break
                     card_content = f"Person: {persona_name}\n(Scenario initialized)"
                 
-                mem["history"].append({"role": "assistant", "content": card_content})
-                mem["full_history"].append({"role": "assistant", "content": card_content})
+                mem["history"].append({"role": ROLE_SYSTEM, "content": card_content})
+                mem["full_history"].append({"role": ROLE_SYSTEM, "content": card_content, "time": now})
 
         mem.setdefault("full_history", [])
         mem.setdefault("session_started", now)
@@ -793,7 +794,15 @@ async def init_session(body: SessionInitRequest):
         "alreadyActive": already_active,
         "character": mem.get("character"),
         "scene": mem.get("scene"),
-        "initialCard": next((m["content"] for m in mem["history"] if m.get("role") == "assistant" and ("Person: " in m["content"] or "Persona: " in m["content"] or "Parent: " in m["content"] or "Parent/Patient: " in m["content"])), initial_card)
+        "initialCard": next(
+            (
+                m["content"]
+                for m in mem["history"]
+                if normalize_role(m.get("role")) in {ROLE_SYSTEM, ROLE_ASSISTANT}
+                and is_scenario_card(m.get("content"))
+            ),
+            initial_card,
+        )
     }
 
 

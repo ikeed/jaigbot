@@ -18,38 +18,61 @@
   /* We inject data-author on the message row wrapper so CSS can       */
   /* target [data-author="X"] descendants for role-based styling.      */
 
-  function injectDataAuthors() {
-    // 1. Tag messages that have avatars (Assistant, Coach, System)
-    document.querySelectorAll('img[alt^="Avatar for "]').forEach(function (img) {
-      var author = img.alt.replace("Avatar for ", "").trim();
-      if (!author || author === "default") return;
-
-      var el = img.parentElement;
-      for (var i = 0; i < 6 && el; i++) {
-        if (el === document.body) break;
-        if (el.getAttribute("data-author") === author) break;
-        if (el.children && el.children.length >= 2 && el.tagName === "DIV") {
-          el.setAttribute("data-author", author);
-          break;
-        }
-        el = el.parentElement;
-      }
-    });
-
-    // 2. Tag user/Doctor messages (no avatar, right-aligned bubbles)
-    var tagged = document.querySelector('[data-author]');
-    if (tagged && tagged.parentElement) {
-      var list = tagged.parentElement;
-      Array.from(list.children).forEach(function (child) {
-        if (child.getAttribute('data-author')) return;
-        if (child.tagName !== 'DIV') return;
-        // Skip empty / non-message elements
-        if (!child.textContent || child.textContent.trim().length === 0) return;
-        // Skip elements that are clearly not messages (very small, no block children)
-        if (!child.querySelector('div, p')) return;
-        child.setAttribute('data-author', 'Doctor');
-      });
+  function tagAiMessage(message) {
+    var author = message.getAttribute("data-author");
+    if (!author) {
+      var img = message.querySelector('img[alt^="Avatar for "]');
+      if (img) author = img.alt.replace("Avatar for ", "").trim();
     }
+    if (!author || author === "default") return;
+
+    message.setAttribute("data-author", author);
+    if (author === "System") {
+      var systemImg = message.querySelector('img[alt="Avatar for System"]');
+      if (systemImg) {
+        systemImg.src = "/public/avatars/system.svg?v=2";
+      }
+    }
+
+    var step = message.closest('[data-step-type]');
+    if (step) {
+      step.setAttribute("data-author", author);
+      step.classList.add("aims-message-row");
+    }
+
+    var content = message.querySelector(".message-content");
+    if (content) {
+      content.classList.add("aims-message-bubble");
+    }
+  }
+
+  function tagDoctorMessage(step) {
+    step.setAttribute("data-author", "Doctor");
+    step.classList.add("aims-message-row");
+
+    var content = step.querySelector(".message-content");
+    if (!content) return;
+
+    var bubble = content.closest(".relative") || content;
+    bubble.classList.add("aims-message-bubble");
+
+    var row = bubble.parentElement;
+    if (!row || row.querySelector(".aims-doctor-avatar")) return;
+
+    var avatarBase = window.location.pathname.indexOf("/chat") === 0 ? "/chat" : "";
+    var avatar = document.createElement("span");
+    avatar.className = "aims-doctor-avatar";
+    avatar.setAttribute("data-state", "closed");
+    avatar.innerHTML = '<img alt="Avatar for Doctor" src="' + avatarBase + '/avatars/Doctor" />';
+    row.appendChild(avatar);
+  }
+
+  function injectDataAuthors() {
+    // Assistant, Coach, and System rows are rendered as .ai-message.
+    document.querySelectorAll(".ai-message").forEach(tagAiMessage);
+
+    // User rows do not include an avatar or data-author in Chainlit 2.11.
+    document.querySelectorAll('[data-step-type="user_message"]').forEach(tagDoctorMessage);
   }
 
   // Run on DOM mutations to catch dynamically added messages
@@ -84,7 +107,7 @@
     // Hide the Chainlit composer until a message appears.
     // Target the specific "Type your message" textarea, NOT our report modal textarea.
     if (!document._aimsComposerHidden) {
-      var textareas = document.querySelectorAll('textarea[placeholder]');
+      const textareas = document.querySelectorAll('textarea[placeholder]');
       textareas.forEach(function (ta) {
         // Skip our own report-issue textarea
         if (ta.id === "report-issue-modal-input") return;
@@ -92,15 +115,15 @@
         if (ta.closest("#report-issue-modal")) return;
 
         // Find the composer form wrapper
-        var form = ta.closest("form");
+        const form = ta.closest("form");
         if (form && !form._aimsHidden) {
           form._aimsHidden = true;
           form.style.display = "none";
           document._aimsComposerHidden = form;
 
           // Reveal once the first chat message appears
-          var obs = new MutationObserver(function () {
-            var hasMsg = document.querySelector('[data-step-type], [data-author]');
+          const obs = new MutationObserver(function () {
+            const hasMsg = document.querySelector('[data-step-type], [data-author]');
             if (hasMsg) {
               form.style.display = "";
               obs.disconnect();
@@ -151,7 +174,7 @@
   }
 
   // Poll for header availability
-  var buttonInterval = setInterval(function() {
+  const buttonInterval = setInterval(function () {
     if (document.getElementById("header")) {
       injectButton();
       // We don't clear interval immediately because Chainlit might re-render
@@ -161,7 +184,7 @@
 
   /* ── modal ─────────────────────────────────────────────────────── */
   function createModal(id, title, description, placeholder, showTextarea, confirmText, onConfirm) {
-    var modal = document.createElement("div");
+    const modal = document.createElement("div");
     modal.id = id;
     Object.assign(modal.style, {
       display: "none",
@@ -177,8 +200,8 @@
       fontFamily: "sans-serif",
     });
 
-    var textareaHtml = showTextarea ? 
-      '<textarea id="' + id + '-input" placeholder="' + placeholder + '" style="width:100%;height:100px;margin:12px 0;padding:8px;border:1px solid #999;border-radius:4px;resize:none;font-size:14px;color:#1a1a1a;background:#fff"></textarea>' : '';
+    const textareaHtml = showTextarea ?
+        '<textarea id="' + id + '-input" placeholder="' + placeholder + '" style="width:100%;height:100px;margin:12px 0;padding:8px;border:1px solid #999;border-radius:4px;resize:none;font-size:14px;color:#1a1a1a;background:#fff"></textarea>' : '';
 
     modal.innerHTML =
       '<div style="background:#ffffff;padding:24px;border-radius:8px;width:400px;box-shadow:0 4px 12px rgba(0,0,0,0.15)">' +

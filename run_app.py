@@ -254,9 +254,8 @@ async def duplicate_tab_page(request: Request):
     """
     return HTMLResponse(content=html_content)
 
-# Serve static assets (SVGs, CSS, JS) at /public so that inline HTML
-# references like /public/doctor.svg resolve correctly even though
-# Chainlit is mounted at /chat (which serves them at /chat/public/).
+# Serve static assets (CSS, JS, avatars, images) at /public so references
+# resolve correctly even though Chainlit is mounted at /chat.
 if os.path.exists("public"):
     app.mount("/public", StaticFiles(directory="public"), name="public-static")
 elif os.path.exists(".chainlit/public"):

@@ -1,6 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app, _MEMORY_STORE
+from app.chat_roles import ROLE_SYSTEM
 
 client = TestClient(app)
 
@@ -36,6 +37,7 @@ def test_init_session_backend_persona():
     assert mem["character"] == data["character"]
     assert mem["scene"] == data["scene"]
     assert len(mem["history"]) == 1
+    assert mem["history"][0]["role"] == ROLE_SYSTEM
     assert mem["history"][0]["content"] == data["initialCard"]
 
 def test_init_session_persists_across_calls():
@@ -78,7 +80,7 @@ def test_init_session_does_not_reseed_if_history_exists():
     mem = _MEMORY_STORE[sid]
     assert len(mem["history"]) == 2
     assert mem["history"][1]["content"] == "Hello"
-    assert mem["history"][0]["role"] == "assistant" # Scenario card
+    assert mem["history"][0]["role"] == ROLE_SYSTEM # Scenario card
 
 def test_init_session_already_active():
     sid = "test-sid-active"

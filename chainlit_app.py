@@ -25,6 +25,19 @@ import httpx
 from fastapi import Request, Response
 import chainlit as cl
 from chainlit.input_widget import TextInput
+from app.chat_roles import (
+    AUTHOR_ASSISTANT,
+    AUTHOR_COACH,
+    AUTHOR_DOCTOR,
+    AUTHOR_SYSTEM,
+    ROLE_ASSISTANT,
+    ROLE_COACH,
+    ROLE_SYSTEM,
+    ROLE_USER,
+    author_for_role,
+    is_scenario_card,
+    normalize_role,
+)
 from app.persona import DEFAULT_CHARACTER, DEFAULT_SCENE
 
 
@@ -58,34 +71,15 @@ CHAINLIT_COACH_DEFAULT = settings.CHAINLIT_COACH_DEFAULT if settings.CHAINLIT_CO
 
 
 def _author_from_role(role: str) -> str:
-    """
-    Map backend role strings to Chainlit author labels.
-    - user/doctor/clinician -> Doctor
-    - assistant/person/parent/model/patient -> Assistant
-    - coach -> Coach
-    - system -> System
-    Unknown roles fall back to 'Assistant'.
-    """
-    r = (role or "").lower().strip()
-    if r in ("user", "doctor", "clinician"):
-        return "Doctor"
-    if r in ("assistant", "person", "parent", "model", "patient"):
-        return "Assistant"
-    if r in ("coach",):
-        return "Coach"
-    if r in ("system", "scenario"):
-        return "System"
-    return "Assistant"
+    """Backward-compatible wrapper around the canonical role mapping."""
+    return author_for_role(role)
 
 
 async def _replay_history(history: list[dict]):
     """
     Replay all prior messages to the UI without making any backend calls.
-    Each history item is a dict like {"role": "user"|"assistant"|"coach"|"scenario", "content": str}.
+    Each history item is a dict like {"role": "system"|"user"|"assistant"|"coach", "content": str}.
     Prefer an explicit 'author' field if present, otherwise map from 'role'.
-
-    Additionally, render 'coach' entries as a styled HTML coaching block so that
-    a page refresh preserves the differentiated look (matching live rendering).
     """
     def _strip_export_artifacts(text: str) -> str:
         # Remove lines such as "Avatar for Doctor" that may appear if a transcript
@@ -99,65 +93,36 @@ async def _replay_history(history: list[dict]):
     for item in history or []:
         content = item.get("content", "")
         author = item.get("author")
-        role = item.get("role", "assistant")
+        role = normalize_role(item.get("role", ROLE_ASSISTANT))
         if not author:
-            author = _author_from_role(role)
+            author = author_for_role(role)
 
         # For Doctor turns, ensure they map to "Doctor"
         # We want the native avatar to show, and CSS to style based on [data-author="Doctor"]
         if author == "You":
-            author = "Doctor"
+            author = AUTHOR_DOCTOR
 
-        # Scenario card persisted in history
-        if role == "assistant" and ("Persona: " in (content or "") or "Person: " in (content or "") or "Parent: " in (content or "")):
-            try:
-                # Use a specific author for the briefing card to help CSS targeting
-                await cl.Message(content=_render_scenario_card_html(content), author="System").send()
-                continue
-            except Exception:
-                pass
+        # Legacy sessions stored scenario cards as assistant messages. Replay
+        # them as system messages without inline HTML.
+        if role == ROLE_ASSISTANT and is_scenario_card(content):
+            author = AUTHOR_SYSTEM
 
-        # Coach entries: render as the same inline HTML block we use during live turns
-        if author == "Coach":
+        # Coach entries: normalize the archived pipe-delimited text into plain
+        # markdown. CSS handles bubble styling by author.
+        if author == AUTHOR_COACH:
             try:
-                txt = (content or "").strip()
-                parts: list[str] = []
-                if " | " in txt:
-                    all_parts = [p.strip() for p in txt.split(" | ") if p.strip()]
-                    parts = [p for p in all_parts if not p.lower().startswith("conversation phase:")]
-                else:
-                    # Fallback: split by lines and keep common prefixes
-                    cands = [ln.strip() for ln in txt.splitlines() if ln.strip()]
-                    for ln in cands:
-                        if ln.lower().startswith(("detected step:", "feedback:", "tip:")):
-                            parts.append(ln)
-                if parts:
-                    items_html = "".join([f"<li>{p}</li>" for p in parts])
-                    html = (
-                        '<div class="aims-coach-bubble">'
-                        '<div class="aims-coach-header">Coaching</div>'
-                        f'<ul>{items_html}</ul>'
-                        '</div>'
-                    )
-                    await cl.Message(content=html, author="Coach").send()
+                coach_text = _format_coach_message(content)
+                if coach_text:
+                    await cl.Message(content=coach_text, author=AUTHOR_COACH).send()
                     continue
             except Exception:
                 # If anything goes wrong, fall back to plain text message
                 pass
 
         # Check for congratulatory post (Scenario complete)
-        if author == "Coach" and ("✅ Scenario complete" in content or "Scenario complete" in content):
+        if author == AUTHOR_COACH and ("Scenario complete" in content):
             try:
-                title = "✅ Scenario complete"
-                lines = [ln.strip() for ln in content.splitlines() if ln.strip() and ln.strip() != title]
-                items_html = "".join([f"<li>{ln}</li>" for ln in lines])
-                html = (
-                    '<div class="aims-coach-bubble">'
-                    f'<div class="aims-coach-header">{title}</div>'
-                    f'<ul>{items_html}</ul>'
-                    '</div>'
-                )
-                await cl.Message(content=html, author="Coach").send()
+                await cl.Message(content=_format_coach_message(content), author=AUTHOR_COACH).send()
                 continue
             except Exception:
                 pass
@@ -165,8 +130,28 @@ async def _replay_history(history: list[dict]):
         # Non-coach (or coach fallback): strip possible export artifacts and send with basic styling.
         content_clean = _strip_export_artifacts(content)
 
-        msg_type = "user_message" if author == "Doctor" else "assistant_message"
+        msg_type = "user_message" if author == AUTHOR_DOCTOR else "assistant_message"
         await cl.Message(content=content_clean, author=author, type=msg_type).send()
+
+
+def _format_coach_message(text: str) -> str:
+    txt = (text or "").strip()
+    if not txt:
+        return ""
+    if " | " in txt:
+        parts = [
+            p.strip()
+            for p in txt.split(" | ")
+            if p.strip() and not p.strip().lower().startswith("conversation phase:")
+        ]
+    else:
+        parts = [ln.strip() for ln in txt.splitlines() if ln.strip()]
+    if not parts:
+        return txt
+    title = "Scenario complete" if any("Scenario complete" in p for p in parts) else "Coaching"
+    clean_parts = [p for p in parts if p != title]
+    bullets = "\n".join(f"- {p}" for p in clean_parts)
+    return f"**{title}**\n\n{bullets}" if bullets else f"**{title}**"
 
 
 def _get_persistent_session_id(user_identifier: str | None = None) -> str:
@@ -240,7 +225,7 @@ def _write_persistent_session_id(session_id: str, user_identifier: str | None = 
 @cl.set_chat_profiles
 async def chat_profiles():
     try:
-        icon = "/public/spinner.svg"
+        icon = "/public/avatars/spinner.svg"
         return [
             cl.ChatProfile(
                 name="AIMSBot",
@@ -296,43 +281,26 @@ def _load_robust_persona(name: str | None = None) -> dict:
 
 
 def _render_scenario_card_html(card_text: str) -> str:
-    """Convert a plain-text scenario card into styled HTML for the Chainlit UI.
-    Parses 'Key: Value' lines and renders them as a visually distinct briefing card.
-    """
-    rows_html = ""
-    note_html = ""
+    """Render a scenario briefing without adding a nested card frame."""
+    lines: list[str] = [
+        '<div class="aims-scenario-briefing">',
+        '<div class="aims-scenario-title">Scenario Briefing</div>',
+    ]
     for line in (card_text or "").splitlines():
         stripped = line.strip()
         if not stripped:
             continue
-        # Parenthetical notes get separate treatment
-        if stripped.startswith("(") and stripped.endswith(")"):
-            note_html = (
-                f'<div style="margin-top:8px;font-style:italic;color:#6b7280;font-size:13px;">'
-                f'{stripped}</div>'
-            )
-            continue
-        # Split on first colon to get label/value
         if ": " in stripped:
             label, value = stripped.split(": ", 1)
-            rows_html += (
-                f'<div style="margin-bottom:4px;">'
-                f'<span style="font-weight:600;color:#374151;">{label}:</span> {value}'
-                f'</div>'
+            lines.append(
+                '<div class="aims-scenario-line">'
+                f'<span class="aims-scenario-label">{label}:</span> {value}'
+                '</div>'
             )
         else:
-            rows_html += f'<div style="margin-bottom:4px;">{stripped}</div>'
-
-    return (
-        '<div style="background:linear-gradient(135deg,#f0f7ff,#e8f0fe);'
-        'border:1px solid #b8d4f0;border-radius:10px;padding:14px 18px;margin:4px 0;">'
-        '<div style="display:flex;align-items:center;font-weight:700;font-size:14px;'
-        'color:#1a56db;margin-bottom:10px;">'
-        '📋&nbsp; Scenario Briefing</div>'
-        f'<div style="color:#1f2937;font-size:14px;line-height:1.6;">{rows_html}</div>'
-        f'{note_html}'
-        '</div>'
-    )
+            lines.append(f'<div class="aims-scenario-note">{stripped}</div>')
+    lines.append("</div>")
+    return "".join(lines)
 
 
 def _build_scenario_card() -> list[str]:
@@ -434,7 +402,7 @@ async def _start_chat_impl():
     if existing_hist:
         for msg in existing_hist:
             content = msg.get("content") or ""
-            if msg.get("role") == "assistant" and ("Persona: " in content or "Person: " in content or "Parent: " in content):
+            if normalize_role(msg.get("role")) in {ROLE_SYSTEM, ROLE_ASSISTANT} and is_scenario_card(content):
                 # Extract name e.g. "Persona: Jasmine\nBackground: ..." or "Person: Jasmine\n..."
                 for line in content.splitlines():
                     if line.startswith("Persona: "):
@@ -537,12 +505,8 @@ async def _start_chat_impl():
         # If the history DOES NOT contain a scenario card, we show it at the TOP before replaying history.
         # We also check for Parent: and Persona: for legacy compatibility.
         has_card_in_history = any(
-            msg.get("role") == "assistant" and (
-                "Persona: " in (msg.get("content") or "") or 
-                "Person: " in (msg.get("content") or "") or 
-                "Parent: " in (msg.get("content") or "") or
-                "Parent/Patient: " in (msg.get("content") or "")
-            )
+            normalize_role(msg.get("role")) in {ROLE_SYSTEM, ROLE_ASSISTANT}
+            and is_scenario_card(msg.get("content"))
             for msg in existing_hist
         )
         if not has_card_in_history:
@@ -550,7 +514,7 @@ async def _start_chat_impl():
                 # Use the user_card (scenario briefing) returned from backend or generated locally
                 card = user_card
                 # Render a scenario summary card at the top (not persisted anew) for consistent context after refresh
-                await cl.Message(content=_render_scenario_card_html(card), author="System").send()
+                await cl.Message(content=_render_scenario_card_html(card), author=AUTHOR_SYSTEM).send()
             except Exception:
                 pass
 
@@ -568,7 +532,7 @@ async def _start_chat_impl():
                 card_to_inject = user_card
                 for msg in existing_hist:
                     content = msg.get("content") or ""
-                    if msg.get("role") == "assistant" and ("Persona: " in content or "Person: " in content or "Parent: " in content):
+                    if normalize_role(msg.get("role")) in {ROLE_SYSTEM, ROLE_ASSISTANT} and is_scenario_card(content):
                         card_to_inject = content
                         break
                 scenario_scene_suffix = (
@@ -588,13 +552,14 @@ async def _start_chat_impl():
     # Defensive check: if the local history already contains a scenario card (even if the backend
     # lost its state), do not append or send a new one.
     has_card = any(
-        msg.get("role") == "assistant" and ("Persona: " in (msg.get("content") or "") or "Person: " in (msg.get("content") or ""))
+        normalize_role(msg.get("role")) in {ROLE_SYSTEM, ROLE_ASSISTANT}
+        and is_scenario_card(msg.get("content"))
         for msg in history
     )
     if not has_card:
-        history.append({"role": "assistant", "content": card})
+        history.append({"role": ROLE_SYSTEM, "content": card})
         cl.user_session.set("history", history)
-        await cl.Message(content=_render_scenario_card_html(card), author="System").send()
+        await cl.Message(content=_render_scenario_card_html(card), author=AUTHOR_SYSTEM).send()
     
     # Inject the scenario into the scene context for grounding
     try:
@@ -997,13 +962,13 @@ async def _handle_message_impl(message: cl.Message):
     # In Chainlit 2.x, Message.update() only supports 'content'. 
     # To change the author after the message was sent, we have to modify the attribute directly
     # before calling update().
-    message.author = "Doctor"
+    message.author = AUTHOR_DOCTOR
     await message.update()
 
     # Retrieve history and append the user's message.  This is not sent to
     # the backend yet but can be used to build context in the future.
     history = cl.user_session.get("history")
-    history.append({"role": "user", "content": content})
+    history.append({"role": ROLE_USER, "content": content})
     cl.user_session.set("history", history)
 
     try:
@@ -1083,7 +1048,7 @@ async def _handle_message_impl(message: cl.Message):
         else:
             msg = f"Backend error: HTTP {status}{(' — ' + error_msg) if error_msg else ''}"
         # Send as a system note and return without appending an assistant turn
-        await cl.Message(msg, author="System").send()
+        await cl.Message(msg, author=AUTHOR_SYSTEM).send()
         return
 
     # If coaching info is present, render it immediately after the user's message (before assistant reply)
@@ -1103,41 +1068,27 @@ async def _handle_message_impl(message: cl.Message):
         if parts:
             # Append a plain-text coaching note to local history for persistence across refresh
             try:
-                history.append({"role": "coach", "content": " | ".join(parts)})
+                history.append({"role": ROLE_COACH, "content": " | ".join(parts)})
                 cl.user_session.set("history", history)
             except Exception:
                 pass
 
-            # Chainlit 2.11+ resolves avatars from public/avatars/{author_lowercase}.svg
-            items_html = "".join([f"<li>{p}</li>" for p in parts])
-            html = (
-                '<div class="aims-coach-bubble">'
-                '<div class="aims-coach-header">Coaching</div>'
-                f'<ul>{items_html}</ul>'
-                '</div>'
-            )
-            await cl.Message(content=html, author="Coach").send()
+            await cl.Message(content=_format_coach_message(" | ".join(parts)), author=AUTHOR_COACH).send()
 
 
     # Append assistant reply to history and send to UI after coaching
-    history.append({"role": "assistant", "content": reply})
+    history.append({"role": ROLE_ASSISTANT, "content": reply})
     cl.user_session.set("history", history)
 
-    await cl.Message(reply, author="Assistant").send()
+    await cl.Message(reply, author=AUTHOR_ASSISTANT).send()
 
     # If a coachPost is present (end-of-game), render a congratulatory block with summary AFTER patient reply
     coach_post = data.get("coachPost") if isinstance(data, dict) else None
     if coach_post:
         title = coach_post.get("title") or "✅ Scenario complete"
         lines = coach_post.get("lines") or []
-        items_html = "".join([f"<li>{p}</li>" for p in lines])
-        html = (
-            '<div class="aims-coach-bubble">'
-            f'<div class="aims-coach-header">{title}</div>'
-            f'<ul>{items_html}</ul>'
-            '</div>'
-        )
-        await cl.Message(content=html, author="Coach").send()
+        post_text = "\n".join([title, *lines])
+        await cl.Message(content=_format_coach_message(post_text), author=AUTHOR_COACH).send()
 
 
 
