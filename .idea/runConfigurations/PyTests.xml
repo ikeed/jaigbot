@@ -1,6 +1,6 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="PyTests" type="tests" factoryName="py.test">
-    <module name="AIMSBot" />
+    <module name="aimsbot" />
     <option name="ENV_FILES" value="" />
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
@@ -12,17 +12,14 @@
     <option name="IS_MODULE_SDK" value="true" />
     <option name="ADD_CONTENT_ROOTS" value="true" />
     <option name="ADD_SOURCE_ROOTS" value="true" />
+    <option name="DEBUG_JUST_MY_CODE" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+    <option name="RUN_TOOL" value="" />
     <option name="_new_keywords" value="&quot;&quot;" />
     <option name="_new_parameters" value="&quot;&quot;" />
     <option name="_new_additionalArguments" value="&quot;&quot;" />
     <option name="_new_target" value="&quot;&quot;" />
     <option name="_new_targetType" value="&quot;PATH&quot;" />
-    <option name="FOLDER_NAME" value="$PROJECT_DIR$/tests" />
-    <option name="TEST_TYPE" value="TEST_FOLDER" />
-    <option name="PATTERN" value="" />
-    <option name="USE_PATTERN" value="false" />
-    <option name="PARAMETERS" value="" />
     <method v="2" />
   </configuration>
 </component>

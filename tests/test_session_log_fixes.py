@@ -39,7 +39,7 @@ def _result(step: str, steps: list = None, score: int = 2) -> ClassifierResult:
 
 
 def _run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 def _make_handler(memory_store, classifier_service=None):

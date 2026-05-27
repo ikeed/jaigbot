@@ -1,94 +1,151 @@
 # API reference
 
-This document describes the FastAPI endpoints exposed by AIMSBot and their request/response contracts. See the README for run instructions and Swagger UI (/docs) for live schemas.
+This document describes the FastAPI endpoints exposed by AIMSBot. See the root
+README for run instructions and Swagger UI at `/docs` when the API-only backend
+is running.
 
-- Base URL (local dev): http://localhost:8080
-- Primary endpoints:
-  - POST /chat
-  - GET  /summary
-  - GET  /healthz
-  - GET  /config, /diagnostics, /models (auxiliary)
+Local base URLs:
 
-Notes
-- Backward compatibility: By default, POST /chat returns only `{ reply, model, latencyMs }`.
-- AIMS coaching features are gated behind the `AIMS_COACHING_ENABLED` environment flag AND a per-request `coach: true` field.
-- Session state is stored in memory or Redis (recommended for Cloud Run). See docs/memory-and-persona.md.
+- API-only backend: `http://localhost:8080`
+- Unified app from `run_app.py`: backend endpoints are under
+  `http://localhost:8080/api`
+
+## Compatibility notes
+
+- `POST /chat` keeps the core response fields `{ reply, model, latencyMs }`.
+- Backward-compatible aliases such as `text`, `modelId`, and `latency_ms` may
+  also be present.
+- AIMS coaching output is returned when `AIMS_COACHING_ENABLED=true` and the
+  request opts in with `coach: true`, or when the server is configured to force
+  coaching by default.
+- Session state is stored in memory or Redis. See `docs/memory-and-persona.md`.
 
 ## POST /chat
 
-Sends one clinician message and receives a reply from the vaccine‑hesitant parent simulator. When coaching is enabled (both flag and request), the response includes a `coaching` object and session metrics under `session`.
+Sends one clinician message and receives a patient/parent simulator reply.
+When coaching is active, the response also includes AIMS feedback and session
+metrics.
 
-Request body (JSON)
-- message: string (required, non-empty)
-- sessionId: string (optional; if omitted, server issues/uses a cookie id)
-- coach: boolean (optional; default false)
-- character: string (optional; override persona)
-- scene: string (optional; override scene context)
+Request body:
 
-Example (coaching disabled/default)
+- `message`: string, required, non-empty, max 2 KiB after UTF-8 encoding
+- `sessionId`: string, optional; if omitted the server uses a cookie or issues a
+  new session id
+- `coach`: boolean, optional
+- `character`: string, optional persona override
+- `scene`: string, optional scene/objective override
+- `userInfo`: object, optional user metadata for session association/audit
+
+Example:
+
 ```json
 {
-  "message": "Hello there",
-  "sessionId": "abc-123"
-}
-```
-
-Example (coaching enabled)
-```json
-{
-  "message": "What concerns do you have about the MMR for Layla?",
+  "message": "What concerns do you have about the MMR vaccine for Layla?",
   "sessionId": "abc-123",
   "coach": true
 }
 ```
 
-Response (coaching disabled)
+Response without coaching:
+
 ```json
 {
   "reply": "...",
   "model": "gemini-2.5-pro",
-  "latencyMs": 123
+  "latencyMs": 123,
+  "sessionId": "abc-123",
+  "text": "...",
+  "modelId": "gemini-2.5-pro",
+  "latency_ms": 123
 }
 ```
 
-Response (coaching enabled)
+Response with coaching:
+
 ```json
 {
   "reply": "...",
   "model": "gemini-2.5-pro",
   "latencyMs": 234,
+  "sessionId": "abc-123",
   "coaching": {
-    "step": "Announce|Inquire|Mirror|Secure",
-    "score": 0,
+    "step": "Mirror+Inquire",
+    "steps": ["Mirror", "Inquire"],
+    "score": 2,
     "reasons": ["..."],
-    "tips": ["..."]
+    "tips": ["..."],
+    "step_feedback": [
+      {
+        "step": "Mirror",
+        "feedback": "...",
+        "tone": "praise"
+      }
+    ],
+    "phase": "InquireMirror"
   },
   "session": {
     "totalTurns": 2,
-    "perStepCounts": {"Announce": 1, "Inquire": 1, "Mirror": 0, "Secure": 0},
-    "runningAverage": {"Announce": 2.5, "Inquire": 2}
+    "perStepCounts": {
+      "Announce": 1,
+      "Inquire": 1,
+      "Mirror": 1,
+      "Secure": 0,
+      "Mirror+Inquire": 1
+    },
+    "runningAverage": {
+      "Announce": 2.5,
+      "Inquire": 2,
+      "Mirror": 2
+    }
   }
 }
 ```
 
-Errors
-- 400: invalid message encoding or size (max 2 KiB)
-- 422: Pydantic validation error for the request body
-- 500: Upstream/model configuration issue (e.g., PROJECT_ID missing)
+Coaching responses may also include:
 
-Behavioral notes
-- Persona and scene: The server composes a system instruction using the effective persona/scene (defaults in app/persona.py). The initial assistant message is a neutral appointment card; the parent will not volunteer concerns until asked.
-- Safety: The parent will not provide medical advice. If the model outputs advice-like text, the server returns the explicit error string: "Error: parent persona generated clinician-style advice. Logged for debugging. Please try again." and logs details (truncated).
-- Jailbreaks/meta: If the input appears to be a jailbreak/meta request (e.g., "break character", "show your system prompt"), the server responds as a confused parent and logs the intercept.
+- `coachPost`: final coaching summary when the scenario reaches an end state
+- `gameOver`: `true` when a coach post ends the scenario
+
+Errors:
+
+- `400`: invalid UTF-8 or message too large
+- `422`: request body validation failure
+- `404`: configured Vertex model not found or unavailable
+- `502`: upstream Vertex AI error
+- `500`: unexpected server error
+
+Behavioral notes:
+
+- Persona and scene are composed into the model system instruction.
+- Jailbreak/meta requests are intercepted by the security guard path.
+- Advice-like patient replies are treated as safety failures and replaced with
+  an error-style retry message.
+
+## GET /history
+
+Returns stored session history.
+
+Query parameters:
+
+- `sessionId`: optional. If omitted, the server attempts to use the session
+  cookie.
+- `full`: optional boolean. When true, returns full history if available.
+
+Response shape is intentionally simple and may include current persona/session
+metadata in addition to history entries.
 
 ## GET /summary
 
-Returns a session-level AIMS summary aggregated deterministically from stored per-turn metrics. The narrative text is deferred for now and may be empty.
+Returns a session-level AIMS summary aggregated from stored per-turn metrics.
 
-Query params
-- sessionId: string (required)
+Query parameters:
 
-Response
+- `sessionId`: string, required
+- `analysis`: optional boolean. When true, the server may include richer
+  analysis when available.
+
+Example response:
+
 ```json
 {
   "overallScore": 2.1,
@@ -104,149 +161,85 @@ Response
 }
 ```
 
-Notes
-- The server computes coverage and weighted averages from per-turn scores stored under the session. Overall score may use step weighting (Mirror/Inquire slightly higher) per docs/aims/aims_mapping.json meta.
-- If no data is present for the session, numeric fields default to 0 and arrays to empty.
+If no data is present for the session, numeric fields default to `0` and arrays
+to empty.
+
+## POST /session
+
+Initializes or updates a session with optional persona, scene, and user
+metadata. This is used by the Chainlit UI to prepare or recover a scenario.
+
+Important request fields:
+
+- `sessionId`: optional
+- `character`: optional
+- `scene`: optional
+- `userInfo`: optional
+
+The response includes the effective session id and any available recovered
+history/persona information.
+
+## POST /session/deregister
+
+Removes a session/tab registration used by the UI to detect duplicate active
+tabs.
+
+## POST /report
+
+Archives a session as an issue report and clears it from active memory.
+
+Request body:
+
+- `sessionId`: string, required
+- `reason`: string, required
+- `userInfo`: object, optional
+
+Successful response:
+
+```json
+{
+  "status": "ok",
+  "message": "Issue reported and session ended."
+}
+```
 
 ## Health and diagnostics
-- GET /healthz: liveness check (200 OK when server is up)
-- GET /config: curated configuration snapshot (safe to expose). Includes `modelAvailable` (true|false|"unknown") and a `modelCheck` object with details when available.
-- GET /modelcheck: best‑effort preflight that checks the configured `MODEL_ID` in the selected Vertex location. Returns the exact URLs attempted and HTTP statuses (primary/alt API versions), and may fall back to listing models to avoid false negatives.
-- GET /diagnostics: runtime diagnostics; may include memory backend and store size
+
+- `GET /healthz`: liveness check.
+- `GET /config`: safe configuration snapshot including memory backend and model
+  availability summary.
+- `GET /modelcheck`: best-effort configured-model preflight.
+- `GET /diagnostics`: runtime diagnostics such as memory backend/store size.
+- `GET /models`: attempts to list available Vertex publisher models.
 
 ## Environment flags
-- AIMS_COACHING_ENABLED: gate coaching features (default false; dev script sets true)
-- MEMORY_ENABLED, MEMORY_BACKEND, REDIS_URL (or REDIS_HOST/PORT/DB/PASSWORD), REDIS_PREFIX, MEMORY_TTL_SECONDS
-- MODEL_ID, PROJECT_ID, REGION, TEMPERATURE, MAX_TOKENS
-- LOG_LEVEL, LOG_RESPONSE_PREVIEW_MAX, SAFETY_LOG_CAP
 
-## Versioning and compatibility
-- The API aims to be backward-compatible by default. Clients that do not set `coach: true` will continue to receive the minimal response. Coaching fields are additive and optional.
+Common runtime flags:
 
-# API reference
+- `AIMS_COACHING_ENABLED`
+- `AIMS_COACHING_DEFAULT`
+- `AIMS_CLASSIFIER_MODE`
+- `MEMORY_ENABLED`
+- `MEMORY_BACKEND`
+- `REDIS_URL` or `REDIS_HOST` / `REDIS_PORT` / `REDIS_DB` / `REDIS_PASSWORD`
+- `REDIS_PREFIX`
+- `MEMORY_TTL_SECONDS`
+- `PROJECT_ID`
+- `REGION`
+- `VERTEX_LOCATION`
+- `MODEL_ID`
+- `MODEL_FALLBACKS`
+- `TEMPERATURE`
+- `MAX_TOKENS`
+- `LOG_LEVEL`
+- `LOG_RESPONSE_PREVIEW_MAX`
+- `SAFETY_LOG_CAP`
+- `CHAINLIT_AUTH_SECRET`
+- `BACKEND_URL`
 
-This document describes the FastAPI endpoints exposed by AIMSBot and their request/response contracts. See the README for run instructions and Swagger UI (/docs) for live schemas.
+## Vertex note
 
-- Base URL (local dev): http://localhost:8080
-- Primary endpoints:
-  - POST /chat
-  - GET  /summary
-  - GET  /healthz
-  - GET  /config, /diagnostics, /models (auxiliary)
-
-Notes
-- Backward compatibility: By default, POST /chat returns only `{ reply, model, latencyMs }`.
-- AIMS coaching features are gated behind the `AIMS_COACHING_ENABLED` environment flag AND a per-request `coach: true` field.
-- Session state is stored in memory or Redis (recommended for Cloud Run). See docs/memory-and-persona.md.
-
-## POST /chat
-
-Sends one clinician message and receives a reply from the vaccine‑hesitant parent simulator. When coaching is enabled (both flag and request), the response includes a `coaching` object and session metrics under `session`.
-
-Request body (JSON)
-- message: string (required, non-empty)
-- sessionId: string (optional; if omitted, server issues/uses a cookie id)
-- coach: boolean (optional; default false)
-- character: string (optional; override persona)
-- scene: string (optional; override scene context)
-
-Example (coaching disabled/default)
-```json
-{
-  "message": "Hello there",
-  "sessionId": "abc-123"
-}
-```
-
-Example (coaching enabled)
-```json
-{
-  "message": "What concerns do you have about the MMR for Layla?",
-  "sessionId": "abc-123",
-  "coach": true
-}
-```
-
-Response (coaching disabled)
-```json
-{
-  "reply": "...",
-  "model": "gemini-2.5-pro",
-  "latencyMs": 123
-}
-```
-
-Response (coaching enabled)
-```json
-{
-  "reply": "...",
-  "model": "gemini-2.5-pro",
-  "latencyMs": 234,
-  "coaching": {
-    "step": "Announce|Inquire|Mirror|Secure",
-    "score": 0,
-    "reasons": ["..."],
-    "tips": ["..."]
-  },
-  "session": {
-    "totalTurns": 2,
-    "perStepCounts": {"Announce": 1, "Inquire": 1, "Mirror": 0, "Secure": 0},
-    "runningAverage": {"Announce": 2.5, "Inquire": 2}
-  }
-}
-```
-
-Errors
-- 400: invalid message encoding or size (max 2 KiB)
-- 422: Pydantic validation error for the request body
-- 500: Upstream/model configuration issue (e.g., PROJECT_ID missing)
-
-Behavioral notes
-- Persona and scene: The server composes a system instruction using the effective persona/scene (defaults in app/persona.py). The initial assistant message is a neutral appointment card; the parent will not volunteer concerns until asked.
-- Safety: The parent will not provide medical advice. If the model outputs advice-like text, the server returns the explicit error string: "Error: parent persona generated clinician-style advice. Logged for debugging. Please try again." and logs details (truncated).
-- Jailbreaks/meta: If the input appears to be a jailbreak/meta request (e.g., "break character", "show your system prompt"), the server responds as a confused parent and logs the intercept.
-
-## GET /summary
-
-Returns a session-level AIMS summary aggregated deterministically from stored per-turn metrics. The narrative text is deferred for now and may be empty.
-
-Query params
-- sessionId: string (required)
-
-Response
-```json
-{
-  "overallScore": 2.1,
-  "stepCoverage": {
-    "Announce": 1,
-    "Inquire": 2,
-    "Mirror": 1,
-    "Secure": 0
-  },
-  "strengths": [],
-  "growthAreas": [],
-  "narrative": ""
-}
-```
-
-Notes
-- The server computes coverage and weighted averages from per-turn scores stored under the session. Overall score may use step weighting (Mirror/Inquire slightly higher) per docs/aims/aims_mapping.json meta.
-- If no data is present for the session, numeric fields default to 0 and arrays to empty.
-
-## Health and diagnostics
-- GET /healthz: liveness check (200 OK when server is up)
-- GET /config: curated configuration snapshot (safe to expose). Includes `modelAvailable` (true|false|"unknown") and a `modelCheck` object with details when available.
-- GET /modelcheck: best‑effort preflight that checks the configured `MODEL_ID` in the selected Vertex location. Returns the exact URLs attempted and HTTP statuses (primary/alt API versions), and may fall back to listing models to avoid false negatives.
-- GET /diagnostics: runtime diagnostics; may include memory backend and store size
-
-## Environment flags
-- AIMS_COACHING_ENABLED: gate coaching features (default false; dev script sets true)
-- MEMORY_ENABLED, MEMORY_BACKEND, REDIS_URL (or REDIS_HOST/PORT/DB/PASSWORD), REDIS_PREFIX, MEMORY_TTL_SECONDS
-- MODEL_ID, PROJECT_ID, REGION, TEMPERATURE, MAX_TOKENS
-- LOG_LEVEL, LOG_RESPONSE_PREVIEW_MAX, SAFETY_LOG_CAP
-
-## Versioning and compatibility
-- The API aims to be backward-compatible by default. Clients that do not set `coach: true` will continue to receive the minimal response. Coaching fields are additive and optional.
-
-## Vertex API version fallback (note)
-- For REST calls to Vertex AI, the server chooses an API version based on the model id (Gemini 2.x → v1beta, others → v1), but if a 404 Not Found is received it will automatically retry the other API version once (v1 ↔ v1beta). This helps when using the global location where some endpoints are only exposed on one version.
+The active model client is `app/vertex.py`, which uses the Google Gen AI SDK in
+Vertex AI mode with API version `v1`. Model availability and generation checks
+should be done through `/config`, `/modelcheck`, `/models`, or the scripts under
+`scripts/`.

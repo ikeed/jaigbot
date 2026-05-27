@@ -1,7 +1,8 @@
 
 # Terraform IaC for AIMSBot infra
 
-This Terraform config provisions the minimal Google Cloud infrastructure to build and deploy the hello‑world Gemini app via Cloud Run and GitHub Actions.
+This Terraform config provisions the Google Cloud infrastructure needed to build
+and deploy AIMSBot via Cloud Run and GitHub Actions.
 
 What it creates:
 - Enables required APIs: Vertex AI, Cloud Run, Artifact Registry, IAM Credentials
@@ -9,7 +10,7 @@ What it creates:
 - Service accounts:
   - cr-vertex-runtime: used by Cloud Run at runtime
   - cr-deployer: used by GitHub Actions via Workload Identity Federation (WIF)
-- IAM bindings (least‑privilege for hello world)
+- IAM bindings scoped for the AIMSBot runtime and deploy workflow
 - Workload Identity Federation pool + GitHub OIDC provider and binding allowing ikeed/aimsbot@main to impersonate cr-deployer
 
 What it does NOT create:

@@ -13,84 +13,6 @@
   /* ── guard against double-init ─────────────────────────────────── */
   if (document.getElementById("sidebar-report-button")) return;
 
-  /* ── data-author injection ──────────────────────────────────────── */
-  /* Chainlit 2.x (shadcn) does NOT emit data-author attributes.       */
-  /* We inject data-author on the message row wrapper so CSS can       */
-  /* target [data-author="X"] descendants for role-based styling.      */
-
-  function tagAiMessage(message) {
-    var author = message.getAttribute("data-author");
-    if (!author) {
-      var img = message.querySelector('img[alt^="Avatar for "]');
-      if (img) author = img.alt.replace("Avatar for ", "").trim();
-    }
-    if (!author || author === "default") return;
-
-    message.setAttribute("data-author", author);
-    if (author === "System") {
-      var systemImg = message.querySelector('img[alt="Avatar for System"]');
-      if (systemImg) {
-        systemImg.src = "/public/avatars/system.svg?v=2";
-      }
-    }
-
-    var step = message.closest('[data-step-type]');
-    if (step) {
-      step.setAttribute("data-author", author);
-      step.classList.add("aims-message-row");
-    }
-
-    var content = message.querySelector(".message-content");
-    if (content) {
-      content.classList.add("aims-message-bubble");
-    }
-  }
-
-  function tagDoctorMessage(step) {
-    step.setAttribute("data-author", "Doctor");
-    step.classList.add("aims-message-row");
-
-    var content = step.querySelector(".message-content");
-    if (!content) return;
-
-    var bubble = content.closest(".relative") || content;
-    bubble.classList.add("aims-message-bubble");
-
-    var row = bubble.parentElement;
-    if (!row || row.querySelector(".aims-doctor-avatar")) return;
-
-    var avatarBase = window.location.pathname.indexOf("/chat") === 0 ? "/chat" : "";
-    var avatar = document.createElement("span");
-    avatar.className = "aims-doctor-avatar";
-    avatar.setAttribute("data-state", "closed");
-    avatar.innerHTML = '<img alt="Avatar for Doctor" src="' + avatarBase + '/avatars/Doctor" />';
-    row.appendChild(avatar);
-  }
-
-  function injectDataAuthors() {
-    // Assistant, Coach, and System rows are rendered as .ai-message.
-    document.querySelectorAll(".ai-message").forEach(tagAiMessage);
-
-    // User rows do not include an avatar or data-author in Chainlit 2.11.
-    document.querySelectorAll('[data-step-type="user_message"]').forEach(tagDoctorMessage);
-  }
-
-  // Run on DOM mutations to catch dynamically added messages
-  var _aimsDebounce = null;
-  var authorObserver = new MutationObserver(function () {
-    // Debounce to avoid layout thrashing
-    if (_aimsDebounce) return;
-    _aimsDebounce = setTimeout(function () {
-      _aimsDebounce = null;
-      injectDataAuthors();
-    }, 100);
-  });
-  authorObserver.observe(document.body, { childList: true, subtree: true });
-  // Also run on short delays for initial render
-  setTimeout(injectDataAuthors, 300);
-  setTimeout(injectDataAuthors, 1000);
-  setTimeout(injectDataAuthors, 3000);
-
   /* ── splash screen tweaks: enlarge icon & hide composer ──────── */
   function tweakSplash() {
     // Enlarge the chat profile icon (find by src containing "aimsbot")
@@ -107,7 +29,7 @@
     // Hide the Chainlit composer until a message appears.
     // Target the specific "Type your message" textarea, NOT our report modal textarea.
     if (!document._aimsComposerHidden) {
-      const textareas = document.querySelectorAll('textarea[placeholder]');
+      var textareas = document.querySelectorAll('textarea[placeholder]');
       textareas.forEach(function (ta) {
         // Skip our own report-issue textarea
         if (ta.id === "report-issue-modal-input") return;
@@ -115,15 +37,15 @@
         if (ta.closest("#report-issue-modal")) return;
 
         // Find the composer form wrapper
-        const form = ta.closest("form");
+        var form = ta.closest("form");
         if (form && !form._aimsHidden) {
           form._aimsHidden = true;
           form.style.display = "none";
           document._aimsComposerHidden = form;
 
           // Reveal once the first chat message appears
-          const obs = new MutationObserver(function () {
-            const hasMsg = document.querySelector('[data-step-type], [data-author]');
+          var obs = new MutationObserver(function () {
+            var hasMsg = document.querySelector('[data-step-type], [data-author]');
             if (hasMsg) {
               form.style.display = "";
               obs.disconnect();
@@ -174,7 +96,7 @@
   }
 
   // Poll for header availability
-  const buttonInterval = setInterval(function () {
+  var buttonInterval = setInterval(function() {
     if (document.getElementById("header")) {
       injectButton();
       // We don't clear interval immediately because Chainlit might re-render
@@ -184,7 +106,7 @@
 
   /* ── modal ─────────────────────────────────────────────────────── */
   function createModal(id, title, description, placeholder, showTextarea, confirmText, onConfirm) {
-    const modal = document.createElement("div");
+    var modal = document.createElement("div");
     modal.id = id;
     Object.assign(modal.style, {
       display: "none",
@@ -200,8 +122,8 @@
       fontFamily: "sans-serif",
     });
 
-    const textareaHtml = showTextarea ?
-        '<textarea id="' + id + '-input" placeholder="' + placeholder + '" style="width:100%;height:100px;margin:12px 0;padding:8px;border:1px solid #999;border-radius:4px;resize:none;font-size:14px;color:#1a1a1a;background:#fff"></textarea>' : '';
+    var textareaHtml = showTextarea ? 
+      '<textarea id="' + id + '-input" placeholder="' + placeholder + '" style="width:100%;height:100px;margin:12px 0;padding:8px;border:1px solid #999;border-radius:4px;resize:none;font-size:14px;color:#1a1a1a;background:#fff"></textarea>' : '';
 
     modal.innerHTML =
       '<div style="background:#ffffff;padding:24px;border-radius:8px;width:400px;box-shadow:0 4px 12px rgba(0,0,0,0.15)">' +

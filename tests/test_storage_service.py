@@ -55,6 +55,7 @@ def test_storage_service_structured_archive(mock_storage_client):
         "character": "Test Character",
         "scene": "Test Scene",
         "full_history": [
+            {"role": "system", "content": "Person: Test\nBackground: Brief", "time": 1716000001.0},
             {"role": "user", "content": "Hello", "time": 1716000100.0},
             {"role": "assistant", "content": "Hi there", "time": 1716000200.0},
             {
@@ -87,6 +88,10 @@ def test_storage_service_structured_archive(mock_storage_client):
     
     args, kwargs = mock_blob.upload_from_string.call_args
     payload = json.loads(args[0])
+
+    system_entry = next(t for t in payload["transcript"] if t["role"] == "system")
+    assert system_entry["turn"] == 0
+    assert "Person: Test" in system_entry["content"]
     
     # Verify transcript turn 1 has structured coaching
     turn1_assistant = next(t for t in payload["transcript"] if t["role"] == "assistant")
