@@ -18,6 +18,7 @@ Cookie settings (env configurable):
 
 Notes:
 - Chainlit calls the backend from the server via httpx; browser cookies for the backend are not used in that path. New Chainlit conversations use the Chainlit thread id as the backend `sessionId` (see docs/chainlit-ui.md).
+- Chainlit UI conversations do not use a separate per-user "latest backend session" file. The Chainlit thread id is the durable conversation id; a user-scoped current-thread pointer is used only to route plain `/chat` refreshes back to the current Chainlit thread.
 - For cross‑origin browser calls, configure CORS and include credentials. You may need `SESSION_COOKIE_SAMESITE=none` and `SESSION_COOKIE_SECURE=true` to allow third‑party cookies.
 
 ## Local file persistence
@@ -96,6 +97,7 @@ To disable hard‑coded defaults, set the strings to empty in `app/persona.py`.
 ## Using with Chainlit
 - Chainlit persists each chat as a thread using the app memory backend.
 - For new conversations, the Chainlit thread id is sent as the backend `sessionId` with every POST /chat call.
+- Legacy threads whose metadata points at a different backend `sessionId` remain readable, but new threads should keep `thread_id == sessionId`.
 - Optionally send a persona and scene via env vars (see above).
 
 Example:

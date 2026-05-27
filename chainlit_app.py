@@ -28,6 +28,7 @@ import chainlit as cl
 from chainlit.context import context as cl_context
 from chainlit.input_widget import TextInput
 from app.chainlit_memory_data_layer import MemoryDataLayer
+from app.chainlit_thread_state import clear_current_thread_id, set_current_thread_id
 from app.chat_roles import (
     AUTHOR_ASSISTANT,
     AUTHOR_COACH,
@@ -112,6 +113,7 @@ async def _bind_chainlit_thread(thread_id: str | None, session_id: str, app_user
                 user_id=persisted_user.id,
                 metadata={"session_id": session_id},
             )
+            set_current_thread_id(app_user.identifier, thread_id)
     except Exception as e:
         print(f"DEBUG: Failed to bind Chainlit thread {thread_id}: {e}")
 
@@ -200,96 +202,9 @@ def _format_coach_message(text: str) -> str:
     return f"**{title}**\n\n{bullets}" if bullets else f"**{title}**"
 
 
-def _get_persistent_session_id(user_identifier: str | None = None) -> str:
-    """
-    Return a stable session id for Chainlit to use when calling the backend.
-    Used by on_chat_resume to recover the most recent session.
-    Precedence:
-    1) FIXED_SESSION_ID or SESSION_ID env vars
-    2) Value stored in .chainlit/session_id_{user_identifier} (if provided)
-    3) Value stored in .chainlit/session_id (default legacy fallback)
-    4) Fresh UUID4 (as last resort)
-    """
-    sid = settings.FIXED_SESSION_ID or settings.SESSION_ID
-    if sid:
-        return sid
-    try:
-        # Use the project-local .chainlit folder
-        root = Path(os.getcwd())
-        store_dir = root / ".chainlit"
-        store_dir.mkdir(parents=True, exist_ok=True)
-        
-        # If we have a user, prefer a user-specific session file
-        filename = "session_id"
-        if user_identifier:
-            # Sanitize identifier for filesystem
-            safe_id = "".join([c if c.isalnum() else "_" for c in user_identifier])
-            filename = f"session_id_{safe_id}"
-            
-        f = store_dir / filename
-        if f.exists():
-            sid = f.read_text(encoding="utf-8").strip()
-            if sid:
-                return sid
-        
-        # If no user-specific file, and we don't have a user, try legacy general file
-        if not user_identifier:
-            legacy_f = store_dir / "session_id"
-            if legacy_f.exists():
-                sid = legacy_f.read_text(encoding="utf-8").strip()
-                if sid:
-                    return sid
-        
-        # If we have a user but no user-specific file yet, we DON'T want to use the legacy general file
-        # because that would mean they share a session with everyone else.
-        # We also want to generate a new ID if they logged in but don't have a persona-linked session yet.
-        
-        sid = str(uuid.uuid4())
-        f.write_text(sid, encoding="utf-8")
-        return sid
-    except Exception:
-        return str(uuid.uuid4())
-
-
-def _read_persistent_session_id(user_identifier: str | None = None) -> str | None:
-    """Read a persisted session id if it exists, without creating a new one."""
-    try:
-        store_dir = Path(os.getcwd()) / ".chainlit"
-        filenames = []
-        if user_identifier:
-            safe_id = "".join([c if c.isalnum() else "_" for c in user_identifier])
-            filenames.append(f"session_id_{safe_id}")
-        filenames.append("session_id")
-
-        for filename in filenames:
-            f = store_dir / filename
-            if f.exists():
-                sid = f.read_text(encoding="utf-8").strip()
-                if sid:
-                    return sid
-    except Exception:
-        return None
-    return None
-
-
-def _write_persistent_session_id(session_id: str, user_identifier: str | None = None) -> None:
-    """Persist the given session id to disk so on_chat_resume can recover it."""
-    try:
-        root = Path(os.getcwd())
-        store_dir = root / ".chainlit"
-        store_dir.mkdir(parents=True, exist_ok=True)
-        filename = "session_id"
-        if user_identifier:
-            safe_id = "".join([c if c.isalnum() else "_" for c in user_identifier])
-            filename = f"session_id_{safe_id}"
-        f = store_dir / filename
-        f.write_text(session_id, encoding="utf-8")
-    except Exception:
-        pass
-
-
 def _clear_persistent_session_id(user_identifier: str | None = None) -> None:
-    """Remove the persisted session id for a user and the legacy global fallback."""
+    """Remove legacy user-level session pointers from older local builds."""
+    clear_current_thread_id(user_identifier)
     store_dir = Path(".chainlit")
     filenames = ["session_id"]
     if user_identifier:
@@ -434,35 +349,19 @@ async def _start_chat_impl():
         connection_id = str(uuid.uuid4())
         cl.user_session.set("connection_id", connection_id)
 
-    # Use the Chainlit thread id as the backend session id for new conversations.
-    # With a Chainlit data layer, the frontend can resume this thread after a
-    # refresh or Cloud Run restart, and the backend uses the same durable key.
+    # Use the Chainlit thread id as the backend session id. With a Chainlit data
+    # layer, this gives us one durable conversation key across refreshes, Cloud
+    # Run restarts, and Memorystore-backed restores.
     user_identifier = app_user.identifier if app_user else None
     thread_id = getattr(getattr(cl_context, "session", None), "thread_id", None)
     session_id = cl.user_session.get("session_id")
     preexisting_history = cl.user_session.get("history") or []
-    replay_existing_history = False
-
-    # If the user explicitly requested a new chat (e.g. via cl.on_chat_start after a reload)
-    # or if we don't have a session_id, we create a fresh one.
-    # Note: Chainlit 2.x's "New Chat" button usually triggers cl.on_chat_start
-    # but we need a way to distinguish between "reload/resume" and "explicit new chat".
-    # For now, if we are in start_chat and session_id is NOT in cl.user_session, 
-    # it's definitely a fresh start. If it IS there, it might be a re-init from Chainlit.
-    # However, our JS now forces a full page reload to /chat, which should clear 
-    # the Chainlit user_session in most cases, or at least start a fresh on_chat_start.
     
+    configured_session_id = settings.FIXED_SESSION_ID or settings.SESSION_ID
     if not session_id:
-        if settings.FIXED_SESSION_ID or settings.SESSION_ID:
-            session_id = settings.FIXED_SESSION_ID or settings.SESSION_ID
+        if configured_session_id:
+            session_id = configured_session_id
             print(f"DEBUG: Using configured session_id: {session_id}")
-        elif user_identifier and (last_session_id := _read_persistent_session_id(user_identifier)):
-            session_id = last_session_id
-            replay_existing_history = bool(thread_id and thread_id != session_id)
-            print(
-                "DEBUG: Using persisted user session_id "
-                f"{session_id} for new Chainlit thread {thread_id}"
-            )
         elif thread_id:
             session_id = thread_id
             print(f"DEBUG: Using Chainlit thread_id as session_id: {session_id}")
@@ -471,13 +370,16 @@ async def _start_chat_impl():
             session_id = str(uuid.uuid4())
             print(f"DEBUG: Generated fresh session_id: {session_id}")
 
-        # Ensure it's persisted and set in the session
-        _write_persistent_session_id(session_id, user_identifier)
         cl.user_session.set("session_id", session_id)
-    else:
-        # We already have an active session_id in this user_session.
-        # We keep it to avoid generating a duplicate scenario card.
-        pass
+    elif thread_id and session_id != thread_id and not configured_session_id:
+        print(
+            "DEBUG: Replacing stale user_session session_id "
+            f"{session_id} with Chainlit thread_id {thread_id}"
+        )
+        session_id = thread_id
+        cl.user_session.set("session_id", session_id)
+        cl.user_session.set("history", [])
+        preexisting_history = []
     await _bind_chainlit_thread(thread_id, session_id, app_user)
 
     # 2. Attempt to fetch existing backend history for this session
@@ -496,8 +398,7 @@ async def _start_chat_impl():
         f"session_id={session_id} "
         f"thread_id={thread_id} "
         f"preexisting_history={len(preexisting_history)} "
-        f"existing_hist={len(existing_hist)} "
-        f"replay_existing_history={replay_existing_history}"
+        f"existing_hist={len(existing_hist)}"
     )
 
     # 3. Recover persona name from history if it exists
@@ -628,8 +529,6 @@ async def _start_chat_impl():
     if existing_hist:
         try:
             cl.user_session.set("history", existing_hist)
-            if replay_existing_history:
-                await _replay_history(existing_hist)
         except Exception:
             pass
 
@@ -651,10 +550,7 @@ async def _start_chat_impl():
                 cl.user_session.set("scene", new_scene)
         except Exception:
             pass
-        if replay_existing_history:
-            print(f"DEBUG: start_chat replayed {len(existing_hist)} history items into fresh Chainlit thread")
-        else:
-            print(f"DEBUG: start_chat restored backend state without replaying {len(existing_hist)} history items")
+        print(f"DEBUG: start_chat restored backend state without replaying {len(existing_hist)} history items")
         return True
 
     # Otherwise, present a single scenario card as before
@@ -1224,8 +1120,23 @@ async def _resume_chat_impl(thread: dict | None = None):
     """
     metadata = (thread or {}).get("metadata") or {}
     thread_id = (thread or {}).get("id") or getattr(getattr(cl_context, "session", None), "thread_id", None)
-    session_id = cl.user_session.get("session_id") or metadata.get("session_id") or thread_id or _get_persistent_session_id()
+    configured_session_id = settings.FIXED_SESSION_ID or settings.SESSION_ID
+    metadata_session_id = metadata.get("session_id")
+    if configured_session_id:
+        session_id = configured_session_id
+    elif metadata_session_id and metadata_session_id != thread_id:
+        # Legacy compatibility: older builds could bind a Chainlit thread to a
+        # separate backend session id. Keep those archived threads readable, but
+        # do not create this shape for new conversations.
+        session_id = metadata_session_id
+    elif thread_id:
+        session_id = thread_id
+    else:
+        session_id = cl.user_session.get("session_id") or str(uuid.uuid4())
     cl.user_session.set("session_id", session_id)
+    app_user = cl.user_session.get("user")
+    if app_user and thread_id:
+        set_current_thread_id(app_user.identifier, thread_id)
 
     def _base_url() -> str:
         url = get_backend_url()

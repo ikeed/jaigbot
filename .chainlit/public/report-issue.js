@@ -13,6 +13,9 @@
   /* ── guard against double-init ─────────────────────────────────── */
   if (document.getElementById("sidebar-report-button")) return;
   var logoutInProgress = false;
+  if (window.location.search.indexOf("aims_new=1") !== -1) {
+    window.history.replaceState(null, "", window.location.origin + "/chat");
+  }
 
   /* ── splash screen tweaks: enlarge icon & hide composer ──────── */
 
@@ -197,7 +200,7 @@
       // 2. Force a full reload to /chat which will trigger cl.on_chat_start
       // with the cleared session state.
       setTimeout(function() {
-        window.location.href = window.location.origin + "/chat";
+        window.location.href = window.location.origin + "/chat?aims_new=1";
       }, 100);
     }
   );
