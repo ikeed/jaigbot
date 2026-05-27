@@ -58,7 +58,7 @@ def test_legacy_handler_jailbreak_early_return(monkeypatch):
     # If pytest.run is unavailable, call via asyncio directly
     if out is None:
         import asyncio
-        out = asyncio.get_event_loop().run_until_complete(handler.handle(None, req, ctx))
+        out = asyncio.run(handler.handle(None, req, ctx))
 
     assert out["jailbreak_detected"] is True
     assert out["model"] == "gemini-2.5-pro"
