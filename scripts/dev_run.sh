@@ -52,6 +52,7 @@ export TEMPERATURE="${TEMPERATURE:-0.2}"
 export MAX_TOKENS="${MAX_TOKENS:-512}"
 export MODEL_FALLBACKS="${MODEL_FALLBACKS:-gemini-2.5-pro-001,gemini-2.5-pro}"
 export LOG_LEVEL="${LOG_LEVEL:-info}"
+export MEMORY_PERSIST_PATH="${MEMORY_PERSIST_PATH:-.chainlit/session_memory.json}"
 # Force Chainlit UI language to English by default (can be overridden)
 export CHAINLIT_LOCALE="${CHAINLIT_LOCALE:-en}"
 PORT="${PORT:-8080}"

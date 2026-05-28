@@ -21,11 +21,12 @@ else:
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-import jwt # pip install PyJWT
 from chainlit.utils import mount_chainlit
+from chainlit.auth import clear_auth_cookie, get_token_from_cookies, decode_jwt
 
 # Import the existing backend app
 from app.main import app as backend_app
+from app.chainlit_thread_state import clear_current_thread_id, get_current_thread_id
 
 app = FastAPI()
 
@@ -67,6 +68,32 @@ else:
 if not os.getenv("CHAINLIT_AUTH_SECRET"):
     os.environ["CHAINLIT_AUTH_SECRET"] = "local-dev-secret-12345"
     print("DEBUG: Using default CHAINLIT_AUTH_SECRET for local development.")
+
+
+def _clear_persistent_session_id(user_identifier: str | None = None) -> None:
+    clear_current_thread_id(user_identifier)
+    try:
+        filenames = ["session_id"]
+        if user_identifier:
+            safe_name = "".join([c if c.isalnum() else "_" for c in user_identifier])
+            filenames.insert(0, f"session_id_{safe_name}")
+        for filename in filenames:
+            path = os.path.join(".chainlit", filename)
+            if os.path.exists(path):
+                os.remove(path)
+    except Exception:
+        pass
+
+
+def _authenticated_user_identifier(request: Request) -> str | None:
+    token = get_token_from_cookies(request.cookies)
+    if not token:
+        return None
+    try:
+        user = decode_jwt(token)
+    except Exception:
+        return None
+    return user.identifier if user else None
 
 # A simple custom login page that shows SSO buttons
 @app.get("/", response_class=HTMLResponse)
@@ -271,95 +298,44 @@ async def intercept_chainlit_login(request: Request, call_next):
 async def redirect_chainlit_login_to_root():
     return RedirectResponse(url="/")
 
+
+@app.middleware("http")
+async def redirect_chat_refresh_to_current_thread(request: Request, call_next):
+    if (
+        request.method == "GET"
+        and request.url.path in {"/chat", "/chat/"}
+        and request.query_params.get("aims_new") != "1"
+    ):
+        user_identifier = _authenticated_user_identifier(request)
+        thread_id = get_current_thread_id(user_identifier)
+        if thread_id:
+            return RedirectResponse(url=f"/chat/thread/{thread_id}", status_code=307)
+    return await call_next(request)
+
+
+@app.api_route("/chat/logout", methods=["GET", "POST"], response_class=RedirectResponse)
+async def unified_logout(request: Request):
+    """
+    Handle logout at the FastAPI layer so both GET and POST logout flows clear
+    the auth cookie and return the browser to the SSO page.
+    """
+    response = RedirectResponse(url="/", status_code=303)
+    clear_auth_cookie(request, response)
+
+    token = get_token_from_cookies(request.cookies)
+    if token:
+        try:
+            user = decode_jwt(token)
+            if user and user.identifier:
+                _clear_persistent_session_id(user.identifier)
+        except Exception:
+            pass
+
+    return response
+
 # Mount the Chainlit app under /chat
 # Note: This will use chainlit_app.py as the target
 mount_chainlit(app=app, target="chainlit_app.py", path="/chat")
-
-def _get_persistent_session_id(user_identifier: str | None = None) -> str | None:
-    """
-    Recover a persistent session ID from the local .chainlit directory.
-    This logic mirrors chainlit_app.py's implementation.
-    """
-    import re
-    # 1) Specific file for this user identifier
-    if user_identifier:
-        # Match chainlit_app.py: safe_id = "".join([c if c.isalnum() else "_" for c in user_identifier])
-        safe_name = "".join([c if c.isalnum() else "_" for c in user_identifier])
-        path = os.path.join(".chainlit", f"session_id_{safe_name}")
-        if os.path.exists(path):
-            with open(path, "r") as f:
-                return f.read().strip()
-    
-    # 2) Global fallback
-    path = os.path.join(".chainlit", "session_id")
-    if os.path.exists(path):
-        with open(path, "r") as f:
-            return f.read().strip()
-            
-    return None
-
-@app.middleware("http")
-async def early_duplicate_tab_detection(request: Request, call_next):
-    # Only intercept GET requests to the main /chat page
-    # Chainlit's assets and API calls should not be blocked here
-    if request.method == "GET" and request.url.path in ["/chat", "/chat/"]:
-        # Check for force flag in query parameters
-        if request.query_params.get("force") == "true":
-            print("DEBUG: Force flag detected in query params. Bypassing duplicate detection.")
-            return await call_next(request)
-
-        # Extract user from cl-user-session cookie (Chainlit's default name)
-        token = request.cookies.get("cl-user-session")
-        user_identifier = None
-        
-        if token:
-            try:
-                # Chainlit's JWT is signed with CHAINLIT_AUTH_SECRET
-                secret = os.environ.get("CHAINLIT_AUTH_SECRET")
-                if secret:
-                    # We don't necessarily need to verify the full JWT here if we just want a hint,
-                    # but verifying is safer. Chainlit uses HS256 by default.
-                    decoded = jwt.decode(token, secret, algorithms=["HS256"], options={"verify_signature": False})
-                    user_identifier = decoded.get("sub") or decoded.get("email")
-                    print(f"DEBUG: Middleware decoded user_identifier: {user_identifier}")
-                else:
-                    print("DEBUG: Middleware found cl-user-session but CHAINLIT_AUTH_SECRET is not set.")
-            except Exception as e:
-                print(f"DEBUG: Middleware failed to decode cl-user-session: {e}")
-
-        if user_identifier:
-            session_id = _get_persistent_session_id(user_identifier)
-            if session_id:
-                # Access the memory store from the backend app
-                from app.main import _MEMORY_STORE
-                import time
-                mem = _MEMORY_STORE.get(session_id)
-                if mem:
-                    active_connections = mem.get("active_connections", [])
-                    if active_connections:
-                        # Check if the session is stale (e.g. not updated in 60 seconds)
-                        updated = mem.get("updated", 0)
-                        if time.time() - updated > 60:
-                            print(f"DEBUG: Session {session_id} has active connections {active_connections} but is STALE (last update {time.time() - updated:.1f}s ago). Allowing connection.")
-                            # We don't redirect to duplicate page if it's stale
-                            return await call_next(request)
-
-                        # Redirect to the duplicate tab warning page
-                        print(f"DEBUG: Early duplicate detection for {user_identifier} on {session_id}. Active: {active_connections}")
-                        return RedirectResponse(url="/duplicate")
-                    else:
-                        print(f"DEBUG: Session {session_id} found but has no active connections.")
-                else:
-                    print(f"DEBUG: No active backend session found for {session_id}.")
-            else:
-                print(f"DEBUG: No persistent session_id found for user {user_identifier}.")
-        else:
-            if token:
-                print(f"DEBUG: Middleware found token but could not extract user_identifier.")
-            else:
-                print(f"DEBUG: Middleware did not find cl-user-session cookie.")
-
-    return await call_next(request)
 
 if __name__ == "__main__":
     # Use localhost as default for local development to match typical OAuth client configs.

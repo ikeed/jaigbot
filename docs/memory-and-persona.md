@@ -17,13 +17,23 @@ Cookie settings (env configurable):
 - `SESSION_COOKIE_MAX_AGE` (default aligns with `MEMORY_TTL_SECONDS`, else 30 days)
 
 Notes:
-- Chainlit calls the backend from the server via httpx; browser cookies for the backend are not used in that path. Use Chainlit’s persisted session id instead (see docs/chainlit-ui.md).
+- Chainlit calls the backend from the server via httpx; browser cookies for the backend are not used in that path. New Chainlit conversations use the Chainlit thread id as the backend `sessionId` (see docs/chainlit-ui.md).
+- Chainlit UI conversations do not use a separate per-user "latest backend session" file. The Chainlit thread id is the durable conversation id; a user-scoped current-thread pointer is used only to route plain `/chat` refreshes back to the current Chainlit thread.
 - For cross‑origin browser calls, configure CORS and include credentials. You may need `SESSION_COOKIE_SAMESITE=none` and `SESSION_COOKIE_SECURE=true` to allow third‑party cookies.
 
-## Redis / Google Memorystore (shared memory)
-On Cloud Run, instances scale up/down and are reaped, which resets the default in‑process memory. To persist conversation history across instances and avoid duplicate scenario initialization, use the Redis backend (Google Memorystore).
+## Local file persistence
+The default `MEMORY_BACKEND=memory` store is process-local. If the Python process restarts, active sessions disappear unless you opt into local file persistence:
 
-**Note on Duplicate Scenarios:** If using the default in-memory storage, a new Cloud Run instance will not know about the history of an existing session. When the Chainlit UI checks for history upon a reconnect/redeploy, the new instance returns empty, causing the UI to re-send the scenario card. While the UI now includes defensive logic to prevent display duplication, the underlying history state will still be reset unless Redis is used.
+```bash
+export MEMORY_PERSIST_PATH=.chainlit/session_memory.json
+```
+
+This is intended for local development, including IDE reruns. The app still uses the in-process store at runtime, but writes the session map to disk whenever state is saved and reloads it on startup. The persisted map includes both backend session state and Chainlit thread state. Do not use this for production or multiple app instances; use Redis instead.
+
+## Redis / Google Memorystore (shared memory)
+On Cloud Run, instances scale up/down and are reaped, which resets non-persistent in-process memory. To persist conversation history and Chainlit thread state across instances, use the Redis backend (Google Memorystore).
+
+**Note on duplicate scenarios:** If using the default in-memory storage without `MEMORY_PERSIST_PATH`, a new process or Cloud Run instance will not know about the history of an existing session or the Chainlit thread. A reconnect can then look like a fresh conversation. Production should use Redis/Memorystore.
 
 ### Production Setup (GCP Memorystore)
 To use Redis in production:
@@ -75,17 +85,19 @@ Precedence (highest to lowest):
 3. Environment via Chainlit: `CHARACTER_SYSTEM`, `SCENE_OBJECTIVES`
 4. Hard‑coded defaults: `app/persona.py` `DEFAULT_CHARACTER` / `DEFAULT_SCENE`
 
-### Persona Consistency on Refresh
-In the Chainlit UI, the `sessionId` is persisted. On a page refresh:
-1. The UI fetches existing history for that `sessionId` from the backend.
-2. If history is found, it recovers the original persona name from the scenario card.
-3. It then re-initializes the session with the *correct* detailed instructions for that persona.
-4. This ensures that even if the backend instance was replaced, the conversation continues with the same patient persona and historical context.
+### Persona consistency on refresh/restart
+In the Chainlit UI, the Chainlit thread id is the backend `sessionId` for new conversations. On a page refresh or Cloud Run restart:
+1. Chainlit resumes the persisted thread and restores the visible transcript.
+2. The app rehydrates backend session state for the same `sessionId`.
+3. The backend returns the existing character, scene, and history for future turns.
+4. No transcript is manually replayed by `chainlit_app.py`; Chainlit owns UI restoration.
 
 To disable hard‑coded defaults, set the strings to empty in `app/persona.py`.
 
 ## Using with Chainlit
-- Chainlit generates or persists a stable `sessionId` per chat and sends it with every POST /chat call.
+- Chainlit persists each chat as a thread using the app memory backend.
+- For new conversations, the Chainlit thread id is sent as the backend `sessionId` with every POST /chat call.
+- Legacy threads whose metadata points at a different backend `sessionId` remain readable, but new threads should keep `thread_id == sessionId`.
 - Optionally send a persona and scene via env vars (see above).
 
 Example:

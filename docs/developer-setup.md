@@ -1,20 +1,75 @@
 # Developer setup and workflows
 
 This guide shows how to:
+- Set up a local development environment
+- Run the app from the CLI or PyCharm
 - Apply Terraform locally for first-time bootstrap or changes
 - Enable Terraform auto-apply via GitHub Actions
 - Configure app deployment via GitHub Actions to Cloud Run
 - Migrate to another GCP project or GitHub repo
 
 ## Prerequisites
-- Google Cloud project with billing enabled (default in this repo: your-project-id)
 - Tools locally:
+  - Python 3.11
   - gcloud SDK
-  - Terraform >= 1.6
+  - Terraform >= 1.6 for infrastructure changes
   - Docker (optional for local container build)
+- Google Cloud project with billing enabled for Vertex/Cloud Run work (default in this repo: your-project-id)
 - Permissions: You must have Owner/appropriate IAM in the target project for the initial bootstrap
 
-## 1) Local Terraform apply (first time)
+## 1) Local app setup
+
+From a fresh checkout:
+
+```bash
+./scripts/setup_dev.sh
+```
+
+The script:
+- Creates `.venv` if missing.
+- Installs `requirements.txt`.
+- Copies `.env.example` to `.env` if missing.
+- Creates `.chainlit/`.
+- Adds `MEMORY_PERSIST_PATH=.chainlit/session_memory.json` to `.env` if missing.
+
+Review `.env` after setup and fill in values that are specific to your machine or cloud project, especially `PROJECT_ID`, `REGION`, `VERTEX_LOCATION`, `CHAINLIT_AUTH_SECRET`, and OAuth client values when testing SSO.
+
+## 2) Running locally
+
+Recommended CLI path:
+
+```bash
+source .venv/bin/activate
+python run_app.py
+```
+
+Then open `http://localhost:8080`.
+
+You can also use:
+
+```bash
+./scripts/dev_run.sh
+```
+
+`dev_run.sh` sets local defaults and starts the backend with reload. It also defaults `MEMORY_PERSIST_PATH` to `.chainlit/session_memory.json`.
+
+## 3) PyCharm setup
+
+Open the project directory in PyCharm and select the committed run configuration:
+
+```text
+AIMSBot (Unified)
+```
+
+This configuration runs `run_app.py` and includes the same local session persistence path:
+
+```text
+MEMORY_PERSIST_PATH=.chainlit/session_memory.json
+```
+
+Only `.idea/runConfigurations/AIMSBot__Unified_.xml` is tracked. Other `.idea` files are ignored because they contain local interpreter paths, workspace layout, and other machine-specific state.
+
+## 4) Local Terraform apply (first time)
 The first apply must typically be run locally because the Workload Identity Federation (WIF) provider and deployer service account that CI uses are created by Terraform itself.
 
 Steps:
@@ -33,7 +88,7 @@ Steps:
      - project_id/region → GitHub Variables GCP_PROJECT_ID/GCP_REGION
      - artifact/image repo base (optional reference)
 
-## 2) Configure GitHub secrets and variables
+## 5) Configure GitHub secrets and variables
 Repository Settings → Secrets and variables:
 - Secrets:
   - WORKLOAD_IDP = Terraform output wif_provider_name (e.g., projects/.../providers/...)
@@ -47,7 +102,7 @@ Repository Settings → Secrets and variables:
   - TEMPERATURE    = 0.2
   - MAX_TOKENS     = 256
 
-## 3) Remote state (enable auto-apply in CI)
+## 6) Remote state (enable auto-apply in CI)
 Terraform CI workflow requires a remote state so applies can be consistent.
 
 Create a GCS bucket once (choose a unique name):
@@ -62,7 +117,7 @@ Add repo variables to enable CI apply:
 
 Optional: add a backend block to terraform/versions.tf later if you want backends pinned in code. The current CI workflow also accepts backend via -backend-config when these variables are present.
 
-## 4) How the CI workflows run
+## 7) How the CI workflows run
 - PRs: run tests, optionally build+push preview image, and can deploy to a preview service.
 - main: runs tests, runs Terraform (using WIF) to converge infra, builds/pushes image to GAR, deploys to Cloud Run service `SERVICE_NAME`.
 
@@ -71,11 +126,11 @@ Key requirements for main CI:
 - TF_BACKEND_BUCKET/TF_BACKEND_PREFIX must point to your remote state.
 - Deployer SA requires IAM: run.admin, artifactregistry.admin (for repository creation), serviceusage.serviceUsageAdmin (to enable/list services), and iam.serviceAccountTokenCreator.
 
-## 5) Troubleshooting
+## 8) Troubleshooting
 - Error 403 listing services (serviceusage): Ensure deployer SA has roles/serviceusage.serviceUsageAdmin and that WORKLOAD_* secrets are set. Re-run Terraform.
 - Error creating Artifact Registry repository: Ensure roles/artifactregistry.admin is granted to the deployer SA and the Artifact Registry API is enabled. Re-run Terraform.
 - WIF/OIDC impersonation errors: Verify WORKLOAD_IDP is the exact provider name and WORKLOAD_SA is the deployer SA email. Check that the Workload Identity Pool provider condition permits `ikeed/aimsbot` on `refs/heads/main`.
 
-## 6) Migrate to another GCP project or GitHub repo
+## 9) Migrate to another GCP project or GitHub repo
 - Update terraform variables (project_id, region, github_org/repo) and re-apply.
 - Update GitHub secrets/variables accordingly.
