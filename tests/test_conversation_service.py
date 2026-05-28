@@ -55,6 +55,31 @@ def test_maybe_add_person_concern_uses_llm_topic():
     assert st["parent_concerns"][0]["desc"] == "I'm worried about what he eats."
 
 
+def test_maybe_add_person_concern_skips_materials_followup_acceptance_even_with_llm_topic():
+    st = {"parent_concerns": []}
+    maybe_add_person_concern(
+        st,
+        (
+            "That sounds really good, thank you. I think having something to "
+            "read over at home would help a lot, and a follow-up would be great."
+        ),
+        TOPICAL_CUES,
+        llm_topic="autonomy",
+    )
+    assert st["parent_concerns"] == []
+
+
+def test_maybe_add_person_concern_keeps_active_concern_with_materials_request():
+    st = {"parent_concerns": []}
+    maybe_add_person_concern(
+        st,
+        "I'm still worried about the ingredients, but having something to read over would help.",
+        TOPICAL_CUES,
+        llm_topic="diet",
+    )
+    assert st["parent_concerns"][0]["topic"] == "diet"
+
+
 def test_maybe_add_person_concern_skips_when_no_topic():
     st = {"parent_concerns": []}
     maybe_add_person_concern(st, "this is unrelated chit chat", TOPICAL_CUES)
