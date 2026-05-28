@@ -11,11 +11,156 @@
   "use strict";
 
   /* ── guard against double-init ─────────────────────────────────── */
-  if (document.getElementById("sidebar-report-button")) return;
+  if (window.__aimsbotCustomJsInitialized) return;
+  window.__aimsbotCustomJsInitialized = true;
+  document.querySelectorAll("#report-issue-modal, #new-session-modal, #logout-modal").forEach(function (modal) {
+    modal.remove();
+  });
+  var debugCounter = 0;
   var logoutInProgress = false;
+
+  function debugLog(event, details) {
+    debugCounter += 1;
+    try {
+      console.debug("[AIMSBot logout]", debugCounter, event, details || {});
+      console.debug("[AIMSBot logout json]", JSON.stringify({
+        n: debugCounter,
+        event: event,
+        details: details || {},
+      }));
+    } catch (_) {}
+  }
+
+  function describeNode(node) {
+    if (!node) return null;
+    var modal = node.closest ? node.closest("#logout-modal") : null;
+    var allLogoutModals = Array.from(document.querySelectorAll("#logout-modal"));
+    return {
+      tag: node.tagName,
+      id: node.id || "",
+      className: typeof node.className === "string" ? node.className : "",
+      text: (node.textContent || "").trim().slice(0, 80),
+      disabled: !!node.disabled,
+      modalIndex: modal ? allLogoutModals.indexOf(modal) : -1,
+      modalDisplay: modal ? modal.style.display : null,
+      logoutModalCount: allLogoutModals.length,
+      visibleLogoutModalCount: allLogoutModals.filter(function (m) {
+        return getComputedStyle(m).display !== "none";
+      }).length,
+    };
+  }
+
+  function isLogoutModalVisible() {
+    return Array.from(document.querySelectorAll("#logout-modal")).some(function (modal) {
+      return getComputedStyle(modal).display !== "none";
+    });
+  }
+
+  function describePoint(e) {
+    var elementAtPoint = null;
+    try {
+      elementAtPoint = document.elementFromPoint(e.clientX, e.clientY);
+    } catch (_) {}
+    return {
+      type: e.type,
+      clientX: e.clientX,
+      clientY: e.clientY,
+      button: e.button,
+      buttons: e.buttons,
+      target: describeNode(e.target),
+      matchedConfirm: describeNode(e.target.closest ? e.target.closest("#logout-modal .modal-confirm-btn") : null),
+      matchedLogoutModal: describeNode(e.target.closest ? e.target.closest("#logout-modal") : null),
+      elementFromPoint: describeNode(elementAtPoint),
+      elementFromPointConfirm: describeNode(elementAtPoint && elementAtPoint.closest ? elementAtPoint.closest("#logout-modal .modal-confirm-btn") : null),
+      elementFromPointModal: describeNode(elementAtPoint && elementAtPoint.closest ? elementAtPoint.closest("#logout-modal") : null),
+      path: typeof e.composedPath === "function" ? e.composedPath().slice(0, 8).map(describeNode) : [],
+    };
+  }
+
+  ["pointerdown", "pointerup", "mousedown", "mouseup", "click"].forEach(function (eventName) {
+    document.addEventListener(eventName, function(e) {
+      if (!isLogoutModalVisible()) return;
+      debugLog("logout-modal-event-" + eventName, describePoint(e));
+    }, true);
+  });
   if (window.location.search.indexOf("aims_new=1") !== -1) {
     window.history.replaceState(null, "", window.location.origin + "/chat");
   }
+
+  /* ── data-author injection ──────────────────────────────────────── */
+  /* Chainlit 2.x (shadcn) does NOT emit data-author attributes.       */
+  /* We inject data-author on the message row wrapper so CSS can       */
+  /* target [data-author="X"] descendants for role-based styling.      */
+
+  function tagAiMessage(message) {
+    var author = message.getAttribute("data-author");
+    if (!author) {
+      var img = message.querySelector('img[alt^="Avatar for "]');
+      if (img) author = img.alt.replace("Avatar for ", "").trim();
+    }
+    if (!author || author === "default") return;
+
+    message.setAttribute("data-author", author);
+    if (author === "System") {
+      var systemImg = message.querySelector('img[alt="Avatar for System"]');
+      if (systemImg) {
+        systemImg.src = "/public/avatars/system.svg?v=2";
+      }
+    }
+
+    var step = message.closest('[data-step-type]');
+    if (step) {
+      step.setAttribute("data-author", author);
+      step.classList.add("aims-message-row");
+    }
+
+    var content = message.querySelector(".message-content");
+    if (content) {
+      content.classList.add("aims-message-bubble");
+    }
+  }
+
+  function tagDoctorMessage(step) {
+    step.setAttribute("data-author", "Doctor");
+    step.classList.add("aims-message-row");
+
+    var content = step.querySelector(".message-content");
+    if (!content) return;
+
+    var bubble = content.closest(".relative") || content;
+    bubble.classList.add("aims-message-bubble");
+
+    var row = bubble.parentElement;
+    if (!row || row.querySelector(".aims-doctor-avatar")) return;
+
+    var avatarBase = window.location.pathname.indexOf("/chat") === 0 ? "/chat" : "";
+    var avatar = document.createElement("span");
+    avatar.className = "aims-doctor-avatar";
+    avatar.setAttribute("data-state", "closed");
+    avatar.innerHTML = '<img alt="Avatar for Doctor" src="' + avatarBase + '/avatars/Doctor" />';
+    row.appendChild(avatar);
+  }
+
+  function injectDataAuthors() {
+    // Assistant, Coach, and System rows are rendered as .ai-message.
+    document.querySelectorAll(".ai-message").forEach(tagAiMessage);
+
+    // User rows do not include an avatar or data-author in Chainlit 2.11.
+    document.querySelectorAll('[data-step-type="user_message"]').forEach(tagDoctorMessage);
+  }
+
+  var _aimsDebounce = null;
+  var authorObserver = new MutationObserver(function () {
+    if (_aimsDebounce) return;
+    _aimsDebounce = setTimeout(function () {
+      _aimsDebounce = null;
+      injectDataAuthors();
+    }, 100);
+  });
+  authorObserver.observe(document.body, { childList: true, subtree: true });
+  setTimeout(injectDataAuthors, 300);
+  setTimeout(injectDataAuthors, 1000);
+  setTimeout(injectDataAuthors, 3000);
 
   /* ── splash screen tweaks: enlarge icon & hide composer ──────── */
 
@@ -112,8 +257,15 @@
 
   /* ── modal ─────────────────────────────────────────────────────── */
   function createModal(id, title, description, placeholder, showTextarea, confirmText, onConfirm) {
+    var existing = document.getElementById(id);
+    if (existing) {
+      debugLog("remove-existing-modal", { id: id });
+      existing.remove();
+    }
+
     var modal = document.createElement("div");
     modal.id = id;
+    modal.dataset.aimsModalInstance = String(Date.now()) + "-" + Math.random().toString(16).slice(2);
     Object.assign(modal.style, {
       display: "none",
       position: "fixed",
@@ -122,7 +274,7 @@
       width: "100%",
       height: "100%",
       background: "rgba(0,0,0,0.5)",
-      zIndex: "2000",
+      zIndex: "2147483647",
       justifyContent: "center",
       alignItems: "center",
       fontFamily: "sans-serif",
@@ -143,18 +295,36 @@
       "</div>";
 
     document.body.appendChild(modal);
+    debugLog("create-modal", {
+      id: id,
+      instance: modal.dataset.aimsModalInstance,
+      count: document.querySelectorAll("#" + id).length,
+    });
 
     modal.querySelector(".modal-cancel-btn").addEventListener("click", function (e) {
+      debugLog("modal-cancel-click", describeNode(e.target));
       e.preventDefault();
       e.stopPropagation();
       modal.style.display = "none";
     });
 
     modal.addEventListener("click", function (e) {
+      debugLog("modal-background-click", {
+        modalId: id,
+        instance: modal.dataset.aimsModalInstance,
+        targetIsModal: e.target === modal,
+        target: describeNode(e.target),
+      });
       if (e.target === modal) modal.style.display = "none";
     });
 
     modal.querySelector(".modal-confirm-btn").addEventListener("click", function (e) {
+      debugLog("modal-confirm-click", {
+        modalId: id,
+        instance: modal.dataset.aimsModalInstance,
+        target: describeNode(e.target),
+        currentTarget: describeNode(e.currentTarget),
+      });
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
@@ -170,6 +340,35 @@
     });
 
     return modal;
+  }
+
+  function leaveChatForLogout() {
+    debugLog("leave-chat-for-logout", {
+      alreadyInProgress: logoutInProgress,
+      activeElement: describeNode(document.activeElement),
+      modals: Array.from(document.querySelectorAll("#logout-modal")).map(function (modal, index) {
+        return {
+          index: index,
+          instance: modal.dataset.aimsModalInstance,
+          display: modal.style.display,
+          computedDisplay: getComputedStyle(modal).display,
+          confirm: describeNode(modal.querySelector(".modal-confirm-btn")),
+        };
+      }),
+    });
+    if (logoutInProgress) return;
+    logoutInProgress = true;
+    logoutModal.style.display = "none";
+
+    var confirmBtn = logoutModal.querySelector(".modal-confirm-btn");
+    if (confirmBtn) {
+      confirmBtn.disabled = true;
+      confirmBtn.style.cursor = "default";
+      confirmBtn.textContent = "Logging out";
+    }
+
+    debugLog("logout-navigate", { href: "/chat/logout" });
+    window.location.assign("/chat/logout");
   }
 
   var reportModal = createModal(
@@ -212,34 +411,95 @@
     "",
     false,
     "Logout",
-    function() {
-      if (logoutInProgress) return;
-      logoutInProgress = true;
-      var confirmBtn = logoutModal.querySelector(".modal-confirm-btn");
-      if (confirmBtn) {
-        confirmBtn.disabled = true;
-        confirmBtn.style.cursor = "default";
-        confirmBtn.textContent = "Logging out";
-      }
-      fetch("/chat/logout", {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: "{}"
-      }).catch(function() {
-        // Ignore transport errors and still leave the chat page.
-      }).finally(function() {
-        window.location.replace("/");
-      });
-    }
+    leaveChatForLogout
   );
 
+  function attachLogoutConfirmHandler() {
+    var buttons = document.querySelectorAll("#logout-modal .modal-confirm-btn");
+    buttons.forEach(function (btn) {
+      if (btn._aimsLogoutConfirmAttached) return;
+      btn._aimsLogoutConfirmAttached = true;
+      btn.addEventListener("pointerdown", function(e) {
+        debugLog("logout-confirm-pointerdown-attached", {
+          target: describeNode(e.target),
+          currentTarget: describeNode(e.currentTarget),
+        });
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        leaveChatForLogout();
+      }, true);
+      btn.addEventListener("click", function(e) {
+        debugLog("logout-confirm-click-attached", {
+          target: describeNode(e.target),
+          currentTarget: describeNode(e.currentTarget),
+        });
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        leaveChatForLogout();
+      }, true);
+    });
+  }
+  attachLogoutConfirmHandler();
+
+  function logoutConfirmTargetFromEvent(e) {
+    var directTarget = e.target && e.target.closest ? e.target.closest("#logout-modal .modal-confirm-btn") : null;
+    if (directTarget) return directTarget;
+
+    var elementAtPoint = null;
+    try {
+      elementAtPoint = document.elementFromPoint(e.clientX, e.clientY);
+    } catch (_) {}
+    return elementAtPoint && elementAtPoint.closest ? elementAtPoint.closest("#logout-modal .modal-confirm-btn") : null;
+  }
+
+  function handleLogoutConfirmDocumentEvent(eventName, e) {
+    var target = logoutConfirmTargetFromEvent(e);
+    if (!target) return;
+    var elementAtPoint = null;
+    try {
+      elementAtPoint = document.elementFromPoint(e.clientX, e.clientY);
+    } catch (_) {}
+    debugLog("logout-confirm-" + eventName + "-document", {
+      target: describeNode(e.target),
+      matchedTarget: describeNode(target),
+      point: describeNode(elementAtPoint),
+    });
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    leaveChatForLogout();
+  }
+
+  ["pointerdown", "pointerup", "mouseup", "click"].forEach(function(eventName) {
+    document.addEventListener(eventName, function(e) {
+      handleLogoutConfirmDocumentEvent(eventName, e);
+    }, true);
+  });
+
   function showLogoutModal() {
+    debugLog("show-logout-modal", {
+      alreadyInProgress: logoutInProgress,
+      modalCountBefore: document.querySelectorAll("#logout-modal").length,
+      triggerActiveElement: describeNode(document.activeElement),
+    });
     if (logoutInProgress) return;
-    if (logoutModal.style.display === "flex") return;
-    logoutModal.style.display = "flex";
+    document.querySelectorAll("#logout-modal").forEach(function (modal, index) {
+      modal.style.display = index === 0 ? "flex" : "none";
+    });
+    attachLogoutConfirmHandler();
+    debugLog("show-logout-modal-after", {
+      modals: Array.from(document.querySelectorAll("#logout-modal")).map(function (modal, index) {
+        return {
+          index: index,
+          instance: modal.dataset.aimsModalInstance,
+          display: modal.style.display,
+          computedDisplay: getComputedStyle(modal).display,
+          confirm: describeNode(modal.querySelector(".modal-confirm-btn")),
+        };
+      }),
+    });
   }
 
   /* ── intercept new chat ────────────────────────────────────────── */
@@ -287,6 +547,10 @@
       if (btn._aimsIntercepted) return;
 
       btn.addEventListener("click", function (e) {
+        debugLog("logout-trigger-click-attached", {
+          target: describeNode(e.target),
+          currentTarget: describeNode(e.currentTarget),
+        });
         if (btn._aimsLogoutBypass) {
           btn._aimsLogoutBypass = false;
           return;
@@ -317,6 +581,13 @@
     
     if (href.indexOf("logout") !== -1 || id.indexOf("logout") !== -1 || 
         (target.getAttribute('role') === 'menuitem' && (text.indexOf("logout") !== -1 || text.indexOf("sign out") !== -1))) {
+      debugLog("logout-trigger-click-document", {
+        target: describeNode(e.target),
+        matchedTarget: describeNode(target),
+        href: href,
+        id: id,
+        role: target.getAttribute("role"),
+      });
       
       if (target._aimsLogoutBypass) {
         target._aimsLogoutBypass = false;
