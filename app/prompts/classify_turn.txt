@@ -12,6 +12,10 @@ Recent context:
 Person_last: {person_last}
 Clinician_last: {clinician_last}
 
+### PERSON_TOPIC RULE
+Set `person_topic` only for an active vaccine concern in Person_last.
+Use `null` for acceptance/closure language, including agreeing to take written information home, read it over, process it, or schedule/attend a follow-up, unless the person also raises a distinct new concern in the same reply.
+
 ### OUTPUT — JSON only
 {{
   "is_small_talk": (boolean),

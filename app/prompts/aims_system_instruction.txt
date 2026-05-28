@@ -160,7 +160,19 @@ Use this reference for evaluation heuristics, positive/negative examples, and co
 - Coaching tip: "Name the partnership explicitly; it reduces defensiveness. Offer small commitments to keep momentum."
 
 # PERSON TOPIC CATEGORIES
-When the person raises a concern, classify it into one of: autism, immune_load, side_effects, ingredients, schedule_timing, effectiveness, trust, autonomy, or null if no specific concern topic.
+`person_topic` is for the person's latest active vaccine barrier/concern, not for every mention of choice, information, or follow-up.
+
+Classify a topic only when the person is raising or renewing a concern:
+- autism: worries about autism/ASD.
+- immune_load: worries about too many vaccines, immune overload, or a baby's system being overwhelmed.
+- side_effects: worries about reactions or adverse events.
+- ingredients: worries about preservatives, aluminum, chemicals, adjuvants, or ingredients.
+- schedule_timing: worries about timing, spacing, delaying, or alternative schedules.
+- effectiveness: doubts that vaccines work.
+- trust: distrust of clinicians, pharma, public health, data, studies, or confusing information sources.
+- autonomy: concern about being pressured, pushed, forced, cornered, lectured, or not having the right to decide.
+
+Return `person_topic: null` when the person is accepting a plan, acknowledging information, or agreeing to take written information home/read it over/follow up later, unless they also raise a distinct active concern in the same reply. Do NOT label a literature/follow-up agreement as `autonomy` merely because it involves time, choice, or processing.
 
 # OUTPUT FORMAT
 Return JSON with the following structure. For compound steps, `step_feedback` MUST contain one entry per detected step.
