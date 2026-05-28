@@ -11,7 +11,15 @@
   "use strict";
 
   /* ── guard against double-init ─────────────────────────────────── */
-  if (document.getElementById("sidebar-report-button")) return;
+  if (window.__aimsbotCustomJsInitialized) return;
+  window.__aimsbotCustomJsInitialized = true;
+  document.querySelectorAll("#report-issue-modal, #new-session-modal, #logout-modal").forEach(function (modal) {
+    modal.remove();
+  });
+  var logoutInProgress = false;
+  if (window.location.search.indexOf("aims_new=1") !== -1) {
+    window.history.replaceState(null, "", window.location.origin + "/chat");
+  }
 
   /* ── data-author injection ──────────────────────────────────────── */
   /* Chainlit 2.x (shadcn) does NOT emit data-author attributes.       */
@@ -75,10 +83,8 @@
     document.querySelectorAll('[data-step-type="user_message"]').forEach(tagDoctorMessage);
   }
 
-  // Run on DOM mutations to catch dynamically added messages
   var _aimsDebounce = null;
   var authorObserver = new MutationObserver(function () {
-    // Debounce to avoid layout thrashing
     if (_aimsDebounce) return;
     _aimsDebounce = setTimeout(function () {
       _aimsDebounce = null;
@@ -86,12 +92,12 @@
     }, 100);
   });
   authorObserver.observe(document.body, { childList: true, subtree: true });
-  // Also run on short delays for initial render
   setTimeout(injectDataAuthors, 300);
   setTimeout(injectDataAuthors, 1000);
   setTimeout(injectDataAuthors, 3000);
 
   /* ── splash screen tweaks: enlarge icon & hide composer ──────── */
+
   function tweakSplash() {
     // Enlarge the chat profile icon (find by src containing "aimsbot")
     document.querySelectorAll("img").forEach(function (img) {
@@ -107,7 +113,7 @@
     // Hide the Chainlit composer until a message appears.
     // Target the specific "Type your message" textarea, NOT our report modal textarea.
     if (!document._aimsComposerHidden) {
-      const textareas = document.querySelectorAll('textarea[placeholder]');
+      var textareas = document.querySelectorAll('textarea[placeholder]');
       textareas.forEach(function (ta) {
         // Skip our own report-issue textarea
         if (ta.id === "report-issue-modal-input") return;
@@ -115,15 +121,15 @@
         if (ta.closest("#report-issue-modal")) return;
 
         // Find the composer form wrapper
-        const form = ta.closest("form");
+        var form = ta.closest("form");
         if (form && !form._aimsHidden) {
           form._aimsHidden = true;
           form.style.display = "none";
           document._aimsComposerHidden = form;
 
           // Reveal once the first chat message appears
-          const obs = new MutationObserver(function () {
-            const hasMsg = document.querySelector('[data-step-type], [data-author]');
+          var obs = new MutationObserver(function () {
+            var hasMsg = document.querySelector('[data-step-type], [data-author]');
             if (hasMsg) {
               form.style.display = "";
               obs.disconnect();
@@ -133,6 +139,7 @@
         }
       });
     }
+
   }
 
   // Run immediately and retry (Chainlit renders asynchronously)
@@ -174,7 +181,7 @@
   }
 
   // Poll for header availability
-  const buttonInterval = setInterval(function () {
+  var buttonInterval = setInterval(function() {
     if (document.getElementById("header")) {
       injectButton();
       // We don't clear interval immediately because Chainlit might re-render
@@ -184,7 +191,12 @@
 
   /* ── modal ─────────────────────────────────────────────────────── */
   function createModal(id, title, description, placeholder, showTextarea, confirmText, onConfirm) {
-    const modal = document.createElement("div");
+    var existing = document.getElementById(id);
+    if (existing) {
+      existing.remove();
+    }
+
+    var modal = document.createElement("div");
     modal.id = id;
     Object.assign(modal.style, {
       display: "none",
@@ -194,14 +206,14 @@
       width: "100%",
       height: "100%",
       background: "rgba(0,0,0,0.5)",
-      zIndex: "2000",
+      zIndex: "2147483647",
       justifyContent: "center",
       alignItems: "center",
       fontFamily: "sans-serif",
     });
 
-    const textareaHtml = showTextarea ?
-        '<textarea id="' + id + '-input" placeholder="' + placeholder + '" style="width:100%;height:100px;margin:12px 0;padding:8px;border:1px solid #999;border-radius:4px;resize:none;font-size:14px;color:#1a1a1a;background:#fff"></textarea>' : '';
+    var textareaHtml = showTextarea ? 
+      '<textarea id="' + id + '-input" placeholder="' + placeholder + '" style="width:100%;height:100px;margin:12px 0;padding:8px;border:1px solid #999;border-radius:4px;resize:none;font-size:14px;color:#1a1a1a;background:#fff"></textarea>' : '';
 
     modal.innerHTML =
       '<div style="background:#ffffff;padding:24px;border-radius:8px;width:400px;box-shadow:0 4px 12px rgba(0,0,0,0.15)">' +
@@ -216,7 +228,9 @@
 
     document.body.appendChild(modal);
 
-    modal.querySelector(".modal-cancel-btn").addEventListener("click", function () {
+    modal.querySelector(".modal-cancel-btn").addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
       modal.style.display = "none";
     });
 
@@ -224,7 +238,10 @@
       if (e.target === modal) modal.style.display = "none";
     });
 
-    modal.querySelector(".modal-confirm-btn").addEventListener("click", function () {
+    modal.querySelector(".modal-confirm-btn").addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
       var textarea = modal.querySelector("textarea");
       var value = textarea ? textarea.value.trim() : "";
       if (showTextarea && !value) {
@@ -237,6 +254,21 @@
     });
 
     return modal;
+  }
+
+  function leaveChatForLogout() {
+    if (logoutInProgress) return;
+    logoutInProgress = true;
+    logoutModal.style.display = "none";
+
+    var confirmBtn = logoutModal.querySelector(".modal-confirm-btn");
+    if (confirmBtn) {
+      confirmBtn.disabled = true;
+      confirmBtn.style.cursor = "default";
+      confirmBtn.textContent = "Logging out";
+    }
+
+    window.location.assign("/chat/logout");
   }
 
   var reportModal = createModal(
@@ -263,11 +295,11 @@
       // 1. Notify the backend to clear the session state for this user_session
       var payload = JSON.stringify({ type: "new_chat" });
       window.postMessage(payload, "*");
-      
+
       // 2. Force a full reload to /chat which will trigger cl.on_chat_start
       // with the cleared session state.
       setTimeout(function() {
-        window.location.href = window.location.origin + "/chat";
+        window.location.href = window.location.origin + "/chat?aims_new=1";
       }, 100);
     }
   );
@@ -279,25 +311,63 @@
     "",
     false,
     "Logout",
-    function() {
-      // 1. Notify the backend to clear the session state for this user_session
-      var payload = JSON.stringify({ type: "on_logout" });
-      window.postMessage(payload, "*");
-      
-      // 2. Fallback in case window message isn't picked up by parent (unlikely but safe)
-      // We give some time for the message to be processed and for Chainlit to do its own logout
-      setTimeout(function() {
-        // Trigger the original logout button if found
-        var logoutBtn = document.querySelector('a[href*="logout"], button[id*="logout"]');
-        if (logoutBtn) {
-          logoutBtn._aimsLogoutBypass = true;
-          logoutBtn.click();
-        } else {
-          window.location.href = "/chat/logout";
-        }
-      }, 500);
-    }
+    leaveChatForLogout
   );
+
+  function attachLogoutConfirmHandler() {
+    var buttons = document.querySelectorAll("#logout-modal .modal-confirm-btn");
+    buttons.forEach(function (btn) {
+      if (btn._aimsLogoutConfirmAttached) return;
+      btn._aimsLogoutConfirmAttached = true;
+      btn.addEventListener("pointerdown", function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        leaveChatForLogout();
+      }, true);
+      btn.addEventListener("click", function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        leaveChatForLogout();
+      }, true);
+    });
+  }
+  attachLogoutConfirmHandler();
+
+  function logoutConfirmTargetFromEvent(e) {
+    var directTarget = e.target && e.target.closest ? e.target.closest("#logout-modal .modal-confirm-btn") : null;
+    if (directTarget) return directTarget;
+
+    var elementAtPoint = null;
+    try {
+      elementAtPoint = document.elementFromPoint(e.clientX, e.clientY);
+    } catch (_) {}
+    return elementAtPoint && elementAtPoint.closest ? elementAtPoint.closest("#logout-modal .modal-confirm-btn") : null;
+  }
+
+  function handleLogoutConfirmDocumentEvent(e) {
+    var target = logoutConfirmTargetFromEvent(e);
+    if (!target) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    leaveChatForLogout();
+  }
+
+  ["pointerdown", "pointerup", "mouseup", "click"].forEach(function(eventName) {
+    document.addEventListener(eventName, function(e) {
+      handleLogoutConfirmDocumentEvent(e);
+    }, true);
+  });
+
+  function showLogoutModal() {
+    if (logoutInProgress) return;
+    document.querySelectorAll("#logout-modal").forEach(function (modal, index) {
+      modal.style.display = index === 0 ? "flex" : "none";
+    });
+    attachLogoutConfirmHandler();
+  }
 
   /* ── intercept new chat ────────────────────────────────────────── */
   function interceptNewChat() {
@@ -353,7 +423,7 @@
         e.stopPropagation();
         e.stopImmediatePropagation();
 
-        logoutModal.style.display = "flex";
+        showLogoutModal();
       }, true);
 
       btn._aimsIntercepted = true;
@@ -374,7 +444,6 @@
     
     if (href.indexOf("logout") !== -1 || id.indexOf("logout") !== -1 || 
         (target.getAttribute('role') === 'menuitem' && (text.indexOf("logout") !== -1 || text.indexOf("sign out") !== -1))) {
-      
       if (target._aimsLogoutBypass) {
         target._aimsLogoutBypass = false;
         return;
@@ -384,7 +453,7 @@
       e.stopPropagation();
       e.stopImmediatePropagation();
       
-      logoutModal.style.display = "flex";
+      showLogoutModal();
       
       // Mark as intercepted to avoid double modals if the interval also finds it
       target._aimsIntercepted = true;
@@ -395,6 +464,8 @@
   window.addEventListener("message", function(event) {
     if (event.data === "on_duplicate_tab" || (event.data && event.data.type === "on_duplicate_tab")) {
       window.location.href = "/duplicate";
+    } else if (event.data === "on_logout" || (event.data && event.data.type === "on_logout")) {
+      window.location.href = "/";
     }
   });
 
