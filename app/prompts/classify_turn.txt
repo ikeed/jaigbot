@@ -15,12 +15,13 @@ Clinician_last: {clinician_last}
 ### PERSON_TOPIC RULE
 Set `person_topic` only for an active vaccine concern in Person_last.
 Use `null` for acceptance/closure language, including agreeing to take written information home, read it over, process it, or schedule/attend a follow-up, unless the person also raises a distinct new concern in the same reply.
+Use `disease_risk` when the person says the disease feels gone, historical, rare, abstract, unlikely to affect their child, or not a real present-day threat. Do NOT force this into `effectiveness` unless they doubt that the vaccine itself works.
 
 ### OUTPUT — JSON only
 {{
   "is_small_talk": (boolean),
   "is_vaccine_relevant": (boolean),
-  "person_topic": (autism | immune_load | side_effects | ingredients | schedule_timing | effectiveness | trust | autonomy | null),
+  "person_topic": (autism | immune_load | side_effects | ingredients | schedule_timing | disease_risk | effectiveness | trust | autonomy | null),
   "aims": {{
     "steps": [...],
     "score": (0-3),

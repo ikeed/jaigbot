@@ -94,6 +94,38 @@ class TestPromptContent:
             assert "autonomy" in lower
             assert "null" in lower
 
+    def test_person_topic_includes_low_disease_risk_category(self):
+        """Prompts need a category for 'disease feels gone' concerns."""
+        v2 = build_unified_classify_prompt(
+            person_last="I thought measles was basically gone. I haven't seen any cases.",
+            clinician_last="What are your thoughts about MMR?",
+            prior_announced=True,
+            prior_phase="InquireMirror",
+            context_turns=3,
+        )
+        sys = get_classify_system_instruction()
+        for text in (v2, sys):
+            lower = text.lower()
+            assert "disease_risk" in lower
+            assert "historical" in lower or "feels gone" in lower
+            assert "effectiveness" in lower
+
+    def test_feedback_prompt_warns_against_overstating_followup_logistics(self):
+        """Coach feedback should not say a follow-up was scheduled unless it was explicit."""
+        v2 = build_unified_classify_prompt(
+            person_last="That sounds okay.",
+            clinician_last="We can revisit it after she recovers.",
+            prior_announced=True,
+            prior_phase="Secure",
+            context_turns=3,
+        )
+        sys = get_classify_system_instruction()
+        for text in (v2, sys):
+            lower = text.lower()
+            assert "scheduled" in lower or "booked" in lower
+            assert "revisit" in lower
+            assert "explicitly" in lower
+
     def test_prompt_contains_status_question_rule(self):
         """Both prompts should handle trailing status questions as Announce."""
         v2 = build_unified_classify_prompt(
