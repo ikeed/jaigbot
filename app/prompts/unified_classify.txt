@@ -60,6 +60,13 @@ Clinicians often synthesize multiple AIMS moves in a single turn. Use arrays: `[
 - **"But" in a separate clause** → No penalty.
 - **Cognitive validation of a concern** → **Mirror**, not Secure.
 
+### PERSON_TOPIC RULES
+`person_topic` is for the person's latest active vaccine barrier/concern.
+- Use `null` for acceptance/closure language, including agreeing to take written information home, read it over, process it, or schedule/attend a follow-up.
+- Do NOT label a literature/follow-up agreement as `autonomy` merely because it involves time, choice, or processing.
+- Only return `autonomy` when the person expresses pressure, coercion, being pushed/forced/cornered/lectured, or concern that their right to decide is not being respected.
+- If the person accepts a plan and also raises a distinct new worry in the same reply, classify the new worry, not the plan acceptance.
+
 ### CONVERSATION STATE
 Recent context:
 {recent_context}

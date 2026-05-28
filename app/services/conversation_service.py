@@ -83,6 +83,65 @@ _HEDGING_CUES = (
     "what about", "what if",
 )
 
+_MATERIALS_OR_FOLLOWUP_CUES = (
+    "take information home",
+    "take some information home",
+    "information home",
+    "something to read",
+    "read over",
+    "read through",
+    "look over",
+    "look through",
+    "written information",
+    "handout",
+    "pamphlet",
+    "materials",
+    "follow-up",
+    "follow up",
+)
+
+_PLAN_ACCEPTANCE_CUES = (
+    "sounds good",
+    "sounds really good",
+    "would help",
+    "would help a lot",
+    "would be great",
+    "that's okay",
+    "if that's okay",
+    "thank you",
+    "thanks",
+    "i appreciate",
+    "that helps",
+    "that would help",
+)
+
+_ACTIVE_CONCERN_CUES = (
+    "worried",
+    "worry",
+    "concern",
+    "concerns",
+    "nervous",
+    "scared",
+    "afraid",
+    "unsafe",
+    "harm",
+    "risk",
+    "risks",
+    "not sure",
+    "not certain",
+    "not convinced",
+    "pressured",
+    "pressure",
+    "pushed",
+    "forced",
+    "cornered",
+    "lectured",
+    "trust",
+    "pharma",
+    "conflicting information",
+    "hard to know what to believe",
+)
+
 
 def _is_acceptance_message(text: str) -> bool:
     """Return True if `text` is a positive response, not a new concern."""
@@ -95,6 +154,18 @@ def _is_acceptance_message(text: str) -> bool:
     if any(h in lt for h in _HEDGING_CUES):
         return False
     return True
+
+
+def _is_materials_or_followup_acceptance(text: str) -> bool:
+    """Return True when the person accepts materials/follow-up, not a new concern."""
+    lt = (text or "").strip().lower()
+    if not lt:
+        return False
+    if not any(cue in lt for cue in _MATERIALS_OR_FOLLOWUP_CUES):
+        return False
+    if not any(cue in lt for cue in _PLAN_ACCEPTANCE_CUES):
+        return False
+    return not any(cue in lt for cue in _ACTIVE_CONCERN_CUES)
 
 
 def maybe_add_person_concern(
@@ -115,6 +186,12 @@ def maybe_add_person_concern(
 
     # Skip positive responses that aren't actual concerns
     if _is_acceptance_message(person_text):
+        return
+
+    # Guard against LLM person_topic false positives where a person is
+    # accepting take-home materials or follow-up rather than raising a new
+    # autonomy/trust barrier.
+    if llm_topic in {"autonomy", "trust"} and _is_materials_or_followup_acceptance(person_text):
         return
     
     topic = llm_topic or concern_topic(person_text, topical_cues)

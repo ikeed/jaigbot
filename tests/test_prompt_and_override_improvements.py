@@ -77,6 +77,23 @@ class TestPromptContent:
         assert "praise" in instruction.lower()
         assert "improvement" in instruction.lower()
 
+    def test_person_topic_excludes_literature_followup_acceptance(self):
+        """Prompts must not turn literature/follow-up agreement into autonomy concerns."""
+        v2 = build_unified_classify_prompt(
+            person_last="That sounds good. I will read it over at home and follow up.",
+            clinician_last="I will give you written information and book a follow-up.",
+            prior_announced=True,
+            prior_phase="Secure",
+            context_turns=3,
+        )
+        sys = get_classify_system_instruction()
+        for text in (v2, sys):
+            lower = text.lower()
+            assert "person_topic" in lower
+            assert "literature/follow-up agreement" in lower
+            assert "autonomy" in lower
+            assert "null" in lower
+
     def test_prompt_contains_status_question_rule(self):
         """Both prompts should handle trailing status questions as Announce."""
         v2 = build_unified_classify_prompt(
