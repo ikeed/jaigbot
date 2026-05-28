@@ -98,6 +98,7 @@ _MATERIALS_OR_FOLLOWUP_CUES = (
     "materials",
     "follow-up",
     "follow up",
+    "another appointment"
 )
 
 _PLAN_ACCEPTANCE_CUES = (
@@ -286,22 +287,39 @@ def mark_secured_by_topic(
     topical_cues: TopicalCues,
     llm_topic: Optional[str] = None
 ) -> None:
-    """Mark first mirrored concern matching clinician topic as secured; fallback to first mirrored.
+    """Mark mirrored concerns matching clinician topic(s) as secured.
+
+    If the LLM supplies a single topic, mark that mirrored topic. Otherwise,
+    mark all mirrored concerns whose topics appear in the clinician text. Fall
+    back only when there is exactly one mirrored unresolved concern; if several
+    concerns could match, leave them alone rather than guessing.
     """
     concerns: List[Concern] = state.get("parent_concerns") or []
     if not concerns:
         return
     
-    topic = llm_topic or concern_topic(clinician_text, topical_cues)
-    if topic:
+    if llm_topic:
         for c in concerns:
-            if (c.get("topic") == topic) and c.get("is_mirrored") and not c.get("is_secured"):
+            if (c.get("topic") == llm_topic) and c.get("is_mirrored") and not c.get("is_secured"):
                 c["is_secured"] = True
                 return
-    for c in concerns:
-        if c.get("is_mirrored") and not c.get("is_secured"):
-            c["is_secured"] = True
-            return
+
+    found = topics_in(clinician_text, topical_cues)
+    marked_any = False
+    if found:
+        for c in concerns:
+            if (c.get("topic") in found) and c.get("is_mirrored") and not c.get("is_secured"):
+                c["is_secured"] = True
+                marked_any = True
+    if marked_any:
+        return
+
+    candidates = [
+        c for c in concerns
+        if c.get("is_mirrored") and not c.get("is_secured")
+    ]
+    if len(candidates) == 1:
+        candidates[0]["is_secured"] = True
 
 
 __all__ = [

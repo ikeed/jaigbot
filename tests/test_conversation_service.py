@@ -142,3 +142,12 @@ def test_mark_secured_by_topic_fallback_to_first_mirrored():
     ]}
     mark_secured_by_topic(st, clinician_text="no match text", topical_cues=TOPICAL_CUES)
     assert st["parent_concerns"][0]["is_secured"] is True
+
+
+def test_mark_secured_by_topic_does_not_guess_between_multiple_concerns():
+    st = {"parent_concerns": [
+        {"desc": "late bedtime", "topic": "sleep", "is_mirrored": True, "is_secured": False},
+        {"desc": "too much screen", "topic": "screen_time", "is_mirrored": True, "is_secured": False},
+    ]}
+    mark_secured_by_topic(st, clinician_text="no match text", topical_cues=TOPICAL_CUES)
+    assert not any(c["is_secured"] for c in st["parent_concerns"])

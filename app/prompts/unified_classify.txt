@@ -66,6 +66,7 @@ Clinicians often synthesize multiple AIMS moves in a single turn. Use arrays: `[
 - Do NOT label a literature/follow-up agreement as `autonomy` merely because it involves time, choice, or processing.
 - Only return `autonomy` when the person expresses pressure, coercion, being pushed/forced/cornered/lectured, or concern that their right to decide is not being respected.
 - If the person accepts a plan and also raises a distinct new worry in the same reply, classify the new worry, not the plan acceptance.
+- Use `disease_risk` when the person says the disease feels gone, historical, rare, abstract, unlikely to affect their child, or not a real present-day threat. Do NOT force this into `effectiveness` unless they doubt that the vaccine itself works.
 
 ### CONVERSATION STATE
 Recent context:
@@ -86,12 +87,13 @@ Clinician_last: {clinician_last}
   - **Praise** (tone: "praise"): say what the clinician did well.
   - **Improvement** (tone: "improvement"): say what to do differently next time. Always include what to do instead.
 - For compound steps, provide one step_feedback entry per component.
+- Do not overstate logistics. If the clinician only says "we can revisit it" or "talk later," call that a revisit/follow-up option; only say "scheduled" or "booked" when an appointment, timing, or booking was explicitly proposed.
 
 ### OUTPUT — JSON only, no fences
 {{
   "is_small_talk": (boolean),
   "is_vaccine_relevant": (boolean),
-  "person_topic": (autism | immune_load | side_effects | ingredients | schedule_timing | effectiveness | trust | autonomy | null),
+  "person_topic": (autism | immune_load | side_effects | ingredients | schedule_timing | disease_risk | effectiveness | trust | autonomy | null),
   "aims": {{
     "steps": [...],
     "score": (0-3),
