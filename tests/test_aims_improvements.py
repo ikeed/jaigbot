@@ -145,6 +145,119 @@ def test_mirror_plus_inquire_returns_phase_from_secure():
     assert state["phase"] == "InquireMirror"
 
 
+def test_mirror_secure_inquire_scalar_marks_all_components():
+    """A scalar-only Mirror+Secure+Inquire payload should still update concern state."""
+    h = _handler_instance()
+    mem = {
+        "character": None,
+        "aims_state": _make_state(
+            phase="InquireMirror",
+            concerns=[
+                {
+                    "desc": "I'm worried about side effects.",
+                    "topic": "side_effects",
+                    "is_mirrored": False,
+                    "is_secured": False,
+                }
+            ],
+        ),
+    }
+    cls = {"step": "Mirror+Secure+Inquire", "score": 3, "reasons": [], "tips": []}
+
+    h._update_aims_state(
+        mem,
+        cls,
+        "You're worried about side effects. Serious side effects are rare. What else is on your mind?",
+        "I'm worried about side effects.",
+        llm_topic="side_effects",
+    )
+
+    concern = mem["aims_state"]["parent_concerns"][0]
+    assert concern["is_mirrored"] is True
+    assert concern["is_secured"] is True
+    assert mem["aims_state"]["first_inquire_done"] is True
+    assert mem["aims_state"]["phase"] == "Secure"
+    assert cls["phase"] == "Secure"
+
+
+def test_mirror_secure_inquire_can_resolve_multiple_explicit_concerns():
+    """A blended turn mentioning two concerns should mirror and secure both."""
+    h = _handler_instance()
+    mem = {
+        "character": None,
+        "aims_state": _make_state(
+            phase="InquireMirror",
+            concerns=[
+                {
+                    "desc": "I'm worried about side effects and aluminum.",
+                    "topic": "side_effects",
+                    "is_mirrored": False,
+                    "is_secured": False,
+                },
+                {
+                    "desc": "I'm worried about side effects and aluminum.",
+                    "topic": "ingredients",
+                    "is_mirrored": False,
+                    "is_secured": False,
+                },
+            ],
+        ),
+    }
+    cls = {"step": "Mirror+Secure+Inquire", "score": 3, "reasons": [], "tips": []}
+
+    h._update_aims_state(
+        mem,
+        cls,
+        (
+            "You're worried about side effects and aluminum ingredients. "
+            "Serious side effects are rare, and the aluminum amount is very small. "
+            "What else feels important?"
+        ),
+        "I'm worried about side effects and aluminum.",
+        llm_topic="side_effects",
+    )
+
+    concerns = mem["aims_state"]["parent_concerns"]
+    assert all(c["is_mirrored"] for c in concerns)
+    assert all(c["is_secured"] for c in concerns)
+    assert mem["aims_state"]["pending_concerns"] is False
+
+
+def test_secure_inquire_scalar_marks_secure_without_premature_secure_warning():
+    """Secure+Inquire should secure an already mirrored concern without Secure-only warning."""
+    h = _handler_instance()
+    mem = {
+        "character": None,
+        "aims_state": _make_state(
+            phase="InquireMirror",
+            concerns=[
+                {
+                    "desc": "I'm worried about side effects.",
+                    "topic": "side_effects",
+                    "is_mirrored": True,
+                    "is_secured": False,
+                }
+            ],
+        ),
+    }
+    cls = {"step": "Secure+Inquire", "score": 3, "reasons": [], "tips": []}
+
+    h._update_aims_state(
+        mem,
+        cls,
+        "Side effects are usually mild and brief. What else would help you decide?",
+        "I'm worried about side effects.",
+        llm_topic="side_effects",
+    )
+
+    concern = mem["aims_state"]["parent_concerns"][0]
+    assert concern["is_secured"] is True
+    feedback = " ".join(cls["reasons"]).lower()
+    assert "reflecting" not in feedback
+    assert "mirroring" not in feedback
+    assert "open question first" not in feedback
+
+
 # ---------------------------------------------------------------------------
 # Coaching feedback de-duplication and escalation tests (Fix 3)
 # ---------------------------------------------------------------------------

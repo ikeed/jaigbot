@@ -523,8 +523,8 @@ class AimsCoachingHandler:
                 "first_inquire_done": False, "pending_concerns": True, 
                 "parent_concerns": []
             })
-            
-            steps = cls_payload.get("steps") or ([cls_payload.get("step")] if cls_payload.get("step") else [])
+            step_main = cls_payload.get("step")
+            steps = self._component_steps(step_main, cls_payload.get("steps"))
             
             # Add latest person concern if any, avoiding duplicates by topic
             if person_last:
@@ -537,10 +537,9 @@ class AimsCoachingHandler:
                     self._TOPICAL_CUES, llm_topic=llm_topic
                 )
             if "Secure" in steps:
-                mark_secured_by_topic(state, clinician_message, self._TOPICAL_CUES, llm_topic=llm_topic)
+                mark_secured_by_topic(state, clinician_message, self._TOPICAL_CUES)
 
             # 2. Apply coaching guidance rules
-            step_main = cls_payload.get("step")
             character = mem.get("character")
             self._apply_coaching_guidance(
                 cls_payload, step_main, state, clinician_message, person_last,
@@ -556,6 +555,32 @@ class AimsCoachingHandler:
             
         except Exception:
             self.logger.exception("AIMS state update failed")
+
+    @classmethod
+    def _component_steps(
+        cls, step_current: str | None, steps: List[str] | None = None
+    ) -> List[str]:
+        """Return de-duplicated atomic AIMS steps for state transitions.
+
+        Classifier payloads normally include both ``step`` and ``steps``, but
+        deterministic fallbacks and older tests can provide only a compound
+        scalar such as ``Mirror+Secure+Inquire``.  State updates should still
+        credit each operation in that turn.
+        """
+        out: List[str] = []
+
+        def add(step: str | None) -> None:
+            if not step:
+                return
+            expanded = cls._COMPOUND_EXPANSIONS.get(step, [step])
+            for item in expanded:
+                if item and item not in out:
+                    out.append(item)
+
+        for step in steps or []:
+            add(step)
+        add(step_current)
+        return out
     
     # Prefixes that mark a reason as internal/debug rather than user-facing
     # coaching feedback.  These are filtered out when building the coach note.
@@ -664,14 +689,16 @@ class AimsCoachingHandler:
                 "Keep it brief and invite input (e.g., 'How does that sound?')."
             )
         
-        # Handle mirroring (Mirror, Mirror+Inquire, and Mirror+Secure all mirror)
-        if step_current in ("Mirror", "Mirror+Inquire", "Mirror+Secure"):
+        component_steps = set(self._component_steps(step_current))
+
+        # Handle mirroring for plain and compound Mirror turns.
+        if "Mirror" in component_steps:
             mark_mirrored_multi(state, clinician_message, person_last, self._TOPICAL_CUES)
         
         # Handle securing
-        if step_current == "Mirror+Secure":
+        if "Secure" in component_steps and step_current != "Secure":
             # Compound step: securing is part of the blended turn. No "secure before mirror"
-            # warning — the Mirror component handles it. Simply mark secured.
+            # warning — the Mirror component, when present, handles it in the same turn.
             mark_secured_by_topic(state, clinician_message, self._TOPICAL_CUES)
         elif step_current == "Secure":
             # Priority check: if no Inquire has ever occurred, the deeper issue is
@@ -764,9 +791,7 @@ class AimsCoachingHandler:
         that compound turns like Announce+Inquire correctly set announced=True even
         when the primary reported step is Inquire.
         """
-        all_steps = set(steps or [])
-        if step_current:
-            all_steps.add(step_current)
+        all_steps = set(self._component_steps(step_current, steps))
 
         # Announce in any step sets the announced flag
         if "Announce" in all_steps:
@@ -776,7 +801,7 @@ class AimsCoachingHandler:
         # Track how many turns have included a Mirror component.  Used to
         # suppress false-alarm "secure before mirroring" warnings when
         # keyword matching fails to update is_mirrored on individual concerns.
-        if "Mirror" in all_steps or step_current in ("Mirror", "Mirror+Inquire", "Mirror+Secure"):
+        if "Mirror" in all_steps:
             state["mirrors_done"] = state.get("mirrors_done", 0) + 1
 
         # Inquire / Announce+Inquire / Mirror+Inquire / Secure+Inquire always sets phase to InquireMirror,

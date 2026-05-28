@@ -399,6 +399,57 @@ def test_all_concerns_mirrored_allows_endgame():
     assert result is not None, "Endgame should proceed when all concerns are mirrored"
 
 
+def test_compound_turn_resolving_final_concern_allows_endgame():
+    """Mirror+Secure+Inquire should unblock endgame when it resolves the last concern."""
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_vaccine",
+            "summary": "Person agreed to vaccinate.",
+            "reason": "",
+        }
+    )
+    store = {
+        "s13b": {
+            "history": [
+                {"role": "user", "content": "MMR recommended."},
+                {"role": "assistant", "content": "Okay, let's do it today. I consent."},
+            ],
+            "aims_state": {
+                "phase": "InquireMirror",
+                "announced": True,
+                "first_inquire_done": True,
+                "parent_concerns": [
+                    {
+                        "desc": "I'm worried about side effects.",
+                        "topic": "side_effects",
+                        "is_mirrored": False,
+                        "is_secured": False,
+                    },
+                ],
+            },
+        }
+    }
+    handler = _make_handler(store, mock_svc)
+
+    cls = {"step": "Mirror+Secure+Inquire", "score": 3, "reasons": [], "tips": []}
+    handler._update_aims_state(
+        store["s13b"],
+        cls,
+        "You're worried about side effects. Serious side effects are rare. What else would help?",
+        "I'm worried about side effects.",
+        llm_topic="side_effects",
+    )
+
+    concern = store["s13b"]["aims_state"]["parent_concerns"][0]
+    assert concern["is_mirrored"] is True
+    assert concern["is_secured"] is True
+
+    result = _run(handler._check_end_game(store["s13b"], {}, None))
+    assert result is not None, "Endgame should proceed after the compound turn resolves the final concern"
+    assert mock_svc.last_history_text != "", "LLM should be called once concern guard is satisfied"
+
+
 def test_no_concerns_allows_endgame():
     """Endgame should proceed when no concerns have been registered at all."""
     mock_svc = _MockClassifierService(
