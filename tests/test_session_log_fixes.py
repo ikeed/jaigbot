@@ -103,6 +103,29 @@ class TestTopicalCuesFalsePositive:
         assert len(state["parent_concerns"]) == 1
         assert state["parent_concerns"][0]["topic"] == "side_effects"
 
+    def test_low_measles_risk_concern_registers_as_disease_risk(self):
+        """'Measles is gone / not a real threat' should not be forced into effectiveness."""
+        state = {"parent_concerns": []}
+        maybe_add_person_concern(
+            state,
+            "I thought measles was pretty much gone, so I'm not sure how much of a risk it really is anymore.",
+            self._topical_cues(),
+            llm_topic=None,
+        )
+        assert len(state["parent_concerns"]) == 1
+        assert state["parent_concerns"][0]["topic"] == "disease_risk"
+
+    def test_clinical_measles_question_does_not_register_as_disease_risk(self):
+        """A clinical question about symptoms being measles is not automatically a vaccine barrier."""
+        state = {"parent_concerns": []}
+        maybe_add_person_concern(
+            state,
+            "So, with Emily having these symptoms, could this actually be measles then?",
+            self._topical_cues(),
+            llm_topic=None,
+        )
+        assert state["parent_concerns"] == []
+
     def test_reaction_to_the_shot_registers(self):
         """'reaction to the shot' should still register as side_effects."""
         state = {"parent_concerns": []}

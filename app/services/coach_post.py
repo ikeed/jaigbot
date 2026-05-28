@@ -343,8 +343,8 @@ def build_endgame_bullets_fallback(session_obj: Dict | None) -> List[str]:
         },
         "Inquire": {
             "high": "strong open questions that surfaced the parent's real concerns.",
-            "mid":  "good inquiry; keep questions single-barreled — avoid listing multiple options in one question.",
-            "low":  "use open-ended questions to surface concerns (e.g., \"What's on your mind about vaccines today?\") and avoid stacking multiple questions.",
+            "mid":  "good inquiry; when closing the loop, explicitly invite any remaining concerns or what is still on their mind.",
+            "low":  "use open-ended questions to surface concerns (e.g., \"What's still on your mind about vaccines today?\") before educating.",
             "absent": "ask at least one open-ended question to discover the parent's specific concerns before educating.",
         },
         "Mirror": {

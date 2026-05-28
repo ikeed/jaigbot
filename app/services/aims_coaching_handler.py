@@ -81,6 +81,16 @@ class AimsCoachingHandler:
                         "reaction to the shot", "after the shot", "after the vaccine"],
         "ingredients": ["thimerosal", "aluminum", "adjuvant", "preservative", "ingredient"],
         "schedule_timing": ["schedule", "spacing", "delay", "alternative schedule", "wait"],
+        "disease_risk": [
+            "measles was pretty much gone", "measles is pretty much gone",
+            "measles was gone", "measles is gone", "measles basically gone",
+            "thing of the past", "old disease", "from the past",
+            "don't see it around", "do not see it around",
+            "haven't seen any cases", "have not seen any cases",
+            "never seen a case", "never seen it", "never actually seen it",
+            "hard to picture", "hard to imagine", "real threat", "real danger",
+            "still around", "catching it", "actually catching it",
+        ],
         "effectiveness": ["effective", "efficacy", "works", "breakthrough"],
         "trust": [
             "data", "study", "studies", "pharma", "big pharma", "trust",
