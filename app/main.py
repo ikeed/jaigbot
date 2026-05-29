@@ -2,7 +2,6 @@ import json
 import logging
 import time
 import uuid
-import asyncio
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -14,11 +13,9 @@ from fastapi.responses import JSONResponse
 from .config import settings
 from .vertex import VertexClient
 from .runtime import VertexClientCache, create_memory_store
+from .routes.summary import create_summary_router
 from .routes.system import create_system_router
 from .services.session_initializer import deregister_session_connection, initialize_session
-from .telemetry.events import (
-    log_event as telemetry_log_event,
-)
 
 _VERTEX_CLIENT_CACHE = VertexClientCache()
 
@@ -347,148 +344,6 @@ async def log_requests(request: Request, call_next):
 
     return response
 
-@app.get("/summary")
-async def summary(
-    sessionId: Optional[str] = None,
-    analysis: Optional[bool] = False,
-    memory_store=Depends(get_memory_store),
-):
-    """Return an aggregated AIMS summary for a session.
-
-    Stable contract keys: overallScore, stepCoverage, strengths, growthAreas.
-    Optional: when analysis=true, includes an LLM-authored 'analysis' bullet list
-    using full transcript, AIMS scores, and aims_mapping.json.
-    """
-    base = {"overallScore": 0.0, "stepCoverage": {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0}, "strengths": [], "growthAreas": []}
-    if not sessionId or not settings.MEMORY_ENABLED:
-        if analysis:
-            base["analysis"] = []
-        return base
-    mem = memory_store.get(sessionId) or {}
-    aims = mem.get("aims") or {}
-    per_counts = {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0}
-    per_counts.update(aims.get("perStepCounts", {}))
-    # compute simple averages
-    running_avg: dict[str, float] = {}
-    for k, arr in (aims.get("scores", {}) or {}).items():
-        if arr:
-            try:
-                running_avg[k] = sum(arr)/len(arr)
-            except Exception:
-                pass
-    # overall: mean of available averages
-    overall = (sum(running_avg.values())/len(running_avg)) if running_avg else 0.0
-    base.update({
-        "overallScore": overall,
-        "stepCoverage": per_counts,
-        "runningAverage": running_avg,
-        "strengths": [],
-        "growthAreas": [],
-        "totalTurns": aims.get("totalTurns", 0),
-    })
-
-    if not analysis:
-        return base
-
-    # Build transcript
-    transcript = ""
-    try:
-        hist = mem.get("history") or []
-        parts = []
-        for item in hist:
-            role = item.get("role") or "assistant"
-            author = "Doctor" if role == "user" else "Patient"
-            txt = (item.get("content") or "").strip()
-            if txt:
-                parts.append(f"{author}: {txt}")
-        transcript = "\n".join(parts)
-    except Exception:
-        transcript = ""
-
-    # Load aims mapping JSON
-    mapping = getattr(app.state, "aims_mapping", None)
-    if mapping is None:
-        try:
-            from .aims_engine import load_mapping
-            mapping = load_mapping()
-            app.state.aims_mapping = mapping
-        except Exception:
-            mapping = {}
-
-    metrics_blob = json.dumps({
-        "totalTurns": aims.get("totalTurns", 0),
-        "perStepCounts": per_counts,
-        "runningAverage": aims.get("runningAverage", {}),
-    }, ensure_ascii=False)
-    mapping_blob = json.dumps(mapping or {}, ensure_ascii=False)
-
-    # Render prompt and call Vertex to obtain analysis bullets
-    try:
-        from app.prompts.aims import build_summary_analysis_prompt as _build_summary_analysis_prompt
-        prompt = _build_summary_analysis_prompt(metrics_blob=metrics_blob, mapping_blob=mapping_blob, transcript=transcript)
-
-        from .services.vertex_helpers import vertex_call_with_fallback_text
-        # Use Flash for summary analysis (faster, schema-light); keep Pro as fallback
-        narrative = await asyncio.to_thread(
-            vertex_call_with_fallback_text,
-            project=settings.PROJECT_ID,
-            region=settings.VERTEX_LOCATION,
-            primary_model="gemini-2.5-flash",
-            fallbacks=[settings.MODEL_ID] + list(settings.MODEL_FALLBACKS or []),
-            temperature=min(settings.TEMPERATURE, 0.2),
-            max_tokens=min(settings.MAX_TOKENS, 384),
-            prompt=prompt,
-            system_instruction=None,
-            log_path="summary_analysis",
-            logger=logger,
-            client_cls=VertexClient,
-        )
-        narrative = (narrative or "").strip()
-        bullets_raw = [ln for ln in narrative.splitlines() if ln.strip()]
-        try:
-            from app.services.coach_post import sanitize_endgame_bullets as _sanitize
-            bullets = _sanitize(bullets_raw)
-        except Exception:
-            bullets = [ln.strip(" -\t") for ln in bullets_raw]
-
-        # Enforce consistency with metrics: do not allow bullets that contradict step coverage
-        try:
-            import re
-            def _enforce_metrics_consistency(bullets_in: list[str], step_counts: dict[str, int]) -> list[str]:
-                present = {k for k, v in (step_counts or {}).items() if isinstance(v, int) and v > 0}
-                pat = re.compile(r"\b(Announce|Inquire|Mirror|Secure)\b.*\b(skipped|missing|didn’t happen|did not happen|not used)\b", re.IGNORECASE)
-                cleaned: list[str] = []
-                for b in bullets_in or []:
-                    m = pat.search(b or "")
-                    if m and (m.group(1) in present):
-                        step = m.group(1)
-                        rewrites = {
-                            "Announce": "Announce occurred — keep it concise and invite input (e.g., ‘It’s MMR today — how does that sound?’).",
-                            "Inquire": "Inquire was present — prioritize open-ended questions and pause for the full answer.",
-                            "Mirror": "Mirror was used — keep reflecting the exact worry before educating.",
-                            "Secure": "Secure was present — share one tailored fact, link to the concern, and check understanding.",
-                        }
-                        cleaned.append(rewrites.get(step, b))
-                    else:
-                        cleaned.append(b)
-                # de-duplicate preserving order
-                out, seen = [], set()
-                for x in cleaned:
-                    if x not in seen:
-                        out.append(x); seen.add(x)
-                return out
-            bullets = _enforce_metrics_consistency(bullets, per_counts)
-        except Exception:
-            pass
-
-        base["analysis"] = bullets
-    except Exception as e:
-        telemetry_log_event(logger, "summary_analysis_failed", sessionId=sessionId, error=str(e))
-        base["analysis"] = []
-
-    return base
-
-
 from .models import ChatRequest, ReportRequest
 from pydantic import BaseModel as _BaseModel
 
@@ -522,6 +377,12 @@ app.include_router(create_system_router(
     get_memory_store=get_memory_store,
     get_model_check=get_model_check,
     get_request_id=_get_request_id,
+))
+app.include_router(create_summary_router(
+    settings=settings,
+    logger=logger,
+    get_memory_store=get_memory_store,
+    vertex_client_cls=VertexClient,
 ))
 
 
