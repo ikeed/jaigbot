@@ -7,7 +7,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Depends
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -61,6 +61,14 @@ async def _lifespan(application: FastAPI):
 
 
 app = FastAPI(title="AIMSBot (Gemini Enterprise)", version="0.2.0", lifespan=_lifespan)
+
+
+def get_memory_store(request: Request):
+    return getattr(request.app.state, "memory_store", _MEMORY_STORE)
+
+
+def get_model_check(request: Request) -> dict:
+    return getattr(request.app.state, "model_check", {"available": "unknown"})
 
 # Optional CORS
 if settings.ALLOWED_ORIGINS:
@@ -364,7 +372,11 @@ async def healthz():
 
 
 @app.get("/history")
-async def history(sessionId: Optional[str] = None, full: Optional[bool] = False):
+async def history(
+    sessionId: Optional[str] = None,
+    full: Optional[bool] = False,
+    memory_store=Depends(get_memory_store),
+):
     """Return conversation history for a session.
 
     By default returns the trimmed working history as a list of {role, content}.
@@ -374,7 +386,7 @@ async def history(sessionId: Optional[str] = None, full: Optional[bool] = False)
     try:
         if not (sessionId and settings.MEMORY_ENABLED):
             return {"history": []}
-        mem = _MEMORY_STORE.get(sessionId) or {}
+        mem = memory_store.get(sessionId) or {}
         if full:
             return {"history": mem.get("full_history") or []}
         hist = mem.get("history") or []
@@ -394,7 +406,11 @@ async def history(sessionId: Optional[str] = None, full: Optional[bool] = False)
 
 
 @app.get("/summary")
-async def summary(sessionId: Optional[str] = None, analysis: Optional[bool] = False):
+async def summary(
+    sessionId: Optional[str] = None,
+    analysis: Optional[bool] = False,
+    memory_store=Depends(get_memory_store),
+):
     """Return an aggregated AIMS summary for a session.
 
     Stable contract keys: overallScore, stepCoverage, strengths, growthAreas.
@@ -406,7 +422,7 @@ async def summary(sessionId: Optional[str] = None, analysis: Optional[bool] = Fa
         if analysis:
             base["analysis"] = []
         return base
-    mem = _MEMORY_STORE.get(sessionId) or {}
+    mem = memory_store.get(sessionId) or {}
     aims = mem.get("aims") or {}
     per_counts = {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0}
     per_counts.update(aims.get("perStepCounts", {}))
@@ -851,9 +867,12 @@ async def report(req: Request, body: ReportRequest, background_tasks: Background
 
 
 @app.get("/config")
-async def config():
+async def config(
+    memory_store=Depends(get_memory_store),
+    model_check: dict = Depends(get_model_check),
+):
     # Pull model preflight info if available
-    mc = getattr(app.state, "model_check", {"available": "unknown"})
+    mc = model_check
     return {
         "projectId": settings.PROJECT_ID,
         "region": settings.REGION,
@@ -890,7 +909,7 @@ async def config():
         "memoryTtlSeconds": settings.MEMORY_TTL_SECONDS,
         "redisKeyPrefix": settings.redis_key_prefix,
         "redisFallbackPrefixes": settings.redis_fallback_prefixes,
-        "memoryStoreSize": len(_MEMORY_STORE),
+        "memoryStoreSize": len(memory_store),
         # Hard-coded defaults visibility
         "defaultCharacter": (DEFAULT_CHARACTER if settings.DEBUG_MODE and DEFAULT_CHARACTER else None),
         "defaultScene": (DEFAULT_SCENE if settings.DEBUG_MODE and DEFAULT_SCENE else None),
@@ -905,13 +924,13 @@ async def config():
 
 
 @app.get("/modelcheck")
-async def modelcheck():
-    mc = getattr(app.state, "model_check", {"available": "unknown"})
+async def modelcheck(model_check: dict = Depends(get_model_check)):
+    mc = model_check
     return {"modelId": settings.MODEL_ID, "region": settings.VERTEX_LOCATION, **mc}
 
 
 @app.get("/diagnostics")
-async def diagnostics():
+async def diagnostics(memory_store=Depends(get_memory_store)):
     """Expose effective generation settings to help root-cause truncation issues."""
     diag = {
         "transport": "rest" if settings.USE_VERTEX_REST else "sdk",
@@ -934,7 +953,7 @@ async def diagnostics():
             "ttlSeconds": settings.MEMORY_TTL_SECONDS,
             "redisKeyPrefix": settings.redis_key_prefix,
             "redisFallbackPrefixes": settings.redis_fallback_prefixes,
-            "storeSize": len(_MEMORY_STORE),
+            "storeSize": len(memory_store),
         },
         "environment": {
             "appEnv": settings.APP_ENV,
