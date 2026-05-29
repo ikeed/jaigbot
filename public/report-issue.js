@@ -13,12 +13,21 @@
   /* ── guard against double-init ─────────────────────────────────── */
   if (window.__aimsbotCustomJsInitialized) return;
   window.__aimsbotCustomJsInitialized = true;
-  document.querySelectorAll("#report-issue-modal, #new-session-modal, #logout-modal").forEach(function (modal) {
+  document.querySelectorAll("#report-issue-modal, #new-session-modal, #logout-modal, #aims-infographic-modal").forEach(function (modal) {
     modal.remove();
   });
   var logoutInProgress = false;
+  var pendingIntroStorageKey = "aimsbot.pendingIntro";
   if (window.location.search.indexOf("aims_new=1") !== -1) {
     window.history.replaceState(null, "", window.location.origin + "/chat");
+  }
+
+  function isLoginCallbackRoute() {
+    return window.location.pathname.indexOf("/login/callback") !== -1;
+  }
+
+  function isChatShellReady() {
+    return !!document.getElementById("header");
   }
 
   /* ── data-author injection ──────────────────────────────────────── */
@@ -148,17 +157,31 @@
   setTimeout(tweakSplash, 800);
   setTimeout(tweakSplash, 1500);
 
-  /* ── button ────────────────────────────────────────────────────── */
+  /* ── header buttons ────────────────────────────────────────────── */
   function injectButton() {
     var header = document.getElementById("header");
     if (!header) return;
-    if (document.getElementById("sidebar-report-button")) return;
 
     // The right-side container is the last child div with flex layout.
     // Chainlit 2.11 uses: className="flex items-center gap-1"
     var rightContainer = header.querySelector('div.flex.items-center.gap-1')
       || header.lastElementChild;
     if (!rightContainer) return;
+
+    if (!document.getElementById("aims-info-button")) {
+      var infoBtn = document.createElement("button");
+      infoBtn.id = "aims-info-button";
+      infoBtn.type = "button";
+      infoBtn.className = "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-accent h-9 w-9 text-muted-foreground hover:text-muted-foreground";
+      infoBtn.innerHTML = '<span aria-hidden="true" style="font-size:18px">?</span>';
+      infoBtn.title = "AIMS infographic";
+      rightContainer.insertBefore(infoBtn, rightContainer.firstChild);
+      infoBtn.addEventListener("click", function () {
+        showInfographicModal(false);
+      });
+    }
+
+    if (document.getElementById("sidebar-report-button")) return;
 
     var btn = document.createElement("button");
     btn.id = "sidebar-report-button";
@@ -254,6 +277,229 @@
     });
 
     return modal;
+  }
+
+  function createInfographicModal() {
+    var existing = document.getElementById("aims-infographic-modal");
+    if (existing) existing.remove();
+
+    var modal = document.createElement("div");
+    modal.id = "aims-infographic-modal";
+    modal.className = "aims-infographic-modal";
+    modal.setAttribute("aria-hidden", "true");
+    Object.assign(modal.style, {
+      display: "none",
+      position: "fixed",
+      inset: "0",
+      zIndex: "2147483647",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "24px",
+      background: "rgba(15, 23, 42, 0.62)"
+    });
+    modal.innerHTML =
+      '<div class="aims-infographic-panel" role="dialog" aria-modal="true" aria-labelledby="aims-infographic-title">' +
+      '  <div class="aims-infographic-header">' +
+      '    <div class="aims-infographic-copy">' +
+      '      <h2 id="aims-infographic-title">Review the AIMS approach</h2>' +
+      '      <p>This bot is going to help you to practice the AIMS communication protocol for helping address vaccine hesitancy. Before you start, please review this infographic so you are best equipped to have a conversation with our vaccine hesitant patients.</p>' +
+      '    </div>' +
+      '    <div class="aims-infographic-actions">' +
+      '      <button type="button" class="aims-infographic-close" aria-label="Close">×</button>' +
+      '      <button type="button" class="aims-infographic-continue">Start practicing</button>' +
+      '    </div>' +
+      '  </div>' +
+      '  <div class="aims-infographic-scroll">' +
+      '    <img src="/public/aims_infographic.svg" alt="Addressing Vaccine Hesitancy with the AIMS Communication Approach infographic" />' +
+      '  </div>' +
+      '</div>';
+
+    document.body.appendChild(modal);
+
+    var closeBtn = modal.querySelector(".aims-infographic-close");
+    var continueBtn = modal.querySelector(".aims-infographic-continue");
+
+    closeBtn.addEventListener("click", function () {
+      hideInfographicModal();
+    });
+    continueBtn.addEventListener("click", function () {
+      window.postMessage(JSON.stringify({ type: "aims_intro_continue" }), "*");
+      hideInfographicModal();
+    });
+    modal.addEventListener("click", function (e) {
+      if (e.target === modal && modal.getAttribute("data-mode") === "reference") {
+        hideInfographicModal();
+      }
+    });
+
+    return modal;
+  }
+
+  var infographicModal = createInfographicModal();
+
+  function styleInfographicModal(isIntro) {
+    var panel = infographicModal.querySelector(".aims-infographic-panel");
+    var header = infographicModal.querySelector(".aims-infographic-header");
+    var copy = infographicModal.querySelector(".aims-infographic-copy");
+    var title = infographicModal.querySelector(".aims-infographic-copy h2");
+    var text = infographicModal.querySelector(".aims-infographic-copy p");
+    var actions = infographicModal.querySelector(".aims-infographic-actions");
+    var closeBtn = infographicModal.querySelector(".aims-infographic-close");
+    var continueBtn = infographicModal.querySelector(".aims-infographic-continue");
+    var scroll = infographicModal.querySelector(".aims-infographic-scroll");
+    var img = infographicModal.querySelector(".aims-infographic-scroll img");
+
+    Object.assign(infographicModal.style, {
+      display: "flex",
+      position: "fixed",
+      inset: "0",
+      zIndex: "2147483647",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "24px",
+      background: "rgba(15, 23, 42, 0.62)"
+    });
+    if (panel) {
+      Object.assign(panel.style, {
+        width: "min(1180px, 96vw)",
+        maxHeight: "92vh",
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        borderRadius: "8px",
+        border: "1px solid #d7dee8",
+        background: "#ffffff",
+        color: "#172033",
+        boxShadow: "0 20px 60px rgba(15, 23, 42, 0.28)"
+      });
+    }
+    if (header) {
+      Object.assign(header.style, {
+        display: "flex",
+        alignItems: "flex-start",
+        justifyContent: isIntro ? "space-between" : "flex-end",
+        gap: "18px",
+        padding: isIntro ? "18px 20px" : "12px 14px",
+        borderBottom: "1px solid #e4e9f1",
+        background: "#ffffff",
+        flexShrink: "0"
+      });
+    }
+    if (copy) {
+      Object.assign(copy.style, {
+        display: isIntro ? "block" : "none",
+        maxWidth: "760px"
+      });
+    }
+    if (title) {
+      Object.assign(title.style, {
+        margin: "0 0 8px",
+        fontSize: "20px",
+        lineHeight: "1.25",
+        fontWeight: "700",
+        letterSpacing: "0",
+        color: "#101828"
+      });
+    }
+    if (text) {
+      Object.assign(text.style, {
+        margin: "0",
+        fontSize: "14px",
+        lineHeight: "1.45",
+        color: "#344054"
+      });
+    }
+    if (actions) {
+      Object.assign(actions.style, {
+        display: "flex",
+        alignItems: "center",
+        gap: "10px",
+        flexShrink: "0"
+      });
+    }
+    if (continueBtn) {
+      Object.assign(continueBtn.style, {
+        display: isIntro ? "inline-flex" : "none",
+        alignItems: "center",
+        justifyContent: "center",
+        minHeight: "36px",
+        padding: "0 14px",
+        borderRadius: "6px",
+        border: "1px solid #0f6b8f",
+        background: "#0f6b8f",
+        color: "#ffffff",
+        fontSize: "14px",
+        fontWeight: "600",
+        cursor: "pointer",
+        whiteSpace: "nowrap"
+      });
+    }
+    if (closeBtn) {
+      Object.assign(closeBtn.style, {
+        display: isIntro ? "none" : "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: "36px",
+        minHeight: "36px",
+        borderRadius: "6px",
+        border: "1px solid #cbd5e1",
+        background: "#ffffff",
+        color: "#344054",
+        fontSize: "20px",
+        fontWeight: "600",
+        cursor: "pointer"
+      });
+    }
+    if (scroll) {
+      Object.assign(scroll.style, {
+        overflow: "auto",
+        padding: "18px",
+        background: "#f8fafc",
+        minHeight: "0"
+      });
+    }
+    if (img) {
+      Object.assign(img.style, {
+        display: "block",
+        width: "100%",
+        maxWidth: "1080px",
+        height: "auto",
+        margin: "0 auto",
+        border: "1px solid #e5e7eb",
+        background: "#ffffff"
+      });
+    }
+  }
+
+  function showInfographicModal(isIntro) {
+    if (isIntro && (isLoginCallbackRoute() || !isChatShellReady())) {
+      try {
+        sessionStorage.setItem(pendingIntroStorageKey, "1");
+      } catch (_) {}
+      return;
+    }
+
+    infographicModal.setAttribute("data-mode", isIntro ? "intro" : "reference");
+    infographicModal.setAttribute("aria-hidden", "false");
+    styleInfographicModal(isIntro);
+  }
+
+  function hideInfographicModal() {
+    try {
+      sessionStorage.removeItem(pendingIntroStorageKey);
+    } catch (_) {}
+    infographicModal.setAttribute("aria-hidden", "true");
+    infographicModal.style.display = "none";
+  }
+
+  function showPendingIntroWhenReady() {
+    var pending = false;
+    try {
+      pending = sessionStorage.getItem(pendingIntroStorageKey) === "1";
+    } catch (_) {}
+    if (pending && !isLoginCallbackRoute() && isChatShellReady()) {
+      showInfographicModal(true);
+    }
   }
 
   function leaveChatForLogout() {
@@ -466,12 +712,15 @@
       window.location.href = "/duplicate";
     } else if (event.data === "on_logout" || (event.data && event.data.type === "on_logout")) {
       window.location.href = "/";
+    } else if (event.data === "aims_intro_required" || (event.data && event.data.type === "aims_intro_required")) {
+      showInfographicModal(true);
     }
   });
 
   setInterval(function() {
     interceptNewChat();
     interceptLogout();
+    showPendingIntroWhenReady();
   }, 1000);
 
   /* ── dark mode support ─────────────────────────────────────────── */
