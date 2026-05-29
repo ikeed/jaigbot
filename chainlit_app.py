@@ -21,6 +21,7 @@ import uuid
 import json
 import random
 import shutil
+import time
 from pathlib import Path
 import httpx
 from fastapi import Request, Response
@@ -79,6 +80,37 @@ def get_backend_url() -> str:
 DEBUG_MODE = settings.DEBUG_MODE
 # Whether Chainlit should request coaching; default to env CHAINLIT_COACH_DEFAULT, else AIMS_COACHING_ENABLED, else false
 CHAINLIT_COACH_DEFAULT = settings.CHAINLIT_COACH_DEFAULT if settings.CHAINLIT_COACH_DEFAULT is not None else settings.AIMS_COACHING_ENABLED
+INTRO_SEEN_KEY_PREFIX = "aims:intro_seen:"
+
+
+def _intro_seen_key(user_identifier: str) -> str:
+    return f"{INTRO_SEEN_KEY_PREFIX}{user_identifier.strip().lower()}"
+
+
+def _has_seen_intro(user_identifier: str | None, store=None) -> bool:
+    if not user_identifier:
+        return bool(cl.user_session.get("aims_intro_seen"))
+    try:
+        if store is None:
+            from app.main import _MEMORY_STORE
+            store = _MEMORY_STORE
+        value = store.get(_intro_seen_key(user_identifier))
+        return bool(value.get("seen")) if isinstance(value, dict) else bool(value)
+    except Exception:
+        return False
+
+
+def _mark_intro_seen(user_identifier: str | None, store=None) -> None:
+    if not user_identifier:
+        cl.user_session.set("aims_intro_seen", True)
+        return
+    try:
+        if store is None:
+            from app.main import _MEMORY_STORE
+            store = _MEMORY_STORE
+        store[_intro_seen_key(user_identifier)] = {"seen": True, "updated": time.time()}
+    except Exception:
+        cl.user_session.set("aims_intro_seen", True)
 
 
 def _author_from_role(role: str) -> str:
@@ -325,6 +357,17 @@ async def start_chat():
         await cl.Message("An error occurred while starting the chat. The issue has been reported. Please try refreshing the page.").send()
 
 async def _start_chat_impl():
+    app_user = cl.user_session.get("user")
+    user_identifier = app_user.identifier if app_user else None
+    if not _has_seen_intro(user_identifier):
+        cl.user_session.set("aims_intro_pending", True)
+        await cl.send_window_message({"type": "aims_intro_required"})
+        return True
+    cl.user_session.set("aims_intro_pending", False)
+    return await _start_scenario_flow()
+
+
+async def _start_scenario_flow():
     """
     Initialize the Chainlit chat session. If a prior backend conversation exists for
     this sessionId, replay it instead of stacking a new scenario card. Otherwise,
@@ -856,6 +899,12 @@ async def on_window_message(message: str):
         # Ensure on_logout window message is forwarded to the parent window
         # so that run_app.py can redirect to the login screen.
         await cl.send_window_message("on_logout")
+    elif data.get("type") == "aims_intro_continue":
+        app_user = cl.user_session.get("user")
+        user_identifier = app_user.identifier if app_user else None
+        _mark_intro_seen(user_identifier)
+        cl.user_session.set("aims_intro_pending", False)
+        await _start_scenario_flow()
 
 
 async def _submit_report(reason: str):
@@ -962,6 +1011,9 @@ async def _handle_message_impl(message: cl.Message):
         await cl.Message(
             "This session has ended due to a report. Please start a new chat to continue."
         ).send()
+        return
+    if cl.user_session.get("aims_intro_pending"):
+        await cl.send_window_message({"type": "aims_intro_required"})
         return
 
     content = message.content.strip()
@@ -1118,6 +1170,13 @@ async def _resume_chat_impl(thread: dict | None = None):
     function must not send or replay messages. Its job is only to reconnect the
     Chainlit thread to the backend session/persona state used for new turns.
     """
+    app_user = cl.user_session.get("user")
+    user_identifier = app_user.identifier if app_user else None
+    if not _has_seen_intro(user_identifier):
+        cl.user_session.set("aims_intro_pending", True)
+        await cl.send_window_message({"type": "aims_intro_required"})
+        return True
+
     metadata = (thread or {}).get("metadata") or {}
     thread_id = (thread or {}).get("id") or getattr(getattr(cl_context, "session", None), "thread_id", None)
     configured_session_id = settings.FIXED_SESSION_ID or settings.SESSION_ID
