@@ -54,3 +54,32 @@ def test_extract_persona_name_from_legacy_archive_character():
     }
 
     assert persona_service.extract_persona_name_from_archive(archive) == "Ethan"
+
+
+def test_build_persona_session_fields_includes_interaction_guidance():
+    persona = {
+        "id": 99,
+        "name": "Test",
+        "brief": "A test parent.",
+        "detailed": "Detailed profile.",
+        "scenario": {
+            "visit_reason": "Clinic visit.",
+            "detailed_instructions": "Stay in role.",
+            "user_sketch": "At the clinic.",
+            "vaccine_related": True,
+        },
+        "interaction": {
+            "communication_needs": ["Needs plain language."],
+            "likely_questions": ["Is this safe?"],
+            "avoid": ["Do not lecture."],
+            "trust_repair": "Ask permission before sharing facts.",
+            "conversation_challenge": "May agree before understanding.",
+        },
+    }
+
+    fields = persona_service.build_persona_session_fields(persona)
+
+    assert "Behavioral Guidance:" in fields["character"]
+    assert "Communication needs:" in fields["character"]
+    assert "- Needs plain language." in fields["character"]
+    assert "Trust repair: Ask permission before sharing facts." in fields["character"]

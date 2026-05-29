@@ -11,7 +11,7 @@ are authoritative.
 
 Every clinician turn is passed through a two-layer pipeline:
 
-1. **LLM classifier** (`unified_classify.txt` prompt → Gemini) — identifies the AIMS step(s),
+1. **LLM classifier** (`aims_system_instruction.txt` + `classify_turn.txt` → Gemini) — identifies the AIMS step(s),
    scores execution quality, and detects vaccine relevance and small talk.
 2. **Deterministic post-processors** (Python) — apply hard-coded guards that fix known LLM
    failure modes and enforce structural AIMS rules that are categorical rather than linguistic.

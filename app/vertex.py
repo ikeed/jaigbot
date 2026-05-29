@@ -34,6 +34,18 @@ def _extract_status_code(e: APIError) -> Optional[int]:
     return None
 
 
+def _get_usage_count(usage: Any, *names: str) -> Optional[int]:
+    for name in names:
+        value = getattr(usage, name, None) if usage else None
+        if value is None:
+            continue
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
 class VertexClient:
     def __init__(self, project: str, region: str, model_id: str):
         self.logger = logging.getLogger("app.vertex")
@@ -233,6 +245,11 @@ class VertexClient:
             "candidatesTokens": getattr(usage, "candidates_token_count", None) if usage else None,
             "totalTokens": getattr(usage, "total_token_count", None) if usage else None,
             "thoughtsTokens": getattr(usage, "thoughts_token_count", None) if usage else None,
+            "cachedContentTokens": _get_usage_count(
+                usage,
+                "cached_content_token_count",
+                "cachedContentTokenCount",
+            ),
             "safety": safety_summary,
             "textLen": len(txt.strip()),
             "thoughtLen": len(thought_txt.strip()),
@@ -277,6 +294,7 @@ class VertexClient:
                 "finishReason": meta.get("finishReason"),
                 "textLen": meta.get("textLen"),
                 "thoughtLen": meta.get("thoughtLen", 0),
+                "cachedContentTokens": meta.get("cachedContentTokens"),
                 "hasText": bool(text),
             }))
 
@@ -345,6 +363,7 @@ class VertexClient:
                 "promptTokens": meta_local.get("promptTokens"),
                 "candidatesTokens": meta_local.get("candidatesTokens"),
                 "thoughtsTokens": meta_local.get("thoughtsTokens"),
+                "cachedContentTokens": meta_local.get("cachedContentTokens"),
                 "hasText": bool(text),
                 "textPreview": (text[:120] + "...") if len(text) > 120 else text,
             }))
@@ -384,6 +403,7 @@ class VertexClient:
                     "promptTokens": next_meta.get("promptTokens"),
                     "candidatesTokens": next_meta.get("candidatesTokens"),
                     "totalTokens": next_meta.get("totalTokens"),
+                    "cachedContentTokens": next_meta.get("cachedContentTokens"),
                     "textLen": len(text),
                 })
 
