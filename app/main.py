@@ -633,8 +633,17 @@ def _chat_orchestrator(memory_store=None):
     )
 
 
+def get_chat_orchestrator(memory_store=Depends(get_memory_store)):
+    return _chat_orchestrator(memory_store=memory_store)
+
+
 @app.post("/chat")
-async def chat(req: Request, body: ChatRequest, background_tasks: BackgroundTasks):
+async def chat(
+    req: Request,
+    body: ChatRequest,
+    background_tasks: BackgroundTasks,
+    orchestrator=Depends(get_chat_orchestrator),
+):
     """Main chat endpoint using the new ChatOrchestrator."""
     # Enforce settings.PROJECT_ID presence for live calls to align with tests/contract
     if not settings.PROJECT_ID:
@@ -643,7 +652,6 @@ async def chat(req: Request, body: ChatRequest, background_tasks: BackgroundTask
             "error": {"message": "settings.PROJECT_ID not set — configure the settings.PROJECT_ID environment variable.", "code": 500}
         })
 
-    orchestrator = _chat_orchestrator()
     return await orchestrator.handle_chat(req, body, background_tasks)
 
 
@@ -860,9 +868,13 @@ async def deregister_session(body: SessionDeregisterRequest):
 
 
 @app.post("/report")
-async def report(req: Request, body: ReportRequest, background_tasks: BackgroundTasks):
+async def report(
+    req: Request,
+    body: ReportRequest,
+    background_tasks: BackgroundTasks,
+    orchestrator=Depends(get_chat_orchestrator),
+):
     """Endpoint for reporting issues in a scenario."""
-    orchestrator = _chat_orchestrator()
     return await orchestrator.handle_report(req, body, background_tasks)
 
 
