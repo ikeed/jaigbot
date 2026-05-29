@@ -292,8 +292,9 @@ img[alt="AIMSBot"] {
 }
 
 .aims-infographic-panel {
-  width: min(1040px, 100%);
-  max-height: min(92vh, 1100px);
+  width: fit-content;
+  max-width: min(1040px, 100vw);
+  max-height: 92vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -390,6 +391,15 @@ img[alt="AIMSBot"] {
 .aims-infographic-modal[data-mode="reference"] .aims-infographic-header {
   justify-content: flex-end;
   padding: 12px 14px;
+}
+
+.aims-infographic-modal[data-mode="reference"] .aims-infographic-copy,
+.aims-infographic-modal[data-mode="reference"] .aims-infographic-continue {
+  display: none;
+}
+
+.aims-infographic-modal[data-mode="intro"] .aims-infographic-close {
+  display: none;
 }
 
 @media (max-width: 720px) {
