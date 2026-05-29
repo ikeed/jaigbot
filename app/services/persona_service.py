@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import random
 import time
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Optional
 
@@ -28,13 +30,19 @@ def _personas_path() -> Path:
     return root / "prompts" / "personas.json"
 
 
-def load_personas() -> list[dict]:
+@lru_cache(maxsize=1)
+def _load_personas_cached() -> tuple[dict, ...]:
     try:
         data = json.loads(_personas_path().read_text(encoding="utf-8"))
         personas = data.get("personas") or []
-        return [p for p in personas if p.get("name")]
+        loaded = [p for p in personas if p.get("name")]
+        return tuple(loaded or [FALLBACK_PERSONA])
     except Exception:
-        return [FALLBACK_PERSONA]
+        return (FALLBACK_PERSONA,)
+
+
+def load_personas() -> list[dict]:
+    return copy.deepcopy(list(_load_personas_cached()))
 
 
 def find_persona(name: str | None = None, persona_id: int | str | None = None) -> dict | None:
@@ -197,14 +205,49 @@ def record_persona_interaction_once(user_id: str | None, session_id: str, person
     return True
 
 
+def _format_interaction_guidance(persona: dict) -> str:
+    interaction = persona.get("interaction") or {}
+    if not isinstance(interaction, dict):
+        return ""
+
+    lines: list[str] = []
+
+    def add_list(label: str, key: str) -> None:
+        values = interaction.get(key) or []
+        if not values:
+            return
+        lines.append(f"{label}:")
+        for value in values:
+            cleaned = str(value).strip()
+            if cleaned:
+                lines.append(f"- {cleaned}")
+
+    add_list("Communication needs", "communication_needs")
+    add_list("Likely questions", "likely_questions")
+    add_list("Avoid", "avoid")
+
+    trust_repair = str(interaction.get("trust_repair") or "").strip()
+    if trust_repair:
+        lines.append(f"Trust repair: {trust_repair}")
+
+    challenge = str(interaction.get("conversation_challenge") or "").strip()
+    if challenge:
+        lines.append(f"Conversation challenge: {challenge}")
+
+    return "\n".join(lines)
+
+
 def build_persona_session_fields(persona: dict) -> dict:
     base_char = settings.CHARACTER_SYSTEM or DEFAULT_CHARACTER
     base_scene = settings.SCENE_OBJECTIVES or DEFAULT_SCENE
+    interaction_guidance = _format_interaction_guidance(persona)
     character = (
         f"{base_char}\n\n"
         f"Specific Persona: {persona['name']}\n"
         f"Detailed Biography and Motivations: {persona['detailed']}"
     )
+    if interaction_guidance:
+        character = f"{character}\n\nBehavioral Guidance:\n{interaction_guidance}"
     scene = (
         f"{base_scene}\n\n"
         f"Current Scenario: {persona['scenario']['visit_reason']}\n"
