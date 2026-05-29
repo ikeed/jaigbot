@@ -164,6 +164,7 @@ The backend supports session-keyed memory with optional persona/scene, using in-
 - Chainlit UI details: docs/chainlit-ui.md
 - Health checks and URLs: docs/health-checks.md
 - Environment separation: docs/environments.md
+- Release and rollback: docs/release-and-rollback.md
 - Memory and persona: docs/memory-and-persona.md
 - MCP empowerment/readiness: docs/mcp-empowerment.md
 - Standing orders (minimize manual work via efficient tool use): docs/standing-orders.md

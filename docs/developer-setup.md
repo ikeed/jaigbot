@@ -121,6 +121,8 @@ Optional: add a backend block to terraform/versions.tf later if you want backend
 - PRs: run tests, optionally build+push preview image, and can deploy to a preview service.
 - main: deploys to Cloud Run service `SERVICE_NAME` with `APP_ENV=prod`.
 - staging: deploys to Cloud Run service `STAGING_SERVICE_NAME` (default `aimsbot-staging`) with `APP_ENV=staging`.
+- Pull requests into main must come from `staging`; the `Main PR Source Guard` workflow enforces this, and should be marked as a required status check in GitHub branch protection.
+- Pushes to main create an annotated release tag named `vYYYY.MM.DD.<run_number>`.
 
 Key requirements for main CI:
 - WORKLOAD_IDP and WORKLOAD_SA secrets must be configured from Terraform outputs.
@@ -130,6 +132,7 @@ Key requirements for main CI:
 - The first staging deploy can run without `STAGING_CHAINLIT_URL` to create the Cloud Run URL. Set `STAGING_CHAINLIT_URL` and rerun the deploy before testing OAuth.
 - WIF must allow both `refs/heads/main` and `refs/heads/staging`; this is controlled by Terraform variable `github_branch_refs`.
 - If using Memorystore, set GitHub variables `MEMORY_BACKEND=redis`, `REDIS_HOST`, `REDIS_PORT`, and `VPC_CONNECTOR` from Terraform outputs so every deploy keeps Redis and VPC access configured.
+- See `docs/release-and-rollback.md` for promotion, release tags, and rollback commands.
 - See `docs/environments.md` for Redis/GCS namespacing and the incremental rollout checklist.
 
 ## 8) Troubleshooting
