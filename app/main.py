@@ -656,14 +656,14 @@ async def chat(
 
 
 @app.post("/session")
-async def init_session(body: SessionInitRequest):
+async def init_session(body: SessionInitRequest, memory_store=Depends(get_memory_store)):
     """Register a session in the memory store so /report and /summary can find it.
     Called by the Chainlit UI at scenario start, before any /chat messages."""
     if not settings.MEMORY_ENABLED:
         return {"status": "ok"}
     sid = body.sessionId
     now = time.time()
-    mem = _MEMORY_STORE.get(sid)
+    mem = memory_store.get(sid)
 
     character = body.character
     scene = body.scene
@@ -703,7 +703,7 @@ async def init_session(body: SessionInitRequest):
             user_id = user_info.get("identifier")
             selected_persona = select_persona_for_user(
                 user_id,
-                _MEMORY_STORE,
+                memory_store,
                 load_counts=storage_service.count_personas_for_user,
             )
             fields = build_persona_session_fields(selected_persona)
@@ -735,7 +735,7 @@ async def init_session(body: SessionInitRequest):
         }
         if selected_persona:
             user_info = body.userInfo if isinstance(body.userInfo, dict) else {}
-            record_persona_interaction_once(user_info.get("identifier"), sid, selected_persona, _MEMORY_STORE)
+            record_persona_interaction_once(user_info.get("identifier"), sid, selected_persona, memory_store)
         
         # If we have a character (either passed or generated), seed the history with a scenario card.
         if character:
@@ -751,7 +751,7 @@ async def init_session(body: SessionInitRequest):
             mem["history"].append({"role": ROLE_SYSTEM, "content": card_content})
             mem["full_history"].append({"role": ROLE_SYSTEM, "content": card_content, "time": now})
             
-        _MEMORY_STORE[sid] = mem
+        memory_store[sid] = mem
     else:
         # Update persona/scene if provided/generated and not already set
         if character and not mem.get("character"):
@@ -784,7 +784,7 @@ async def init_session(body: SessionInitRequest):
         mem.setdefault("full_history", [])
         mem.setdefault("session_started", now)
         mem["updated"] = now
-        _MEMORY_STORE[sid] = mem
+        memory_store[sid] = mem
 
     logger.info("Session initialized: %s", sid)
     
@@ -811,7 +811,7 @@ async def init_session(body: SessionInitRequest):
             # it stays as part of the session, but it will be blocked until other tabs are closed.
             active_connections.append(body.connectionId)
             mem["active_connections"] = active_connections
-            _MEMORY_STORE[sid] = mem
+            memory_store[sid] = mem
         else:
             # If THIS connectionId is already in active_connections, but it's not the ONLY one,
             # it should still be considered "already active" unless it was the first one.
@@ -850,19 +850,19 @@ class SessionDeregisterRequest(_BaseModel):
 
 
 @app.post("/session/deregister")
-async def deregister_session(body: SessionDeregisterRequest):
+async def deregister_session(body: SessionDeregisterRequest, memory_store=Depends(get_memory_store)):
     """Remove a connectionId from the active connections list."""
     if not settings.MEMORY_ENABLED:
         return {"status": "ok"}
     sid = body.sessionId
-    mem = _MEMORY_STORE.get(sid)
+    mem = memory_store.get(sid)
     if mem:
         active = mem.get("active_connections", [])
         if body.connectionId in active:
             active.remove(body.connectionId)
             mem["active_connections"] = active
             mem["updated"] = time.time()
-            _MEMORY_STORE[sid] = mem
+            memory_store[sid] = mem
             logger.info("Connection deregistered: %s for session %s", body.connectionId, sid)
     return {"status": "ok"}
 
