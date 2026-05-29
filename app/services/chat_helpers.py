@@ -1,55 +1,6 @@
-import json
-import random
-from pathlib import Path
 from typing import List, Optional
 
-
-def load_robust_persona(name: str | None = None) -> dict:
-    """
-    Load a persona from app/prompts/personas.json.
-    If name is provided, try to find that specific persona.
-    """
-    try:
-        # We assume this helper is called from app/services/
-        # Adjust path to find app/prompts/personas.json
-        root = Path(__file__).resolve().parent.parent
-        path = root / "prompts" / "personas.json"
-        
-        if not path.exists():
-            # Try project root
-            path = root.parent / "app" / "prompts" / "personas.json"
-        
-        if not path.exists():
-            # Try absolute path from project root if current working dir is project root
-            path = Path("app/prompts/personas.json")
-
-        if not path.exists():
-             raise FileNotFoundError(f"Could not find personas.json at {path.absolute()}")
-
-        data = json.loads(path.read_text(encoding="utf-8"))
-        personas = data.get("personas") or []
-        
-        if name:
-            for p in personas:
-                if p.get("name") == name:
-                    return p
-
-        # We don't have settings here easily, so we just pick random if no name
-        idx = random.randrange(len(personas))
-        return personas[idx]
-    except Exception:
-        # Minimum fallback
-        return {
-            "name": "Jasmine",
-            "brief": "A nervous first-time parent.",
-            "detailed": "Jasmine is a nervous first-time parent worried about vaccine risks.",
-            "scenario": {
-                "visit_reason": "Well-baby check",
-                "detailed_instructions": "Assure her of vaccine safety.",
-                "user_sketch": "You are at the clinic for a well-baby checkup.",
-                "vaccine_related": True
-            }
-        }
+from app.services.persona_service import load_robust_persona
 
 
 def build_system_instruction(effective_character: Optional[str], effective_scene: Optional[str]) -> Optional[str]:
