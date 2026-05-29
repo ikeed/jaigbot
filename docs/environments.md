@@ -41,14 +41,20 @@ Recommended cloud layout:
 The GitHub deploy workflow supports this layout:
 - `main` uses repository variable `SERVICE_NAME` and `CHAINLIT_URL`.
 - `staging` uses `STAGING_SERVICE_NAME`, defaulting to `aimsbot-staging`, and `STAGING_CHAINLIT_URL`.
+- The first staging deploy may run before `STAGING_CHAINLIT_URL` exists. That bootstrap deploy creates the Cloud Run service URL; set `STAGING_CHAINLIT_URL` afterward and rerun the deploy.
+- If using shared Memorystore, set repository variables `MEMORY_BACKEND=redis`, `REDIS_HOST`, `REDIS_PORT`, and `VPC_CONNECTOR` from Terraform outputs.
 
 ## Incremental rollout
 
 1. Merge the namespacing code and deploy production.
 2. Confirm `/api/config` shows `appEnv: "prod"`, `redisKeyPrefix: "aims:prod:session:"`, and `gcsObjectPrefix: "env=prod"`.
 3. Confirm existing production conversations still load if they are still under the legacy Redis prefix. New writes should appear under the prod prefix.
-4. Create the `staging` Cloud Run service and set `STAGING_CHAINLIT_URL` once its URL is known.
-5. Add the staging OAuth redirect URI to the Google OAuth client, or create a separate staging OAuth client.
-6. Push the `staging` branch and confirm `/api/config` shows `appEnv: "staging"`.
+4. Apply Terraform so WIF trusts both `main` and `staging` and Redis outputs are available.
+5. Set repo variables `MEMORY_BACKEND=redis`, `REDIS_HOST`, `REDIS_PORT`, and `VPC_CONNECTOR`.
+6. Push the `staging` branch once to create the `aimsbot-staging` Cloud Run service.
+7. Copy the staging service URL from the deploy log or Cloud Run console.
+8. Set repo variable `STAGING_CHAINLIT_URL` to that URL.
+9. Add the staging OAuth redirect URI to the Google OAuth client, or create a separate staging OAuth client.
+10. Rerun the staging deploy and confirm `/api/config` shows `appEnv: "staging"`.
 
 Do not reuse one `CHAINLIT_URL` for both production and staging. OAuth callback behavior depends on the externally visible service URL.
