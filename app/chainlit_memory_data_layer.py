@@ -9,9 +9,18 @@ from chainlit.types import Feedback, PageInfo, PaginatedResponse, Pagination, Th
 from chainlit.user import PersistedUser, User
 from chainlit.utils import utc_now
 
+from app.config import settings
 
-USER_KEY_PREFIX = "chainlit:user:"
-THREAD_KEY_PREFIX = "chainlit:thread:"
+LEGACY_USER_KEY_PREFIX = "chainlit:user:"
+LEGACY_THREAD_KEY_PREFIX = "chainlit:thread:"
+
+
+def _user_key_prefix() -> str:
+    return f"chainlit:{settings.APP_ENV}:user:"
+
+
+def _thread_key_prefix() -> str:
+    return f"chainlit:{settings.APP_ENV}:thread:"
 
 
 def _user_id(identifier: str) -> str:
@@ -19,11 +28,31 @@ def _user_id(identifier: str) -> str:
 
 
 def _user_key(identifier: str) -> str:
-    return f"{USER_KEY_PREFIX}{identifier}"
+    return f"{_user_key_prefix()}{identifier}"
+
+
+def _legacy_user_key(identifier: str) -> str:
+    return f"{LEGACY_USER_KEY_PREFIX}{identifier}"
 
 
 def _thread_key(thread_id: str) -> str:
-    return f"{THREAD_KEY_PREFIX}{thread_id}"
+    return f"{_thread_key_prefix()}{thread_id}"
+
+
+def _legacy_thread_key(thread_id: str) -> str:
+    return f"{LEGACY_THREAD_KEY_PREFIX}{thread_id}"
+
+
+def _thread_keys(thread_id: str) -> List[str]:
+    return [_thread_key(thread_id), _legacy_thread_key(thread_id)]
+
+
+def _is_user_key(key: str) -> bool:
+    return key.startswith(_user_key_prefix()) or key.startswith(LEGACY_USER_KEY_PREFIX)
+
+
+def _is_thread_key(key: str) -> bool:
+    return key.startswith(_thread_key_prefix()) or key.startswith(LEGACY_THREAD_KEY_PREFIX)
 
 
 def _step_time(step: Dict[str, Any]) -> str:
@@ -64,9 +93,19 @@ class MemoryDataLayer(BaseDataLayer):
     def _put(self, key: str, value: Dict[str, Any]) -> None:
         self.store[key] = value
 
+    def _get_first(self, keys: List[str]) -> Dict[str, Any] | None:
+        for key in keys:
+            value = self._get(key)
+            if value:
+                return value
+        return None
+
+    def _get_thread(self, thread_id: str) -> Dict[str, Any] | None:
+        return self._get_first(_thread_keys(thread_id))
+
     def _ensure_thread(self, thread_id: str) -> Dict[str, Any]:
         key = _thread_key(thread_id)
-        thread = self._get(key)
+        thread = self._get_thread(thread_id)
         if thread:
             thread.setdefault("steps", [])
             thread.setdefault("elements", [])
@@ -90,12 +129,12 @@ class MemoryDataLayer(BaseDataLayer):
 
     def _find_user_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
         for key, value in self.store.items():
-            if key.startswith(USER_KEY_PREFIX) and value.get("id") == user_id:
+            if _is_user_key(key) and value.get("id") == user_id:
                 return value
         return None
 
     async def get_user(self, identifier: str) -> Optional[PersistedUser]:
-        user = self._get(_user_key(identifier))
+        user = self._get_first([_user_key(identifier), _legacy_user_key(identifier)])
         if not user:
             return None
         return PersistedUser(
@@ -135,7 +174,7 @@ class MemoryDataLayer(BaseDataLayer):
         self._put(_thread_key(thread["id"]), thread)
 
     async def get_element(self, thread_id: str, element_id: str) -> Optional[Dict[str, Any]]:
-        thread = self._get(_thread_key(thread_id))
+        thread = self._get_thread(thread_id)
         if not thread:
             return None
         for element in thread.get("elements", []) or []:
@@ -146,7 +185,7 @@ class MemoryDataLayer(BaseDataLayer):
     async def delete_element(self, element_id: str, thread_id: Optional[str] = None):
         if not thread_id:
             return
-        thread = self._get(_thread_key(thread_id))
+        thread = self._get_thread(thread_id)
         if not thread:
             return
         thread["elements"] = [e for e in thread.get("elements", []) if e.get("id") != element_id]
@@ -165,17 +204,18 @@ class MemoryDataLayer(BaseDataLayer):
 
     async def delete_step(self, step_id: str):
         for key, thread in self.store.items():
-            if not key.startswith(THREAD_KEY_PREFIX):
+            if not _is_thread_key(key):
                 continue
             thread["steps"] = [s for s in thread.get("steps", []) if s.get("id") != step_id]
             self._put(key, thread)
 
     async def get_thread_author(self, thread_id: str) -> str:
-        thread = self._get(_thread_key(thread_id)) or {}
+        thread = self._get_thread(thread_id) or {}
         return thread.get("userIdentifier") or ""
 
     async def delete_thread(self, thread_id: str):
-        self.store.pop(_thread_key(thread_id), None)
+        for key in _thread_keys(thread_id):
+            self.store.pop(key, None)
 
     async def list_threads(
         self, pagination: Pagination, filters: ThreadFilter
@@ -184,16 +224,20 @@ class MemoryDataLayer(BaseDataLayer):
         canonical_thread_ids = {
             value.get("id")
             for key, value in self.store.items()
-            if key.startswith(THREAD_KEY_PREFIX)
+            if _is_thread_key(key)
             and value.get("id") == _canonical_session_id(value)
             and (not filters.userId or value.get("userId") == filters.userId)
         }
+        seen_thread_ids = set()
         for key, value in self.store.items():
-            if not key.startswith(THREAD_KEY_PREFIX):
+            if not _is_thread_key(key):
                 continue
             if filters.userId and value.get("userId") != filters.userId:
                 continue
             thread_id = value.get("id")
+            if thread_id in seen_thread_ids:
+                continue
+            seen_thread_ids.add(thread_id)
             session_id = _canonical_session_id(value)
             if session_id != thread_id and session_id in canonical_thread_ids:
                 continue
@@ -214,7 +258,7 @@ class MemoryDataLayer(BaseDataLayer):
         )
 
     async def get_thread(self, thread_id: str) -> Optional[ThreadDict]:
-        thread = self._get(_thread_key(thread_id))
+        thread = self._get_thread(thread_id)
         if not thread:
             return None
         thread.setdefault("steps", [])
@@ -253,7 +297,7 @@ class MemoryDataLayer(BaseDataLayer):
     async def get_favorite_steps(self, user_id: str) -> List[Dict[str, Any]]:
         favorites: List[Dict[str, Any]] = []
         for key, value in self.store.items():
-            if not key.startswith(THREAD_KEY_PREFIX) or value.get("userId") != user_id:
+            if not _is_thread_key(key) or value.get("userId") != user_id:
                 continue
             for step in value.get("steps", []) or []:
                 if (step.get("metadata") or {}).get("favorite"):

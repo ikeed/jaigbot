@@ -58,7 +58,9 @@ try:
             port=settings.REDIS_PORT,
             db=settings.REDIS_DB,
             password=settings.REDIS_PASSWORD,
-            prefix=settings.REDIS_PREFIX,
+            prefix=settings.redis_key_prefix,
+            fallback_prefixes=settings.redis_fallback_prefixes,
+            ttl=settings.MEMORY_TTL_SECONDS,
         )
     else:
         _MEMORY_STORE = InMemoryStore(persist_path=settings.MEMORY_PERSIST_PATH)
@@ -879,6 +881,8 @@ async def config():
         "allowedOrigins": settings.ALLOWED_ORIGINS,
         "exposeUpstreamError": settings.EXPOSE_UPSTREAM_ERROR,
         "debugMode": settings.DEBUG_MODE,
+        "appEnv": settings.APP_ENV,
+        "gcsObjectPrefix": settings.gcs_object_prefix,
         "modelFallbacks": settings.MODEL_FALLBACKS,
         "modelAvailable": mc.get("available"),
         "modelCheck": mc,
@@ -897,6 +901,8 @@ async def config():
         "memoryBackend": settings.MEMORY_BACKEND,
         "memoryMaxTurns": settings.MEMORY_MAX_TURNS,
         "memoryTtlSeconds": settings.MEMORY_TTL_SECONDS,
+        "redisKeyPrefix": settings.redis_key_prefix,
+        "redisFallbackPrefixes": settings.redis_fallback_prefixes,
         "memoryStoreSize": len(_MEMORY_STORE),
         # Hard-coded defaults visibility
         "defaultCharacter": (DEFAULT_CHARACTER if settings.DEBUG_MODE and DEFAULT_CHARACTER else None),
@@ -939,7 +945,13 @@ async def diagnostics():
             "backend": settings.MEMORY_BACKEND,
             "maxTurns": settings.MEMORY_MAX_TURNS,
             "ttlSeconds": settings.MEMORY_TTL_SECONDS,
+            "redisKeyPrefix": settings.redis_key_prefix,
+            "redisFallbackPrefixes": settings.redis_fallback_prefixes,
             "storeSize": len(_MEMORY_STORE),
+        },
+        "environment": {
+            "appEnv": settings.APP_ENV,
+            "gcsObjectPrefix": settings.gcs_object_prefix,
         },
     }
     return diag

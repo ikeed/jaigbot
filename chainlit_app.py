@@ -80,11 +80,19 @@ def get_backend_url() -> str:
 DEBUG_MODE = settings.DEBUG_MODE
 # Whether Chainlit should request coaching; default to env CHAINLIT_COACH_DEFAULT, else AIMS_COACHING_ENABLED, else false
 CHAINLIT_COACH_DEFAULT = settings.CHAINLIT_COACH_DEFAULT if settings.CHAINLIT_COACH_DEFAULT is not None else settings.AIMS_COACHING_ENABLED
-INTRO_SEEN_KEY_PREFIX = "aims:intro_seen:"
+LEGACY_INTRO_SEEN_KEY_PREFIX = "aims:intro_seen:"
+
+
+def _intro_seen_key_prefix() -> str:
+    return f"aims:{settings.APP_ENV}:intro_seen:"
 
 
 def _intro_seen_key(user_identifier: str) -> str:
-    return f"{INTRO_SEEN_KEY_PREFIX}{user_identifier.strip().lower()}"
+    return f"{_intro_seen_key_prefix()}{user_identifier.strip().lower()}"
+
+
+def _legacy_intro_seen_key(user_identifier: str) -> str:
+    return f"{LEGACY_INTRO_SEEN_KEY_PREFIX}{user_identifier.strip().lower()}"
 
 
 def _has_seen_intro(user_identifier: str | None, store=None) -> bool:
@@ -94,7 +102,7 @@ def _has_seen_intro(user_identifier: str | None, store=None) -> bool:
         if store is None:
             from app.main import _MEMORY_STORE
             store = _MEMORY_STORE
-        value = store.get(_intro_seen_key(user_identifier))
+        value = store.get(_intro_seen_key(user_identifier)) or store.get(_legacy_intro_seen_key(user_identifier))
         return bool(value.get("seen")) if isinstance(value, dict) else bool(value)
     except Exception:
         return False

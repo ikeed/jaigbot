@@ -73,6 +73,29 @@ async def test_chainlit_memory_data_layer_persists_threads_and_steps():
     assert thread["userIdentifier"] == "doctor@example.com"
     assert thread["metadata"]["session_id"] == "thread-1"
     assert thread["steps"][0]["output"] == "Person: Sarah"
+    assert "chainlit:local:user:doctor@example.com" in dict(store.items())
+    assert "chainlit:local:thread:thread-1" in dict(store.items())
+
+
+@pytest.mark.asyncio
+async def test_chainlit_memory_data_layer_reads_legacy_thread_keys():
+    store = InMemoryStore()
+    store["chainlit:thread:legacy-thread"] = {
+        "id": "legacy-thread",
+        "createdAt": "2026-01-01T00:00:00Z",
+        "name": "legacy",
+        "userId": None,
+        "userIdentifier": "doctor@example.com",
+        "tags": None,
+        "metadata": {"session_id": "legacy-thread"},
+        "steps": [],
+        "elements": [],
+    }
+    layer = MemoryDataLayer(store)
+
+    thread = await layer.get_thread("legacy-thread")
+
+    assert thread["id"] == "legacy-thread"
 
 
 @pytest.mark.asyncio

@@ -182,6 +182,35 @@ class TestProductionConfiguration:
         assert settings.MEMORY_BACKEND == "redis"
         assert settings.REDIS_URL == redis_url
 
+    def test_app_env_defaults_to_local_outside_cloud_run(self, monkeypatch):
+        monkeypatch.delenv("APP_ENV", raising=False)
+        monkeypatch.delenv("K_SERVICE", raising=False)
+
+        settings = Settings()
+
+        assert settings.APP_ENV == "local"
+        assert settings.redis_key_prefix == "aims:local:session:"
+        assert settings.gcs_object_prefix == "env=local"
+
+    def test_app_env_namespaces_prod_resources(self, monkeypatch):
+        monkeypatch.setenv("APP_ENV", "prod")
+
+        settings = Settings()
+
+        assert settings.APP_ENV == "prod"
+        assert settings.redis_key_prefix == "aims:prod:session:"
+        assert settings.redis_fallback_prefixes == ["aims:session:"]
+        assert settings.gcs_path("sessions/v1", "user_id=u", "session_id=s.json") == (
+            "env=prod/sessions/v1/user_id=u/session_id=s.json"
+        )
+
+    def test_cloud_run_requires_explicit_app_env(self, monkeypatch):
+        monkeypatch.delenv("APP_ENV", raising=False)
+        monkeypatch.setenv("K_SERVICE", "aimsbot")
+
+        with pytest.raises(ValueError, match="APP_ENV must be set"):
+            Settings()
+
 
 class TestEnvironmentVariableValidation:
     """Test that environment variable validation works correctly."""
@@ -262,15 +291,19 @@ class TestDeploymentIntegration:
 
         # Expected env vars from deploy.yaml
         deployment_env_vars = [
+            "APP_ENV",
             "PROJECT_ID",
             "REGION",
             "GAR_REPO",  # Not in Settings, but used in deployment
             "SERVICE_NAME",  # Not in Settings, but used in deployment
+            "STAGING_SERVICE_NAME",  # Not in Settings, but used in deployment
             "MODEL_ID",
             "TEMPERATURE",
             "MAX_TOKENS",
             "AIMS_COACHING_ENABLED",
             "CHAINLIT_AUTH_SECRET",
+            "CHAINLIT_URL",  # Not in Settings, but used in deployment
+            "STAGING_CHAINLIT_URL",  # Not in Settings, but used in deployment
             "OAUTH_GOOGLE_CLIENT_ID",
             "OAUTH_GOOGLE_CLIENT_SECRET",
             "MEMORY_BACKEND",
@@ -284,11 +317,9 @@ class TestDeploymentIntegration:
         # Check that Settings-specific variables exist in the class
         for var in ["PROJECT_ID", "REGION", "MODEL_ID", "TEMPERATURE",
                     "MAX_TOKENS", "AIMS_COACHING_ENABLED", "CHAINLIT_AUTH_SECRET",
-                    "MEMORY_BACKEND", "REDIS_URL"]:
+                    "MEMORY_BACKEND", "REDIS_URL", "APP_ENV"]:
             assert var in settings_fields, f"{var} not found in Settings"
 
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-
-

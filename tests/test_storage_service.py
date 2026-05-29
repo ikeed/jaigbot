@@ -27,7 +27,7 @@ def test_storage_service_upload_path(mock_storage_client):
     
     assert result is True
     # Verify path
-    mock_bucket.blob.assert_called_once_with("sessions/v1/user_id=uid@example.com/session_id=sid.json")
+    mock_bucket.blob.assert_called_once_with("env=local/sessions/v1/user_id=uid@example.com/session_id=sid.json")
     # Verify content was uploaded
     mock_blob.upload_from_string.assert_called_once()
     
@@ -35,6 +35,7 @@ def test_storage_service_upload_path(mock_storage_client):
     args, kwargs = mock_blob.upload_from_string.call_args
     payload = json.loads(args[0])
     assert "metadata" in payload
+    assert payload["environment"]["appEnv"] == "local"
     assert payload["metadata"]["sessionId"] == "sid"
     assert payload["metadata"]["userId"] == "uid@example.com"
     assert "config" in payload
