@@ -4,9 +4,18 @@ import hashlib
 import time
 from typing import Any
 
+from app.config import settings
 
-CURRENT_THREAD_KEY_PREFIX = "chainlit:current_thread:"
-THREAD_KEY_PREFIX = "chainlit:thread:"
+LEGACY_CURRENT_THREAD_KEY_PREFIX = "chainlit:current_thread:"
+LEGACY_THREAD_KEY_PREFIX = "chainlit:thread:"
+
+
+def _current_thread_key_prefix() -> str:
+    return f"chainlit:{settings.APP_ENV}:current_thread:"
+
+
+def _thread_key_prefix() -> str:
+    return f"chainlit:{settings.APP_ENV}:thread:"
 
 
 def _store() -> Any:
@@ -17,14 +26,26 @@ def _store() -> Any:
 
 def _key(user_identifier: str) -> str:
     digest = hashlib.sha256(user_identifier.encode("utf-8")).hexdigest()
-    return f"{CURRENT_THREAD_KEY_PREFIX}{digest}"
+    return f"{_current_thread_key_prefix()}{digest}"
+
+
+def _legacy_key(user_identifier: str) -> str:
+    digest = hashlib.sha256(user_identifier.encode("utf-8")).hexdigest()
+    return f"{LEGACY_CURRENT_THREAD_KEY_PREFIX}{digest}"
+
+
+def _thread_exists(store: Any, thread_id: str) -> bool:
+    return (
+        store.get(f"{_thread_key_prefix()}{thread_id}") is not None
+        or store.get(f"{LEGACY_THREAD_KEY_PREFIX}{thread_id}") is not None
+    )
 
 
 def get_current_thread_id(user_identifier: str | None) -> str | None:
     if not user_identifier:
         return None
     store = _store()
-    value = store.get(_key(user_identifier))
+    value = store.get(_key(user_identifier)) or store.get(_legacy_key(user_identifier))
     if isinstance(value, dict):
         thread_id = value.get("thread_id")
     elif isinstance(value, str):
@@ -35,7 +56,7 @@ def get_current_thread_id(user_identifier: str | None) -> str | None:
     if not thread_id:
         return None
 
-    if store.get(f"{THREAD_KEY_PREFIX}{thread_id}") is None:
+    if not _thread_exists(store, thread_id):
         clear_current_thread_id(user_identifier)
         return None
     return thread_id
@@ -54,3 +75,4 @@ def clear_current_thread_id(user_identifier: str | None) -> None:
     if not user_identifier:
         return
     _store().pop(_key(user_identifier), None)
+    _store().pop(_legacy_key(user_identifier), None)

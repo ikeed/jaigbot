@@ -4,6 +4,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import field_validator
 
 class Settings(BaseSettings):
+    # Deployment environment namespace. Cloud Run must set this explicitly so
+    # shared resources such as Redis and GCS cannot cross-pollute environments.
+    APP_ENV: str = ""
+
     # GCP Configuration
     PROJECT_ID: Optional[str] = None
     REGION: str = "us-west4"
@@ -62,7 +66,7 @@ class Settings(BaseSettings):
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
     REDIS_PASSWORD: Optional[str] = None
-    REDIS_PREFIX: str = "aims:session:"
+    REDIS_PREFIX: Optional[str] = None
     
     # Session cookie configuration
     SESSION_COOKIE_NAME: str = "sessionId"
@@ -97,6 +101,41 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore"
     )
+
+    @field_validator("APP_ENV", mode="before")
+    @classmethod
+    def validate_app_env(cls, v):
+        if not v:
+            if os.getenv("K_SERVICE"):
+                raise ValueError("APP_ENV must be set to one of local, staging, or prod in Cloud Run.")
+            return "local"
+        env = str(v).strip().lower()
+        allowed = {"local", "staging", "prod"}
+        if env not in allowed:
+            raise ValueError(f"APP_ENV must be one of {sorted(allowed)}; got {env!r}.")
+        return env
+
+    @property
+    def redis_key_prefix(self) -> str:
+        if self.REDIS_PREFIX:
+            return self.REDIS_PREFIX
+        return f"aims:{self.APP_ENV}:session:"
+
+    @property
+    def redis_fallback_prefixes(self) -> List[str]:
+        if self.REDIS_PREFIX:
+            return []
+        if self.APP_ENV == "prod":
+            return ["aims:session:"]
+        return []
+
+    @property
+    def gcs_object_prefix(self) -> str:
+        return f"env={self.APP_ENV}"
+
+    def gcs_path(self, *parts: str) -> str:
+        clean_parts = [part.strip("/") for part in parts if part]
+        return "/".join([self.gcs_object_prefix, *clean_parts])
 
     @field_validator("PROJECT_ID", mode="before")
     @classmethod

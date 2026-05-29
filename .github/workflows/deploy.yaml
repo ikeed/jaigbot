@@ -2,7 +2,7 @@ name: Deploy to Cloud Run
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "staging" ]
   workflow_dispatch:
 
 permissions:
@@ -14,7 +14,9 @@ env:
   PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
   REGION: ${{ vars.GCP_REGION }}
   GAR_REPO: ${{ vars.GAR_REPO }}
+  APP_ENV: ${{ github.ref_name == 'staging' && 'staging' || 'prod' }}
   SERVICE_NAME: ${{ vars.SERVICE_NAME }}
+  STAGING_SERVICE_NAME: ${{ vars.STAGING_SERVICE_NAME }}
   MODEL_ID: ${{ vars.MODEL_ID }}
   TEMPERATURE: ${{ vars.TEMPERATURE }}
   MAX_TOKENS: ${{ vars.MAX_TOKENS }}
@@ -22,6 +24,7 @@ env:
   # SSO Credentials
   CHAINLIT_AUTH_SECRET: ${{ secrets.CHAINLIT_AUTH_SECRET }}
   CHAINLIT_URL: ${{ vars.CHAINLIT_URL }}
+  STAGING_CHAINLIT_URL: ${{ vars.STAGING_CHAINLIT_URL }}
   OAUTH_GOOGLE_CLIENT_ID: ${{ vars.OAUTH_GOOGLE_CLIENT_ID }}
   OAUTH_GOOGLE_CLIENT_SECRET: ${{ secrets.OAUTH_GOOGLE_CLIENT_SECRET }}
   # Optional runtime tuning and memory settings
@@ -42,6 +45,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Select deployment environment
+        run: |
+          if [[ "$APP_ENV" == "staging" ]]; then
+            echo "SERVICE_NAME=${STAGING_SERVICE_NAME:-aimsbot-staging}" >> "$GITHUB_ENV"
+            echo "CHAINLIT_URL=${STAGING_CHAINLIT_URL}" >> "$GITHUB_ENV"
+          else
+            echo "SERVICE_NAME=${SERVICE_NAME}" >> "$GITHUB_ENV"
+            echo "CHAINLIT_URL=${CHAINLIT_URL}" >> "$GITHUB_ENV"
+          fi
+
       - name: Validate required variables
         run: |
           MISSING=()
@@ -49,6 +62,7 @@ jobs:
           [[ -z "$REGION" ]] && MISSING+=(REGION)
           [[ -z "$GAR_REPO" ]] && MISSING+=(GAR_REPO)
           [[ -z "$SERVICE_NAME" ]] && MISSING+=(SERVICE_NAME)
+          [[ -z "$CHAINLIT_URL" ]] && MISSING+=(CHAINLIT_URL)
           if (( ${#MISSING[@]} )); then
             echo "Error: Missing required repository variables: ${MISSING[*]}" >&2
             echo "Set these in Settings → Secrets and variables → Actions → Variables." >&2
@@ -137,7 +151,7 @@ jobs:
             --region "$REGION" \
             --allow-unauthenticated \
             --service-account "cr-vertex-runtime@${PROJECT_ID}.iam.gserviceaccount.com" \
-            --set-env-vars "PROJECT_ID=${PROJECT_ID},REGION=${REGION},MODEL_ID=${MODEL_ID:-gemini-2.5-pro},TEMPERATURE=${TEMPERATURE:-0.2},MAX_TOKENS=${MAX_TOKENS:-768},HOST=${HOST:-0.0.0.0},AIMS_COACHING_ENABLED=true,AIMS_COACHING_DEFAULT=true,MEMORY_BACKEND=${MEMORY_BACKEND:-memory},REDIS_URL=${REDIS_URL:-},CHAINLIT_URL=${CHAINLIT_URL:-},CHAINLIT_AUTH_SECRET=${CHAINLIT_AUTH_SECRET:-},OAUTH_GOOGLE_CLIENT_ID=${OAUTH_GOOGLE_CLIENT_ID:-},OAUTH_GOOGLE_CLIENT_SECRET=${OAUTH_GOOGLE_CLIENT_SECRET:-},VALIDATE_MODEL_ON_STARTUP=false,SESSIONS_BUCKET_NAME=${{ vars.SESSIONS_BUCKET_NAME || 'aimsbot-chat-sessions' }},REPORTS_BUCKET_NAME=${{ vars.REPORTS_BUCKET_NAME || 'aimsbot-bug-reports' }}" \
+            --set-env-vars "APP_ENV=${APP_ENV},PROJECT_ID=${PROJECT_ID},REGION=${REGION},MODEL_ID=${MODEL_ID:-gemini-2.5-pro},TEMPERATURE=${TEMPERATURE:-0.2},MAX_TOKENS=${MAX_TOKENS:-768},HOST=${HOST:-0.0.0.0},AIMS_COACHING_ENABLED=true,AIMS_COACHING_DEFAULT=true,MEMORY_BACKEND=${MEMORY_BACKEND:-memory},REDIS_URL=${REDIS_URL:-},CHAINLIT_URL=${CHAINLIT_URL:-},CHAINLIT_AUTH_SECRET=${CHAINLIT_AUTH_SECRET:-},OAUTH_GOOGLE_CLIENT_ID=${OAUTH_GOOGLE_CLIENT_ID:-},OAUTH_GOOGLE_CLIENT_SECRET=${OAUTH_GOOGLE_CLIENT_SECRET:-},VALIDATE_MODEL_ON_STARTUP=false,SESSIONS_BUCKET_NAME=${{ vars.SESSIONS_BUCKET_NAME || 'aimsbot-chat-sessions' }},REPORTS_BUCKET_NAME=${{ vars.REPORTS_BUCKET_NAME || 'aimsbot-bug-reports' }}" \
             --memory=512Mi --cpu=1 --concurrency=20 --max-instances=2 --min-instances=1 --timeout=3600 \
             --cpu-throttling \
             --startup-probe="httpGet.path=/api/healthz,periodSeconds=10,timeoutSeconds=9,failureThreshold=5"

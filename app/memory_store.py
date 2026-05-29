@@ -92,6 +92,7 @@ class RedisStore:
     - url: full redis URL, if provided (takes precedence over host/port/db/password)
     - host, port, db, password: standard Redis connection fields
     - prefix: string prefix for namespacing keys
+    - fallback_prefixes: read-only legacy prefixes used during migrations
     - ttl: expiration in seconds; if > 0, applied on write
     """
 
@@ -104,6 +105,7 @@ class RedisStore:
         db: int = 0,
         password: Optional[str] = None,
         prefix: str = "aims:session:",
+        fallback_prefixes: Optional[List[str]] = None,
         ttl: int = 3600,
     ) -> None:
         try:
@@ -112,6 +114,7 @@ class RedisStore:
             raise RuntimeError(f"Redis library not available: {e}")
 
         self._prefix = prefix
+        self._fallback_prefixes = [p for p in fallback_prefixes or [] if p and p != prefix]
         self._ttl = ttl
 
         if url:
@@ -128,14 +131,19 @@ class RedisStore:
     def _k(self, key: str) -> str:
         return f"{self._prefix}{key}"
 
+    def _candidate_keys(self, key: str) -> List[str]:
+        return [self._k(key), *[f"{prefix}{key}" for prefix in self._fallback_prefixes]]
+
     def get(self, key: str) -> Optional[Dict[str, Any]]:
-        raw = self.r.get(self._k(key))
-        if not raw:
-            return None
-        try:
-            return json.loads(raw)
-        except Exception:  # pragma: no cover - corrupt value
-            return None
+        for redis_key in self._candidate_keys(key):
+            raw = self.r.get(redis_key)
+            if not raw:
+                continue
+            try:
+                return json.loads(raw)
+            except Exception:  # pragma: no cover - corrupt value
+                return None
+        return None
 
     def __setitem__(self, key: str, value: Dict[str, Any]) -> None:
         try:
@@ -151,37 +159,44 @@ class RedisStore:
     def items(self) -> List[Tuple[str, Dict[str, Any]]]:
         cursor = 0
         out: List[Tuple[str, Dict[str, Any]]] = []
-        pattern = f"{self._prefix}*"
-        while True:
-            cursor, keys = self.r.scan(cursor=cursor, match=pattern, count=200)
-            if keys:
-                vals = self.r.mget(keys)
-                for k, v in zip(keys, vals):
-                    if not v:
-                        continue
-                    try:
-                        data = json.loads(v)
-                    except Exception:
-                        data = None
-                    if data is not None:
-                        sid = k[len(self._prefix) :]
-                        out.append((sid, data))
-            if cursor == 0:
-                break
+        seen = set()
+        for prefix in [self._prefix, *self._fallback_prefixes]:
+            cursor = 0
+            pattern = f"{prefix}*"
+            while True:
+                cursor, keys = self.r.scan(cursor=cursor, match=pattern, count=200)
+                if keys:
+                    vals = self.r.mget(keys)
+                    for k, v in zip(keys, vals):
+                        if not v:
+                            continue
+                        try:
+                            data = json.loads(v)
+                        except Exception:
+                            data = None
+                        if data is not None:
+                            sid = k[len(prefix) :]
+                            if sid not in seen:
+                                seen.add(sid)
+                                out.append((sid, data))
+                if cursor == 0:
+                    break
         return out
 
     def pop(self, key: str, default: Any = None) -> Any:
         val = self.get(key)
-        self.r.delete(self._k(key))
+        self.r.delete(*self._candidate_keys(key))
         return val if val is not None else default
 
     def __len__(self) -> int:  # pragma: no cover - approximate
-        count = 0
-        cursor = 0
-        pattern = f"{self._prefix}*"
-        while True:
-            cursor, keys = self.r.scan(cursor=cursor, match=pattern, count=500)
-            count += len(keys)
-            if cursor == 0:
-                break
-        return count
+        seen = set()
+        for prefix in [self._prefix, *self._fallback_prefixes]:
+            cursor = 0
+            pattern = f"{prefix}*"
+            while True:
+                cursor, keys = self.r.scan(cursor=cursor, match=pattern, count=500)
+                for key in keys:
+                    seen.add(key[len(prefix) :])
+                if cursor == 0:
+                    break
+        return len(seen)

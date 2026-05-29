@@ -219,10 +219,11 @@ Common runtime flags:
 - `AIMS_COACHING_ENABLED`
 - `AIMS_COACHING_DEFAULT`
 - `AIMS_CLASSIFIER_MODE`
+- `APP_ENV` (`local`, `staging`, or `prod`; required on Cloud Run)
 - `MEMORY_ENABLED`
 - `MEMORY_BACKEND`
 - `REDIS_URL` or `REDIS_HOST` / `REDIS_PORT` / `REDIS_DB` / `REDIS_PASSWORD`
-- `REDIS_PREFIX`
+- `REDIS_PREFIX` (optional override; by default derived from `APP_ENV`)
 - `MEMORY_TTL_SECONDS`
 - `PROJECT_ID`
 - `REGION`

@@ -58,7 +58,7 @@ class StorageService:
     def upload_session(self, session_id: str, user_id: str, session_data: Dict[str, Any], is_report: bool = False) -> bool:
         """
         Uploads session data to GCS.
-        Path: sessions/v1/user_id={user_id}/session_id={session_id}.json
+        Path: env={APP_ENV}/sessions/v1/user_id={user_id}/session_id={session_id}.json
         """
         target_bucket_name = self.reports_bucket_name if is_report else self.bucket_name
         bucket = self.reports_bucket if is_report else self.bucket
@@ -75,7 +75,7 @@ class StorageService:
         # Transform the "messy" internal memory state into the logical archive schema
         archive_data = self._transform_to_logical_schema(session_id, user_id, session_data)
 
-        path = f"sessions/v1/user_id={user_id}/session_id={session_id}.json"
+        path = settings.gcs_path("sessions/v1", f"user_id={user_id}", f"session_id={session_id}.json")
         
         try:
             blob = bucket.blob(path)
@@ -195,6 +195,10 @@ class StorageService:
 
         return {
             "metadata": metadata,
+            "environment": {
+                "appEnv": settings.APP_ENV,
+                "gcsObjectPrefix": settings.gcs_object_prefix,
+            },
             "config": config,
             "transcript": transcript,
             "analytics": analytics
@@ -203,7 +207,7 @@ class StorageService:
     def download_session(self, session_id: str, user_id: str) -> Optional[dict]:
         """
         Downloads session data from GCS.
-        Path: sessions/v1/user_id={user_id}/session_id={session_id}.json
+        Path: env={APP_ENV}/sessions/v1/user_id={user_id}/session_id={session_id}.json
         """
         if not self.bucket_name:
             return None
@@ -212,9 +216,12 @@ class StorageService:
         if not bucket:
             return None
 
-        path = f"sessions/v1/user_id={user_id}/session_id={session_id}.json"
+        path = settings.gcs_path("sessions/v1", f"user_id={user_id}", f"session_id={session_id}.json")
         try:
             blob = bucket.blob(path)
+            if not blob.exists() and settings.APP_ENV == "prod":
+                legacy_path = f"sessions/v1/user_id={user_id}/session_id={session_id}.json"
+                blob = bucket.blob(legacy_path)
             if not blob.exists():
                 return None
             
