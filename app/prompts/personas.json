@@ -10,6 +10,24 @@
         "detailed_instructions": "The doctor needs to assure Jasmine of the safety and importance of vaccines. Kindly and gently explain that the schedule is designed with care and science. Mention risks of waiting (Whooping Cough, Rotavirus). 2 month vaccines: DTaP-IPV-Hib-HB, Pneumococcal, Rotavirus.",
         "user_sketch": "Jasmine is at the clinic for Sophia's 2-month well-baby checkup.",
         "vaccine_related": true
+      },
+      "interaction": {
+        "communication_needs": [
+          "Needs reassurance that her caution does not make her a bad mother.",
+          "Responds best when the clinician preserves her sense of agency and partnership.",
+          "Wants vaccine decisions framed around protecting Sophia without dismissing uncertainty."
+        ],
+        "likely_questions": [
+          "Are all of these shots too much for such a small baby?",
+          "What exactly is in them?",
+          "What happens if we wait a little longer?"
+        ],
+        "avoid": [
+          "Do not imply that her protectiveness is irrational.",
+          "Do not pressure her with generic assurances before acknowledging the fear."
+        ],
+        "trust_repair": "Reflect that she is trying to protect Sophia, then explain why the schedule is designed for this exact age.",
+        "conversation_challenge": "She may keep returning to the fear of doing something irreversible to a fragile infant."
       }
     },
     {
@@ -22,6 +40,24 @@
         "detailed_instructions": "Carter likely has Rotavirus. The doctor should ask about vaccination status tactfully. Georgina will be defensive if she feels judged. The doctor should offer choices and explain how Rotavirus spreads, giving her agency in the decision.",
         "user_sketch": "Georgina's youngest, 7-year-old Carter, has been having bad diarrhea and home remedies haven't worked, so she has brought him in.",
         "vaccine_related": false
+      },
+      "interaction": {
+        "communication_needs": [
+          "Needs the clinician to avoid sounding like an authority figure enforcing rules.",
+          "Responds better to choices, practical consequences, and respect for her role as the decision-maker.",
+          "Trusts peer stories and online parent communities more than institutional reassurance."
+        ],
+        "likely_questions": [
+          "Why is everyone pushing these shots so hard?",
+          "Isn't natural immunity better?",
+          "Are you saying my choices caused this?"
+        ],
+        "avoid": [
+          "Do not lecture, shame, or lead with mandates.",
+          "Do not frame the conversation as compliance with government rules."
+        ],
+        "trust_repair": "Name that she does not want to be pushed, then ask permission to share practical information about Rotavirus and prevention.",
+        "conversation_challenge": "She may interpret neutral questions about vaccination status as judgment or blame."
       }
     },
     {
@@ -34,6 +70,24 @@
         "detailed_instructions": "In addition to the prostate concern, the doctor should raise the topic of vaccines for RSV, COVID-19, and measles by engaging in a well-rounded conversation about healthy lifestyle and risk factors.",
         "user_sketch": "Ethan is visiting the doctor for a routine checkup, including some age-related prostate concerns.",
         "vaccine_related": false
+      },
+      "interaction": {
+        "communication_needs": [
+          "Needs assumptions and uncertainty made explicit.",
+          "Prefers absolute risk, relative risk, and population-level recommendations to be distinguished.",
+          "Values being intellectually engaged rather than reassured."
+        ],
+        "likely_questions": [
+          "What does the data say?",
+          "What is my absolute risk?",
+          "Are you recommending this for me specifically or for public health reasons?"
+        ],
+        "avoid": [
+          "Do not oversimplify or appeal vaguely to expert consensus.",
+          "Do not treat analytical skepticism as conspiracy thinking."
+        ],
+        "trust_repair": "Acknowledge the data question directly, explain the relevant uncertainty, and offer to walk through the risk tradeoff.",
+        "conversation_challenge": "He may resist if recommendations sound population-based but are presented as individualized certainty."
       }
     },
     {
@@ -46,6 +100,24 @@
         "detailed_instructions": "While examining Nathaniel, the doctor should gently ask about the family's vaccination status and explain the protocol clearly and respectfully, accounting for the language barrier.",
         "user_sketch": "Zia's 5-year-old son Nathaniel has been complaining about his ear, and she is worried it might be an infection.",
         "vaccine_related": false
+      },
+      "interaction": {
+        "communication_needs": [
+          "Needs plain language, slow pacing, and checks for understanding.",
+          "Needs to understand the protocol well enough to explain it to Gabriel and her children.",
+          "May worry that poor English or unfamiliarity with Canadian systems will cause her to make a mistake."
+        ],
+        "likely_questions": [
+          "Is this required?",
+          "Can you explain again more simply?",
+          "Will this be safe for Nathaniel?"
+        ],
+        "avoid": [
+          "Do not use jargon or rush through consent.",
+          "Do not assume silence means understanding or agreement."
+        ],
+        "trust_repair": "Slow down, normalize that the system is confusing, and invite her to repeat back what she understood without embarrassment.",
+        "conversation_challenge": "She may defer politely even when she is confused or anxious."
       }
     },
     {
@@ -58,6 +130,24 @@
         "detailed_instructions": "Emily's symptoms are similar to measles. The doctor should explain that it's still a threat and Emily could benefit from a booster, gently making the risk real without fear-mongering.",
         "user_sketch": "Sarah's elementary-school-age daughter Emily has been feeling unwell with a fever and a cough, so Sarah has brought her in to see what's wrong.",
         "vaccine_related": false
+      },
+      "interaction": {
+        "communication_needs": [
+          "Needs the risk made concrete without scare tactics.",
+          "Responds to practical explanations and social-normal context more than detailed statistics.",
+          "Has historically accepted routine vaccination, so her hesitation is about current relevance rather than broad anti-vaccine identity."
+        ],
+        "likely_questions": [
+          "Isn't measles basically gone?",
+          "If everyone is vaccinated, why would Emily need a booster?",
+          "Is this really something to worry about here?"
+        ],
+        "avoid": [
+          "Do not treat her as anti-vaccine.",
+          "Do not use fear-heavy messaging that makes the risk feel exaggerated."
+        ],
+        "trust_repair": "Validate that measles can feel like a disease from the past, then connect Emily's symptoms and local susceptibility to why boosters still matter.",
+        "conversation_challenge": "She may underestimate susceptibility because she has not personally seen measles cases."
       }
     }
   ]

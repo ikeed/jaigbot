@@ -72,6 +72,12 @@ Behavior and diagnostics:
 ## Persona (character) and scene
 You can set a character sketch (persona) and optional scene objectives to steer the assistant.
 
+For Chainlit sessions, new personas are selected by user history. The app keeps
+per-user persona interaction counts in Redis using non-expiring keys, backfills
+the cache from GCS archives when needed, and chooses among personas with weight
+`1 / (previous_interactions + 1)`. This makes personas a user has seen less
+often more likely without making any persona impossible to select.
+
 Where to configure:
 - Hard‑coded defaults: edit `app/persona.py` → `DEFAULT_CHARACTER` and `DEFAULT_SCENE`.
 - Chainlit: set environment variables before starting Chainlit and it will send them with each request:
@@ -100,6 +106,7 @@ To disable hard‑coded defaults, set the strings to empty in `app/persona.py`.
 - Chainlit persists each chat as a thread using the app memory backend.
 - For new conversations, the Chainlit thread id is sent as the backend `sessionId` with every POST /chat call.
 - Legacy threads whose metadata points at a different backend `sessionId` remain readable, but new threads should keep `thread_id == sessionId`.
+- The backend `/session` endpoint owns persona selection. Chainlit only falls back to local random persona selection if backend session initialization fails.
 - Optionally send a persona and scene via env vars (see above).
 
 Example:

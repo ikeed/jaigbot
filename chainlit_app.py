@@ -276,45 +276,9 @@ async def chat_profiles():
 
 
 def _load_robust_persona(name: str | None = None) -> dict:
-    """
-    Load a persona from app/prompts/personas.json.
-    If name is provided, try to find that specific persona.
-    """
-    try:
-        root = Path(__file__).resolve().parent
-        path = root / "app" / "prompts" / "personas.json"
-        if not path.exists():
-            path = root / "prompts" / "personas.json"
-        
-        data = json.loads(path.read_text(encoding="utf-8"))
-        personas = data.get("personas") or []
-        
-        if name:
-            for p in personas:
-                if p.get("name") == name:
-                    return p
+    from app.services.persona_service import load_robust_persona
 
-        # Pick persona index
-        idx_env = settings.PERSONA_INDEX
-        if idx_env is not None:
-            idx = max(0, min(int(idx_env), len(personas) - 1))
-        else:
-            idx = random.randrange(len(personas))
-        
-        return personas[idx]
-    except Exception:
-        # Minimum fallback
-        return {
-            "name": "Jasmine",
-            "brief": "A nervous first-time parent.",
-            "detailed": "Jasmine is a nervous first-time parent worried about vaccine risks.",
-            "scenario": {
-                "visit_reason": "Well-baby check",
-                "detailed_instructions": "Assure her of vaccine safety.",
-                "user_sketch": "You are at the clinic for a well-baby checkup.",
-                "vaccine_related": True
-            }
-        }
+    return load_robust_persona(name)
 
 
 def _render_scenario_card_html(card_text: str) -> str:
