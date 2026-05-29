@@ -1,0 +1,21 @@
+name: Main PR Source Guard
+
+on:
+  pull_request:
+    branches: [ "main" ]
+    types: [ opened, synchronize, reopened, edited, ready_for_review ]
+
+permissions:
+  contents: read
+
+jobs:
+  require-staging-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require staging source branch
+        run: |
+          if [[ "${{ github.head_ref }}" != "staging" ]]; then
+            echo "Pull requests into main must come from the staging branch." >&2
+            echo "Actual source branch: ${{ github.head_ref }}" >&2
+            exit 1
+          fi
