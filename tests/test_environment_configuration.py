@@ -310,6 +310,7 @@ class TestDeploymentIntegration:
             "REDIS_URL",
             "TF_BACKEND_BUCKET",  # Not in Settings, used for Terraform
             "TF_BACKEND_PREFIX",  # Not in Settings, used for Terraform
+            "VPC_CONNECTOR",  # Not in Settings, used by deployment
         ]
 
         settings_fields = {f for f in dir(Settings()) if not f.startswith("_")}
