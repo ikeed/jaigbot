@@ -36,8 +36,14 @@ variable "github_repo" {
 
 variable "github_branch_ref" {
   type        = string
-  description = "Git ref to permit for WIF (e.g., refs/heads/main)"
+  description = "Legacy single Git ref to permit for WIF. Prefer github_branch_refs."
   default     = "refs/heads/main"
+}
+
+variable "github_branch_refs" {
+  type        = list(string)
+  description = "Git refs to permit for WIF deploys."
+  default     = ["refs/heads/main", "refs/heads/staging"]
 }
 
 variable "wif_pool_id" {

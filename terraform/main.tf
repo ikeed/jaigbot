@@ -224,7 +224,7 @@ resource "google_iam_workload_identity_pool_provider" "github" {
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"
   }
-  attribute_condition = "attribute.repository=='${var.github_org}/${var.github_repo}' && attribute.ref=='${var.github_branch_ref}'"
+  attribute_condition = "attribute.repository=='${var.github_org}/${var.github_repo}' && attribute.ref in ${jsonencode(var.github_branch_refs)}"
 }
 
 # Allow identities from the provider to impersonate the deployer SA

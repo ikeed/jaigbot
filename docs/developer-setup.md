@@ -127,6 +127,9 @@ Key requirements for main CI:
 - TF_BACKEND_BUCKET/TF_BACKEND_PREFIX must point to your remote state.
 - Deployer SA requires IAM: run.admin, artifactregistry.admin (for repository creation), serviceusage.serviceUsageAdmin (to enable/list services), and iam.serviceAccountTokenCreator.
 - Set `CHAINLIT_URL` for production and `STAGING_CHAINLIT_URL` for staging. Add both callback URLs to the Google OAuth client, or use a separate staging OAuth client.
+- The first staging deploy can run without `STAGING_CHAINLIT_URL` to create the Cloud Run URL. Set `STAGING_CHAINLIT_URL` and rerun the deploy before testing OAuth.
+- WIF must allow both `refs/heads/main` and `refs/heads/staging`; this is controlled by Terraform variable `github_branch_refs`.
+- If using Memorystore, set GitHub variables `MEMORY_BACKEND=redis`, `REDIS_HOST`, `REDIS_PORT`, and `VPC_CONNECTOR` from Terraform outputs so every deploy keeps Redis and VPC access configured.
 - See `docs/environments.md` for Redis/GCS namespacing and the incremental rollout checklist.
 
 ## 8) Troubleshooting

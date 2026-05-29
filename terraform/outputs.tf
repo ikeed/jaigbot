@@ -42,3 +42,18 @@ output "wif_principal_set" {
   value       = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.pool.name}/attribute.repository/${var.github_org}/${var.github_repo}"
   description = "PrincipalSet used to bind workloadIdentityUser"
 }
+
+output "redis_host" {
+  value       = var.enable_redis ? google_redis_instance.cache[0].host : ""
+  description = "Memorystore Redis host for Cloud Run REDIS_HOST."
+}
+
+output "redis_port" {
+  value       = var.enable_redis ? google_redis_instance.cache[0].port : 6379
+  description = "Memorystore Redis port for Cloud Run REDIS_PORT."
+}
+
+output "vpc_connector" {
+  value       = var.enable_redis ? google_vpc_access_connector.connector[0].name : ""
+  description = "Serverless VPC connector name for Cloud Run VPC_CONNECTOR."
+}

@@ -30,6 +30,9 @@ env:
   # Optional runtime tuning and memory settings
   MEMORY_BACKEND: ${{ vars.MEMORY_BACKEND }}
   REDIS_URL: ${{ vars.REDIS_URL }}
+  REDIS_HOST: ${{ vars.REDIS_HOST }}
+  REDIS_PORT: ${{ vars.REDIS_PORT }}
+  VPC_CONNECTOR: ${{ vars.VPC_CONNECTOR }}
   # Optional: for Terraform backend initialization (trimmed in script)
   TF_BACKEND_BUCKET: ${{ vars.TF_BACKEND_BUCKET }}
   TF_BACKEND_PREFIX: ${{ vars.TF_BACKEND_PREFIX }}
@@ -62,11 +65,16 @@ jobs:
           [[ -z "$REGION" ]] && MISSING+=(REGION)
           [[ -z "$GAR_REPO" ]] && MISSING+=(GAR_REPO)
           [[ -z "$SERVICE_NAME" ]] && MISSING+=(SERVICE_NAME)
-          [[ -z "$CHAINLIT_URL" ]] && MISSING+=(CHAINLIT_URL)
+          if [[ "$APP_ENV" == "prod" && -z "$CHAINLIT_URL" ]]; then
+            MISSING+=(CHAINLIT_URL)
+          fi
           if (( ${#MISSING[@]} )); then
             echo "Error: Missing required repository variables: ${MISSING[*]}" >&2
             echo "Set these in Settings → Secrets and variables → Actions → Variables." >&2
             exit 1
+          fi
+          if [[ "$APP_ENV" == "staging" && -z "$CHAINLIT_URL" ]]; then
+            echo "Warning: STAGING_CHAINLIT_URL is not set. The staging service will deploy for URL discovery, but OAuth may not work until you set it and redeploy." >&2
           fi
       - name: Validate auth configuration
         env:
@@ -151,7 +159,8 @@ jobs:
             --region "$REGION" \
             --allow-unauthenticated \
             --service-account "cr-vertex-runtime@${PROJECT_ID}.iam.gserviceaccount.com" \
-            --set-env-vars "APP_ENV=${APP_ENV},PROJECT_ID=${PROJECT_ID},REGION=${REGION},MODEL_ID=${MODEL_ID:-gemini-2.5-pro},TEMPERATURE=${TEMPERATURE:-0.2},MAX_TOKENS=${MAX_TOKENS:-768},HOST=${HOST:-0.0.0.0},AIMS_COACHING_ENABLED=true,AIMS_COACHING_DEFAULT=true,MEMORY_BACKEND=${MEMORY_BACKEND:-memory},REDIS_URL=${REDIS_URL:-},CHAINLIT_URL=${CHAINLIT_URL:-},CHAINLIT_AUTH_SECRET=${CHAINLIT_AUTH_SECRET:-},OAUTH_GOOGLE_CLIENT_ID=${OAUTH_GOOGLE_CLIENT_ID:-},OAUTH_GOOGLE_CLIENT_SECRET=${OAUTH_GOOGLE_CLIENT_SECRET:-},VALIDATE_MODEL_ON_STARTUP=false,SESSIONS_BUCKET_NAME=${{ vars.SESSIONS_BUCKET_NAME || 'aimsbot-chat-sessions' }},REPORTS_BUCKET_NAME=${{ vars.REPORTS_BUCKET_NAME || 'aimsbot-bug-reports' }}" \
+            --set-env-vars "APP_ENV=${APP_ENV},PROJECT_ID=${PROJECT_ID},REGION=${REGION},MODEL_ID=${MODEL_ID:-gemini-2.5-pro},TEMPERATURE=${TEMPERATURE:-0.2},MAX_TOKENS=${MAX_TOKENS:-768},HOST=${HOST:-0.0.0.0},AIMS_COACHING_ENABLED=true,AIMS_COACHING_DEFAULT=true,MEMORY_BACKEND=${MEMORY_BACKEND:-memory},REDIS_URL=${REDIS_URL:-},REDIS_HOST=${REDIS_HOST:-},REDIS_PORT=${REDIS_PORT:-6379},CHAINLIT_URL=${CHAINLIT_URL:-},CHAINLIT_AUTH_SECRET=${CHAINLIT_AUTH_SECRET:-},OAUTH_GOOGLE_CLIENT_ID=${OAUTH_GOOGLE_CLIENT_ID:-},OAUTH_GOOGLE_CLIENT_SECRET=${OAUTH_GOOGLE_CLIENT_SECRET:-},VALIDATE_MODEL_ON_STARTUP=false,SESSIONS_BUCKET_NAME=${{ vars.SESSIONS_BUCKET_NAME || 'aimsbot-chat-sessions' }},REPORTS_BUCKET_NAME=${{ vars.REPORTS_BUCKET_NAME || 'aimsbot-bug-reports' }}" \
+            ${VPC_CONNECTOR:+--vpc-connector="$VPC_CONNECTOR" --vpc-egress=private-ranges-only} \
             --memory=512Mi --cpu=1 --concurrency=20 --max-instances=2 --min-instances=1 --timeout=3600 \
             --cpu-throttling \
             --startup-probe="httpGet.path=/api/healthz,periodSeconds=10,timeoutSeconds=9,failureThreshold=5"

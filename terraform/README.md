@@ -208,7 +208,7 @@ Once roles are fixed and resources are imported if needed:
 ## Notes
 - Ensure Artifact Registry region matches Cloud Run region for efficiency.
 - The deploy workflow maps Terraform var.region to the GitHub variable GCP_REGION and sets Cloud Run env REGION accordingly. The backend can use a separate Vertex location via VERTEX_LOCATION (recommended: global for Gemini 2.x). Ensure your chosen MODEL_ID is available in that location (e.g., set VERTEX_LOCATION=global for gemini-2.5-pro).
-- WIF attribute_condition restricts deployments to the main branch of ikeed/aimsbot by default. Override `github_branch_ref` if needed.
+- WIF attribute_condition restricts deployments to configured branch refs. By default `github_branch_refs` permits `refs/heads/main` and `refs/heads/staging`.
 - The deploy workflow expects the runtime service account to exist and will set env vars during `gcloud run deploy`.
 
 
