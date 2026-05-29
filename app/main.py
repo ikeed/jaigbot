@@ -14,18 +14,13 @@ from fastapi.responses import JSONResponse
 
 from .vertex import VertexClient, VertexAIError
 from .chat_roles import ROLE_ASSISTANT, ROLE_SYSTEM, is_scenario_card, normalize_role
+from .runtime import VertexClientCache, create_memory_store
 
-# Lazy, cached Vertex client per (project, region, model, class) to avoid re-initializing
-# a new SDK client on every request while still allowing tests to monkeypatch VertexClient.
-_VERTEX_CLIENT_CACHE = {}
+_VERTEX_CLIENT_CACHE = VertexClientCache()
+
 
 def _get_vertex_client(project: str, region: str, model_id: str):
-    key = (project, region, model_id, VertexClient)
-    client = _VERTEX_CLIENT_CACHE.get(key)
-    if client is None:
-        client = VertexClient(project=project, region=region, model_id=model_id)
-        _VERTEX_CLIENT_CACHE[key] = client
-    return client
+    return _VERTEX_CLIENT_CACHE.get(project, region, model_id, VertexClient)
 from .persona import DEFAULT_CHARACTER, DEFAULT_SCENE
 from .services.conversation_service import (
     maybe_add_person_concern as svc_maybe_add_person_concern,
@@ -53,32 +48,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger("app")
 
-# Memory store abstraction (factored into app.memory_store for readability)
-from .memory_store import InMemoryStore, RedisStore
-
-# Instantiate store with fallback
-try:
-    if settings.MEMORY_ENABLED and settings.MEMORY_BACKEND == "redis":
-        _MEMORY_STORE = RedisStore(
-            url=settings.REDIS_URL,
-            host=settings.REDIS_HOST,
-            port=settings.REDIS_PORT,
-            db=settings.REDIS_DB,
-            password=settings.REDIS_PASSWORD,
-            prefix=settings.redis_key_prefix,
-            fallback_prefixes=settings.redis_fallback_prefixes,
-            ttl=settings.MEMORY_TTL_SECONDS,
-        )
-    else:
-        _MEMORY_STORE = InMemoryStore(persist_path=settings.MEMORY_PERSIST_PATH)
-except Exception:
-    _MEMORY_STORE = InMemoryStore(persist_path=settings.MEMORY_PERSIST_PATH)
-    settings.MEMORY_BACKEND = "memory"
+_MEMORY_STORE = create_memory_store(settings, logger)
 
 
 @asynccontextmanager
 async def _lifespan(application: FastAPI):
     """Application lifespan: run startup tasks before yielding, cleanup after."""
+    application.state.memory_store = _MEMORY_STORE
+    application.state.vertex_client_cache = _VERTEX_CLIENT_CACHE
     await _model_preflight(application)
     yield
 
@@ -581,6 +558,65 @@ def _get_request_id(request: Request) -> Optional[str]:
         return str(uuid.uuid4())
 
 
+def _vertex_config() -> dict:
+    return {
+        "project_id": settings.PROJECT_ID,
+        "region": settings.REGION,
+        "vertex_location": settings.VERTEX_LOCATION,
+        "model_id": settings.MODEL_ID,
+        "model_fallbacks": settings.MODEL_FALLBACKS,
+        "temperature": settings.TEMPERATURE,
+        "max_tokens": settings.MAX_TOKENS,
+        # Pass client class from app.main so tests can monkeypatch m.VertexClient.
+        "client_cls": VertexClient,
+    }
+
+
+def _memory_config() -> dict:
+    return {
+        "enabled": settings.MEMORY_ENABLED,
+        "max_turns": settings.MEMORY_MAX_TURNS,
+        "ttl_seconds": settings.MEMORY_TTL_SECONDS,
+    }
+
+
+def _session_cookie_settings() -> dict:
+    return {
+        "name": settings.SESSION_COOKIE_NAME,
+        "secure": settings.SESSION_COOKIE_SECURE,
+        "samesite": settings.SESSION_COOKIE_SAMESITE,
+        "max_age": settings.SESSION_COOKIE_MAX_AGE,
+    }
+
+
+def _aims_config() -> dict:
+    return {
+        "enabled": settings.AIMS_COACHING_ENABLED,
+        "force_default": settings.AIMS_COACHING_DEFAULT,
+    }
+
+
+def _debug_config() -> dict:
+    return {
+        "expose_upstream_error": settings.EXPOSE_UPSTREAM_ERROR,
+        "log_response_preview_max": settings.LOG_RESPONSE_PREVIEW_MAX,
+    }
+
+
+def _chat_orchestrator(memory_store=None):
+    from .services.chat_orchestrator import ChatOrchestrator
+
+    return ChatOrchestrator(
+        memory_store=memory_store or _MEMORY_STORE,
+        session_cookie_settings=_session_cookie_settings(),
+        memory_config=_memory_config(),
+        aims_config=_aims_config(),
+        vertex_config=_vertex_config(),
+        debug_config=_debug_config(),
+        logger=logger,
+    )
+
+
 @app.post("/chat")
 async def chat(req: Request, body: ChatRequest, background_tasks: BackgroundTasks):
     """Main chat endpoint using the new ChatOrchestrator."""
@@ -591,54 +627,7 @@ async def chat(req: Request, body: ChatRequest, background_tasks: BackgroundTask
             "error": {"message": "settings.PROJECT_ID not set — configure the settings.PROJECT_ID environment variable.", "code": 500}
         })
 
-    # Build config structures for orchestrator
-    vertex_config = {
-        "project_id": settings.PROJECT_ID,
-        "region": settings.REGION,
-        "vertex_location": settings.VERTEX_LOCATION,
-        "model_id": settings.MODEL_ID,
-        "model_fallbacks": settings.MODEL_FALLBACKS,
-        "temperature": settings.TEMPERATURE,
-        "max_tokens": settings.MAX_TOKENS,
-        # Pass client class from app.main so tests can monkeypatch m.VertexClient
-        "client_cls": VertexClient,
-    }
-    
-    memory_config = {
-        "enabled": settings.MEMORY_ENABLED,
-        "max_turns": settings.MEMORY_MAX_TURNS,
-        "ttl_seconds": settings.MEMORY_TTL_SECONDS,
-    }
-    
-    session_cookie_settings = {
-        "name": settings.SESSION_COOKIE_NAME,
-        "secure": settings.SESSION_COOKIE_SECURE,
-        "samesite": settings.SESSION_COOKIE_SAMESITE,
-        "max_age": settings.SESSION_COOKIE_MAX_AGE,
-    }
-    
-    aims_config = {
-        "enabled": settings.AIMS_COACHING_ENABLED,
-        "force_default": settings.AIMS_COACHING_DEFAULT,
-    }
-    
-    debug_config = {
-        "expose_upstream_error": settings.EXPOSE_UPSTREAM_ERROR,
-        "log_response_preview_max": settings.LOG_RESPONSE_PREVIEW_MAX,
-    }
-    
-    # Initialize and run the orchestrator
-    from .services.chat_orchestrator import ChatOrchestrator
-    orchestrator = ChatOrchestrator(
-        memory_store=_MEMORY_STORE,
-        session_cookie_settings=session_cookie_settings,
-        memory_config=memory_config,
-        aims_config=aims_config,
-        vertex_config=vertex_config,
-        debug_config=debug_config,
-        logger=logger,
-    )
-    
+    orchestrator = _chat_orchestrator()
     return await orchestrator.handle_chat(req, body, background_tasks)
 
 
@@ -857,32 +846,7 @@ async def deregister_session(body: SessionDeregisterRequest):
 @app.post("/report")
 async def report(req: Request, body: ReportRequest, background_tasks: BackgroundTasks):
     """Endpoint for reporting issues in a scenario."""
-    # Initialize and run the orchestrator
-    from .services.chat_orchestrator import ChatOrchestrator
-    
-    # Minimal config for report path (mostly needs memory_store and session_service)
-    # Reusing the same session cookie settings as /chat
-    session_cookie_settings = {
-        "name": settings.SESSION_COOKIE_NAME,
-        "secure": settings.SESSION_COOKIE_SECURE,
-        "samesite": settings.SESSION_COOKIE_SAMESITE,
-        "max_age": settings.SESSION_COOKIE_MAX_AGE,
-    }
-    
-    orchestrator = ChatOrchestrator(
-        memory_store=_MEMORY_STORE,
-        session_cookie_settings=session_cookie_settings,
-        memory_config={
-            "enabled": settings.MEMORY_ENABLED,
-            "max_turns": settings.MEMORY_MAX_TURNS,
-            "ttl_seconds": settings.MEMORY_TTL_SECONDS,
-        },
-        aims_config={"enabled": settings.AIMS_COACHING_ENABLED},
-        vertex_config={"project_id": settings.PROJECT_ID, "region": settings.REGION},
-        debug_config={"expose_upstream_error": settings.EXPOSE_UPSTREAM_ERROR},
-        logger=logger,
-    )
-    
+    orchestrator = _chat_orchestrator()
     return await orchestrator.handle_report(req, body, background_tasks)
 
 
