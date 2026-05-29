@@ -154,6 +154,7 @@ Use the helper script with backoff instead of a one-shot curl.
 The backend supports session-keyed memory with optional persona/scene, using in-process storage or Redis/Google Memorystore. Chainlit uses the same memory backend as a data layer for thread persistence, and uses the Chainlit thread id as the backend `sessionId` for new conversations.
 
 - See docs/memory-and-persona.md
+- See docs/environments.md for local/staging/prod resource namespacing.
 
 ## More docs
 - Developer setup (step‑by‑step): docs/developer-setup.md
@@ -162,6 +163,7 @@ The backend supports session-keyed memory with optional persona/scene, using in-
 - Terraform IaC: terraform/README.md
 - Chainlit UI details: docs/chainlit-ui.md
 - Health checks and URLs: docs/health-checks.md
+- Environment separation: docs/environments.md
 - Memory and persona: docs/memory-and-persona.md
 - MCP empowerment/readiness: docs/mcp-empowerment.md
 - Standing orders (minimize manual work via efficient tool use): docs/standing-orders.md

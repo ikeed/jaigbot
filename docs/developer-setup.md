@@ -119,12 +119,15 @@ Optional: add a backend block to terraform/versions.tf later if you want backend
 
 ## 7) How the CI workflows run
 - PRs: run tests, optionally build+push preview image, and can deploy to a preview service.
-- main: runs tests, runs Terraform (using WIF) to converge infra, builds/pushes image to GAR, deploys to Cloud Run service `SERVICE_NAME`.
+- main: deploys to Cloud Run service `SERVICE_NAME` with `APP_ENV=prod`.
+- staging: deploys to Cloud Run service `STAGING_SERVICE_NAME` (default `aimsbot-staging`) with `APP_ENV=staging`.
 
 Key requirements for main CI:
 - WORKLOAD_IDP and WORKLOAD_SA secrets must be configured from Terraform outputs.
 - TF_BACKEND_BUCKET/TF_BACKEND_PREFIX must point to your remote state.
 - Deployer SA requires IAM: run.admin, artifactregistry.admin (for repository creation), serviceusage.serviceUsageAdmin (to enable/list services), and iam.serviceAccountTokenCreator.
+- Set `CHAINLIT_URL` for production and `STAGING_CHAINLIT_URL` for staging. Add both callback URLs to the Google OAuth client, or use a separate staging OAuth client.
+- See `docs/environments.md` for Redis/GCS namespacing and the incremental rollout checklist.
 
 ## 8) Troubleshooting
 - Error 403 listing services (serviceusage): Ensure deployer SA has roles/serviceusage.serviceUsageAdmin and that WORKLOAD_* secrets are set. Re-run Terraform.

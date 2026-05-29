@@ -96,6 +96,7 @@ sys.modules["chainlit.utils"] = mock_chainlit_utils
 
 # Mock settings
 with patch("app.config.settings") as mock_settings:
+    mock_settings.APP_ENV = "local"
     mock_settings.ENABLE_PASSWORD_AUTH = True
     from chainlit_app import (
         auth_callback,
@@ -238,13 +239,13 @@ async def test_on_window_message_ignores_browser_state():
 
 def test_intro_seen_helpers_persist_per_user():
     store = {}
-    assert _intro_seen_key("User@Example.COM") == "aims:intro_seen:user@example.com"
+    assert _intro_seen_key("User@Example.COM") == "aims:local:intro_seen:user@example.com"
     assert _has_seen_intro("User@Example.COM", store=store) is False
 
     _mark_intro_seen("User@Example.COM", store=store)
 
     assert _has_seen_intro("user@example.com", store=store) is True
-    assert store["aims:intro_seen:user@example.com"]["seen"] is True
+    assert store["aims:local:intro_seen:user@example.com"]["seen"] is True
 
 
 @pytest.mark.asyncio

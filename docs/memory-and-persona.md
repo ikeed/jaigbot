@@ -2,6 +2,8 @@
 
 The backend supports lightweight, server‑side memory keyed by a `sessionId`, plus optional persona (character) and scene context. Memory can be in‑process or backed by Redis/Google Memorystore.
 
+Runtime data is scoped by `APP_ENV` (`local`, `staging`, or `prod`). See `docs/environments.md` for the Redis and GCS namespace layout.
+
 ## Session identity via cookie (browser‑based frontends)
 When the browser calls the FastAPI backend directly, the backend issues and remembers a session id in a cookie to keep conversation state across refreshes and across Cloud Run instances (when paired with Redis).
 
@@ -64,7 +66,7 @@ You can verify the connection via `GET /config` when the backend is running.
 
 Behavior and diagnostics:
 - If Redis is unavailable at startup, the app falls back to in‑memory storage and logs a warning.
-- Redis keys are JSON blobs under the prefix; TTL is applied on write.
+- Redis keys are JSON blobs under the environment prefix; TTL is applied on write.
 - GET `/config` and `/diagnostics` show `memoryBackend`/`backend` and `storeSize`.
 
 ## Persona (character) and scene
