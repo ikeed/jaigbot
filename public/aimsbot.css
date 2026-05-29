@@ -179,3 +179,179 @@ img[alt="AIMSBot"] {
   font-size: 14px !important;
   font-weight: 500 !important;
 }
+
+/* --- AIMS Infographic Interstitial / Reference Modal --- */
+
+.aims-infographic-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.62);
+}
+
+.aims-infographic-panel {
+  width: min(1040px, 100%);
+  max-height: min(92vh, 1100px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 8px;
+  border: 1px solid #d7dee8;
+  background: #ffffff;
+  color: #172033;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.28);
+}
+
+.aims-infographic-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px;
+  border-bottom: 1px solid #e4e9f1;
+  background: #ffffff;
+}
+
+.aims-infographic-copy {
+  max-width: 760px;
+}
+
+.aims-infographic-copy h2 {
+  margin: 0 0 8px;
+  font-size: 20px;
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: #101828;
+}
+
+.aims-infographic-copy p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: #344054;
+}
+
+.aims-infographic-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.aims-infographic-continue,
+.aims-infographic-close {
+  min-height: 36px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.aims-infographic-continue {
+  padding: 0 14px;
+  border: 1px solid #0f6b8f;
+  background: #0f6b8f;
+  color: #ffffff;
+}
+
+.aims-infographic-continue:hover {
+  background: #0b5a78;
+}
+
+.aims-infographic-close {
+  width: 36px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #344054;
+}
+
+.aims-infographic-close:hover {
+  background: #f1f5f9;
+}
+
+.aims-infographic-scroll {
+  overflow: auto;
+  padding: 18px;
+  background: #f8fafc;
+}
+
+.aims-infographic-scroll img {
+  display: block;
+  width: min(100%, 927px);
+  height: auto;
+  margin: 0 auto;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+}
+
+.aims-infographic-modal[data-mode="reference"] .aims-infographic-header {
+  justify-content: flex-end;
+  padding: 12px 14px;
+}
+
+@media (max-width: 720px) {
+  .aims-infographic-modal {
+    padding: 10px;
+  }
+
+  .aims-infographic-panel {
+    max-height: 94vh;
+  }
+
+  .aims-infographic-header {
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .aims-infographic-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .aims-infographic-continue {
+    flex: 1;
+  }
+
+  .aims-infographic-scroll {
+    padding: 10px;
+  }
+}
+
+.dark .aims-infographic-panel {
+  border-color: #334155;
+  background: #0f172a;
+  color: #e5e7eb;
+}
+
+.dark .aims-infographic-header {
+  border-bottom-color: #334155;
+  background: #0f172a;
+}
+
+.dark .aims-infographic-copy h2 {
+  color: #f8fafc;
+}
+
+.dark .aims-infographic-copy p {
+  color: #cbd5e1;
+}
+
+.dark .aims-infographic-close {
+  border-color: #475569;
+  background: #1e293b;
+  color: #e2e8f0;
+}
+
+.dark .aims-infographic-close:hover {
+  background: #334155;
+}
+
+.dark .aims-infographic-scroll {
+  background: #111827;
+}

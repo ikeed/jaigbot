@@ -97,7 +97,17 @@ sys.modules["chainlit.utils"] = mock_chainlit_utils
 # Mock settings
 with patch("app.config.settings") as mock_settings:
     mock_settings.ENABLE_PASSWORD_AUTH = True
-    from chainlit_app import auth_callback, on_logout, oauth_callback, _submit_report, on_window_message
+    from chainlit_app import (
+        auth_callback,
+        on_logout,
+        oauth_callback,
+        _has_seen_intro,
+        _intro_seen_key,
+        _mark_intro_seen,
+        _start_chat_impl,
+        _submit_report,
+        on_window_message,
+    )
 
 @pytest.mark.asyncio
 async def test_auth_callback_success(monkeypatch):
@@ -224,3 +234,67 @@ async def test_on_window_message_ignores_browser_state():
     message = '{"type": "browser_state", "hasTranscript": true}'
     await on_window_message(message)
     mock_cl.user_session.set.assert_not_called()
+
+
+def test_intro_seen_helpers_persist_per_user():
+    store = {}
+    assert _intro_seen_key("User@Example.COM") == "aims:intro_seen:user@example.com"
+    assert _has_seen_intro("User@Example.COM", store=store) is False
+
+    _mark_intro_seen("User@Example.COM", store=store)
+
+    assert _has_seen_intro("user@example.com", store=store) is True
+    assert store["aims:intro_seen:user@example.com"]["seen"] is True
+
+
+@pytest.mark.asyncio
+async def test_on_window_message_intro_continue_marks_seen_and_starts_flow():
+    mock_user = MagicMock(identifier="test-user")
+    mock_cl.user_session.get.side_effect = lambda key: {"user": mock_user}.get(key)
+    mock_cl.user_session.set.reset_mock()
+
+    with patch("chainlit_app._mark_intro_seen") as mock_mark, patch(
+        "chainlit_app._start_scenario_flow", new_callable=AsyncMock
+    ) as mock_start:
+        await on_window_message('{"type": "aims_intro_continue"}')
+
+    mock_mark.assert_called_once_with("test-user")
+    mock_cl.user_session.set.assert_any_call("aims_intro_pending", False)
+    mock_start.assert_awaited_once()
+    mock_cl.user_session.get.side_effect = None
+
+
+@pytest.mark.asyncio
+async def test_start_chat_blocks_scenario_until_intro_seen():
+    mock_user = MagicMock(identifier="test-user")
+    mock_cl.user_session.get.side_effect = lambda key: {"user": mock_user}.get(key)
+    mock_cl.user_session.set.reset_mock()
+    mock_cl.send_window_message.reset_mock()
+
+    with patch("chainlit_app._has_seen_intro", return_value=False), patch(
+        "chainlit_app._start_scenario_flow", new_callable=AsyncMock
+    ) as mock_start:
+        result = await _start_chat_impl()
+
+    assert result is True
+    mock_cl.user_session.set.assert_any_call("aims_intro_pending", True)
+    mock_cl.send_window_message.assert_awaited_once_with({"type": "aims_intro_required"})
+    mock_start.assert_not_awaited()
+    mock_cl.user_session.get.side_effect = None
+
+
+@pytest.mark.asyncio
+async def test_start_chat_runs_scenario_when_intro_seen():
+    mock_user = MagicMock(identifier="test-user")
+    mock_cl.user_session.get.side_effect = lambda key: {"user": mock_user}.get(key)
+    mock_cl.user_session.set.reset_mock()
+
+    with patch("chainlit_app._has_seen_intro", return_value=True), patch(
+        "chainlit_app._start_scenario_flow", new_callable=AsyncMock, return_value=True
+    ) as mock_start:
+        result = await _start_chat_impl()
+
+    assert result is True
+    mock_cl.user_session.set.assert_any_call("aims_intro_pending", False)
+    mock_start.assert_awaited_once()
+    mock_cl.user_session.get.side_effect = None
