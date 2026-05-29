@@ -2,6 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 from app.main import app, _MEMORY_STORE
 from app.chat_roles import ROLE_SYSTEM
+from app.services.persona_service import persona_counted_key, persona_counts_key
 
 client = TestClient(app)
 
@@ -39,6 +40,28 @@ def test_init_session_backend_persona():
     assert len(mem["history"]) == 1
     assert mem["history"][0]["role"] == ROLE_SYSTEM
     assert mem["history"][0]["content"] == data["initialCard"]
+    assert mem["persona"]["name"] == "Jasmine"
+    assert data["personaName"] == "Jasmine"
+
+
+def test_init_session_counts_persona_once_per_session():
+    sid = "test-sid-persona-count"
+    user_id = "doctor@example.com"
+    _MEMORY_STORE.pop(sid, None)
+    _MEMORY_STORE.pop(persona_counts_key(user_id), None)
+    _MEMORY_STORE.pop(persona_counted_key(user_id, sid), None)
+
+    payload = {
+        "sessionId": sid,
+        "personaId": "Jasmine",
+        "userInfo": {"identifier": user_id},
+    }
+
+    assert client.post("/session", json=payload).status_code == 200
+    assert client.post("/session", json=payload).status_code == 200
+
+    counts = _MEMORY_STORE.get(persona_counts_key(user_id))["counts"]
+    assert counts["Jasmine"] == 1
 
 def test_init_session_persists_across_calls():
     sid = "test-sid-persist"

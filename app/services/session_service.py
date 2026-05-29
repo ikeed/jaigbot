@@ -175,7 +175,13 @@ class SessionService:
         try:
             from app.services.storage_service import storage_service
             now = time.time()
-            expired = [sid for sid, v in self._store.items() if (now - v.get("updated", now)) > self.memory_ttl_seconds]
+            expired = [
+                sid
+                for sid, v in self._store.items()
+                if isinstance(v, dict)
+                and ("history" in v or "full_history" in v)
+                and (now - v.get("updated", now)) > self.memory_ttl_seconds
+            ]
             for sid in expired:
                 mem = self._store.get(sid)
                 if mem:

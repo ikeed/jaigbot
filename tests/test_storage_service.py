@@ -38,6 +38,7 @@ def test_storage_service_upload_path(mock_storage_client):
     assert payload["environment"]["appEnv"] == "local"
     assert payload["metadata"]["sessionId"] == "sid"
     assert payload["metadata"]["userId"] == "uid@example.com"
+    assert "persona" in payload["config"]
     assert "config" in payload
     assert "transcript" in payload
     assert "analytics" in payload
@@ -55,6 +56,7 @@ def test_storage_service_structured_archive(mock_storage_client):
         "updated": 1716000500.0,
         "character": "Test Character",
         "scene": "Test Scene",
+        "persona": {"id": 99, "name": "Test Persona"},
         "full_history": [
             {"role": "system", "content": "Person: Test\nBackground: Brief", "time": 1716000001.0},
             {"role": "user", "content": "Hello", "time": 1716000100.0},
@@ -110,6 +112,8 @@ def test_storage_service_structured_archive(mock_storage_client):
     # Verify metadata outcome
     assert payload["metadata"]["outcome"]["isGameOver"] is True
     assert payload["metadata"]["outcome"]["exitContext"] == "completion"
+    assert payload["config"]["persona"]["id"] == 99
+    assert payload["config"]["persona"]["name"] == "Test Persona"
 def test_storage_service_error_handling(mock_storage_client):
     service = StorageService(bucket_name="test-bucket")
     
