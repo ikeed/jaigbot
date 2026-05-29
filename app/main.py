@@ -1,6 +1,5 @@
 import json
 import logging
-import os
 import time
 import uuid
 import asyncio
@@ -12,33 +11,19 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from .vertex import VertexClient, VertexAIError
-from .chat_roles import ROLE_ASSISTANT, ROLE_SYSTEM, is_scenario_card, normalize_role
+from .vertex import VertexClient
 from .runtime import VertexClientCache, create_memory_store
+from .routes.system import create_system_router
 
 _VERTEX_CLIENT_CACHE = VertexClientCache()
 
 
 def _get_vertex_client(project: str, region: str, model_id: str):
     return _VERTEX_CLIENT_CACHE.get(project, region, model_id, VertexClient)
-from .persona import DEFAULT_CHARACTER, DEFAULT_SCENE
-from .services.conversation_service import (
-    maybe_add_person_concern as svc_maybe_add_person_concern,
-    mark_mirrored_multi as svc_mark_mirrored_multi,
-    mark_secured_by_topic as svc_mark_secured_by_topic,
-)
 from .telemetry.events import (
     log_event as telemetry_log_event,
-    truncate_for_log as telemetry_truncate,
 )
-from .services.session_service import SessionService, CookieSettings
-from .services.persona_service import (
-    build_persona_session_fields,
-    extract_persona_name_from_text,
-    find_persona,
-    record_persona_interaction_once,
-    select_persona_for_user,
-)
+from .services.session_initializer import deregister_session_connection, initialize_session
 
 from .config import settings
 
@@ -363,48 +348,6 @@ async def log_requests(request: Request, call_next):
 
     return response
 
-
-
-
-@app.get("/healthz")
-async def healthz():
-    return {"status": "ok"}
-
-
-@app.get("/history")
-async def history(
-    sessionId: Optional[str] = None,
-    full: Optional[bool] = False,
-    memory_store=Depends(get_memory_store),
-):
-    """Return conversation history for a session.
-
-    By default returns the trimmed working history as a list of {role, content}.
-    Pass ``full=true`` to get the complete untrimmed history with timestamps
-    ({role, content, time}).
-    """
-    try:
-        if not (sessionId and settings.MEMORY_ENABLED):
-            return {"history": []}
-        mem = memory_store.get(sessionId) or {}
-        if full:
-            return {"history": mem.get("full_history") or []}
-        hist = mem.get("history") or []
-        # Ensure items are objects with role/content strings
-        out = []
-        for it in hist:
-            try:
-                role = it.get("role")
-                content = it.get("content")
-                if isinstance(role, str) and isinstance(content, str):
-                    out.append({"role": role, "content": content})
-            except Exception:
-                continue
-        return {"history": out}
-    except Exception:
-        return {"history": []}
-
-
 @app.get("/summary")
 async def summary(
     sessionId: Optional[str] = None,
@@ -547,7 +490,7 @@ async def summary(
     return base
 
 
-from .models import Coaching, SessionMetrics, ChatRequest, ReportRequest
+from .models import ChatRequest, ReportRequest
 from pydantic import BaseModel as _BaseModel
 
 
@@ -572,6 +515,15 @@ def _get_request_id(request: Request) -> Optional[str]:
         return getattr(request.state, "request_id", None) or str(uuid.uuid4())
     except Exception:
         return str(uuid.uuid4())
+
+
+app.include_router(create_system_router(
+    settings=settings,
+    logger=logger,
+    get_memory_store=get_memory_store,
+    get_model_check=get_model_check,
+    get_request_id=_get_request_id,
+))
 
 
 def _vertex_config() -> dict:
@@ -659,189 +611,12 @@ async def chat(
 async def init_session(body: SessionInitRequest, memory_store=Depends(get_memory_store)):
     """Register a session in the memory store so /report and /summary can find it.
     Called by the Chainlit UI at scenario start, before any /chat messages."""
-    if not settings.MEMORY_ENABLED:
-        return {"status": "ok"}
-    sid = body.sessionId
-    now = time.time()
-    mem = memory_store.get(sid)
-
-    character = body.character
-    scene = body.scene
-    initial_card = body.initialCard
-
-    # If personaId is NOT provided, but we have an existing session,
-    # try to RECOVER the personaId from the existing memory so we don't pick a new random one.
-    persona_id = body.personaId
-    if not persona_id and mem:
-        persona_meta = mem.get("persona") if isinstance(mem.get("persona"), dict) else {}
-        persona_id = persona_meta.get("name") or extract_persona_name_from_text(mem.get("character"))
-        if persona_id:
-            logger.info("Recovered personaId '%s' from existing memory for session %s", persona_id, sid)
-
-    selected_persona = None
-
-    # If persona_id is provided or recovered, the backend generates the character/scene/card.
-    # Otherwise, for a new session, choose a weighted persona based on this user's history.
-    if persona_id:
-        try:
-            selected_persona = find_persona(name=persona_id) or find_persona(persona_id=persona_id)
-            if not selected_persona:
-                raise ValueError(f"Unknown persona {persona_id}")
-            
-            # Use standard template if character/scene not already provided
-            fields = build_persona_session_fields(selected_persona)
-            character = character or fields["character"]
-            scene = scene or fields["scene"]
-            initial_card = initial_card or fields["initial_card"]
-        except Exception as e:
-            logger.error("Failed to load persona %s: %s", persona_id, e)
-    elif not mem and not character:
-        try:
-            from .services.storage_service import storage_service
-
-            user_info = body.userInfo if isinstance(body.userInfo, dict) else {}
-            user_id = user_info.get("identifier")
-            selected_persona = select_persona_for_user(
-                user_id,
-                memory_store,
-                load_counts=storage_service.count_personas_for_user,
-            )
-            fields = build_persona_session_fields(selected_persona)
-            character = fields["character"]
-            scene = scene or fields["scene"]
-            initial_card = initial_card or fields["initial_card"]
-        except Exception as e:
-            logger.warning("Failed weighted persona selection for session %s: %s", sid, e)
-
-    if selected_persona is None and character:
-        recovered_persona_name = extract_persona_name_from_text(character)
-        if recovered_persona_name:
-            selected_persona = find_persona(name=recovered_persona_name)
-
-    if not mem:
-        mem = {
-            "history": [],
-            "full_history": [],
-            "character": character,
-            "scene": scene,
-            "persona": (
-                {"id": selected_persona.get("id"), "name": selected_persona.get("name")}
-                if selected_persona
-                else None
-            ),
-            "user_info": body.userInfo,
-            "updated": now,
-            "session_started": now,
-        }
-        if selected_persona:
-            user_info = body.userInfo if isinstance(body.userInfo, dict) else {}
-            record_persona_interaction_once(user_info.get("identifier"), sid, selected_persona, memory_store)
-        
-        # If we have a character (either passed or generated), seed the history with a scenario card.
-        if character:
-            if initial_card:
-                card_content = initial_card
-            else:
-                persona_name = "Person"
-                for line in character.splitlines():
-                    if "Specific Persona:" in line:
-                        persona_name = line.split("Specific Persona:")[1].strip()
-                        break
-                card_content = f"Person: {persona_name}\n(Scenario initialized)"
-            mem["history"].append({"role": ROLE_SYSTEM, "content": card_content})
-            mem["full_history"].append({"role": ROLE_SYSTEM, "content": card_content, "time": now})
-            
-        memory_store[sid] = mem
-    else:
-        # Update persona/scene if provided/generated and not already set
-        if character and not mem.get("character"):
-            mem["character"] = character
-        if scene and not mem.get("scene"):
-            mem["scene"] = scene
-        if selected_persona and not mem.get("persona"):
-            mem["persona"] = {"id": selected_persona.get("id"), "name": selected_persona.get("name")}
-        if body.userInfo and not mem.get("user_info"):
-            mem["user_info"] = body.userInfo
-        
-        # IDEMPOTENCY: ONLY seed history if it is absolutely empty.
-        # This prevents re-seeding on page refresh if the backend already has history.
-        if not mem.get("history") and character:
-            # Check if there is anything in full_history too, just to be safe.
-            if not mem.get("full_history"):
-                if initial_card:
-                    card_content = initial_card
-                else:
-                    persona_name = "Person"
-                    for line in character.splitlines():
-                        if "Specific Persona:" in line:
-                            persona_name = line.split("Specific Persona:")[1].strip()
-                            break
-                    card_content = f"Person: {persona_name}\n(Scenario initialized)"
-                
-                mem["history"].append({"role": ROLE_SYSTEM, "content": card_content})
-                mem["full_history"].append({"role": ROLE_SYSTEM, "content": card_content, "time": now})
-
-        mem.setdefault("full_history", [])
-        mem.setdefault("session_started", now)
-        mem["updated"] = now
-        memory_store[sid] = mem
-
-    logger.info("Session initialized: %s", sid)
-    
-    # Connection tracking
-    active_connections = mem.get("active_connections", [])
-    already_active = False
-
-    # If force is true, we clear existing connections and takeover
-    if body.force:
-        logger.info("Force flag detected for session %s. Clearing active connections: %s", sid, active_connections)
-        active_connections = []
-        mem["active_connections"] = active_connections
-        # We don't return alreadyActive=True in this case because we are forcing it.
-
-    if body.connectionId:
-        logger.debug("Checking connectionId: %s for session %s. Existing: %s", body.connectionId, sid, active_connections)
-        if body.connectionId not in active_connections:
-            # If there are active connections and we are adding a NEW one, mark it as alreadyActive
-            if active_connections:
-                already_active = True
-                logger.info("Session %s is already active with connections: %s. Blocking new connection: %s", sid, active_connections, body.connectionId)
-            
-            # We still add the connectionId so that if the user refreshes THIS tab, 
-            # it stays as part of the session, but it will be blocked until other tabs are closed.
-            active_connections.append(body.connectionId)
-            mem["active_connections"] = active_connections
-            memory_store[sid] = mem
-        else:
-            # If THIS connectionId is already in active_connections, but it's not the ONLY one,
-            # it should still be considered "already active" unless it was the first one.
-            # Actually, if it's already there, it means this tab is RECONNECTING.
-            # If it was already blocked before, it should stay blocked? 
-            # No, if it's reconnecting, we should check if it's the "primary" one.
-            # For simplicity: if it's already in the list, and it's not the first one, it's already active.
-            if active_connections and active_connections[0] != body.connectionId:
-                already_active = True
-            logger.debug("connectionId %s already registered for session %s. alreadyActive=%s", body.connectionId, sid, already_active)
-
-    return {
-        "status": "ok", 
-        "sessionId": sid,
-        "alreadyActive": already_active,
-        "character": mem.get("character"),
-        "scene": mem.get("scene"),
-        "persona": mem.get("persona"),
-        "personaId": (mem.get("persona") or {}).get("id") if isinstance(mem.get("persona"), dict) else None,
-        "personaName": (mem.get("persona") or {}).get("name") if isinstance(mem.get("persona"), dict) else None,
-        "initialCard": next(
-            (
-                m["content"]
-                for m in mem["history"]
-                if normalize_role(m.get("role")) in {ROLE_SYSTEM, ROLE_ASSISTANT}
-                and is_scenario_card(m.get("content"))
-            ),
-            initial_card,
-        )
-    }
+    return initialize_session(
+        body,
+        memory_store=memory_store,
+        memory_enabled=settings.MEMORY_ENABLED,
+        logger=logger,
+    )
 
 
 class SessionDeregisterRequest(_BaseModel):
@@ -852,19 +627,12 @@ class SessionDeregisterRequest(_BaseModel):
 @app.post("/session/deregister")
 async def deregister_session(body: SessionDeregisterRequest, memory_store=Depends(get_memory_store)):
     """Remove a connectionId from the active connections list."""
-    if not settings.MEMORY_ENABLED:
-        return {"status": "ok"}
-    sid = body.sessionId
-    mem = memory_store.get(sid)
-    if mem:
-        active = mem.get("active_connections", [])
-        if body.connectionId in active:
-            active.remove(body.connectionId)
-            mem["active_connections"] = active
-            mem["updated"] = time.time()
-            memory_store[sid] = mem
-            logger.info("Connection deregistered: %s for session %s", body.connectionId, sid)
-    return {"status": "ok"}
+    return deregister_session_connection(
+        body,
+        memory_store=memory_store,
+        memory_enabled=settings.MEMORY_ENABLED,
+        logger=logger,
+    )
 
 
 @app.post("/report")
