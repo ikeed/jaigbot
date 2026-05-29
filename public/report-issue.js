@@ -482,6 +482,24 @@
     infographicModal.setAttribute("data-mode", isIntro ? "intro" : "reference");
     infographicModal.setAttribute("aria-hidden", "false");
     styleInfographicModal(isIntro);
+    resetInfographicScroll();
+  }
+
+  function resetInfographicScroll() {
+    var scroll = infographicModal.querySelector(".aims-infographic-scroll");
+    var img = infographicModal.querySelector(".aims-infographic-scroll img");
+
+    function reset() {
+      if (!scroll) return;
+      scroll.scrollTop = 0;
+      scroll.scrollLeft = 0;
+    }
+
+    reset();
+    window.requestAnimationFrame(reset);
+    if (img && !img.complete) {
+      img.addEventListener("load", reset, { once: true });
+    }
   }
 
   function hideInfographicModal() {
