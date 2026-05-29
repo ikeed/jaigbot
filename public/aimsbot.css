@@ -292,9 +292,9 @@ img[alt="AIMSBot"] {
 }
 
 .aims-infographic-panel {
-  width: fit-content;
-  max-width: min(1040px, 100vw);
-  max-height: 92vh;
+  width: 95%;
+  max-width: 1400px;
+  max-height: 96vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -316,7 +316,7 @@ img[alt="AIMSBot"] {
 }
 
 .aims-infographic-copy {
-  max-width: 760px;
+  max-width: 1000px;
 }
 
 .aims-infographic-copy h2 {
@@ -381,7 +381,8 @@ img[alt="AIMSBot"] {
 
 .aims-infographic-scroll img {
   display: block;
-  width: min(100%, 927px);
+  width: 100%;
+  max-width: 1200px;
   height: auto;
   margin: 0 auto;
   border: 1px solid #e5e7eb;
