@@ -1,21 +1,18 @@
-import json
 import logging
-import time
-import uuid
 from contextlib import asynccontextmanager
-from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Depends
-from fastapi.exceptions import RequestValidationError
+from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 
 from .config import settings
+from .http_handlers import get_request_id as _get_request_id, install_http_handlers
 from .vertex import VertexClient
 from .runtime import VertexClientCache, create_memory_store
+from .routes.chat import create_chat_router
+from .routes.session import create_session_router
 from .routes.summary import create_summary_router
 from .routes.system import create_system_router
-from .services.session_initializer import deregister_session_connection, initialize_session
+from .services.model_preflight import run_model_preflight
 
 _VERTEX_CLIENT_CACHE = VertexClientCache()
 
@@ -68,307 +65,10 @@ async def _model_preflight(application: FastAPI):
     Stores tri-state availability in app.state.model_check: { available: true|false|"unknown", ... }.
     Never raises; only logs.
     """
-    application.state.model_check = {"available": "unknown", "modelId": settings.MODEL_ID, "region": settings.VERTEX_LOCATION}
-    if not settings.VALIDATE_MODEL_ON_STARTUP:
-        application.state.model_check["reason"] = "disabled_by_env"
-        return
-    if not settings.PROJECT_ID:
-        application.state.model_check["reason"] = "no_project_id"
-        return
-    try:
-        import google.auth  # type: ignore
-        from google.auth.transport.requests import AuthorizedSession  # type: ignore
-        creds, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
-        session = AuthorizedSession(creds)
-
-        attempts: list[dict] = []
-
-        def try_get(api_version: str) -> tuple[int, str]:
-            loc = settings.VERTEX_LOCATION
-            host = "aiplatform.googleapis.com" if str(loc).lower() == "global" else f"{loc}-aiplatform.googleapis.com"
-            url = (
-                f"https://{host}/{api_version}/projects/{settings.PROJECT_ID}"
-                f"/locations/{loc}/publishers/google/models/{settings.MODEL_ID}"
-            )
-            r = session.get(url)
-            attempts.append({"apiVersion": api_version, "url": url, "httpStatus": r.status_code})
-            return r.status_code, url
-
-        # Use stable v1 endpoint only (skip beta)
-        primary = "v1"
-        code, url_primary = try_get(primary)
-        application.state.model_check["apiVersion"] = primary
-        application.state.model_check["urlPrimary"] = url_primary
-        application.state.model_check["httpStatusPrimary"] = code
-
-        if code == 404:
-            # Default to unknown on 404; do a v1 models list to avoid false negatives
-            application.state.model_check["available"] = "unknown"
-            loc = settings.VERTEX_LOCATION
-            host = "aiplatform.googleapis.com" if str(loc).lower() == "global" else f"{loc}-aiplatform.googleapis.com"
-            list_url = f"https://{host}/v1/projects/{settings.PROJECT_ID}/locations/{loc}/publishers/google/models"
-            application.state.model_check["listUrl"] = list_url
-            rlist = session.get(list_url)
-            application.state.model_check["listHttpStatus"] = rlist.status_code
-            matched = False
-            if rlist.status_code == 200:
-                try:
-                    data = rlist.json()
-                except Exception:
-                    data = {}
-                models = data.get("models", []) or []
-                application.state.model_check["listCount"] = len(models)
-                matched = any(((m.get("name", "").split("/models/")[-1]) == settings.MODEL_ID) for m in models)
-            application.state.model_check["listMatched"] = matched
-            if matched:
-                application.state.model_check["available"] = True
-        else:
-            application.state.model_check["httpStatus"] = code
-            application.state.model_check["available"] = True if code == 200 else "unknown"
-
-        # Record all attempts for debugging
-        application.state.model_check["urlsTried"] = attempts
-        # Precompute the generateContent base URL(s) that the Vertex client would use
-        try:
-            loc = settings.VERTEX_LOCATION
-            host = "aiplatform.googleapis.com" if str(loc).lower() == "global" else f"{loc}-aiplatform.googleapis.com"
-            gen_primary = "v1"
-            base_gen_url = f"https://{host}/{gen_primary}/projects/{settings.PROJECT_ID}/locations/{loc}/publishers/google/models/{settings.MODEL_ID}:generateContent"
-            application.state.model_check["baseGenerateUrlPrimary"] = base_gen_url
-        except Exception:
-            pass
-
-    except Exception as e:
-        # ADC missing or network error — mark unknown
-        try:
-            logger.info(json.dumps({
-                "event": "model_preflight",
-                "status": "exception",
-                "error": str(e),
-                "modelId": settings.MODEL_ID,
-                "region": settings.VERTEX_LOCATION,
-            }))
-        except Exception:
-            logger.info("model preflight error: %s", e)
-        application.state.model_check["available"] = "unknown"
-        application.state.model_check["error"] = str(e)
+    await run_model_preflight(application, settings=settings, logger=logger)
 
 
-# Exception handlers to surface better errors with request correlation
-@app.exception_handler(HTTPException)
-async def on_http_exception(request: Request, exc: HTTPException):
-    # Normalize all HTTP exceptions into a consistent error envelope
-    req_id = _get_request_id(request)
-    logger.warning(json.dumps({
-        "event": "http_exception",
-        "status": exc.status_code,
-        "detail": exc.detail,
-        "requestId": req_id,
-        "path": request.url.path,
-        "method": request.method,
-    }))
-
-    # Build a flat error object: { message, code, requestId, ... }
-    if isinstance(exc.detail, dict):
-        base = exc.detail.get("error", exc.detail).copy()
-    elif isinstance(exc.detail, list):
-        base = {"errors": exc.detail}
-    else:
-        base = {"message": str(exc.detail)}
-
-    # Ensure required fields
-    base.setdefault("message", "")
-    base.setdefault("code", exc.status_code)
-    base.setdefault("requestId", req_id)
-
-    return JSONResponse(status_code=exc.status_code, content={"error": base})
-
-
-@app.exception_handler(RequestValidationError)
-async def on_validation_error(request: Request, exc: RequestValidationError):
-    req_id = _get_request_id(request)
-
-    # Safely log the request body in a JSON-serializable way
-    body_logged = None
-    if request.method in ("POST", "PUT", "PATCH"):
-        try:
-            raw = await request.body()
-        except Exception:
-            raw = b""
-        if raw:
-            try:
-                body_logged = json.loads(raw.decode("utf-8"))
-            except Exception:
-                try:
-                    body_logged = raw.decode("utf-8", errors="replace")
-                except Exception:
-                    body_logged = "<binary>"
-
-    logger.warning(json.dumps({
-        "event": "request_validation_error",
-        "errors": exc.errors(),
-        "body": body_logged,
-        "requestId": req_id,
-        "path": request.url.path,
-        "method": request.method,
-    }))
-    return JSONResponse(status_code=422, content={
-        "error": {"message": "Request validation failed", "code": 422, "requestId": req_id, "errors": exc.errors()}})
-
-
-@app.exception_handler(Exception)
-async def on_unhandled_exception(request: Request, exc: Exception):
-    req_id = _get_request_id(request)
-    # This will include the traceback to stderr and our JSON line after
-    logger.exception("Unhandled application exception: %s", exc)
-    logger.error(json.dumps({
-        "event": "unhandled_exception",
-        "error": str(exc),
-        "requestId": req_id,
-        "path": request.url.path,
-        "method": request.method,
-    }))
-    return JSONResponse(status_code=500,
-                        content={"error": {"message": "Internal server error", "code": 500, "requestId": req_id}})
-
-
-# Simple structured logging middleware with request id and capped body logging
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    # Request ID: prefer inbound headers, else generate
-    req_id = request.headers.get("x-cloud-trace-context") or request.headers.get("x-request-id") or str(uuid.uuid4())
-    request.state.request_id = req_id
-
-    start = time.time()
-    # Read and restore body for downstream handlers
-    try:
-        body_bytes = await request.body()
-    except Exception:
-        body_bytes = b""
-
-    # Restore the request stream so downstream can read body
-    async def receive():
-        return {"type": "http.request", "body": body_bytes, "more_body": False}
-
-    try:
-        request._receive = receive  # type: ignore[attr-defined]
-    except Exception:
-        pass
-
-    # Prepare log details
-    body_preview = body_bytes[:settings.LOG_REQUEST_BODY_MAX]
-    body_logged = None
-    if body_preview:
-        try:
-            body_logged = json.loads(body_preview.decode("utf-8"))
-            # Redact persona/scene fields unless in debug mode
-            if not settings.DEBUG_MODE and isinstance(body_logged, dict):
-                if "character" in body_logged:
-                    body_logged["character"] = "<hidden>"
-                if "scene" in body_logged:
-                    body_logged["scene"] = "<hidden>"
-        except Exception:
-            # fallback to string preview
-            try:
-                body_logged = body_preview.decode("utf-8", errors="replace")
-            except Exception:
-                body_logged = "<binary>"
-
-    headers_logged = None
-    if settings.LOG_HEADERS:
-        # Redact common sensitive headers
-        redact = {"authorization", "cookie", "set-cookie"}
-        headers_logged = {k: ("<redacted>" if k.lower() in redact else v) for k, v in request.headers.items()}
-
-    logger.info(
-        json.dumps(
-            {
-                "event": "request_start",
-                "method": request.method,
-                "path": request.url.path,
-                "client": request.client.host if request.client else None,
-                "requestId": req_id,
-                "bodySize": len(body_bytes) if body_bytes else 0,
-                "body": body_logged,
-                "headers": headers_logged,
-            }
-        )
-    )
-
-    try:
-        response = await call_next(request)
-    except Exception as e:
-        latency_ms = int((time.time() - start) * 1000)
-        logger.exception("Unhandled exception processing request: %s", e)
-        logger.error(
-            json.dumps(
-                {
-                    "event": "request_error",
-                    "requestId": req_id,
-                    "latencyMs": latency_ms,
-                    "error": str(e),
-                }
-            )
-        )
-        # Let FastAPI's exception handling continue
-        raise
-
-    # Attach request id back to the response for client correlation
-    try:
-        response.headers["x-request-id"] = req_id
-    except Exception:
-        pass
-
-    latency_ms = int((time.time() - start) * 1000)
-    # Choose log level based on status code
-    status_code = getattr(response, "status_code", None)
-    end_event = json.dumps(
-        {
-            "event": "request_end",
-            "method": request.method,
-            "path": request.url.path,
-            "status": status_code,
-            "latencyMs": latency_ms,
-            "requestId": req_id,
-        }
-    )
-    try:
-        if isinstance(status_code, int) and status_code >= 500:
-            logger.error(end_event)
-        elif isinstance(status_code, int) and status_code >= 400:
-            logger.warning(end_event)
-        else:
-            logger.info(end_event)
-    except Exception:
-        logger.info(end_event)
-
-    return response
-
-from .models import ChatRequest, ReportRequest
-from pydantic import BaseModel as _BaseModel
-
-
-class SessionInitRequest(_BaseModel):
-    sessionId: str
-    connectionId: Optional[str] = None
-    personaId: Optional[str] = None
-    character: Optional[str] = None
-    scene: Optional[str] = None
-    userInfo: Optional[dict] = None
-    initialCard: Optional[str] = None
-    force: Optional[bool] = False
-
-
-def _get_request_id(request: Request) -> Optional[str]:
-    # X-Cloud-Trace-Context: traceId/spanId;o=traceTrue
-    h = request.headers.get("x-cloud-trace-context") or request.headers.get("x-request-id")
-    if h:
-        return h
-    # fallback to middleware-provided id or generate one
-    try:
-        return getattr(request.state, "request_id", None) or str(uuid.uuid4())
-    except Exception:
-        return str(uuid.uuid4())
+install_http_handlers(app, settings=settings, logger=logger)
 
 
 app.include_router(create_system_router(
@@ -383,6 +83,11 @@ app.include_router(create_summary_router(
     logger=logger,
     get_memory_store=get_memory_store,
     vertex_client_cls=VertexClient,
+))
+app.include_router(create_session_router(
+    settings=settings,
+    logger=logger,
+    get_memory_store=get_memory_store,
 ))
 
 
@@ -449,58 +154,7 @@ def get_chat_orchestrator(memory_store=Depends(get_memory_store)):
     return _chat_orchestrator(memory_store=memory_store)
 
 
-@app.post("/chat")
-async def chat(
-    req: Request,
-    body: ChatRequest,
-    background_tasks: BackgroundTasks,
-    orchestrator=Depends(get_chat_orchestrator),
-):
-    """Main chat endpoint using the new ChatOrchestrator."""
-    # Enforce settings.PROJECT_ID presence for live calls to align with tests/contract
-    if not settings.PROJECT_ID:
-        # Raise HTTPException to be normalized by our exception handler
-        raise HTTPException(status_code=500, detail={
-            "error": {"message": "settings.PROJECT_ID not set — configure the settings.PROJECT_ID environment variable.", "code": 500}
-        })
-
-    return await orchestrator.handle_chat(req, body, background_tasks)
-
-
-@app.post("/session")
-async def init_session(body: SessionInitRequest, memory_store=Depends(get_memory_store)):
-    """Register a session in the memory store so /report and /summary can find it.
-    Called by the Chainlit UI at scenario start, before any /chat messages."""
-    return initialize_session(
-        body,
-        memory_store=memory_store,
-        memory_enabled=settings.MEMORY_ENABLED,
-        logger=logger,
-    )
-
-
-class SessionDeregisterRequest(_BaseModel):
-    sessionId: str
-    connectionId: str
-
-
-@app.post("/session/deregister")
-async def deregister_session(body: SessionDeregisterRequest, memory_store=Depends(get_memory_store)):
-    """Remove a connectionId from the active connections list."""
-    return deregister_session_connection(
-        body,
-        memory_store=memory_store,
-        memory_enabled=settings.MEMORY_ENABLED,
-        logger=logger,
-    )
-
-
-@app.post("/report")
-async def report(
-    req: Request,
-    body: ReportRequest,
-    background_tasks: BackgroundTasks,
-    orchestrator=Depends(get_chat_orchestrator),
-):
-    """Endpoint for reporting issues in a scenario."""
-    return await orchestrator.handle_report(req, body, background_tasks)
+app.include_router(create_chat_router(
+    settings=settings,
+    get_chat_orchestrator=get_chat_orchestrator,
+))
