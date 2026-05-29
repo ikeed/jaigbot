@@ -151,7 +151,7 @@ Use the helper script with backoff instead of a one-shot curl.
 - See docs/health-checks.md
 
 ## Conversation memory and persona
-The backend supports session-keyed memory with optional persona/scene, using in-process storage or Redis/Google Memorystore. Chainlit uses the same memory backend as a data layer for thread persistence, and uses the Chainlit thread id as the backend `sessionId` for new conversations.
+The backend supports session-keyed memory with optional persona/scene, using in-process storage or Redis/Google Memorystore. Chainlit uses the same memory backend as a data layer for thread persistence, and uses the Chainlit thread id as the backend `sessionId` for new conversations
 
 - See docs/memory-and-persona.md
 - See docs/environments.md for local/staging/prod resource namespacing.
