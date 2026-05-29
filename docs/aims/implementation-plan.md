@@ -489,7 +489,7 @@ The following clarifications reflect stakeholder guidance and adjust scope, risk
 
 5) Persona migration and future mutation
 - Remove the Ghostbusters POC persona and hardcode a realistic vaccine‑hesitant parent persona as the new default early in the implementation (see new Task 3.0 below). This change is not gated by the feature flag.
-- Add later tasks to support persona mutation at session start using seeds from persona_seed.txt (see new Milestone 9).
+- Add later tasks to support persona variation at session start using structured fields in `app/prompts/personas.json` (see new Milestone 9).
 
 6) Storage/session (Redis mandatory)
 - Use Redis (or Google Memorystore) as the memory backend in Cloud Run. Set TTL to 3600 seconds (1 hour). Tests should mock Redis to keep the suite offline.
@@ -526,8 +526,8 @@ The following clarifications reflect stakeholder guidance and adjust scope, risk
   - Deliverable: Add a minimal coaching panel in Chainlit, toggleable, after backend stabilizes.
 
 - 9. Persona mutation (new milestone)
-  - 9.1 Define mutation strategies seeded by persona_seed.txt (concerns, emotional valence)
-    - Deliverable: Design doc snippet in this plan referencing persona_seed.txt; list 3–5 seed personas.
+  - 9.1 Define mutation strategies from structured persona fields (concerns, emotional valence)
+    - Deliverable: Design doc snippet in this plan referencing `app/prompts/personas.json`; list 3–5 variation strategies.
     - Verify: Appendix entry with seeds and selection logic.
   - 9.2 Implement persona mutation at session start (behind a separate flag if needed)
     - Deliverable: Code to pick a seed and maintain consistency per session.
@@ -679,8 +679,8 @@ Milestone 8 — Documentation and rollout
 - Verify: Checklist and notes updated in this doc.
 
 Milestone 9 — Persona mutation (post‑MVP)
-9.1 Define mutation strategies seeded by persona_seed.txt (concerns, emotional valence)
-- Deliverable: Design snippet here referencing persona_seed.txt; list 3–5 seed personas.
+9.1 Define mutation strategies from structured persona fields (concerns, emotional valence)
+- Deliverable: Design snippet here referencing `app/prompts/personas.json`; list 3–5 variation strategies.
 - Verify: Appendix entry with seeds and selection logic.
 
 9.2 Implement persona mutation at session start (optional flag)
@@ -982,7 +982,7 @@ Milestone 8 — Documentation and rollout
 - 8.2 Rollout plan — Not started
 
 Milestone 9 — Persona mutation (post‑MVP)
-- 9.1 Define mutation strategies seeded by persona_seed.txt — Not started
+- 9.1 Define mutation strategies from structured persona fields — Not started
 - 9.2 Implement persona mutation at session start — Not started
 
 Process reminder: Update this summary and the per-task Status lines immediately when completing any stage, marking it Done with a dated note in the Plan status update section above.

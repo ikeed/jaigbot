@@ -37,3 +37,31 @@ def test_merge_trims_overlap_and_wrapper():
 def test_merge_empty_inputs():
     assert merge("", "Now") == "Now"
     assert merge("Start", "") == "Start"
+
+
+class _Obj:
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
+
+
+def test_extract_response_includes_cached_content_tokens():
+    response = _Obj(
+        candidates=[
+            _Obj(
+                content=_Obj(parts=[_Obj(text="ok", thought=False)]),
+                finish_reason="STOP",
+                safety_ratings=[],
+            )
+        ],
+        usage_metadata=_Obj(
+            prompt_token_count=100,
+            candidates_token_count=5,
+            total_token_count=105,
+            cached_content_token_count=80,
+        ),
+    )
+
+    text, meta = VertexClient._extract_response(response)
+
+    assert text == "ok"
+    assert meta["cachedContentTokens"] == 80
