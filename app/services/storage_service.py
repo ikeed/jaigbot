@@ -2,7 +2,7 @@ import json
 import logging
 import datetime
 import subprocess
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Iterable, Optional
 from google.cloud import storage
 from app.config import settings
 from app.chat_roles import ROLE_ASSISTANT, ROLE_COACH, ROLE_SYSTEM, ROLE_USER, normalize_role
@@ -172,6 +172,8 @@ class StorageService:
         # Filter out persona/config
         config = {
             "persona": {
+                "id": (data.get("persona") or {}).get("id") if isinstance(data.get("persona"), dict) else None,
+                "name": (data.get("persona") or {}).get("name") if isinstance(data.get("persona"), dict) else None,
                 "character": data.get("character"),
                 "scene": data.get("scene")
             },
@@ -230,6 +232,43 @@ class StorageService:
         except Exception as e:
             logger.error(f"Failed to download session {session_id} from GCS: {e}")
             return None
+
+    def count_personas_for_user(self, user_id: str, persona_names: Iterable[str]) -> Dict[str, int]:
+        """
+        Count archived sessions by persona for one user in the current APP_ENV.
+
+        This is a backfill/source-of-truth path for the Redis persona-count cache,
+        so failures return zero counts rather than blocking scenario startup.
+        """
+        counts = {str(name): 0 for name in persona_names}
+        if not self.bucket_name or not user_id:
+            return counts
+
+        bucket = self.bucket
+        if not bucket:
+            return counts
+
+        prefixes = [settings.gcs_path("sessions/v1", f"user_id={user_id}") + "/"]
+        if settings.APP_ENV == "prod":
+            prefixes.append(f"sessions/v1/user_id={user_id}/")
+
+        try:
+            from app.services.persona_service import extract_persona_name_from_archive
+
+            for prefix in prefixes:
+                for blob in self.client.list_blobs(self.bucket_name, prefix=prefix):
+                    if not str(getattr(blob, "name", "")).endswith(".json"):
+                        continue
+                    try:
+                        data = json.loads(blob.download_as_string())
+                    except Exception:
+                        continue
+                    persona_name = extract_persona_name_from_archive(data)
+                    if persona_name in counts:
+                        counts[persona_name] += 1
+        except Exception as e:
+            logger.warning("Failed to count personas for user %s from GCS: %s", user_id, e)
+        return counts
 
 # Global instance
 storage_service = StorageService()
