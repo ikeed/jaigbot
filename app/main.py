@@ -37,6 +37,13 @@ from .telemetry.events import (
     truncate_for_log as telemetry_truncate,
 )
 from .services.session_service import SessionService, CookieSettings
+from .services.persona_service import (
+    build_persona_session_fields,
+    extract_persona_name_from_text,
+    find_persona,
+    record_persona_interaction_once,
+    select_persona_for_user,
+)
 
 from .config import settings
 
@@ -652,48 +659,51 @@ async def init_session(body: SessionInitRequest):
     # If personaId is NOT provided, but we have an existing session,
     # try to RECOVER the personaId from the existing memory so we don't pick a new random one.
     persona_id = body.personaId
-    if not persona_id and mem and mem.get("character"):
-        for line in mem["character"].splitlines():
-            if "Specific Persona:" in line:
-                persona_id = line.split("Specific Persona:")[1].strip()
-                logger.info("Recovered personaId '%s' from existing memory for session %s", persona_id, sid)
-                break
+    if not persona_id and mem:
+        persona_meta = mem.get("persona") if isinstance(mem.get("persona"), dict) else {}
+        persona_id = persona_meta.get("name") or extract_persona_name_from_text(mem.get("character"))
+        if persona_id:
+            logger.info("Recovered personaId '%s' from existing memory for session %s", persona_id, sid)
 
-    # If persona_id is provided or recovered, the backend generates the character/scene/card
+    selected_persona = None
+
+    # If persona_id is provided or recovered, the backend generates the character/scene/card.
+    # Otherwise, for a new session, choose a weighted persona based on this user's history.
     if persona_id:
         try:
-            from .services.chat_helpers import load_robust_persona
-            persona = load_robust_persona(name=persona_id)
+            selected_persona = find_persona(name=persona_id) or find_persona(persona_id=persona_id)
+            if not selected_persona:
+                raise ValueError(f"Unknown persona {persona_id}")
             
             # Use standard template if character/scene not already provided
-            if not character:
-                from .config import DEFAULT_CHARACTER
-                base_char = settings.CHARACTER_SYSTEM or DEFAULT_CHARACTER
-                character = (
-                    f"{base_char}\n\n"
-                    f"Specific Persona: {persona['name']}\n"
-                    f"Detailed Biography and Motivations: {persona['detailed']}"
-                )
-            if not scene:
-                from .config import DEFAULT_SCENE
-                base_scene = settings.SCENE_OBJECTIVES or DEFAULT_SCENE
-                scene = (
-                    f"{base_scene}\n\n"
-                    f"Current Scenario: {persona['scenario']['visit_reason']}\n"
-                    f"Scenario Objectives: {persona['scenario']['detailed_instructions']}"
-                )
-            if not initial_card:
-                lines = [
-                    f"Person: {persona['name']}",
-                    f"Background: {persona['brief']}",
-                    f"Reason for visit: {persona['scenario']['user_sketch']}"
-                ]
-                is_pediatric = any(k in persona['brief'].lower() for k in ["parent", "child", "son", "daughter"])
-                if not persona['scenario'].get('vaccine_related') and not is_pediatric:
-                    lines.append("\n(Note: You might want to mention vaccines during this visit.)")
-                initial_card = "\n".join(lines)
+            fields = build_persona_session_fields(selected_persona)
+            character = character or fields["character"]
+            scene = scene or fields["scene"]
+            initial_card = initial_card or fields["initial_card"]
         except Exception as e:
             logger.error("Failed to load persona %s: %s", persona_id, e)
+    elif not mem and not character:
+        try:
+            from .services.storage_service import storage_service
+
+            user_info = body.userInfo if isinstance(body.userInfo, dict) else {}
+            user_id = user_info.get("identifier")
+            selected_persona = select_persona_for_user(
+                user_id,
+                _MEMORY_STORE,
+                load_counts=storage_service.count_personas_for_user,
+            )
+            fields = build_persona_session_fields(selected_persona)
+            character = fields["character"]
+            scene = scene or fields["scene"]
+            initial_card = initial_card or fields["initial_card"]
+        except Exception as e:
+            logger.warning("Failed weighted persona selection for session %s: %s", sid, e)
+
+    if selected_persona is None and character:
+        recovered_persona_name = extract_persona_name_from_text(character)
+        if recovered_persona_name:
+            selected_persona = find_persona(name=recovered_persona_name)
 
     if not mem:
         mem = {
@@ -701,10 +711,18 @@ async def init_session(body: SessionInitRequest):
             "full_history": [],
             "character": character,
             "scene": scene,
+            "persona": (
+                {"id": selected_persona.get("id"), "name": selected_persona.get("name")}
+                if selected_persona
+                else None
+            ),
             "user_info": body.userInfo,
             "updated": now,
             "session_started": now,
         }
+        if selected_persona:
+            user_info = body.userInfo if isinstance(body.userInfo, dict) else {}
+            record_persona_interaction_once(user_info.get("identifier"), sid, selected_persona, _MEMORY_STORE)
         
         # If we have a character (either passed or generated), seed the history with a scenario card.
         if character:
@@ -727,6 +745,8 @@ async def init_session(body: SessionInitRequest):
             mem["character"] = character
         if scene and not mem.get("scene"):
             mem["scene"] = scene
+        if selected_persona and not mem.get("persona"):
+            mem["persona"] = {"id": selected_persona.get("id"), "name": selected_persona.get("name")}
         if body.userInfo and not mem.get("user_info"):
             mem["user_info"] = body.userInfo
         
@@ -796,6 +816,9 @@ async def init_session(body: SessionInitRequest):
         "alreadyActive": already_active,
         "character": mem.get("character"),
         "scene": mem.get("scene"),
+        "persona": mem.get("persona"),
+        "personaId": (mem.get("persona") or {}).get("id") if isinstance(mem.get("persona"), dict) else None,
+        "personaName": (mem.get("persona") or {}).get("name") if isinstance(mem.get("persona"), dict) else None,
         "initialCard": next(
             (
                 m["content"]

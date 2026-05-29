@@ -11,6 +11,7 @@ permissions:
 jobs:
   require-staging-source:
     runs-on: ubuntu-latest
+    if: github.base_ref == 'main'
     steps:
       - name: Require staging source branch
         run: |
