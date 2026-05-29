@@ -1,51 +1,24 @@
-import json
 import logging
-import os
-import time
-import uuid
-import asyncio
 from contextlib import asynccontextmanager
-from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
-from fastapi.exceptions import RequestValidationError
+from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-
-from .vertex import VertexClient, VertexAIError
-from .chat_roles import ROLE_ASSISTANT, ROLE_SYSTEM, is_scenario_card, normalize_role
-
-# Lazy, cached Vertex client per (project, region, model, class) to avoid re-initializing
-# a new SDK client on every request while still allowing tests to monkeypatch VertexClient.
-_VERTEX_CLIENT_CACHE = {}
-
-def _get_vertex_client(project: str, region: str, model_id: str):
-    key = (project, region, model_id, VertexClient)
-    client = _VERTEX_CLIENT_CACHE.get(key)
-    if client is None:
-        client = VertexClient(project=project, region=region, model_id=model_id)
-        _VERTEX_CLIENT_CACHE[key] = client
-    return client
-from .persona import DEFAULT_CHARACTER, DEFAULT_SCENE
-from .services.conversation_service import (
-    maybe_add_person_concern as svc_maybe_add_person_concern,
-    mark_mirrored_multi as svc_mark_mirrored_multi,
-    mark_secured_by_topic as svc_mark_secured_by_topic,
-)
-from .telemetry.events import (
-    log_event as telemetry_log_event,
-    truncate_for_log as telemetry_truncate,
-)
-from .services.session_service import SessionService, CookieSettings
-from .services.persona_service import (
-    build_persona_session_fields,
-    extract_persona_name_from_text,
-    find_persona,
-    record_persona_interaction_once,
-    select_persona_for_user,
-)
 
 from .config import settings
+from .http_handlers import get_request_id as _get_request_id, install_http_handlers
+from .vertex import VertexClient
+from .runtime import VertexClientCache, create_memory_store
+from .routes.chat import create_chat_router
+from .routes.session import create_session_router
+from .routes.summary import create_summary_router
+from .routes.system import create_system_router
+from .services.model_preflight import run_model_preflight
+
+_VERTEX_CLIENT_CACHE = VertexClientCache()
+
+
+def _get_vertex_client(project: str, region: str, model_id: str):
+    return _VERTEX_CLIENT_CACHE.get(project, region, model_id, VertexClient)
 
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL, logging.INFO),
@@ -53,37 +26,27 @@ logging.basicConfig(
 )
 logger = logging.getLogger("app")
 
-# Memory store abstraction (factored into app.memory_store for readability)
-from .memory_store import InMemoryStore, RedisStore
-
-# Instantiate store with fallback
-try:
-    if settings.MEMORY_ENABLED and settings.MEMORY_BACKEND == "redis":
-        _MEMORY_STORE = RedisStore(
-            url=settings.REDIS_URL,
-            host=settings.REDIS_HOST,
-            port=settings.REDIS_PORT,
-            db=settings.REDIS_DB,
-            password=settings.REDIS_PASSWORD,
-            prefix=settings.redis_key_prefix,
-            fallback_prefixes=settings.redis_fallback_prefixes,
-            ttl=settings.MEMORY_TTL_SECONDS,
-        )
-    else:
-        _MEMORY_STORE = InMemoryStore(persist_path=settings.MEMORY_PERSIST_PATH)
-except Exception:
-    _MEMORY_STORE = InMemoryStore(persist_path=settings.MEMORY_PERSIST_PATH)
-    settings.MEMORY_BACKEND = "memory"
+_MEMORY_STORE = create_memory_store(settings, logger)
 
 
 @asynccontextmanager
 async def _lifespan(application: FastAPI):
     """Application lifespan: run startup tasks before yielding, cleanup after."""
+    application.state.memory_store = _MEMORY_STORE
+    application.state.vertex_client_cache = _VERTEX_CLIENT_CACHE
     await _model_preflight(application)
     yield
 
 
 app = FastAPI(title="AIMSBot (Gemini Enterprise)", version="0.2.0", lifespan=_lifespan)
+
+
+def get_memory_store(request: Request):
+    return getattr(request.app.state, "memory_store", _MEMORY_STORE)
+
+
+def get_model_check(request: Request) -> dict:
+    return getattr(request.app.state, "model_check", {"available": "unknown"})
 
 # Optional CORS
 if settings.ALLOWED_ORIGINS:
@@ -102,497 +65,34 @@ async def _model_preflight(application: FastAPI):
     Stores tri-state availability in app.state.model_check: { available: true|false|"unknown", ... }.
     Never raises; only logs.
     """
-    application.state.model_check = {"available": "unknown", "modelId": settings.MODEL_ID, "region": settings.VERTEX_LOCATION}
-    if not settings.VALIDATE_MODEL_ON_STARTUP:
-        application.state.model_check["reason"] = "disabled_by_env"
-        return
-    if not settings.PROJECT_ID:
-        application.state.model_check["reason"] = "no_project_id"
-        return
-    try:
-        import google.auth  # type: ignore
-        from google.auth.transport.requests import AuthorizedSession  # type: ignore
-        creds, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
-        session = AuthorizedSession(creds)
-
-        attempts: list[dict] = []
-
-        def try_get(api_version: str) -> tuple[int, str]:
-            loc = settings.VERTEX_LOCATION
-            host = "aiplatform.googleapis.com" if str(loc).lower() == "global" else f"{loc}-aiplatform.googleapis.com"
-            url = (
-                f"https://{host}/{api_version}/projects/{settings.PROJECT_ID}"
-                f"/locations/{loc}/publishers/google/models/{settings.MODEL_ID}"
-            )
-            r = session.get(url)
-            attempts.append({"apiVersion": api_version, "url": url, "httpStatus": r.status_code})
-            return r.status_code, url
-
-        # Use stable v1 endpoint only (skip beta)
-        primary = "v1"
-        code, url_primary = try_get(primary)
-        application.state.model_check["apiVersion"] = primary
-        application.state.model_check["urlPrimary"] = url_primary
-        application.state.model_check["httpStatusPrimary"] = code
-
-        if code == 404:
-            # Default to unknown on 404; do a v1 models list to avoid false negatives
-            application.state.model_check["available"] = "unknown"
-            loc = settings.VERTEX_LOCATION
-            host = "aiplatform.googleapis.com" if str(loc).lower() == "global" else f"{loc}-aiplatform.googleapis.com"
-            list_url = f"https://{host}/v1/projects/{settings.PROJECT_ID}/locations/{loc}/publishers/google/models"
-            application.state.model_check["listUrl"] = list_url
-            rlist = session.get(list_url)
-            application.state.model_check["listHttpStatus"] = rlist.status_code
-            matched = False
-            if rlist.status_code == 200:
-                try:
-                    data = rlist.json()
-                except Exception:
-                    data = {}
-                models = data.get("models", []) or []
-                application.state.model_check["listCount"] = len(models)
-                matched = any(((m.get("name", "").split("/models/")[-1]) == settings.MODEL_ID) for m in models)
-            application.state.model_check["listMatched"] = matched
-            if matched:
-                application.state.model_check["available"] = True
-        else:
-            application.state.model_check["httpStatus"] = code
-            application.state.model_check["available"] = True if code == 200 else "unknown"
-
-        # Record all attempts for debugging
-        application.state.model_check["urlsTried"] = attempts
-        # Precompute the generateContent base URL(s) that the Vertex client would use
-        try:
-            loc = settings.VERTEX_LOCATION
-            host = "aiplatform.googleapis.com" if str(loc).lower() == "global" else f"{loc}-aiplatform.googleapis.com"
-            gen_primary = "v1"
-            base_gen_url = f"https://{host}/{gen_primary}/projects/{settings.PROJECT_ID}/locations/{loc}/publishers/google/models/{settings.MODEL_ID}:generateContent"
-            application.state.model_check["baseGenerateUrlPrimary"] = base_gen_url
-        except Exception:
-            pass
-
-    except Exception as e:
-        # ADC missing or network error — mark unknown
-        try:
-            logger.info(json.dumps({
-                "event": "model_preflight",
-                "status": "exception",
-                "error": str(e),
-                "modelId": settings.MODEL_ID,
-                "region": settings.VERTEX_LOCATION,
-            }))
-        except Exception:
-            logger.info("model preflight error: %s", e)
-        application.state.model_check["available"] = "unknown"
-        application.state.model_check["error"] = str(e)
+    await run_model_preflight(application, settings=settings, logger=logger)
 
 
-# Exception handlers to surface better errors with request correlation
-@app.exception_handler(HTTPException)
-async def on_http_exception(request: Request, exc: HTTPException):
-    # Normalize all HTTP exceptions into a consistent error envelope
-    req_id = _get_request_id(request)
-    logger.warning(json.dumps({
-        "event": "http_exception",
-        "status": exc.status_code,
-        "detail": exc.detail,
-        "requestId": req_id,
-        "path": request.url.path,
-        "method": request.method,
-    }))
-
-    # Build a flat error object: { message, code, requestId, ... }
-    if isinstance(exc.detail, dict):
-        base = exc.detail.get("error", exc.detail).copy()
-    elif isinstance(exc.detail, list):
-        base = {"errors": exc.detail}
-    else:
-        base = {"message": str(exc.detail)}
-
-    # Ensure required fields
-    base.setdefault("message", "")
-    base.setdefault("code", exc.status_code)
-    base.setdefault("requestId", req_id)
-
-    return JSONResponse(status_code=exc.status_code, content={"error": base})
+install_http_handlers(app, settings=settings, logger=logger)
 
 
-@app.exception_handler(RequestValidationError)
-async def on_validation_error(request: Request, exc: RequestValidationError):
-    req_id = _get_request_id(request)
-
-    # Safely log the request body in a JSON-serializable way
-    body_logged = None
-    if request.method in ("POST", "PUT", "PATCH"):
-        try:
-            raw = await request.body()
-        except Exception:
-            raw = b""
-        if raw:
-            try:
-                body_logged = json.loads(raw.decode("utf-8"))
-            except Exception:
-                try:
-                    body_logged = raw.decode("utf-8", errors="replace")
-                except Exception:
-                    body_logged = "<binary>"
-
-    logger.warning(json.dumps({
-        "event": "request_validation_error",
-        "errors": exc.errors(),
-        "body": body_logged,
-        "requestId": req_id,
-        "path": request.url.path,
-        "method": request.method,
-    }))
-    return JSONResponse(status_code=422, content={
-        "error": {"message": "Request validation failed", "code": 422, "requestId": req_id, "errors": exc.errors()}})
+app.include_router(create_system_router(
+    settings=settings,
+    logger=logger,
+    get_memory_store=get_memory_store,
+    get_model_check=get_model_check,
+    get_request_id=_get_request_id,
+))
+app.include_router(create_summary_router(
+    settings=settings,
+    logger=logger,
+    get_memory_store=get_memory_store,
+    vertex_client_cls=VertexClient,
+))
+app.include_router(create_session_router(
+    settings=settings,
+    logger=logger,
+    get_memory_store=get_memory_store,
+))
 
 
-@app.exception_handler(Exception)
-async def on_unhandled_exception(request: Request, exc: Exception):
-    req_id = _get_request_id(request)
-    # This will include the traceback to stderr and our JSON line after
-    logger.exception("Unhandled application exception: %s", exc)
-    logger.error(json.dumps({
-        "event": "unhandled_exception",
-        "error": str(exc),
-        "requestId": req_id,
-        "path": request.url.path,
-        "method": request.method,
-    }))
-    return JSONResponse(status_code=500,
-                        content={"error": {"message": "Internal server error", "code": 500, "requestId": req_id}})
-
-
-# Simple structured logging middleware with request id and capped body logging
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    # Request ID: prefer inbound headers, else generate
-    req_id = request.headers.get("x-cloud-trace-context") or request.headers.get("x-request-id") or str(uuid.uuid4())
-    request.state.request_id = req_id
-
-    start = time.time()
-    # Read and restore body for downstream handlers
-    try:
-        body_bytes = await request.body()
-    except Exception:
-        body_bytes = b""
-
-    # Restore the request stream so downstream can read body
-    async def receive():
-        return {"type": "http.request", "body": body_bytes, "more_body": False}
-
-    try:
-        request._receive = receive  # type: ignore[attr-defined]
-    except Exception:
-        pass
-
-    # Prepare log details
-    body_preview = body_bytes[:settings.LOG_REQUEST_BODY_MAX]
-    body_logged = None
-    if body_preview:
-        try:
-            body_logged = json.loads(body_preview.decode("utf-8"))
-            # Redact persona/scene fields unless in debug mode
-            if not settings.DEBUG_MODE and isinstance(body_logged, dict):
-                if "character" in body_logged:
-                    body_logged["character"] = "<hidden>"
-                if "scene" in body_logged:
-                    body_logged["scene"] = "<hidden>"
-        except Exception:
-            # fallback to string preview
-            try:
-                body_logged = body_preview.decode("utf-8", errors="replace")
-            except Exception:
-                body_logged = "<binary>"
-
-    headers_logged = None
-    if settings.LOG_HEADERS:
-        # Redact common sensitive headers
-        redact = {"authorization", "cookie", "set-cookie"}
-        headers_logged = {k: ("<redacted>" if k.lower() in redact else v) for k, v in request.headers.items()}
-
-    logger.info(
-        json.dumps(
-            {
-                "event": "request_start",
-                "method": request.method,
-                "path": request.url.path,
-                "client": request.client.host if request.client else None,
-                "requestId": req_id,
-                "bodySize": len(body_bytes) if body_bytes else 0,
-                "body": body_logged,
-                "headers": headers_logged,
-            }
-        )
-    )
-
-    try:
-        response = await call_next(request)
-    except Exception as e:
-        latency_ms = int((time.time() - start) * 1000)
-        logger.exception("Unhandled exception processing request: %s", e)
-        logger.error(
-            json.dumps(
-                {
-                    "event": "request_error",
-                    "requestId": req_id,
-                    "latencyMs": latency_ms,
-                    "error": str(e),
-                }
-            )
-        )
-        # Let FastAPI's exception handling continue
-        raise
-
-    # Attach request id back to the response for client correlation
-    try:
-        response.headers["x-request-id"] = req_id
-    except Exception:
-        pass
-
-    latency_ms = int((time.time() - start) * 1000)
-    # Choose log level based on status code
-    status_code = getattr(response, "status_code", None)
-    end_event = json.dumps(
-        {
-            "event": "request_end",
-            "method": request.method,
-            "path": request.url.path,
-            "status": status_code,
-            "latencyMs": latency_ms,
-            "requestId": req_id,
-        }
-    )
-    try:
-        if isinstance(status_code, int) and status_code >= 500:
-            logger.error(end_event)
-        elif isinstance(status_code, int) and status_code >= 400:
-            logger.warning(end_event)
-        else:
-            logger.info(end_event)
-    except Exception:
-        logger.info(end_event)
-
-    return response
-
-
-
-
-@app.get("/healthz")
-async def healthz():
-    return {"status": "ok"}
-
-
-@app.get("/history")
-async def history(sessionId: Optional[str] = None, full: Optional[bool] = False):
-    """Return conversation history for a session.
-
-    By default returns the trimmed working history as a list of {role, content}.
-    Pass ``full=true`` to get the complete untrimmed history with timestamps
-    ({role, content, time}).
-    """
-    try:
-        if not (sessionId and settings.MEMORY_ENABLED):
-            return {"history": []}
-        mem = _MEMORY_STORE.get(sessionId) or {}
-        if full:
-            return {"history": mem.get("full_history") or []}
-        hist = mem.get("history") or []
-        # Ensure items are objects with role/content strings
-        out = []
-        for it in hist:
-            try:
-                role = it.get("role")
-                content = it.get("content")
-                if isinstance(role, str) and isinstance(content, str):
-                    out.append({"role": role, "content": content})
-            except Exception:
-                continue
-        return {"history": out}
-    except Exception:
-        return {"history": []}
-
-
-@app.get("/summary")
-async def summary(sessionId: Optional[str] = None, analysis: Optional[bool] = False):
-    """Return an aggregated AIMS summary for a session.
-
-    Stable contract keys: overallScore, stepCoverage, strengths, growthAreas.
-    Optional: when analysis=true, includes an LLM-authored 'analysis' bullet list
-    using full transcript, AIMS scores, and aims_mapping.json.
-    """
-    base = {"overallScore": 0.0, "stepCoverage": {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0}, "strengths": [], "growthAreas": []}
-    if not sessionId or not settings.MEMORY_ENABLED:
-        if analysis:
-            base["analysis"] = []
-        return base
-    mem = _MEMORY_STORE.get(sessionId) or {}
-    aims = mem.get("aims") or {}
-    per_counts = {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0}
-    per_counts.update(aims.get("perStepCounts", {}))
-    # compute simple averages
-    running_avg: dict[str, float] = {}
-    for k, arr in (aims.get("scores", {}) or {}).items():
-        if arr:
-            try:
-                running_avg[k] = sum(arr)/len(arr)
-            except Exception:
-                pass
-    # overall: mean of available averages
-    overall = (sum(running_avg.values())/len(running_avg)) if running_avg else 0.0
-    base.update({
-        "overallScore": overall,
-        "stepCoverage": per_counts,
-        "runningAverage": running_avg,
-        "strengths": [],
-        "growthAreas": [],
-        "totalTurns": aims.get("totalTurns", 0),
-    })
-
-    if not analysis:
-        return base
-
-    # Build transcript
-    transcript = ""
-    try:
-        hist = mem.get("history") or []
-        parts = []
-        for item in hist:
-            role = item.get("role") or "assistant"
-            author = "Doctor" if role == "user" else "Patient"
-            txt = (item.get("content") or "").strip()
-            if txt:
-                parts.append(f"{author}: {txt}")
-        transcript = "\n".join(parts)
-    except Exception:
-        transcript = ""
-
-    # Load aims mapping JSON
-    mapping = getattr(app.state, "aims_mapping", None)
-    if mapping is None:
-        try:
-            from .aims_engine import load_mapping
-            mapping = load_mapping()
-            app.state.aims_mapping = mapping
-        except Exception:
-            mapping = {}
-
-    metrics_blob = json.dumps({
-        "totalTurns": aims.get("totalTurns", 0),
-        "perStepCounts": per_counts,
-        "runningAverage": aims.get("runningAverage", {}),
-    }, ensure_ascii=False)
-    mapping_blob = json.dumps(mapping or {}, ensure_ascii=False)
-
-    # Render prompt and call Vertex to obtain analysis bullets
-    try:
-        from app.prompts.aims import build_summary_analysis_prompt as _build_summary_analysis_prompt
-        prompt = _build_summary_analysis_prompt(metrics_blob=metrics_blob, mapping_blob=mapping_blob, transcript=transcript)
-
-        from .services.vertex_helpers import vertex_call_with_fallback_text
-        # Use Flash for summary analysis (faster, schema-light); keep Pro as fallback
-        narrative = await asyncio.to_thread(
-            vertex_call_with_fallback_text,
-            project=settings.PROJECT_ID,
-            region=settings.VERTEX_LOCATION,
-            primary_model="gemini-2.5-flash",
-            fallbacks=[settings.MODEL_ID] + list(settings.MODEL_FALLBACKS or []),
-            temperature=min(settings.TEMPERATURE, 0.2),
-            max_tokens=min(settings.MAX_TOKENS, 384),
-            prompt=prompt,
-            system_instruction=None,
-            log_path="summary_analysis",
-            logger=logger,
-            client_cls=VertexClient,
-        )
-        narrative = (narrative or "").strip()
-        bullets_raw = [ln for ln in narrative.splitlines() if ln.strip()]
-        try:
-            from app.services.coach_post import sanitize_endgame_bullets as _sanitize
-            bullets = _sanitize(bullets_raw)
-        except Exception:
-            bullets = [ln.strip(" -\t") for ln in bullets_raw]
-
-        # Enforce consistency with metrics: do not allow bullets that contradict step coverage
-        try:
-            import re
-            def _enforce_metrics_consistency(bullets_in: list[str], step_counts: dict[str, int]) -> list[str]:
-                present = {k for k, v in (step_counts or {}).items() if isinstance(v, int) and v > 0}
-                pat = re.compile(r"\b(Announce|Inquire|Mirror|Secure)\b.*\b(skipped|missing|didn’t happen|did not happen|not used)\b", re.IGNORECASE)
-                cleaned: list[str] = []
-                for b in bullets_in or []:
-                    m = pat.search(b or "")
-                    if m and (m.group(1) in present):
-                        step = m.group(1)
-                        rewrites = {
-                            "Announce": "Announce occurred — keep it concise and invite input (e.g., ‘It’s MMR today — how does that sound?’).",
-                            "Inquire": "Inquire was present — prioritize open-ended questions and pause for the full answer.",
-                            "Mirror": "Mirror was used — keep reflecting the exact worry before educating.",
-                            "Secure": "Secure was present — share one tailored fact, link to the concern, and check understanding.",
-                        }
-                        cleaned.append(rewrites.get(step, b))
-                    else:
-                        cleaned.append(b)
-                # de-duplicate preserving order
-                out, seen = [], set()
-                for x in cleaned:
-                    if x not in seen:
-                        out.append(x); seen.add(x)
-                return out
-            bullets = _enforce_metrics_consistency(bullets, per_counts)
-        except Exception:
-            pass
-
-        base["analysis"] = bullets
-    except Exception as e:
-        telemetry_log_event(logger, "summary_analysis_failed", sessionId=sessionId, error=str(e))
-        base["analysis"] = []
-
-    return base
-
-
-from .models import Coaching, SessionMetrics, ChatRequest, ReportRequest
-from pydantic import BaseModel as _BaseModel
-
-
-class SessionInitRequest(_BaseModel):
-    sessionId: str
-    connectionId: Optional[str] = None
-    personaId: Optional[str] = None
-    character: Optional[str] = None
-    scene: Optional[str] = None
-    userInfo: Optional[dict] = None
-    initialCard: Optional[str] = None
-    force: Optional[bool] = False
-
-
-def _get_request_id(request: Request) -> Optional[str]:
-    # X-Cloud-Trace-Context: traceId/spanId;o=traceTrue
-    h = request.headers.get("x-cloud-trace-context") or request.headers.get("x-request-id")
-    if h:
-        return h
-    # fallback to middleware-provided id or generate one
-    try:
-        return getattr(request.state, "request_id", None) or str(uuid.uuid4())
-    except Exception:
-        return str(uuid.uuid4())
-
-
-@app.post("/chat")
-async def chat(req: Request, body: ChatRequest, background_tasks: BackgroundTasks):
-    """Main chat endpoint using the new ChatOrchestrator."""
-    # Enforce settings.PROJECT_ID presence for live calls to align with tests/contract
-    if not settings.PROJECT_ID:
-        # Raise HTTPException to be normalized by our exception handler
-        raise HTTPException(status_code=500, detail={
-            "error": {"message": "settings.PROJECT_ID not set — configure the settings.PROJECT_ID environment variable.", "code": 500}
-        })
-
-    # Build config structures for orchestrator
-    vertex_config = {
+def _vertex_config() -> dict:
+    return {
         "project_id": settings.PROJECT_ID,
         "region": settings.REGION,
         "vertex_location": settings.VERTEX_LOCATION,
@@ -600,444 +100,61 @@ async def chat(req: Request, body: ChatRequest, background_tasks: BackgroundTask
         "model_fallbacks": settings.MODEL_FALLBACKS,
         "temperature": settings.TEMPERATURE,
         "max_tokens": settings.MAX_TOKENS,
-        # Pass client class from app.main so tests can monkeypatch m.VertexClient
+        # Pass client class from app.main so tests can monkeypatch m.VertexClient.
         "client_cls": VertexClient,
     }
-    
-    memory_config = {
+
+
+def _memory_config() -> dict:
+    return {
         "enabled": settings.MEMORY_ENABLED,
         "max_turns": settings.MEMORY_MAX_TURNS,
         "ttl_seconds": settings.MEMORY_TTL_SECONDS,
     }
-    
-    session_cookie_settings = {
+
+
+def _session_cookie_settings() -> dict:
+    return {
         "name": settings.SESSION_COOKIE_NAME,
         "secure": settings.SESSION_COOKIE_SECURE,
         "samesite": settings.SESSION_COOKIE_SAMESITE,
         "max_age": settings.SESSION_COOKIE_MAX_AGE,
     }
-    
-    aims_config = {
+
+
+def _aims_config() -> dict:
+    return {
         "enabled": settings.AIMS_COACHING_ENABLED,
         "force_default": settings.AIMS_COACHING_DEFAULT,
     }
-    
-    debug_config = {
+
+
+def _debug_config() -> dict:
+    return {
         "expose_upstream_error": settings.EXPOSE_UPSTREAM_ERROR,
         "log_response_preview_max": settings.LOG_RESPONSE_PREVIEW_MAX,
     }
-    
-    # Initialize and run the orchestrator
+
+
+def _chat_orchestrator(memory_store=None):
     from .services.chat_orchestrator import ChatOrchestrator
-    orchestrator = ChatOrchestrator(
-        memory_store=_MEMORY_STORE,
-        session_cookie_settings=session_cookie_settings,
-        memory_config=memory_config,
-        aims_config=aims_config,
-        vertex_config=vertex_config,
-        debug_config=debug_config,
+
+    return ChatOrchestrator(
+        memory_store=memory_store or _MEMORY_STORE,
+        session_cookie_settings=_session_cookie_settings(),
+        memory_config=_memory_config(),
+        aims_config=_aims_config(),
+        vertex_config=_vertex_config(),
+        debug_config=_debug_config(),
         logger=logger,
     )
-    
-    return await orchestrator.handle_chat(req, body, background_tasks)
 
 
-@app.post("/session")
-async def init_session(body: SessionInitRequest):
-    """Register a session in the memory store so /report and /summary can find it.
-    Called by the Chainlit UI at scenario start, before any /chat messages."""
-    if not settings.MEMORY_ENABLED:
-        return {"status": "ok"}
-    sid = body.sessionId
-    now = time.time()
-    mem = _MEMORY_STORE.get(sid)
-
-    character = body.character
-    scene = body.scene
-    initial_card = body.initialCard
-
-    # If personaId is NOT provided, but we have an existing session,
-    # try to RECOVER the personaId from the existing memory so we don't pick a new random one.
-    persona_id = body.personaId
-    if not persona_id and mem:
-        persona_meta = mem.get("persona") if isinstance(mem.get("persona"), dict) else {}
-        persona_id = persona_meta.get("name") or extract_persona_name_from_text(mem.get("character"))
-        if persona_id:
-            logger.info("Recovered personaId '%s' from existing memory for session %s", persona_id, sid)
-
-    selected_persona = None
-
-    # If persona_id is provided or recovered, the backend generates the character/scene/card.
-    # Otherwise, for a new session, choose a weighted persona based on this user's history.
-    if persona_id:
-        try:
-            selected_persona = find_persona(name=persona_id) or find_persona(persona_id=persona_id)
-            if not selected_persona:
-                raise ValueError(f"Unknown persona {persona_id}")
-            
-            # Use standard template if character/scene not already provided
-            fields = build_persona_session_fields(selected_persona)
-            character = character or fields["character"]
-            scene = scene or fields["scene"]
-            initial_card = initial_card or fields["initial_card"]
-        except Exception as e:
-            logger.error("Failed to load persona %s: %s", persona_id, e)
-    elif not mem and not character:
-        try:
-            from .services.storage_service import storage_service
-
-            user_info = body.userInfo if isinstance(body.userInfo, dict) else {}
-            user_id = user_info.get("identifier")
-            selected_persona = select_persona_for_user(
-                user_id,
-                _MEMORY_STORE,
-                load_counts=storage_service.count_personas_for_user,
-            )
-            fields = build_persona_session_fields(selected_persona)
-            character = fields["character"]
-            scene = scene or fields["scene"]
-            initial_card = initial_card or fields["initial_card"]
-        except Exception as e:
-            logger.warning("Failed weighted persona selection for session %s: %s", sid, e)
-
-    if selected_persona is None and character:
-        recovered_persona_name = extract_persona_name_from_text(character)
-        if recovered_persona_name:
-            selected_persona = find_persona(name=recovered_persona_name)
-
-    if not mem:
-        mem = {
-            "history": [],
-            "full_history": [],
-            "character": character,
-            "scene": scene,
-            "persona": (
-                {"id": selected_persona.get("id"), "name": selected_persona.get("name")}
-                if selected_persona
-                else None
-            ),
-            "user_info": body.userInfo,
-            "updated": now,
-            "session_started": now,
-        }
-        if selected_persona:
-            user_info = body.userInfo if isinstance(body.userInfo, dict) else {}
-            record_persona_interaction_once(user_info.get("identifier"), sid, selected_persona, _MEMORY_STORE)
-        
-        # If we have a character (either passed or generated), seed the history with a scenario card.
-        if character:
-            if initial_card:
-                card_content = initial_card
-            else:
-                persona_name = "Person"
-                for line in character.splitlines():
-                    if "Specific Persona:" in line:
-                        persona_name = line.split("Specific Persona:")[1].strip()
-                        break
-                card_content = f"Person: {persona_name}\n(Scenario initialized)"
-            mem["history"].append({"role": ROLE_SYSTEM, "content": card_content})
-            mem["full_history"].append({"role": ROLE_SYSTEM, "content": card_content, "time": now})
-            
-        _MEMORY_STORE[sid] = mem
-    else:
-        # Update persona/scene if provided/generated and not already set
-        if character and not mem.get("character"):
-            mem["character"] = character
-        if scene and not mem.get("scene"):
-            mem["scene"] = scene
-        if selected_persona and not mem.get("persona"):
-            mem["persona"] = {"id": selected_persona.get("id"), "name": selected_persona.get("name")}
-        if body.userInfo and not mem.get("user_info"):
-            mem["user_info"] = body.userInfo
-        
-        # IDEMPOTENCY: ONLY seed history if it is absolutely empty.
-        # This prevents re-seeding on page refresh if the backend already has history.
-        if not mem.get("history") and character:
-            # Check if there is anything in full_history too, just to be safe.
-            if not mem.get("full_history"):
-                if initial_card:
-                    card_content = initial_card
-                else:
-                    persona_name = "Person"
-                    for line in character.splitlines():
-                        if "Specific Persona:" in line:
-                            persona_name = line.split("Specific Persona:")[1].strip()
-                            break
-                    card_content = f"Person: {persona_name}\n(Scenario initialized)"
-                
-                mem["history"].append({"role": ROLE_SYSTEM, "content": card_content})
-                mem["full_history"].append({"role": ROLE_SYSTEM, "content": card_content, "time": now})
-
-        mem.setdefault("full_history", [])
-        mem.setdefault("session_started", now)
-        mem["updated"] = now
-        _MEMORY_STORE[sid] = mem
-
-    logger.info("Session initialized: %s", sid)
-    
-    # Connection tracking
-    active_connections = mem.get("active_connections", [])
-    already_active = False
-
-    # If force is true, we clear existing connections and takeover
-    if body.force:
-        logger.info("Force flag detected for session %s. Clearing active connections: %s", sid, active_connections)
-        active_connections = []
-        mem["active_connections"] = active_connections
-        # We don't return alreadyActive=True in this case because we are forcing it.
-
-    if body.connectionId:
-        logger.debug("Checking connectionId: %s for session %s. Existing: %s", body.connectionId, sid, active_connections)
-        if body.connectionId not in active_connections:
-            # If there are active connections and we are adding a NEW one, mark it as alreadyActive
-            if active_connections:
-                already_active = True
-                logger.info("Session %s is already active with connections: %s. Blocking new connection: %s", sid, active_connections, body.connectionId)
-            
-            # We still add the connectionId so that if the user refreshes THIS tab, 
-            # it stays as part of the session, but it will be blocked until other tabs are closed.
-            active_connections.append(body.connectionId)
-            mem["active_connections"] = active_connections
-            _MEMORY_STORE[sid] = mem
-        else:
-            # If THIS connectionId is already in active_connections, but it's not the ONLY one,
-            # it should still be considered "already active" unless it was the first one.
-            # Actually, if it's already there, it means this tab is RECONNECTING.
-            # If it was already blocked before, it should stay blocked? 
-            # No, if it's reconnecting, we should check if it's the "primary" one.
-            # For simplicity: if it's already in the list, and it's not the first one, it's already active.
-            if active_connections and active_connections[0] != body.connectionId:
-                already_active = True
-            logger.debug("connectionId %s already registered for session %s. alreadyActive=%s", body.connectionId, sid, already_active)
-
-    return {
-        "status": "ok", 
-        "sessionId": sid,
-        "alreadyActive": already_active,
-        "character": mem.get("character"),
-        "scene": mem.get("scene"),
-        "persona": mem.get("persona"),
-        "personaId": (mem.get("persona") or {}).get("id") if isinstance(mem.get("persona"), dict) else None,
-        "personaName": (mem.get("persona") or {}).get("name") if isinstance(mem.get("persona"), dict) else None,
-        "initialCard": next(
-            (
-                m["content"]
-                for m in mem["history"]
-                if normalize_role(m.get("role")) in {ROLE_SYSTEM, ROLE_ASSISTANT}
-                and is_scenario_card(m.get("content"))
-            ),
-            initial_card,
-        )
-    }
+def get_chat_orchestrator(memory_store=Depends(get_memory_store)):
+    return _chat_orchestrator(memory_store=memory_store)
 
 
-class SessionDeregisterRequest(_BaseModel):
-    sessionId: str
-    connectionId: str
-
-
-@app.post("/session/deregister")
-async def deregister_session(body: SessionDeregisterRequest):
-    """Remove a connectionId from the active connections list."""
-    if not settings.MEMORY_ENABLED:
-        return {"status": "ok"}
-    sid = body.sessionId
-    mem = _MEMORY_STORE.get(sid)
-    if mem:
-        active = mem.get("active_connections", [])
-        if body.connectionId in active:
-            active.remove(body.connectionId)
-            mem["active_connections"] = active
-            mem["updated"] = time.time()
-            _MEMORY_STORE[sid] = mem
-            logger.info("Connection deregistered: %s for session %s", body.connectionId, sid)
-    return {"status": "ok"}
-
-
-@app.post("/report")
-async def report(req: Request, body: ReportRequest, background_tasks: BackgroundTasks):
-    """Endpoint for reporting issues in a scenario."""
-    # Initialize and run the orchestrator
-    from .services.chat_orchestrator import ChatOrchestrator
-    
-    # Minimal config for report path (mostly needs memory_store and session_service)
-    # Reusing the same session cookie settings as /chat
-    session_cookie_settings = {
-        "name": settings.SESSION_COOKIE_NAME,
-        "secure": settings.SESSION_COOKIE_SECURE,
-        "samesite": settings.SESSION_COOKIE_SAMESITE,
-        "max_age": settings.SESSION_COOKIE_MAX_AGE,
-    }
-    
-    orchestrator = ChatOrchestrator(
-        memory_store=_MEMORY_STORE,
-        session_cookie_settings=session_cookie_settings,
-        memory_config={
-            "enabled": settings.MEMORY_ENABLED,
-            "max_turns": settings.MEMORY_MAX_TURNS,
-            "ttl_seconds": settings.MEMORY_TTL_SECONDS,
-        },
-        aims_config={"enabled": settings.AIMS_COACHING_ENABLED},
-        vertex_config={"project_id": settings.PROJECT_ID, "region": settings.REGION},
-        debug_config={"expose_upstream_error": settings.EXPOSE_UPSTREAM_ERROR},
-        logger=logger,
-    )
-    
-    return await orchestrator.handle_report(req, body, background_tasks)
-
-
-@app.get("/config")
-async def config():
-    # Pull model preflight info if available
-    mc = getattr(app.state, "model_check", {"available": "unknown"})
-    return {
-        "projectId": settings.PROJECT_ID,
-        "region": settings.REGION,
-        "vertexLocation": settings.VERTEX_LOCATION,
-        "modelId": settings.MODEL_ID,
-        "temperature": settings.TEMPERATURE,
-        "maxTokens": settings.MAX_TOKENS,
-        "logLevel": settings.LOG_LEVEL,
-        "logHeaders": settings.LOG_HEADERS,
-        "logRequestBodyMax": settings.LOG_REQUEST_BODY_MAX,
-        "logResponsePreviewMax": settings.LOG_RESPONSE_PREVIEW_MAX,
-        "allowedOrigins": settings.ALLOWED_ORIGINS,
-        "exposeUpstreamError": settings.EXPOSE_UPSTREAM_ERROR,
-        "debugMode": settings.DEBUG_MODE,
-        "appEnv": settings.APP_ENV,
-        "gcsObjectPrefix": settings.gcs_object_prefix,
-        "modelFallbacks": settings.MODEL_FALLBACKS,
-        "modelAvailable": mc.get("available"),
-        "modelCheck": mc,
-        "autoContinueOnMaxTokens": settings.AUTO_CONTINUE_ON_MAX_TOKENS,
-        "maxContinuations": settings.MAX_CONTINUATIONS,
-        "suppressVertexAIDeprecation": settings.SUPPRESS_VERTEXAI_DEPRECATION,
-        # Coaching toggles
-        "aimsCoachingEnabled": settings.AIMS_COACHING_ENABLED,
-        "aimsCoachingDefault": settings.AIMS_COACHING_DEFAULT,
-        "useVertexRest": settings.USE_VERTEX_REST,
-        "continueTailChars": settings.CONTINUE_TAIL_CHARS,
-        "continuationInstructionEnabled": settings.CONTINUE_INSTRUCTION_ENABLED,
-        "minContinueGrowth": settings.MIN_CONTINUE_GROWTH,
-        # Memory settings
-        "memoryEnabled": settings.MEMORY_ENABLED,
-        "memoryBackend": settings.MEMORY_BACKEND,
-        "memoryMaxTurns": settings.MEMORY_MAX_TURNS,
-        "memoryTtlSeconds": settings.MEMORY_TTL_SECONDS,
-        "redisKeyPrefix": settings.redis_key_prefix,
-        "redisFallbackPrefixes": settings.redis_fallback_prefixes,
-        "memoryStoreSize": len(_MEMORY_STORE),
-        # Hard-coded defaults visibility
-        "defaultCharacter": (DEFAULT_CHARACTER if settings.DEBUG_MODE and DEFAULT_CHARACTER else None),
-        "defaultScene": (DEFAULT_SCENE if settings.DEBUG_MODE and DEFAULT_SCENE else None),
-        # Session cookie diagnostics
-        "sessionCookie": {
-            "name": settings.SESSION_COOKIE_NAME,
-            "secure": settings.SESSION_COOKIE_SECURE,
-            "sameSite": settings.SESSION_COOKIE_SAMESITE,
-            "maxAge": settings.SESSION_COOKIE_MAX_AGE,
-        },
-    }
-
-
-@app.get("/modelcheck")
-async def modelcheck():
-    mc = getattr(app.state, "model_check", {"available": "unknown"})
-    return {"modelId": settings.MODEL_ID, "region": settings.VERTEX_LOCATION, **mc}
-
-
-@app.get("/diagnostics")
-async def diagnostics():
-    """Expose effective generation settings to help root-cause truncation issues."""
-    diag = {
-        "transport": "rest" if settings.USE_VERTEX_REST else "sdk",
-        "generationConfig": {
-            "temperature": settings.TEMPERATURE,
-            "maxOutputTokens": settings.MAX_TOKENS,
-            "responseMimeType": "text/plain",
-            # Note: We do not set "thinking" control in REST requests to maintain compatibility.
-            "thinkingDisabled": None,
-        },
-        "autoContinueOnMaxTokens": settings.AUTO_CONTINUE_ON_MAX_TOKENS,
-        "maxContinuations": settings.MAX_CONTINUATIONS,
-        "continueTailChars": settings.CONTINUE_TAIL_CHARS,
-        "continuationInstructionEnabled": settings.CONTINUE_INSTRUCTION_ENABLED,
-        "minContinueGrowth": settings.MIN_CONTINUE_GROWTH,
-        "memory": {
-            "enabled": settings.MEMORY_ENABLED,
-            "backend": settings.MEMORY_BACKEND,
-            "maxTurns": settings.MEMORY_MAX_TURNS,
-            "ttlSeconds": settings.MEMORY_TTL_SECONDS,
-            "redisKeyPrefix": settings.redis_key_prefix,
-            "redisFallbackPrefixes": settings.redis_fallback_prefixes,
-            "storeSize": len(_MEMORY_STORE),
-        },
-        "environment": {
-            "appEnv": settings.APP_ENV,
-            "gcsObjectPrefix": settings.gcs_object_prefix,
-        },
-    }
-    return diag
-
-
-@app.get("/models")
-async def list_models(request: Request):
-    """List available google/publisher models in this project+region using ADC.
-    Returns a subset of fields for brevity.
-    """
-    import google.auth
-    from google.auth.transport.requests import AuthorizedSession
-
-    req_id = _get_request_id(request)
-    started = time.time()
-    try:
-        creds, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
-        session = AuthorizedSession(creds)
-        loc = settings.VERTEX_LOCATION
-        host = "aiplatform.googleapis.com" if str(loc).lower() == "global" else f"{loc}-aiplatform.googleapis.com"
-        url = f"https://{host}/v1/projects/{settings.PROJECT_ID}/locations/{loc}/publishers/google/models"
-        r = session.get(url)
-        latency_ms = int((time.time() - started) * 1000)
-        if r.status_code != 200:
-            logger.warning(json.dumps({
-                "event": "models_list",
-                "status": "error",
-                "http": r.status_code,
-                "requestId": req_id,
-            }))
-            return JSONResponse(status_code=502, content={
-                "error": {
-                    "message": f"Failed to list models (HTTP {r.status_code})",
-                    "code": 502,
-                    "requestId": req_id,
-                }
-            })
-        data = r.json()
-        models = data.get("models", [])
-        # simplify
-        out = [{
-            "id": (m.get("name", "").split("/models/")[-1]),
-            "displayName": m.get("displayName"),
-            "supportedActions": m.get("supportedActions", {}),
-        } for m in models]
-        logger.info(json.dumps({
-            "event": "models_list",
-            "status": "ok",
-            "latencyMs": latency_ms,
-            "count": len(out),
-            "requestId": req_id,
-        }))
-        return {"models": out, "count": len(out), "region": settings.VERTEX_LOCATION}
-    except Exception as e:
-        latency_ms = int((time.time() - started) * 1000)
-        logger.exception("/models error: %s", e)
-        logger.error(json.dumps({
-            "event": "models_list",
-            "status": "exception",
-            "latencyMs": latency_ms,
-            "error": str(e),
-            "requestId": req_id,
-        }))
-        return JSONResponse(status_code=500, content={
-            "error": {"message": "Internal server error", "code": 500, "requestId": req_id}
-        })
+app.include_router(create_chat_router(
+    settings=settings,
+    get_chat_orchestrator=get_chat_orchestrator,
+))
