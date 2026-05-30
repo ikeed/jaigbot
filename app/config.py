@@ -2,6 +2,18 @@ import os
 from typing import List, Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import field_validator
+from .constants import (
+    DEFAULT_REGION,
+    DEFAULT_MODEL_ID,
+    DEFAULT_TEMPERATURE,
+    DEFAULT_MAX_TOKENS,
+    DEFAULT_PORT,
+    DEFAULT_APP_ENV,
+    DEFAULT_MEMORY_TTL,
+    DEFAULT_MAX_TURNS,
+    PREFIX_AIMS,
+    PREFIX_SESSION
+)
 
 class Settings(BaseSettings):
     # Deployment environment namespace. Cloud Run must set this explicitly so
@@ -10,13 +22,13 @@ class Settings(BaseSettings):
 
     # GCP Configuration
     PROJECT_ID: Optional[str] = None
-    REGION: str = "us-west4"
+    REGION: str = DEFAULT_REGION
     VERTEX_LOCATION: Optional[str] = None
     
     # Model Configuration
-    MODEL_ID: str = "gemini-2.5-pro"
-    TEMPERATURE: float = 0.2
-    MAX_TOKENS: int = 2048
+    MODEL_ID: str = DEFAULT_MODEL_ID
+    TEMPERATURE: float = DEFAULT_TEMPERATURE
+    MAX_TOKENS: int = DEFAULT_MAX_TOKENS
     MODEL_FALLBACKS: List[str] = ["gemini-2.5-pro-001", "gemini-2.5-pro"]
     AUTO_CONTINUE_ON_MAX_TOKENS: bool = True
     MAX_CONTINUATIONS: int = 2
@@ -32,7 +44,7 @@ class Settings(BaseSettings):
     USE_VERTEX_REST: bool = True
 
     # App Settings
-    PORT: int = 8080
+    PORT: int = DEFAULT_PORT
     LOG_LEVEL: str = "INFO"
     DEBUG_MODE: bool = False
     ALLOWED_ORIGINS: List[str] = []
@@ -57,8 +69,8 @@ class Settings(BaseSettings):
 
     # Memory and Session configuration
     MEMORY_ENABLED: bool = True
-    MEMORY_MAX_TURNS: int = 8
-    MEMORY_TTL_SECONDS: int = 3600
+    MEMORY_MAX_TURNS: int = DEFAULT_MAX_TURNS
+    MEMORY_TTL_SECONDS: int = DEFAULT_MEMORY_TTL
     MEMORY_BACKEND: str = "memory"  # memory or redis
     MEMORY_PERSIST_PATH: Optional[str] = None
     REDIS_URL: Optional[str] = None
@@ -108,7 +120,7 @@ class Settings(BaseSettings):
         if not v:
             if os.getenv("K_SERVICE"):
                 raise ValueError("APP_ENV must be set to one of local, staging, or prod in Cloud Run.")
-            return "local"
+            return DEFAULT_APP_ENV
         env = str(v).strip().lower()
         allowed = {"local", "staging", "prod"}
         if env not in allowed:
@@ -119,14 +131,14 @@ class Settings(BaseSettings):
     def redis_key_prefix(self) -> str:
         if self.REDIS_PREFIX:
             return self.REDIS_PREFIX
-        return f"aims:{self.APP_ENV}:session:"
+        return f"{PREFIX_AIMS}:{self.APP_ENV}:{PREFIX_SESSION}:"
 
     @property
     def redis_fallback_prefixes(self) -> List[str]:
         if self.REDIS_PREFIX:
             return []
         if self.APP_ENV == "prod":
-            return ["aims:session:"]
+            return [f"{PREFIX_AIMS}:{PREFIX_SESSION}:"]
         return []
 
     @property
