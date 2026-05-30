@@ -128,13 +128,38 @@
 }
 
 /* Keep Chainlit's message action buttons, including copy-to-clipboard, neutral. */
-.ai-message [class*="items-center"] > button {
+.ai-message [class*="items-center"] > button,
+.aims-injected-actions > button {
   background-color: transparent !important;
   border: none !important;
   color: hsl(var(--muted-foreground)) !important;
 }
 
-.ai-message [class*="items-center"] > button:hover {
+.aims-injected-actions {
+  margin-top: 4px !important;
+  width: 100% !important;
+  flex-basis: 100% !important;
+}
+
+[data-author="Doctor"] .aims-injected-actions {
+  display: flex !important;
+  justify-content: flex-end !important;
+  padding-right: 28px !important; /* Align with bubble which has avatar space */
+  width: 100% !important;
+}
+
+/* Hide feedback buttons (thumbs up/down) but keep copy button.
+   Chainlit uses .positive-feedback and .negative-feedback classes for these.
+   Updated to handle variations like positive-feedback-off. */
+.positive-feedback,
+.negative-feedback,
+[class*="positive-feedback"],
+[class*="negative-feedback"] {
+  display: none !important;
+}
+
+.ai-message [class*="items-center"] > button:hover,
+.aims-injected-actions > button:hover {
   background-color: hsl(var(--accent)) !important;
   color: hsl(var(--accent-foreground)) !important;
 }

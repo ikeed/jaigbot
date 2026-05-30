@@ -24,6 +24,9 @@
     if (step) {
       step.setAttribute("data-author", author);
       step.classList.add("aims-message-row");
+      if (author === "Coach" || author === "System") {
+        injectCopyButton(step);
+      }
     }
 
     var content = message.querySelector(".message-content");
@@ -41,7 +44,12 @@
     bubble.classList.add("aims-message-bubble");
 
     var row = bubble.parentElement;
-    if (!row || row.querySelector(".aims-doctor-avatar")) return;
+    if (!row || row.querySelector(".aims-doctor-avatar")) {
+      if (row && !row.querySelector(".aims-copy-button")) {
+        injectCopyButton(step);
+      }
+      return;
+    }
 
     var avatarBase = window.location.pathname.indexOf("/chat") === 0 ? "/chat" : "";
     var avatar = document.createElement("span");
@@ -49,6 +57,59 @@
     avatar.setAttribute("data-state", "closed");
     avatar.innerHTML = '<img alt="Avatar for Doctor" src="' + avatarBase + '/avatars/Doctor" />';
     row.appendChild(avatar);
+
+    injectCopyButton(step);
+  }
+
+  function injectCopyButton(step) {
+    var author = step.getAttribute("data-author");
+    if (!author) return;
+
+    var content = step.querySelector(".message-content");
+    if (!content) return;
+
+    // Check if copy button already exists (either Chainlit's or ours)
+    if (step.querySelector(".aims-copy-button") || (author === "Assistant" && step.querySelector(".lucide-copy"))) return;
+
+    var container = content.parentElement;
+    if (author === "Doctor") {
+      // For Doctor messages, the .message-content is wrapped in a bubble div.
+      // We want to append the action row below the flex row containing bubble + avatar.
+      var bubble = content.closest(".aims-message-bubble");
+      if (bubble && bubble.parentElement) {
+        container = bubble.parentElement.parentElement;
+      }
+    }
+    if (!container) return;
+
+    var actionRow = step.querySelector(".flex.items-center.flex-wrap");
+    if (!actionRow) {
+      actionRow = document.createElement("div");
+      actionRow.className = "-ml-1.5 flex items-center flex-wrap aims-injected-actions";
+      container.appendChild(actionRow);
+    }
+
+    var copyBtn = document.createElement("button");
+    copyBtn.className = app.chainlitIconButtonClass + " aims-copy-button";
+    copyBtn.setAttribute("data-state", "closed");
+    copyBtn.setAttribute("title", "Copy to clipboard");
+    copyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy h-4 w-4" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>';
+    
+    copyBtn.addEventListener("click", function(e) {
+      app.prevent(e);
+      var text = content.innerText || "";
+      if (text) {
+        navigator.clipboard.writeText(text).then(function() {
+          var originalHtml = copyBtn.innerHTML;
+          copyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check h-4 w-4" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+          setTimeout(function() {
+            copyBtn.innerHTML = originalHtml;
+          }, 2000);
+        });
+      }
+    });
+
+    actionRow.appendChild(copyBtn);
   }
 
   function injectDataAuthors() {
