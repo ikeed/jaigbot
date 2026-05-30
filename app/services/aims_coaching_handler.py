@@ -55,6 +55,7 @@ from app.telemetry.events import (
     log_event as telemetry_log_event, 
     truncate_for_log as telemetry_truncate
 )
+from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, ROLE_COACH
 from app.vertex import VertexClient
 from app.json_schemas import (
     REPLY_SCHEMA, 
@@ -380,7 +381,7 @@ class AimsCoachingHandler:
                 coach_text = " | ".join(parts)
                 if coach_text:
                     now = time.time()
-                    coach_entry = {"role": "coach", "content": coach_text}
+                    coach_entry = {"role": ROLE_COACH, "content": coach_text}
                     mem.setdefault("history", []).append(coach_entry)
                     
                     # Store structured data in full_history for logical archive schema
@@ -1033,7 +1034,7 @@ class AimsCoachingHandler:
 
         try:
             now = time.time()
-            user_entry = {"role": "user", "content": user_message}
+            user_entry = {"role": ROLE_USER, "content": user_message}
             mem.setdefault("history", []).append(user_entry)
             mem.setdefault("full_history", []).append({**user_entry, "time": now})
             mem["updated"] = now
@@ -1047,7 +1048,7 @@ class AimsCoachingHandler:
 
         try:
             now = time.time()
-            asst_entry = {"role": "assistant", "content": assistant_reply}
+            asst_entry = {"role": ROLE_ASSISTANT, "content": assistant_reply}
             mem.setdefault("history", []).append(asst_entry)
             mem.setdefault("full_history", []).append({**asst_entry, "time": now})
             mem["updated"] = now
@@ -1106,7 +1107,7 @@ class AimsCoachingHandler:
             if phase == "PreAnnounce":
                 return None
 
-            assistant_count = sum(1 for it in hist if it.get("role") == "assistant" and (it.get("content") or "").strip())
+            assistant_count = sum(1 for it in hist if it.get("role") == ROLE_ASSISTANT and (it.get("content") or "").strip())
             if not announced and assistant_count <= 1:
                 return None
 
@@ -1123,14 +1124,14 @@ class AimsCoachingHandler:
             history_text = "\n".join([
                 f"{'Clinician' if m.get('role') == 'user' else 'Person'}: {m.get('content')}"
                 for m in hist[-10:]
-                if m.get("role") in ("user", "assistant")
+                if m.get("role") in (ROLE_USER, ROLE_ASSISTANT)
             ])
 
             # Pre-compute recent person replies for heuristic fallback and dual-consent gate
             combined_reply_text = " ".join(
                 m.get("content", "")
                 for m in reversed(hist[-6:])
-                if m.get("role") == "assistant" and (m.get("content") or "").strip()
+                if m.get("role") == ROLE_ASSISTANT and (m.get("content") or "").strip()
             )[:500]
 
             # Extract concern states

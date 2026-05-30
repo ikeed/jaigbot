@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, ROLE_COACH, AUTHOR_DOCTOR, AUTHOR_ASSISTANT
 import re
 from typing import Any
 
@@ -148,8 +149,8 @@ def _build_transcript(mem: dict) -> str:
     try:
         parts = []
         for item in mem.get("history") or []:
-            role = item.get("role") or "assistant"
-            author = "Doctor" if role == "user" else "Patient"
+            role = item.get("role") or ROLE_ASSISTANT
+            author = AUTHOR_DOCTOR if role == ROLE_USER else "Patient"
             text = (item.get("content") or "").strip()
             if text:
                 parts.append(f"{author}: {text}")
