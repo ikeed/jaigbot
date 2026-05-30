@@ -1,5 +1,5 @@
 from typing import List, Optional
-
+from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, ROLE_COACH, AUTHOR_DOCTOR, AUTHOR_ASSISTANT
 from app.services.persona_service import load_robust_persona
 
 
@@ -28,9 +28,9 @@ def format_history(turns: list[dict], memory_max_turns: int) -> str:
     for t in turns[-(memory_max_turns * 2) :]:  # user+assistant pairs
         role = t.get("role")
         content = t.get("content") or ""
-        if role == "user":
+        if role == ROLE_USER:
             lines.append(f"User: {content}")
-        elif role == "assistant":
+        elif role == ROLE_ASSISTANT:
             lines.append(f"Assistant: {content}")
     return "\n".join(lines)
 
@@ -49,9 +49,9 @@ def recent_context(turns: list[dict], n_turns: int) -> str:
         content = (t.get("content") or "").strip()
         if not content:
             continue
-        if role == "user":
+        if role == ROLE_USER:
             lines.append(f"Clinician: {content}")
-        elif role == "assistant":
+        elif role == ROLE_ASSISTANT:
             lines.append(f"Person: {content}")
     return "\n".join(lines)
 
@@ -102,7 +102,7 @@ def extract_recent_concerns(turns: list[dict], max_items: int = 3) -> list[str]:
     ]
     items: list[str] = []
     for t in reversed(turns or []):
-        if t.get("role") == "assistant":  # parent persona in this app
+        if t.get("role") == ROLE_ASSISTANT:  # parent persona in this app
             txt = (t.get("content") or "")
             lt = txt.lower()
             if any(v in lt for v in vax_cues) and any(c in lt for c in concern_cues):

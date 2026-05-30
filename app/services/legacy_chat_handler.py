@@ -12,6 +12,7 @@ Behavior-preserving extraction from the else/fallback path in app.main.chat().
 from __future__ import annotations
 
 import time
+from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, ROLE_COACH
 from typing import Any, Dict
 
 from fastapi import Request
@@ -174,8 +175,8 @@ class LegacyChatHandler:
             mem = self.memory_store.get(session_id) or {
                 "history": [], "full_history": [], "character": None, "scene": None, "updated": now
             }
-            user_entry = {"role": "user", "content": user_message}
-            asst_entry = {"role": "assistant", "content": assistant_reply}
+            user_entry = {"role": ROLE_USER, "content": user_message}
+            asst_entry = {"role": ROLE_ASSISTANT, "content": assistant_reply}
             mem.setdefault("history", []).append(user_entry)
             mem["history"].append(asst_entry)
             mem.setdefault("full_history", []).append({**user_entry, "time": now})
