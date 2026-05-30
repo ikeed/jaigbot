@@ -44,7 +44,12 @@
     bubble.classList.add("aims-message-bubble");
 
     var row = bubble.parentElement;
-    if (!row || row.querySelector(".aims-doctor-avatar")) return;
+    if (!row || row.querySelector(".aims-doctor-avatar")) {
+      if (row && !row.querySelector(".aims-copy-button")) {
+        injectCopyButton(step);
+      }
+      return;
+    }
 
     var avatarBase = window.location.pathname.indexOf("/chat") === 0 ? "/chat" : "";
     var avatar = document.createElement("span");
@@ -52,6 +57,8 @@
     avatar.setAttribute("data-state", "closed");
     avatar.innerHTML = '<img alt="Avatar for Doctor" src="' + avatarBase + '/avatars/Doctor" />';
     row.appendChild(avatar);
+
+    injectCopyButton(step);
   }
 
   function injectCopyButton(step) {
@@ -65,6 +72,14 @@
     if (step.querySelector(".aims-copy-button") || (author === "Assistant" && step.querySelector(".lucide-copy"))) return;
 
     var container = content.parentElement;
+    if (author === "Doctor") {
+      // For Doctor messages, the .message-content is wrapped in a bubble div.
+      // We want to append the action row below the flex row containing bubble + avatar.
+      var bubble = content.closest(".aims-message-bubble");
+      if (bubble && bubble.parentElement) {
+        container = bubble.parentElement.parentElement;
+      }
+    }
     if (!container) return;
 
     var actionRow = step.querySelector(".flex.items-center.flex-wrap");
