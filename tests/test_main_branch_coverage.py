@@ -426,12 +426,16 @@ class TestMainBranches:
         # The startup function should set the model check to disabled
         import asyncio
         from app.main import _model_preflight
+        original_state = app.state
         
         async def test_preflight():
-            app.state = mock_state
-            await _model_preflight(app)
-            assert app.state.model_check["available"] == "unknown"
-            assert app.state.model_check["reason"] == "disabled_by_env"
+            try:
+                app.state = mock_state
+                await _model_preflight(app)
+                assert app.state.model_check["available"] == "unknown"
+                assert app.state.model_check["reason"] == "disabled_by_env"
+            finally:
+                app.state = original_state
         
         asyncio.run(test_preflight())
 
