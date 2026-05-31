@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import Any, Optional, Tuple
 import time
 import uuid
+from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, ROLE_COACH
 
 
 @dataclass(frozen=True)
@@ -114,7 +115,7 @@ class SessionService:
         that window.
         """
         # Count only dialogue (non-coach) entries
-        dialogue_count = sum(1 for m in history if m.get("role") in ("user", "assistant"))
+        dialogue_count = sum(1 for m in history if m.get("role") in (ROLE_USER, ROLE_ASSISTANT))
         max_dialogue = max_turns * 2
         if dialogue_count <= max_dialogue:
             return history
@@ -124,7 +125,7 @@ class SessionService:
         kept: list = []
         seen_dialogue = 0
         for entry in reversed(history):
-            if entry.get("role") in ("user", "assistant"):
+            if entry.get("role") in (ROLE_USER, ROLE_ASSISTANT):
                 if seen_dialogue >= max_dialogue:
                     break
                 seen_dialogue += 1
