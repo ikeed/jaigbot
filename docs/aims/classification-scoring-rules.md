@@ -1,6 +1,6 @@
 # AIMS Classification, Scoring, and Endgame Rules
 
-This document is the canonical reference for how the JaigBot system classifies, scores, and
+This document is the canonical reference for how the AIMSBot system classifies, scores, and
 coaches each clinician turn in an AIMS vaccine counselling session.  It reflects the current
 implementation; all prompt text, deterministic overrides, and phase-state logic described here
 are authoritative.
