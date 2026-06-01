@@ -29,10 +29,10 @@ async def custom_login_page(request: Request):
     providers = get_enabled_oauth_providers()
     auth_secret_set = is_valid_env_val(settings.CHAINLIT_AUTH_SECRET)
     return templates.TemplateResponse(
-        TEMPLATE_LOGIN, 
-        {
-            "request": request, 
-            "providers": providers, 
+        name=TEMPLATE_LOGIN,
+        request=request,
+        context={
+            "providers": providers,
             "auth_secret_set": auth_secret_set
         }
     )
@@ -40,7 +40,10 @@ async def custom_login_page(request: Request):
 @router.get(ROUTE_DUPLICATE, response_class=HTMLResponse)
 async def duplicate_tab_page(request: Request):
     """Render the duplicate tab warning page."""
-    return templates.TemplateResponse(TEMPLATE_DUPLICATE, {"request": request})
+    return templates.TemplateResponse(
+        name=TEMPLATE_DUPLICATE,
+        request=request
+    )
 
 @router.get(ROUTE_CHAT_LOGIN, response_class=RedirectResponse)
 async def redirect_chainlit_login_to_root():
