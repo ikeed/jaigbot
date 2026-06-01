@@ -1,5 +1,5 @@
 # Minimal container for FastAPI and Chainlit apps running on Cloud Run
-FROM python:3.11-slim-bookworm
+FROM python:3.13-slim-bookworm
 
 # Prevent Python from writing pyc files and enable unbuffered output
 ENV PYTHONDONTWRITEBYTECODE=1 \
