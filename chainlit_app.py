@@ -42,34 +42,33 @@ from app.constants import (
     PROVIDER_FACEBOOK,
     PROVIDER_APPLE,
     PROVIDER_GITHUB,
-    PROVIDER_AZURE_AD, SESSION_INTRO_SEEN
+    PROVIDER_AZURE_AD,
+    SESSION_INTRO_SEEN,
+    ENDPOINT_HISTORY,
+    ENDPOINT_SESSION,
+    ENDPOINT_DEREGISTER,
+    ENDPOINT_REPORT,
+    ENDPOINT_HEALTHZ,
+    ENDPOINT_CONFIG,
+    ENDPOINT_MODELCHECK,
+    SESSION_CHARACTER,
+    SESSION_SCENE,
+    SESSION_SESSION_ENDED,
+    SESSION_INTRO_PENDING,
+    SESSION_CONNECTION_ID,
+    SESSION_QUERY_PARAMS,
+    MSG_INTRO_REQUIRED,
+    MSG_DUPLICATE_TAB,
+    MSG_LOGOUT,
+    MSG_REPORT_ISSUE,
+    MSG_NEW_CHAT,
+    MSG_INTRO_CONTINUE
 )
 
 
-# Session Keys
-SESSION_CHARACTER = "character"
-SESSION_SCENE = "scene"
-SESSION_SESSION_ENDED = "session_ended"
-SESSION_INTRO_PENDING = "aims_intro_pending"
-SESSION_CONNECTION_ID = "connection_id"
-SESSION_QUERY_PARAMS = "query_params"
+# Session and Message Constants (now imported from app.constants)
 
-# Window Message Types
-MSG_INTRO_REQUIRED = "aims_intro_required"
-MSG_DUPLICATE_TAB = "on_duplicate_tab"
-MSG_LOGOUT = "on_logout"
-MSG_REPORT_ISSUE = "report_issue"
-MSG_NEW_CHAT = "new_chat"
-MSG_INTRO_CONTINUE = "aims_intro_continue"
-
-# Backend Endpoints
-ENDPOINT_HISTORY = "/history"
-ENDPOINT_SESSION = "/session"
-ENDPOINT_DEREGISTER = "/session/deregister"
-ENDPOINT_REPORT = "/report"
-ENDPOINT_HEALTHZ = "/healthz"
-ENDPOINT_CONFIG = "/config"
-ENDPOINT_MODELCHECK = "/modelcheck"
+# Backend Endpoints (now imported from app.constants)
 
 
 def _get_base_url() -> str:

@@ -102,8 +102,8 @@ def test_coach_entries_excluded_from_history_text():
     assert "Detected step" not in ht, "Coach content should not appear in history_text"
 
 
-def test_assistant_role_labelled_person_not_parent():
-    """The assistant role must be labelled 'Person:' in the transcript, never 'Parent:'."""
+def test_assistant_role_labelled_assistant_not_parent():
+    """The assistant role must be labelled 'Assistant:' in the transcript, never 'Parent:'."""
     mock_svc = _MockClassifierService(
         {"is_endgame": False, "resolution_type": "not_resolved", "summary": "", "reason": ""}
     )
@@ -120,12 +120,12 @@ def test_assistant_role_labelled_person_not_parent():
     _run(handler._check_end_game(store["s2"], {"patient_reply": ""}, None))
 
     ht = mock_svc.last_history_text
-    assert "Person:" in ht, "Assistant role should be labelled 'Person:'"
+    assert "Assistant:" in ht, "Assistant role should be labelled 'Assistant:'"
     assert "Parent:" not in ht, "Assistant role must not be labelled 'Parent:'"
 
 
-def test_clinician_role_labelled_correctly():
-    """The user role must be labelled 'Clinician:' in the transcript."""
+def test_doctor_role_labelled_correctly():
+    """The user role must be labelled 'Doctor:' in the transcript."""
     mock_svc = _MockClassifierService(
         {"is_endgame": False, "resolution_type": "not_resolved", "summary": "", "reason": ""}
     )
@@ -142,7 +142,7 @@ def test_clinician_role_labelled_correctly():
     _run(handler._check_end_game(store["s3"], {"patient_reply": ""}, None))
 
     ht = mock_svc.last_history_text
-    assert "Clinician:" in ht
+    assert "Doctor:" in ht
 
 
 # ---------------------------------------------------------------------------
