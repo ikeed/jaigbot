@@ -26,7 +26,7 @@ def test_summary_with_memory_without_analysis(monkeypatch):
 
     sess = "sess-1"
     # Minimal aims memory with per-step counts and scores to compute averages
-    m._MEMORY_STORE[sess] = {
+    m.MEMORY_STORE[sess] = {
         "history": [
             {"role": "user", "content": "hi"},
             {"role": "assistant", "content": "hello"},
@@ -64,7 +64,7 @@ def test_summary_with_analysis_monkeypatched_llm(monkeypatch):
     monkeypatch.setattr(settings, "PROJECT_ID", "proj")
 
     sess = "sess-2"
-    m._MEMORY_STORE[sess] = {
+    m.MEMORY_STORE[sess] = {
         "history": [
             {"role": "user", "content": "hello"},
             {"role": "assistant", "content": "hi there"},

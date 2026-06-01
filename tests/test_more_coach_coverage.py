@@ -80,7 +80,7 @@ def test_secure_before_mirror_adds_reason_tip_and_caps_score(monkeypatch):
     c = TestClient(m.app)
     sess = "secure-pre-mirror"
     # Seed state with an unmirrored concern
-    m._MEMORY_STORE[sess] = {
+    m.MEMORY_STORE[sess] = {
         "history": [{"role": "assistant", "content": "I'm worried about side effects of vaccines"}],
         "aims_state": {
             "announced": True,
@@ -125,8 +125,8 @@ def test_topic_mirroring_and_securing_state_updates(monkeypatch):
     assert r1b.status_code == 200
 
     # Verify that the concern is now seeded
-    assert sess in m._MEMORY_STORE
-    assert m._MEMORY_STORE[sess]["aims_state"]["parent_concerns"], "Turn 1b should have seeded parent_concerns from Turn 1's reply"
+    assert sess in m.MEMORY_STORE
+    assert m.MEMORY_STORE[sess]["aims_state"]["parent_concerns"], "Turn 1b should have seeded parent_concerns from Turn 1's reply"
     
     # Turn 3: Mirror via clinician topic mention
     GWStub.classify_payload = {"step": "Mirror", "score": 3, "reasons": ["llm"], "tips": []}
@@ -140,7 +140,7 @@ def test_topic_mirroring_and_securing_state_updates(monkeypatch):
     GWStub.reply_json_payload = {"patient_reply": "ok"}
     r3 = c.post("/chat", json={"message": "For side effects, here is what to expect.", "coach": True, "sessionId": sess})
     assert r3.status_code == 200
-    state = m._MEMORY_STORE[sess]["aims_state"]
+    state = m.MEMORY_STORE[sess]["aims_state"]
     assert state["parent_concerns"], "concerns should exist"
     # Ensure concern is mirrored and secured
     assert any(c.get("is_mirrored") for c in state["parent_concerns"]) is True

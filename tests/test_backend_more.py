@@ -95,14 +95,14 @@ def test_session_cookie_and_memory_persistence(monkeypatch):
     assert sess
 
     # Verify memory has been created and has one user+assistant turn (2 entries)
-    mem = m._MEMORY_STORE.get(sess)
+    mem = m.MEMORY_STORE.get(sess)
     assert mem is not None
     assert len(mem.get("history", [])) == 2
 
     # Second call: rely on cookie only, memory should append and history grows to 4
     r2 = client.post("/chat", json={"message": "again"})
     assert r2.status_code == 200
-    mem2 = m._MEMORY_STORE.get(sess)
+    mem2 = m.MEMORY_STORE.get(sess)
     assert mem2 is not None
     assert len(mem2.get("history", [])) == 4
 
