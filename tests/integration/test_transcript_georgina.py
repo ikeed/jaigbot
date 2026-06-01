@@ -296,7 +296,7 @@ def setup_env(monkeypatch):
 
 def _seed_session():
     """Seed memory store with pre-Turn-1 state matching the transcript's prior context."""
-    m._MEMORY_STORE[SESSION_ID] = {
+    m.MEMORY_STORE[SESSION_ID] = {
         "history": [
             # The parent's message immediately before the visible transcript
             {"role": "assistant", "content": INITIAL_PARENT_MSG},
@@ -423,7 +423,7 @@ class TestGeorginaTranscript:
         )
 
         # ---- Verify final AIMS state ----
-        state = m._MEMORY_STORE[SESSION_ID]["aims_state"]
+        state = m.MEMORY_STORE[SESSION_ID]["aims_state"]
 
         # All pre-existing concerns should now be mirrored
         trust_concerns = [c for c in state["parent_concerns"] if c["topic"] == "trust"]
@@ -444,7 +444,7 @@ class TestGeorginaTranscript:
         assert state["phase"] != "PreAnnounce"
 
         # ---- Verify session metrics ----
-        aims = m._MEMORY_STORE[SESSION_ID]["aims"]
+        aims = m.MEMORY_STORE[SESSION_ID]["aims"]
         assert aims["perStepCounts"]["Mirror"] >= 3, (
             f"Mirror count should be >= 3, got {aims['perStepCounts']['Mirror']}"
         )
@@ -470,7 +470,7 @@ class TestGeorginaTranscript:
         for msg in CLINICIAN_TURNS:
             _post_turn(client, msg)
 
-        state = m._MEMORY_STORE[SESSION_ID]["aims_state"]
+        state = m.MEMORY_STORE[SESSION_ID]["aims_state"]
         concerns = state.get("parent_concerns", [])
         has_unmirrored = any(not c.get("is_mirrored") for c in concerns)
         assert not has_unmirrored, (
@@ -487,7 +487,7 @@ class TestGeorginaTranscript:
         for msg in CLINICIAN_TURNS:
             _post_turn(client, msg)
 
-        history = m._MEMORY_STORE[SESSION_ID].get("history", [])
+        history = m.MEMORY_STORE[SESSION_ID].get("history", [])
         coach_notes = [h["content"] for h in history if h.get("role") == "coach"]
 
         # Should have a coach note for each of the 5 turns

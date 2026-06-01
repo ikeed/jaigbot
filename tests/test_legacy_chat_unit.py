@@ -27,7 +27,7 @@ def test_build_prompt_text_with_history_uses_conversation_prefix():
     }
     text = LegacyPromptBuilder.build_prompt_text(mem, 8, "What's up?")
     assert text.startswith("Conversation so far:\n")
-    assert "User: What's up?\nAssistant:" in text
+    assert "Doctor: What's up?\nAssistant:" in text
 
 
 def test_build_prompt_text_without_history_is_message_only():

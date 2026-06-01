@@ -44,7 +44,7 @@ def test_format_history_limits_turns():
     # With memory_max_turns=2 we should only see last 4 turns (2 pairs)
     formatted = format_history(turns, memory_max_turns=2)
     lines = formatted.split("\n")
-    assert lines == ["User: U4", "Assistant: A4", "User: U5", "Assistant: A5"]
+    assert lines == ["Doctor: U4", "Assistant: A4", "Doctor: U5", "Assistant: A5"]
 
 
 def test_recent_context_labels_and_empty():
@@ -59,9 +59,9 @@ def test_recent_context_labels_and_empty():
     out = recent_context(turns, 3)
     # last 3 items
     assert out.split("\n") == [
-        "Person: Hi doctor",
-        "Clinician: How are you?",
-        "Person: Worried about shots",
+        "Assistant: Hi doctor",
+        "Doctor: How are you?",
+        "Assistant: Worried about shots",
         ]
 
 

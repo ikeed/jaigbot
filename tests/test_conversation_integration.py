@@ -108,10 +108,10 @@ def test_whole_conversation_multi_turns(monkeypatch):
         # prefix with the immediately previous user + assistant turns.
         last_prompt = prompts[-1]
         if i > 1:  # Only check history for turns after the second one
-            assert "User: hi there" in last_prompt
+            assert "Doctor: hi there" in last_prompt
             assert "Assistant: reply1" in last_prompt
         # The immediately previous user turn must be present
-        assert f"User: {turns[i-1]}" in last_prompt
+        assert f"Doctor: {turns[i-1]}" in last_prompt
         # The immediately previous assistant reply must be present
         assert f"Assistant: reply{i}" in last_prompt
 

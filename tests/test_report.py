@@ -14,8 +14,8 @@ def test_report_endpoint_success(monkeypatch):
     user_info = {"identifier": "test@example.com"}
     
     # Mock memory store and session service
-    from app.main import _MEMORY_STORE
-    _MEMORY_STORE[session_id] = {
+    from app.main import MEMORY_STORE
+    MEMORY_STORE[session_id] = {
         "history": [{"role": "user", "content": "hello"}],
         "user_info": user_info,
         "updated": 123456789
@@ -48,7 +48,7 @@ def test_report_endpoint_success(monkeypatch):
         assert args[2]["game_over"] is True
         
         # Verify session cleared from memory
-        assert session_id not in _MEMORY_STORE
+        assert session_id not in MEMORY_STORE
 
 def test_report_endpoint_no_session(monkeypatch):
     # Even without prior session data, a report-only archive should be created
@@ -78,8 +78,8 @@ def test_report_endpoint_from_gcs():
     reason = "Report from GCS"
     
     # Ensure not in memory
-    from app.main import _MEMORY_STORE
-    _MEMORY_STORE.pop(session_id, None)
+    from app.main import MEMORY_STORE
+    MEMORY_STORE.pop(session_id, None)
     
     # Mock storage
     with patch("app.services.storage_service.StorageService.download_session") as mock_down:

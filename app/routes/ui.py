@@ -8,11 +8,14 @@ from app.security.oauth import get_enabled_oauth_providers, is_valid_env_val
 from app.constants import (
     TEMPLATE_LOGIN,
     TEMPLATE_DUPLICATE,
+    ROUTE_ROOT,
     ROUTE_LOGIN,
     ROUTE_LOGOUT,
     ROUTE_DUPLICATE,
     ROUTE_CHAT_LOGIN,
-    ROUTE_CHAT_LOGOUT
+    ROUTE_CHAT_LOGOUT,
+    ROUTE_OAUTH_CALLBACK,
+    PATH_CHAT
 )
 
 import os
@@ -23,7 +26,7 @@ router = APIRouter()
 BASE_DIR = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
-@router.get("/", response_class=HTMLResponse)
+@router.get(ROUTE_ROOT, response_class=HTMLResponse)
 async def custom_login_page(request: Request):
     """Render the custom SSO landing page."""
     providers = get_enabled_oauth_providers()
@@ -48,15 +51,15 @@ async def duplicate_tab_page(request: Request):
 @router.get(ROUTE_CHAT_LOGIN, response_class=RedirectResponse)
 async def redirect_chainlit_login_to_root():
     """Redirect Chainlit's default login to our root landing page."""
-    return RedirectResponse(url="/")
+    return RedirectResponse(url=ROUTE_ROOT)
 
-@router.get("/auth/oauth/{provider}/callback", response_class=RedirectResponse)
+@router.get(ROUTE_OAUTH_CALLBACK, response_class=RedirectResponse)
 async def oauth_callback_redirect(provider: str, request: Request):
     """
     Handle OAuth callbacks at the root level and redirect to the mounted /chat path.
     This provides backward compatibility for OAuth configurations using root-based callbacks.
     """
-    target_url = f"/chat/auth/oauth/{provider}/callback"
+    target_url = f"{PATH_CHAT}{ROUTE_OAUTH_CALLBACK.format(provider=provider)}"
     if request.query_params:
         target_url += f"?{request.query_params}"
     return RedirectResponse(url=target_url)
@@ -67,7 +70,7 @@ async def unified_logout(request: Request):
     Handle logout at the FastAPI layer so both GET and POST logout flows clear
     the auth cookie and return the browser to the SSO page.
     """
-    response = RedirectResponse(url="/", status_code=303)
+    response = RedirectResponse(url=ROUTE_ROOT, status_code=303)
     clear_auth_cookie(request, response)
 
     user_id = authenticated_user_identifier(request)

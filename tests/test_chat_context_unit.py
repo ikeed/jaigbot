@@ -1,5 +1,3 @@
-from dataclasses import dataclass
-
 from app.services.chat_context import ChatContextBuilder
 
 
@@ -63,9 +61,9 @@ def test_chat_context_builder_composes_instruction_and_history():
 
     # History text includes recent turns labeled correctly
     ht = ctx.history_text
-    assert "User: hi" in ht
+    assert "Doctor: hi" in ht
     assert "Assistant: hello" in ht
-    assert "User: how are you?" in ht
+    assert "Doctor: how are you?" in ht
 
     # person_last should be the last assistant message from memory
     assert ctx.person_last == "hello"

@@ -55,7 +55,7 @@ from app.telemetry.events import (
     log_event as telemetry_log_event, 
     truncate_for_log as telemetry_truncate
 )
-from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, ROLE_COACH
+from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, ROLE_COACH, get_ui_attributes
 from app.vertex import VertexClient
 from app.json_schemas import (
     REPLY_SCHEMA, 
@@ -1120,9 +1120,9 @@ class AimsCoachingHandler:
                 return None
 
             # 2. Extract context for LLM
-            # Filter out coach entries so only dialogue reaches the model; label assistant role as "Person"
+            # Filter out coach entries so only dialogue reaches the model
             history_text = "\n".join([
-                f"{'Clinician' if m.get('role') == 'user' else 'Person'}: {m.get('content')}"
+                f"{get_ui_attributes(m.get('role'))['author']}: {m.get('content')}"
                 for m in hist[-10:]
                 if m.get("role") in (ROLE_USER, ROLE_ASSISTANT)
             ])

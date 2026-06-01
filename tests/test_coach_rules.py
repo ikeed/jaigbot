@@ -75,7 +75,7 @@ def test_tip_suppression_when_all_concerns_mirrored(monkeypatch):
     c = TestClient(m.app)
     sess = "tip-sess"
     # Preload state: no unmirrored concerns remain
-    m._MEMORY_STORE[sess] = {
+    m.MEMORY_STORE[sess] = {
         "history": [{"role": "assistant", "content": "I'm worried about side effects of vaccines"}],
         "aims_state": {
             "announced": True,
@@ -100,7 +100,7 @@ def test_announce_after_inquiry_gets_reason_and_score_capped(monkeypatch):
     setup_env(monkeypatch)
     c = TestClient(m.app)
     sess = "ann-after-inq"
-    m._MEMORY_STORE[sess] = {
+    m.MEMORY_STORE[sess] = {
         "history": [{"role": "assistant", "content": "I'm worried about side effects of vaccines"}],
         "aims_state": {
             "announced": False,
