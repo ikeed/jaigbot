@@ -1,20 +1,9 @@
 import os
-from dotenv import load_dotenv
+from app.utils.env import load_and_sanitize_env
 
-# Load environment variables early (especially for OAuth detection)
-from dotenv import find_dotenv
-env_path = find_dotenv()
-
-if env_path:
-    print(f"DEBUG: Found .env file at {env_path}")
-    # Use override=True so that .env values take precedence over 
-    # placeholder values in PyCharm run configurations.
-    load_dotenv(env_path, override=True)
-else:
-    # Only print if we are not in a container (Cloud Run sets K_SERVICE)
-    if not os.getenv("K_SERVICE"):
-        print("DEBUG: No .env file found by python-dotenv")
-    load_dotenv()
+# 1. Load and sanitize environment variables at the absolute top!
+# This must happen before any other imports that might read os.environ (like chainlit or app.config)
+load_and_sanitize_env()
 
 import asyncio
 import uuid
@@ -50,6 +39,25 @@ from app.persona import DEFAULT_CHARACTER, DEFAULT_SCENE
 
 
 from app.config import settings
+from app.utils.env import is_valid_env_val
+from app.security.auth import clear_persistent_session_id
+from app.constants import (
+    ENV_BACKEND_URL,
+    ENV_CHAINLIT_AUTH_SECRET,
+    PATH_API,
+    PATH_CHAT,
+    DIR_CHAINLIT,
+    FILE_SESSION_ID,
+    SESSION_USER,
+    SESSION_ID,
+    SESSION_HISTORY,
+    OAUTH_PLACEHOLDERS,
+    PROVIDER_GOOGLE,
+    PROVIDER_FACEBOOK,
+    PROVIDER_APPLE,
+    PROVIDER_GITHUB,
+    PROVIDER_AZURE_AD
+)
 
 
 @cl.data_layer
@@ -67,11 +75,11 @@ def get_backend_url() -> str:
     # Fallback/Heuristic: if we are running in run_app.py (unified process), 
     # it might need to point to /api/chat.
     # We check if BACKEND_URL was set in environment since settings might be stale.
-    env_url = os.getenv("BACKEND_URL")
+    env_url = os.getenv(ENV_BACKEND_URL)
     if env_url:
         return env_url
         
-    return "http://localhost:8080/chat"
+    return f"http://localhost:8080{PATH_CHAT}"
 
 # We'll use a property-like approach or just update the usages.
 # Given the many usages, let's keep the module-level constant but make it a function-based resolve if possible,
@@ -243,19 +251,8 @@ def _format_coach_message(text: str) -> str:
 
 
 def _clear_persistent_session_id(user_identifier: str | None = None) -> None:
-    """Remove legacy user-level session pointers from older local builds."""
-    clear_current_thread_id(user_identifier)
-    store_dir = Path(".chainlit")
-    filenames = ["session_id"]
-    if user_identifier:
-        safe_id = "".join([c if c.isalnum() else "_" for c in user_identifier])
-        filenames.insert(0, f"session_id_{safe_id}")
-
-    for filename in filenames:
-        try:
-            (store_dir / filename).unlink(missing_ok=True)
-        except Exception:
-            pass
+    """Backward-compatible wrapper for shared session clearing logic."""
+    clear_persistent_session_id(user_identifier)
 
 
 # Chat profile: shown as a splash/loading screen while on_chat_start runs.
@@ -664,13 +661,7 @@ async def _start_scenario_flow():
         pass
     return True
 
-# Helper to check if an environment variable has a valid (non-empty, non-placeholder) value
-def is_valid_env_val(val: str | None) -> bool:
-    if not val:
-        return False
-    # If it's a known placeholder, treat it as unset
-    placeholders = ["REPLACE_WITH", "your-auth-secret", "your-id"]
-    return not any(p in val for p in placeholders)
+# is_valid_env_val is now imported from app.utils.env
 
 # Only enable OAuth if at least one provider is configured.
 # We check for any OAUTH_*_CLIENT_ID environment variable to be more robust.
@@ -704,11 +695,6 @@ else:
 has_auth_secret = is_valid_env_val(settings.CHAINLIT_AUTH_SECRET)
 
 if is_oauth_enabled or has_auth_secret or settings.ENABLE_PASSWORD_AUTH:
-    # Ensure a secret exists if any auth is needed, otherwise Chainlit stays public
-    if not has_auth_secret:
-        os.environ["CHAINLIT_AUTH_SECRET"] = "dev-secret-to-force-login-screen"
-        has_auth_secret = True
-
     # Register password auth ONLY if explicitly requested or if NO OAuth is detected.
     # If OAuth is detected, we STRICTLY avoid the password form unless ENABLE_PASSWORD_AUTH is true.
     should_enable_password = settings.ENABLE_PASSWORD_AUTH
@@ -735,11 +721,11 @@ if is_oauth_enabled or has_auth_secret or settings.ENABLE_PASSWORD_AUTH:
         # Note: We use window messaging because returning a 303 redirect response
         # from a POST request (handled via fetch/XHR in Chainlit) does not
         # always trigger a full-page redirection in the browser.
-        app_user = cl.user_session.get("user")
+        app_user = cl.user_session.get(SESSION_USER)
         if app_user and app_user.identifier:
             _clear_persistent_session_id(app_user.identifier)
-        cl.user_session.set("session_id", None)
-        cl.user_session.set("history", [])
+        cl.user_session.set(SESSION_ID, None)
+        cl.user_session.set(SESSION_HISTORY, [])
         await cl.send_window_message("on_logout")
         return response
 
@@ -772,36 +758,36 @@ if is_oauth_enabled:
         We can inspect raw_user_data to customize the user identifier and metadata.
         """
         # For Google, we typically get 'email', 'name', 'picture'
-        if provider_id == "google":
+        if provider_id == PROVIDER_GOOGLE:
             default_user.identifier = raw_user_data.get("email") or default_user.identifier
             default_user.metadata["name"] = raw_user_data.get("name")
-            default_user.metadata["provider"] = "google"
+            default_user.metadata["provider"] = PROVIDER_GOOGLE
         
         # For Facebook, we typically get 'id', 'name', 'email'
-        elif provider_id == "facebook":
+        elif provider_id == PROVIDER_FACEBOOK:
             default_user.identifier = raw_user_data.get("email") or raw_user_data.get("id") or default_user.identifier
             default_user.metadata["name"] = raw_user_data.get("name")
-            default_user.metadata["provider"] = "facebook"
+            default_user.metadata["provider"] = PROVIDER_FACEBOOK
 
         # For Apple, we typically get 'sub' (identifier) and 'email' in user data
-        elif provider_id == "apple":
+        elif provider_id == PROVIDER_APPLE:
             default_user.identifier = raw_user_data.get("email") or raw_user_data.get("sub") or default_user.identifier
             default_user.metadata["name"] = raw_user_data.get("name") # Note: Apple only sends name on first login
-            default_user.metadata["provider"] = "apple"
+            default_user.metadata["provider"] = PROVIDER_APPLE
 
         # For GitHub, we typically get 'login', 'name', 'email', 'avatar_url'
-        elif provider_id == "github":
+        elif provider_id == PROVIDER_GITHUB:
             # Prefer login name if email is private
             default_user.identifier = raw_user_data.get("login") or default_user.identifier
             default_user.metadata["name"] = raw_user_data.get("name")
             default_user.metadata["email"] = raw_user_data.get("email")
-            default_user.metadata["provider"] = "github"
+            default_user.metadata["provider"] = PROVIDER_GITHUB
 
         # For Azure AD, we might get 'preferred_username' or 'email'
-        elif provider_id == "azure-ad":
+        elif provider_id == PROVIDER_AZURE_AD:
             default_user.identifier = raw_user_data.get("preferred_username") or raw_user_data.get("email") or default_user.identifier
             default_user.metadata["name"] = raw_user_data.get("name")
-            default_user.metadata["provider"] = "azure-ad"
+            default_user.metadata["provider"] = PROVIDER_AZURE_AD
 
         # For Okta/Auth0/Keycloak/etc, try to find a common identifier
         else:

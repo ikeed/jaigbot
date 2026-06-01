@@ -1,6 +1,6 @@
 # AIMS protocol mapping (reference)
 
-This directory contains the AIMS communication protocol as implemented in JaigBot.
+This directory contains the AIMS communication protocol as implemented in AIMSBot.
 
 ## Files
 
