@@ -1,7 +1,7 @@
 import pytest
 import time
 from fastapi.testclient import TestClient
-from app.main import app, _MEMORY_STORE
+from app.main import app, MEMORY_STORE
 
 client = TestClient(app)
 
@@ -9,7 +9,7 @@ def test_init_session_force_takeover():
     sid = "test-sid-force"
     conn1 = "conn-1"
     conn2 = "conn-2"
-    _MEMORY_STORE.pop(sid, None)
+    MEMORY_STORE.pop(sid, None)
     
     # First connection
     resp1 = client.post("/session", json={"sessionId": sid, "connectionId": conn1})
@@ -26,7 +26,7 @@ def test_init_session_force_takeover():
     assert resp3.json()["alreadyActive"] is False
     
     # Verify that conn1 is now GONE from active_connections and conn2 is there
-    mem = _MEMORY_STORE[sid]
+    mem = MEMORY_STORE[sid]
     assert conn1 not in mem["active_connections"]
     assert conn2 in mem["active_connections"]
     assert len(mem["active_connections"]) == 1
@@ -38,20 +38,20 @@ def test_middleware_stale_session_bypass():
     # However, we can check if the backend's updated field works.
     
     sid = "test-sid-stale"
-    _MEMORY_STORE.pop(sid, None)
+    MEMORY_STORE.pop(sid, None)
     
     # Init session
     client.post("/session", json={"sessionId": sid, "connectionId": "old-conn"})
-    mem = _MEMORY_STORE[sid]
+    mem = MEMORY_STORE[sid]
     original_updated = mem["updated"]
     
     # Manually make it stale
     mem["updated"] = time.time() - 100
-    _MEMORY_STORE[sid] = mem
+    MEMORY_STORE[sid] = mem
     
     # Now if we were the middleware in run_app.py, we would check this.
     # Let's verify our logic for "stale"
-    mem = _MEMORY_STORE.get(sid)
+    mem = MEMORY_STORE.get(sid)
     updated = mem.get("updated", 0)
     is_stale = (time.time() - updated) > 60
     assert is_stale is True
@@ -59,7 +59,7 @@ def test_middleware_stale_session_bypass():
 def test_init_session_without_connection_id_does_not_block():
     # If connectionId is not provided (e.g. from a direct API call), it shouldn't block/be blocked
     sid = "test-sid-no-conn"
-    _MEMORY_STORE.pop(sid, None)
+    MEMORY_STORE.pop(sid, None)
     
     resp1 = client.post("/session", json={"sessionId": sid})
     assert resp1.json()["alreadyActive"] is False

@@ -12,7 +12,7 @@ Behavior-preserving extraction from the else/fallback path in app.main.chat().
 from __future__ import annotations
 
 import time
-from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, ROLE_COACH
+from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, ROLE_COACH, get_ui_attributes
 from typing import Any, Dict
 
 from fastapi import Request
@@ -129,8 +129,10 @@ class LegacyChatHandler:
             parts.append(ctx.history_text)
         
         # Add current user message
-        parts.append(f"User: {current_message}")
-        parts.append("Assistant:")
+        user_author = get_ui_attributes(ROLE_USER)["author"]
+        asst_author = get_ui_attributes(ROLE_ASSISTANT)["author"]
+        parts.append(f"{user_author}: {current_message}")
+        parts.append(f"{asst_author}:")
         
         return "\n\n".join(parts)
     

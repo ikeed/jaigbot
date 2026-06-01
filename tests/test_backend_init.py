@@ -1,6 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
-from app.main import app, _MEMORY_STORE
+from app.main import app, MEMORY_STORE
 from app.chat_roles import ROLE_SYSTEM
 from app.services.persona_service import persona_counted_key, persona_counts_key
 
@@ -9,7 +9,7 @@ client = TestClient(app)
 def test_init_session_backend_persona():
     # Remove from memory store for a fresh test
     sid = "test-sid-backend-persona"
-    _MEMORY_STORE.pop(sid, None)
+    MEMORY_STORE.pop(sid, None)
     
     # We pass personaId but no character/scene
     payload = {
@@ -33,8 +33,8 @@ def test_init_session_backend_persona():
     assert "Jasmine" in data["initialCard"]
     
     # Check if memory store is updated
-    assert sid in _MEMORY_STORE
-    mem = _MEMORY_STORE[sid]
+    assert sid in MEMORY_STORE
+    mem = MEMORY_STORE[sid]
     assert mem["character"] == data["character"]
     assert mem["scene"] == data["scene"]
     assert len(mem["history"]) == 1
@@ -47,9 +47,9 @@ def test_init_session_backend_persona():
 def test_init_session_counts_persona_once_per_session():
     sid = "test-sid-persona-count"
     user_id = "doctor@example.com"
-    _MEMORY_STORE.pop(sid, None)
-    _MEMORY_STORE.pop(persona_counts_key(user_id), None)
-    _MEMORY_STORE.pop(persona_counted_key(user_id, sid), None)
+    MEMORY_STORE.pop(sid, None)
+    MEMORY_STORE.pop(persona_counts_key(user_id), None)
+    MEMORY_STORE.pop(persona_counted_key(user_id, sid), None)
 
     payload = {
         "sessionId": sid,
@@ -60,12 +60,12 @@ def test_init_session_counts_persona_once_per_session():
     assert client.post("/session", json=payload).status_code == 200
     assert client.post("/session", json=payload).status_code == 200
 
-    counts = _MEMORY_STORE.get(persona_counts_key(user_id))["counts"]
+    counts = MEMORY_STORE.get(persona_counts_key(user_id))["counts"]
     assert counts["Jasmine"] == 1
 
 def test_init_session_persists_across_calls():
     sid = "test-sid-persist"
-    _MEMORY_STORE.pop(sid, None)
+    MEMORY_STORE.pop(sid, None)
     
     # First call with persona
     client.post("/session", json={"sessionId": sid, "personaId": "Jasmine"})
@@ -79,18 +79,18 @@ def test_init_session_persists_across_calls():
     assert "Jasmine" in data["initialCard"]
     
     # Verify no duplicate history entries in memory store
-    mem = _MEMORY_STORE[sid]
+    mem = MEMORY_STORE[sid]
     assert len(mem["history"]) == 1
 
 def test_init_session_does_not_reseed_if_history_exists():
     sid = "test-sid-no-reseed"
-    _MEMORY_STORE.pop(sid, None)
+    MEMORY_STORE.pop(sid, None)
     
     # Initialize session
     client.post("/session", json={"sessionId": sid, "personaId": "Jasmine"})
     
     # Add a user message to history
-    mem = _MEMORY_STORE[sid]
+    mem = MEMORY_STORE[sid]
     mem["history"].append({"role": "user", "content": "Hello"})
     mem["full_history"].append({"role": "user", "content": "Hello"})
     assert len(mem["history"]) == 2
@@ -100,7 +100,7 @@ def test_init_session_does_not_reseed_if_history_exists():
     assert response.status_code == 200
     
     # Verify history is still length 2 (not reset or re-seeded)
-    mem = _MEMORY_STORE[sid]
+    mem = MEMORY_STORE[sid]
     assert len(mem["history"]) == 2
     assert mem["history"][1]["content"] == "Hello"
     assert mem["history"][0]["role"] == ROLE_SYSTEM # Scenario card
@@ -109,7 +109,7 @@ def test_init_session_already_active():
     sid = "test-sid-active"
     conn1 = "conn-1"
     conn2 = "conn-2"
-    _MEMORY_STORE.pop(sid, None)
+    MEMORY_STORE.pop(sid, None)
     
     # First connection
     resp1 = client.post("/session", json={"sessionId": sid, "connectionId": conn1})

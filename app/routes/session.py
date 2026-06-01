@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from app.services.session_initializer import deregister_session_connection, initialize_session
+from app.constants import ENDPOINT_SESSION, ENDPOINT_DEREGISTER
 
 
 class SessionInitRequest(BaseModel):
@@ -33,7 +34,7 @@ def create_session_router(
 ) -> APIRouter:
     router = APIRouter()
 
-    @router.post("/session")
+    @router.post(ENDPOINT_SESSION)
     async def init_session(body: SessionInitRequest, memory_store=Depends(get_memory_store)):
         """Register a session in the memory store before chat messages arrive."""
         return initialize_session(
@@ -43,7 +44,7 @@ def create_session_router(
             logger=logger,
         )
 
-    @router.post("/session/deregister")
+    @router.post(ENDPOINT_DEREGISTER)
     async def deregister_session(body: SessionDeregisterRequest, memory_store=Depends(get_memory_store)):
         """Remove a connectionId from the active connections list."""
         return deregister_session_connection(

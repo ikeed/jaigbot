@@ -79,6 +79,6 @@ def test_cookie_issued_and_memory_persists(monkeypatch):
     # Verify that the second prompt contains a history prefix with the prior user turn
     assert len(prompts) >= 2
     second_prompt = prompts[-1]
-    assert "User: ping" in second_prompt
+    assert "Doctor: ping" in second_prompt
     assert "Assistant: ack" in second_prompt
     assert second_prompt.rstrip().endswith("Assistant:")

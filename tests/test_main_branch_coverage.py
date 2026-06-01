@@ -121,7 +121,7 @@ class TestMainBranches:
     def test_summary_endpoint_with_session_no_memory(self, monkeypatch):
         """Test summary endpoint with session but no stored memory"""
         monkeypatch.setattr("app.config.settings.MEMORY_ENABLED", True)
-        monkeypatch.setattr("app.main._MEMORY_STORE", {})
+        monkeypatch.setattr("app.main.MEMORY_STORE", {})
         
         r = client.get("/summary?sessionId=nonexistent-session")
         assert r.status_code == 200
@@ -153,7 +153,7 @@ class TestMainBranches:
         }
         
         monkeypatch.setattr("app.config.settings.MEMORY_ENABLED", True)
-        monkeypatch.setattr("app.main._MEMORY_STORE", mock_memory)
+        monkeypatch.setattr("app.main.MEMORY_STORE", mock_memory)
         
         r = client.get("/summary?sessionId=test-session")
         assert r.status_code == 200
@@ -175,7 +175,7 @@ class TestMainBranches:
         }
         
         monkeypatch.setattr("app.config.settings.MEMORY_ENABLED", True)
-        monkeypatch.setattr("app.main._MEMORY_STORE", mock_memory)
+        monkeypatch.setattr("app.main.MEMORY_STORE", mock_memory)
         
         r = client.get("/summary?sessionId=test-session")
         assert r.status_code == 200
@@ -201,7 +201,7 @@ class TestMainBranches:
         mock_vertex_call.return_value = "- Practice more open questions\n- Use better reflections"
         
         monkeypatch.setattr("app.config.settings.MEMORY_ENABLED", True)
-        monkeypatch.setattr("app.main._MEMORY_STORE", mock_memory)
+        monkeypatch.setattr("app.main.MEMORY_STORE", mock_memory)
         monkeypatch.setattr("app.config.settings.PROJECT_ID", "test-project")
 
         # Set aims_mapping directly on app state with proper cleanup
@@ -242,7 +242,7 @@ class TestMainBranches:
         mock_vertex_call.side_effect = Exception("Vertex error")
         
         monkeypatch.setattr("app.config.settings.MEMORY_ENABLED", True)
-        monkeypatch.setattr("app.main._MEMORY_STORE", mock_memory)
+        monkeypatch.setattr("app.main.MEMORY_STORE", mock_memory)
         monkeypatch.setattr("app.config.settings.PROJECT_ID", "test-project")
 
         r = client.get("/summary?sessionId=test-session&analysis=true")
@@ -260,7 +260,7 @@ class TestMainBranches:
         }
         
         monkeypatch.setattr("app.config.settings.MEMORY_ENABLED", True)
-        monkeypatch.setattr("app.main._MEMORY_STORE", mock_memory)
+        monkeypatch.setattr("app.main.MEMORY_STORE", mock_memory)
         monkeypatch.setattr("app.config.settings.PROJECT_ID", "test-project")
 
         # Temporarily clear aims_mapping from app state to simulate load failure
@@ -536,6 +536,6 @@ class TestMainBranches:
         
         # The actual initialization happens at import time, so we test the fallback logic
         # by checking that the store is indeed an InMemoryStore when Redis is not available
-        from app.main import _MEMORY_STORE
+        from app.main import MEMORY_STORE
         # Should have fallen back to InMemoryStore
-        assert hasattr(_MEMORY_STORE, '_store')  # InMemoryStore has _store attribute
+        assert hasattr(MEMORY_STORE, '_store')  # InMemoryStore has _store attribute

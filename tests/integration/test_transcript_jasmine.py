@@ -211,7 +211,7 @@ class TestJasmineTranscript(TranscriptReplayTest):
             if i < len(self.CLINICIAN_TURNS) - 1:
                 assert not data.get("gameOver", False), f"Turn {i + 1} ended prematurely"
 
-        final_state = m._MEMORY_STORE[self.SESSION_ID]["aims_state"]
+        final_state = m.MEMORY_STORE[self.SESSION_ID]["aims_state"]
         concerns = final_state.get("parent_concerns", [])
         assert concerns, "Expected immune-load and ingredients concerns to be tracked"
         assert {c.get("topic") for c in concerns} == {"immune_load", "ingredients"}
@@ -226,7 +226,7 @@ class TestJasmineTranscript(TranscriptReplayTest):
         for msg in self.CLINICIAN_TURNS:
             self._post_turn(client, msg)
 
-        state = m._MEMORY_STORE[self.SESSION_ID]["aims_state"]
+        state = m.MEMORY_STORE[self.SESSION_ID]["aims_state"]
         concerns = state.get("parent_concerns", [])
         autonomy_concerns = [c for c in concerns if c.get("topic") == "autonomy"]
         assert autonomy_concerns == [], (
@@ -261,7 +261,7 @@ class TestJasmineTranscript(TranscriptReplayTest):
         for msg in self.CLINICIAN_TURNS:
             self._post_turn(client, msg)
 
-        full_history = m._MEMORY_STORE[self.SESSION_ID].get("full_history", [])
+        full_history = m.MEMORY_STORE[self.SESSION_ID].get("full_history", [])
         coach_notes = [h["content"] for h in full_history if h.get("role") == "coach"]
         assert len(coach_notes) >= len(self.CLINICIAN_TURNS)
 

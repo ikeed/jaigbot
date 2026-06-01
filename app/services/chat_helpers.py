@@ -1,5 +1,5 @@
 from typing import List, Optional
-from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, ROLE_COACH, AUTHOR_DOCTOR, AUTHOR_ASSISTANT
+from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, ROLE_COACH, get_ui_attributes
 from app.services.persona_service import load_robust_persona
 
 
@@ -27,18 +27,14 @@ def format_history(turns: list[dict], memory_max_turns: int) -> str:
     lines: List[str] = []
     for t in turns[-(memory_max_turns * 2) :]:  # user+assistant pairs
         role = t.get("role")
+        author = get_ui_attributes(role)["author"]
         content = t.get("content") or ""
-        if role == ROLE_USER:
-            lines.append(f"User: {content}")
-        elif role == ROLE_ASSISTANT:
-            lines.append(f"Assistant: {content}")
+        lines.append(f"{author}: {content}")
     return "\n".join(lines)
 
 
 def recent_context(turns: list[dict], n_turns: int) -> str:
     """Create compact recent context for classifier grounding.
-
-    Labels 'user' as Clinician and 'assistant' as Person, identical to current logic.
     """
     if not turns:
         return ""
@@ -49,10 +45,8 @@ def recent_context(turns: list[dict], n_turns: int) -> str:
         content = (t.get("content") or "").strip()
         if not content:
             continue
-        if role == ROLE_USER:
-            lines.append(f"Clinician: {content}")
-        elif role == ROLE_ASSISTANT:
-            lines.append(f"Person: {content}")
+        author = get_ui_attributes(role)["author"]
+        lines.append(f"{author}: {content}")
     return "\n".join(lines)
 
 

@@ -15,35 +15,16 @@ AUTHOR_COACH = "Coach"
 CANONICAL_ROLES = {ROLE_SYSTEM, ROLE_USER, ROLE_ASSISTANT, ROLE_COACH}
 
 
-def normalize_role(role: str | None) -> str:
-    """Return one of the canonical backend roles.
-
-    Historical sessions may contain UI-ish or persona-ish role names. Keep those
-    readable during replay without letting aliases spread through the app.
-    """
-    value = (role or "").strip().lower()
-    if value in {"doctor", "clinician"}:
-        return ROLE_USER
-    if value in {"person", "parent", "patient", "model"}:
-        return ROLE_ASSISTANT
-    if value == ROLE_COACH:
-        return ROLE_COACH
-    if value in {"scenario", "briefing"}:
-        return ROLE_SYSTEM
-    if value in CANONICAL_ROLES:
-        return value
-    return ROLE_ASSISTANT
-
-
-def author_for_role(role: str | None) -> str:
-    role = normalize_role(role)
-    if role == ROLE_USER:
-        return AUTHOR_DOCTOR
-    if role == ROLE_COACH:
-        return AUTHOR_COACH
-    if role == ROLE_SYSTEM:
-        return AUTHOR_SYSTEM
-    return AUTHOR_ASSISTANT
+def get_ui_attributes(role: str | None) -> dict:
+    """Return UI-specific attributes (author, type) for a given role."""
+    role_key = (role or ROLE_ASSISTANT).strip().lower()
+    mapping = {
+        ROLE_USER: {"author": AUTHOR_DOCTOR, "type": "user_message"},
+        ROLE_ASSISTANT: {"author": AUTHOR_ASSISTANT, "type": "assistant_message"},
+        ROLE_COACH: {"author": AUTHOR_COACH, "type": "assistant_message"},
+        ROLE_SYSTEM: {"author": AUTHOR_SYSTEM, "type": "assistant_message"},
+    }
+    return mapping.get(role_key, mapping[ROLE_ASSISTANT])
 
 
 def is_scenario_card(content: str | None) -> bool:

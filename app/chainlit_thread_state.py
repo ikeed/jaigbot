@@ -26,9 +26,9 @@ def _thread_key_prefix() -> str:
 
 
 def _store() -> Any:
-    from app.main import _MEMORY_STORE
+    from app.main import MEMORY_STORE
 
-    return _MEMORY_STORE
+    return MEMORY_STORE
 
 
 def _key(user_identifier: str) -> str:

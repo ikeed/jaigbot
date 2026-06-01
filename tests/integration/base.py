@@ -193,7 +193,7 @@ class TranscriptReplayTest:
             history.append(entry)
             full_history.append({**entry, "time": now})
 
-        m._MEMORY_STORE[self.SESSION_ID] = {
+        m.MEMORY_STORE[self.SESSION_ID] = {
             "history": history,
             "full_history": full_history,
             "character": None,
@@ -281,7 +281,7 @@ class TranscriptReplayTest:
 
             # Phase assertion (needs SESSION_ID context)
             if exp.phase_after is not None:
-                state = m._MEMORY_STORE[self.SESSION_ID].get("aims_state", {})
+                state = m.MEMORY_STORE[self.SESSION_ID].get("aims_state", {})
                 actual_phase = state.get("phase")
                 prefix = f"Turn {i+1}"
                 if exp.label:
@@ -300,7 +300,7 @@ class TranscriptReplayTest:
         for msg in self.CLINICIAN_TURNS:
             self._post_turn(client, msg)
 
-        mem = m._MEMORY_STORE[self.SESSION_ID]
+        mem = m.MEMORY_STORE[self.SESSION_ID]
         full = mem.get("full_history", [])
         trimmed = mem.get("history", [])
 
