@@ -94,6 +94,12 @@ mock_chainlit_utils.__spec__ = ModuleSpec("chainlit.utils", loader=None)
 mock_chainlit_utils.utc_now = lambda: "2026-01-01T00:00:00Z"
 sys.modules["chainlit.utils"] = mock_chainlit_utils
 
+mock_chainlit_auth = types.ModuleType("chainlit.auth")
+mock_chainlit_auth.__spec__ = ModuleSpec("chainlit.auth", loader=None)
+mock_chainlit_auth.get_token_from_cookies = lambda x: "mock_token"
+mock_chainlit_auth.decode_jwt = lambda x: MagicMock(identifier="mock_user")
+sys.modules["chainlit.auth"] = mock_chainlit_auth
+
 # Mock settings
 with patch("app.config.settings") as mock_settings:
     mock_settings.APP_ENV = "local"

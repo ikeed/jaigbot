@@ -1,11 +1,11 @@
 ---
 name: generate-transcript-test
-description: Generate an AIMS coaching integration test from a JaigBot session transcript JSON file. Use this skill when the user provides a transcript JSON export (from JaigBot/AIMSBot) and wants to create a regression/integration test that replays the dialog through the coaching pipeline. Trigger when: user mentions "transcript test", "integration test from transcript", "test from convo", "generate test from JSON", or provides a session export JSON and asks for a test.
+description: Generate an AIMS coaching integration test from an AIMSBot session transcript JSON file. Use this skill when the user provides a transcript JSON export (from AIMSBot) and wants to create a regression/integration test that replays the dialog through the coaching pipeline. Trigger when: user mentions "transcript test", "integration test from transcript", "test from convo", "generate test from JSON", or provides a session export JSON and asks for a test.
 ---
 
 # Generate AIMS Transcript Integration Test
 
-Given a JaigBot session transcript JSON file, analyze the dialog, determine the correct AIMS classifications for each clinician turn, and generate a pytest integration test that replays the conversation through the full coaching pipeline.
+Given an AIMSBot session transcript JSON file, analyze the dialog, determine the correct AIMS classifications for each clinician turn, and generate a pytest integration test that replays the conversation through the full coaching pipeline.
 
 ## Step 1: Read and Parse the Transcript
 

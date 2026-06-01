@@ -13,6 +13,7 @@ from .routes.session import create_session_router
 from .routes.summary import create_summary_router
 from .routes.system import create_system_router
 from .services.model_preflight import run_model_preflight
+from .constants import APP_TITLE, APP_VERSION
 
 _VERTEX_CLIENT_CACHE = VertexClientCache()
 
@@ -38,7 +39,7 @@ async def _lifespan(application: FastAPI):
     yield
 
 
-app = FastAPI(title="AIMSBot (Gemini Enterprise)", version="0.2.0", lifespan=_lifespan)
+app = FastAPI(title=APP_TITLE, version=APP_VERSION, lifespan=_lifespan)
 
 
 def get_memory_store(request: Request):
