@@ -5,7 +5,7 @@ import subprocess
 from typing import Dict, Any, Iterable, Optional
 from google.cloud import storage
 from app.config import settings
-from app.chat_roles import ROLE_ASSISTANT, ROLE_COACH, ROLE_SYSTEM, ROLE_USER, normalize_role
+from app.chat_roles import ROLE_ASSISTANT, ROLE_COACH, ROLE_SYSTEM, ROLE_USER
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +110,7 @@ class StorageService:
         # user -> coach -> assistant, so archives should preserve that order too.
         current_turn = 0
         for entry in full_hist:
-            role = normalize_role(entry.get("role"))
+            role = (entry.get("role") or ROLE_ASSISTANT).lower().strip()
             if role == ROLE_SYSTEM:
                 transcript.append({
                     "turn": current_turn,

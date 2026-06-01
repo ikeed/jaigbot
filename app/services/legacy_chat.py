@@ -20,12 +20,14 @@ class LegacyPromptBuilder:
         mem = mem or {}
         history = mem.get("history") if isinstance(mem, dict) else None
         if history:
-            # Import locally to avoid import cycles and keep identical behavior
             from .chat_helpers import format_history as _format_history
+            from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, get_ui_attributes
 
             history_text = _format_history(history, memory_max_turns).strip()
             prefix = ("Conversation so far:\n" + history_text + "\n\n") if history_text else ""
-            return prefix + f"User: {user_message}\nAssistant:"
+            user_author = get_ui_attributes(ROLE_USER)["author"]
+            asst_author = get_ui_attributes(ROLE_ASSISTANT)["author"]
+            return prefix + f"{user_author}: {user_message}\n{asst_author}:"
         else:
             return user_message
 

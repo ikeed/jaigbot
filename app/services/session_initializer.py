@@ -4,7 +4,7 @@ import logging
 import time
 from typing import Any
 
-from app.chat_roles import ROLE_ASSISTANT, ROLE_SYSTEM, is_scenario_card, normalize_role
+from app.chat_roles import ROLE_ASSISTANT, ROLE_SYSTEM, is_scenario_card
 from app.services.persona_service import (
     build_persona_session_fields,
     extract_persona_name_from_text,
@@ -218,7 +218,7 @@ def _session_response(body: Any, sid: str, mem: dict, already_active: bool, init
             (
                 m["content"]
                 for m in mem["history"]
-                if normalize_role(m.get("role")) in {ROLE_SYSTEM, ROLE_ASSISTANT}
+                if (m.get("role") or ROLE_ASSISTANT).lower().strip() in {ROLE_SYSTEM, ROLE_ASSISTANT}
                 and is_scenario_card(m.get("content"))
             ),
             initial_card,

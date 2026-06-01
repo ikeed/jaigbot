@@ -16,17 +16,12 @@ from chainlit.context import context as cl_context
 from app.chainlit_memory_data_layer import MemoryDataLayer
 from app.chainlit_thread_state import set_current_thread_id
 from app.chat_roles import (
-    AUTHOR_ASSISTANT,
-    AUTHOR_COACH,
-    AUTHOR_DOCTOR,
-    AUTHOR_SYSTEM,
     ROLE_ASSISTANT,
     ROLE_COACH,
     ROLE_SYSTEM,
     ROLE_USER,
-    author_for_role,
+    get_ui_attributes,
     is_scenario_card,
-    normalize_role,
 )
 from app.persona import DEFAULT_CHARACTER, DEFAULT_SCENE
 
@@ -152,15 +147,12 @@ def _mark_intro_seen(user_identifier: str | None, store=None) -> None:
         cl.user_session.set(SESSION_INTRO_SEEN, True)
 
 
-def _author_from_role(role: str) -> str:
-    """Backward-compatible wrapper around the canonical role mapping."""
-    return author_for_role(role)
 
 
 def _scenario_card_from_history(history: list[dict] | None) -> str | None:
     for msg in history or []:
         content = msg.get("content") or ""
-        if normalize_role(msg.get("role")) in {ROLE_SYSTEM, ROLE_ASSISTANT} and is_scenario_card(content):
+        if (msg.get("role") or ROLE_ASSISTANT).lower().strip() in {ROLE_SYSTEM, ROLE_ASSISTANT} and is_scenario_card(content):
             return content
     return None
 
@@ -193,7 +185,6 @@ async def _replay_history(history: list[dict]):
     """
     Replay all prior messages to the UI without making any backend calls.
     Each history item is a dict like {"role": "system"|"user"|"assistant"|"coach", "content": str}.
-    Prefer an explicit 'author' field if present, otherwise map from 'role'.
     """
     def _strip_export_artifacts(text: str) -> str:
         # Remove lines such as "Avatar for Doctor" that may appear if a transcript
@@ -205,50 +196,44 @@ async def _replay_history(history: list[dict]):
             return text
 
     for item in history or []:
+        role = (item.get("role") or ROLE_ASSISTANT).lower().strip()
         content = item.get("content", "")
-        author = item.get("author")
-        role = normalize_role(item.get("role", ROLE_ASSISTANT))
-        if not author:
-            author = author_for_role(role)
-
-        # For Doctor turns, ensure they map to "Doctor"
-        # We want the native avatar to show, and CSS to style based on [data-author="Doctor"]
-        if author == "You":
-            author = AUTHOR_DOCTOR
 
         # Legacy sessions stored scenario cards as assistant messages. Replay
         # them as system messages without inline HTML.
         if role == ROLE_ASSISTANT and is_scenario_card(content):
-            author = AUTHOR_SYSTEM
+            role = ROLE_SYSTEM
 
-        if author == AUTHOR_SYSTEM and is_scenario_card(content):
-            await cl.Message(content=_render_scenario_card_html(content), author=AUTHOR_SYSTEM).send()
+        attrs = get_ui_attributes(role)
+        author = attrs["author"]
+        msg_type = attrs["type"]
+
+        if role == ROLE_SYSTEM and is_scenario_card(content):
+            await cl.Message(content=_render_scenario_card_html(content), author=author, type=msg_type).send()
             continue
 
         # Coach entries: normalize the archived pipe-delimited text into plain
         # markdown. CSS handles bubble styling by author.
-        if author == AUTHOR_COACH:
+        if role == ROLE_COACH:
             try:
                 coach_text = _format_coach_message(content)
                 if coach_text:
-                    await cl.Message(content=coach_text, author=AUTHOR_COACH).send()
+                    await cl.Message(content=coach_text, author=author, type=msg_type).send()
                     continue
             except Exception:
                 # If anything goes wrong, fall back to plain text message
                 pass
 
         # Check for congratulatory post (Scenario complete)
-        if author == AUTHOR_COACH and ("Scenario complete" in content):
+        if role == ROLE_COACH and ("Scenario complete" in content):
             try:
-                await cl.Message(content=_format_coach_message(content), author=AUTHOR_COACH).send()
+                await cl.Message(content=_format_coach_message(content), author=author, type=msg_type).send()
                 continue
             except Exception:
                 pass
 
         # Non-coach (or coach fallback): strip possible export artifacts and send with basic styling.
         content_clean = _strip_export_artifacts(content)
-
-        msg_type = "user_message" if author == AUTHOR_DOCTOR else "assistant_message"
         await cl.Message(content=content_clean, author=author, type=msg_type).send()
     print(f"DEBUG: replay_history sent {len(history or [])} messages")
 
@@ -454,7 +439,7 @@ async def _fetch_backend_history(session_id: str) -> list[dict]:
 def _recover_persona_from_history(history: list[dict]) -> str | None:
     for msg in history:
         content = msg.get("content") or ""
-        if normalize_role(msg.get("role")) in {ROLE_SYSTEM, ROLE_ASSISTANT} and is_scenario_card(content):
+        if (msg.get("role") or ROLE_ASSISTANT).lower().strip() in {ROLE_SYSTEM, ROLE_ASSISTANT} and is_scenario_card(content):
             for line in content.splitlines():
                 for prefix in ["Persona: ", "Person: ", "Parent: ", "Parent/Patient: "]:
                     if line.startswith(prefix):
@@ -531,7 +516,7 @@ def _inject_scenario_into_scene(history: list[dict], default_card: str):
     card = default_card
     for msg in history:
         content = msg.get("content") or ""
-        if normalize_role(msg.get("role")) in {ROLE_SYSTEM, ROLE_ASSISTANT} and is_scenario_card(content):
+        if (msg.get("role") or ROLE_ASSISTANT).lower().strip() in {ROLE_SYSTEM, ROLE_ASSISTANT} and is_scenario_card(content):
             card = content
             break
     
@@ -541,11 +526,11 @@ def _inject_scenario_into_scene(history: list[dict], default_card: str):
 
 async def _present_scenario_card(card: str):
     history = cl.user_session.get(SESSION_HISTORY) or []
-    has_card = any(normalize_role(msg.get("role")) in {ROLE_SYSTEM, ROLE_ASSISTANT} and is_scenario_card(msg.get("content")) for msg in history)
+    has_card = any((msg.get("role") or ROLE_ASSISTANT).lower().strip() in {ROLE_SYSTEM, ROLE_ASSISTANT} and is_scenario_card(msg.get("content")) for msg in history)
     if not has_card:
         history.append({"role": ROLE_SYSTEM, "content": card})
         cl.user_session.set(SESSION_HISTORY, history)
-        await cl.Message(content=_render_scenario_card_html(card), author=AUTHOR_SYSTEM).send()
+        await cl.Message(content=_render_scenario_card_html(card), **get_ui_attributes(ROLE_SYSTEM)).send()
 
 
 async def _run_preflight_checks():
@@ -562,7 +547,7 @@ async def _run_preflight_checks():
                 except Exception: pass
             
             if not ok:
-                await cl.Message(f"Backend at {base_url} is not reachable. Ensure it is running.").send()
+                await cl.Message(f"Backend at {base_url} is not reachable. Ensure it is running.", **get_ui_attributes(ROLE_SYSTEM)).send()
                 return
 
             # Config check
@@ -572,7 +557,7 @@ async def _run_preflight_checks():
                     data = r.json()
                     proj = data.get("projectId") or data.get("project_id") or data.get("project")
                     if proj in (None, "", "<unset>"):
-                        await cl.Message("Warning: Backend PROJECT_ID appears unset. You may see a 500 on /chat.").send()
+                        await cl.Message("Warning: Backend PROJECT_ID appears unset. You may see a 500 on /chat.", **get_ui_attributes(ROLE_SYSTEM)).send()
             except Exception: pass
 
             # Model check
@@ -581,7 +566,7 @@ async def _run_preflight_checks():
                 if r.status_code == 200:
                     mc = r.json()
                     if mc.get("available") is False:
-                        await cl.Message(f"System: The configured model '{mc.get('modelId')}' is not available in region '{mc.get('region')}'. ").send()
+                        await cl.Message(f"The configured model '{mc.get('modelId')}' is not available in region '{mc.get('region')}'.", **get_ui_attributes(ROLE_SYSTEM)).send()
             except Exception: pass
     except Exception: pass
 
@@ -873,7 +858,9 @@ async def _handle_message_impl(message: cl.Message):
         await cl.Message("Please enter a message.").send()
         return
 
-    message.author = AUTHOR_DOCTOR
+    attrs = get_ui_attributes(ROLE_USER)
+    message.author = attrs["author"]
+    message.type = attrs["type"]
     await message.update()
 
     history = cl.user_session.get(SESSION_HISTORY)
@@ -929,7 +916,7 @@ async def _handle_chat_error(response: httpx.Response):
     else:
         msg = f"Backend error: HTTP {status}{(' — ' + error_msg) if error_msg else ''}"
     
-    await cl.Message(msg, author=AUTHOR_SYSTEM).send()
+    await cl.Message(msg, **get_ui_attributes(ROLE_SYSTEM)).send()
 
 
 async def _handle_coaching(data: dict, history: list):
@@ -949,7 +936,7 @@ async def _handle_coaching(data: dict, history: list):
         coach_text = " | ".join(parts)
         history.append({"role": ROLE_COACH, "content": coach_text})
         cl.user_session.set(SESSION_HISTORY, history)
-        await cl.Message(content=_format_coach_message(coach_text), author=AUTHOR_COACH).send()
+        await cl.Message(content=_format_coach_message(coach_text), **get_ui_attributes(ROLE_COACH)).send()
 
 
 async def _handle_reply(data: dict, history: list):
@@ -957,7 +944,7 @@ async def _handle_reply(data: dict, history: list):
     if reply:
         history.append({"role": ROLE_ASSISTANT, "content": reply})
         cl.user_session.set(SESSION_HISTORY, history)
-        await cl.Message(reply, author=AUTHOR_ASSISTANT).send()
+        await cl.Message(reply, **get_ui_attributes(ROLE_ASSISTANT)).send()
 
 
 async def _handle_coach_post(data: dict):
@@ -965,7 +952,7 @@ async def _handle_coach_post(data: dict):
     if coach_post:
         title = coach_post.get("title") or "✅ Scenario complete"
         lines = coach_post.get("lines") or []
-        await cl.Message(content=_format_coach_message("\n".join([title, *lines])), author=AUTHOR_COACH).send()
+        await cl.Message(content=_format_coach_message("\n".join([title, *lines])), **get_ui_attributes(ROLE_COACH)).send()
 
 
 @cl.on_chat_resume
