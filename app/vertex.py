@@ -94,7 +94,7 @@ class VertexClient:
         return cleaned if isinstance(cleaned, dict) and len(cleaned) > 0 else None
 
     @staticmethod
-    def _merge_with_overlap(base: str, addition: str, max_overlap: int = 200) -> str:
+    def merge_with_overlap(base: str, addition: str, max_overlap: int = 200) -> str:
         """
         Merge addition onto base by trimming any overlapping prefix of `addition`
         that already appears as a suffix of `base`. Additionally, normalize the
@@ -396,7 +396,7 @@ class VertexClient:
 
                 prev_len = len(text)
                 if next_text:
-                    text = self._merge_with_overlap(text, next_text)
+                    text = self.merge_with_overlap(text, next_text)
 
                 meta_local.update({
                     "finishReason": next_meta.get("finishReason"),

@@ -71,7 +71,7 @@ def load_mapping(path: Optional[str] = None) -> Dict[str, Any]:
     if path:
         candidates.append(path)
     # relative to project root
-    candidates.append(os.path.join("docs", "aims", "aims_mapping.json"))
+    candidates.append(os.path.join(["docs", "aims", "aims_mapping.json"]))
     # sometimes tests may run from a nested cwd; try up to two levels up
     candidates.append(os.path.join("..", "docs", "aims", "aims_mapping.json"))
     candidates.append(os.path.join("..", "..", "docs", "aims", "aims_mapping.json"))

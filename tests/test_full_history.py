@@ -43,7 +43,7 @@ class TestTrimHistory:
             {"role": "user", "content": "u1"},
             {"role": "assistant", "content": "a1"},
         ]
-        result = SessionService._trim_history(hist, max_turns=2)
+        result = SessionService.trim_history(hist, max_turns=2)
         assert result == hist
 
     def test_trims_dialogue_only(self):
@@ -54,7 +54,7 @@ class TestTrimHistory:
             {"role": "user", "content": "u2"},
             {"role": "assistant", "content": "a2"},
         ]
-        result = SessionService._trim_history(hist, max_turns=1)
+        result = SessionService.trim_history(hist, max_turns=1)
         assert len([m for m in result if m["role"] in ("user", "assistant")]) == 2
         assert result[-1]["content"] == "a2"
         assert result[-2]["content"] == "u2"
@@ -73,7 +73,7 @@ class TestTrimHistory:
             {"role": "assistant", "content": "a3"},
         ]
         # max_turns=2 → keep last 4 dialogue entries (u2,a2,u3,a3) + their coaches
-        result = SessionService._trim_history(hist, max_turns=2)
+        result = SessionService.trim_history(hist, max_turns=2)
         dialogue = [m for m in result if m["role"] in ("user", "assistant")]
         assert len(dialogue) == 4
         # Coach entries within the window should be kept
@@ -92,7 +92,7 @@ class TestTrimHistory:
             {"role": "user", "content": "u2"},
             {"role": "assistant", "content": "a2"},
         ]
-        result = SessionService._trim_history(hist, max_turns=1)
+        result = SessionService.trim_history(hist, max_turns=1)
         contents = [m["content"] for m in result]
         assert "c0" not in contents
         assert "c1" not in contents
@@ -190,7 +190,7 @@ class TestFullHistory:
             asst_entry = {"role": "assistant", "content": f"a{i}"}
             mem["history"].append(asst_entry)
             mem["full_history"].append({**asst_entry, "time": now})
-            mem["history"] = SessionService._trim_history(mem["history"], 2)
+            mem["history"] = SessionService.trim_history(mem["history"], 2)
             store[sid] = mem
 
         mem = store[sid]
@@ -272,7 +272,7 @@ class TestOriginalBugRegression:
             mem.setdefault("full_history", []).append({**user_entry, "time": now})
             mem["full_history"].append({**coach_entry, "time": now})
             mem["full_history"].append({**asst_entry, "time": now})
-            mem["history"] = SessionService._trim_history(mem["history"], 8)
+            mem["history"] = SessionService.trim_history(mem["history"], 8)
             store[sid] = mem
 
         mem = store[sid]

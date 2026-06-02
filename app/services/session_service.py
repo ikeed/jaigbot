@@ -109,7 +109,7 @@ class SessionService:
         return mem
 
     @staticmethod
-    def _trim_history(history: list, max_turns: int) -> list:
+    def trim_history(history: list, max_turns: int) -> list:
         """Trim history to the last *max_turns* dialogue pairs.
 
         Coach entries are interleaved but should not count toward the
@@ -145,7 +145,7 @@ class SessionService:
         mem.setdefault("history", []).append(entry)
         mem.setdefault("full_history", []).append({**entry, "time": now})
         # Trim working history (coach-aware)
-        mem["history"] = self._trim_history(mem["history"], self.memory_max_turns)
+        mem["history"] = self.trim_history(mem["history"], self.memory_max_turns)
         mem["updated"] = now
         self._store[session_id] = mem
 

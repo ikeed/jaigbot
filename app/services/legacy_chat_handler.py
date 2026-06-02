@@ -188,7 +188,7 @@ class LegacyChatHandler:
             
             # Trim working history (coach-aware)
             from app.services.session_service import SessionService
-            mem["history"] = SessionService._trim_history(mem["history"], self.memory_max_turns)
+            mem["history"] = SessionService.trim_history(mem["history"], self.memory_max_turns)
             
             mem["updated"] = now
             self.memory_store[session_id] = mem

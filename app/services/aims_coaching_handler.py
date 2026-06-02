@@ -1064,7 +1064,7 @@ class AimsCoachingHandler:
 
             # Trim working history (coach-aware) after the full turn is present.
             from app.services.session_service import SessionService
-            mem["history"] = SessionService._trim_history(mem["history"], self.memory_max_turns)
+            mem["history"] = SessionService.trim_history(mem["history"], self.memory_max_turns)
 
         except Exception as e:
             self.logger.debug(f"Assistant history append failed: {e}")
