@@ -1,11 +1,14 @@
-import pytest
-import httpx
 from unittest.mock import AsyncMock, MagicMock, patch
-from app.services.chainlit.session_manager import SessionManager
-from app.services.chainlit.backend_client import BackendClient
-from app.services.chainlit.ui_handler import UIHandler
+
+import httpx
+import pytest
+
+from app.chat_roles import ROLE_USER
 from app.constants import SESSION_USER, SESSION_ID
-from app.chat_roles import ROLE_USER, ROLE_ASSISTANT
+from app.services.chainlit.backend_client import BackendClient
+from app.services.chainlit.session_manager import SessionManager
+from app.services.chainlit.ui_handler import UIHandler
+
 
 @pytest.fixture
 def mock_cl_user_session():

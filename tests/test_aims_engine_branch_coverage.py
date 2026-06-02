@@ -3,16 +3,16 @@ Additional tests for aims_engine.py to improve branch coverage to 85%+
 
 These tests target specific uncovered branches identified in the coverage report.
 """
-import pytest
+import json
 import os
 import tempfile
-import json
-from unittest.mock import patch, mock_open
+from unittest.mock import patch
+
+import pytest
 
 from app.aims_engine import (
     load_mapping, classify_step, score_step, evaluate_turn,
-    _stem_match, _starts_with_any, _is_small_talk, _introduces_new_info,
-    ClassificationResult, ScoreResult
+    _stem_match, _starts_with_any, _is_small_talk, _introduces_new_info
 )
 
 

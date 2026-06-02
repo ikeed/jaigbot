@@ -1,4 +1,3 @@
-import json
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -12,7 +11,6 @@ def test_cookie_issued_and_memory_persists(monkeypatch):
     history in the prompt that is sent to the Vertex client. We simulate the
     Vertex client with a fake that records the prompt it was called with.
     """
-    import app.main as m
     from app.config import settings
 
     # Ensure env values are present for route checks

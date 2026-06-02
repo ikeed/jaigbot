@@ -2,12 +2,11 @@
 Tests for full_history, coach-aware history trimming, per-message timestamps,
 and session_started / session_ended lifecycle fields.
 """
-import asyncio
 import logging
 import time
 
-from app.services.session_service import SessionService, CookieSettings
 from app.services.aims_coaching_handler import AimsCoachingHandler
+from app.services.session_service import SessionService, CookieSettings
 
 
 # ---------------------------------------------------------------------------

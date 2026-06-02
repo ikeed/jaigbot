@@ -1,5 +1,5 @@
 import os
-import sys
+
 from fastapi.testclient import TestClient
 
 # Mock environment variables before importing app

@@ -1,13 +1,11 @@
-from app.config import settings
-import json
 from http import cookies
 
 from fastapi.testclient import TestClient
 
 import app.main as m
+from app.config import settings
 from app.main import app
 from app.vertex import VertexAIError
-
 
 client = TestClient(app)
 
@@ -109,7 +107,6 @@ def test_session_cookie_and_memory_persistence(monkeypatch):
 
 def test_model_fallback_success(monkeypatch):
     # Arrange: primary fails with 404, fallback succeeds
-    import app.main as m
     from app.services import vertex_helpers
     
     monkeypatch.setattr(settings, "PROJECT_ID", "proj")
@@ -140,7 +137,6 @@ def test_model_fallback_success(monkeypatch):
 
 def test_upstream_error_maps_to_502_and_sets_cookie(monkeypatch):
     # Arrange
-    import app.main as m
     from app.services import vertex_helpers
     from app.vertex import VertexAIError
     
@@ -183,7 +179,6 @@ def test_config_session_cookie_fields_reflect_env(monkeypatch):
 
 
 def test_model_not_found_no_fallback_returns_404(monkeypatch):
-    import app.main as m
     from app.services import vertex_helpers
     from app.vertex import VertexAIError
     

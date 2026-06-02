@@ -1,8 +1,8 @@
 import contextvars
 import json
-import re
 import logging
-from typing import Callable, Optional
+import re
+from typing import Optional
 
 from ..vertex import VertexAIError, VertexClient
 

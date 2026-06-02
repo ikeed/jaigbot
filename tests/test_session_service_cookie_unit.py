@@ -1,5 +1,3 @@
-from types import SimpleNamespace
-
 from app.services.session_service import SessionService, CookieSettings
 
 

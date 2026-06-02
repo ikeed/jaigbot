@@ -1,6 +1,8 @@
 import logging
+from typing import Any, Dict, List
+
 import chainlit as cl
-from typing import Any, Dict, List, Optional
+
 from app.chat_roles import (
     ROLE_ASSISTANT,
     ROLE_COACH,

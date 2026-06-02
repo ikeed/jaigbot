@@ -1,5 +1,3 @@
-import pytest
-
 from app.prompts.aims import build_classify_turn_prompt, get_classify_system_instruction
 
 # ---------------------------------------------------------------------------

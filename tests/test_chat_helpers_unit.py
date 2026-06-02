@@ -1,5 +1,3 @@
-import pytest
-
 from app.services.chat_helpers import (
     build_system_instruction,
     format_history,

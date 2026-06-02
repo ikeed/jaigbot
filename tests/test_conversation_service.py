@@ -1,5 +1,3 @@
-import pytest
-
 from app.services.conversation_service import (
     topics_in,
     concern_topic,

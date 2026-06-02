@@ -20,7 +20,7 @@ from typing import Any, Optional
 from fastapi import HTTPException, Request, BackgroundTasks
 from fastapi.responses import JSONResponse
 
-from app.models import ChatRequest, Coaching, SessionMetrics, ReportRequest
+from app.models import ChatRequest, ReportRequest
 from app.services.chat_context import ChatContextBuilder, ChatContext
 from app.services.session_service import SessionService, CookieSettings
 from app.services.storage_service import storage_service

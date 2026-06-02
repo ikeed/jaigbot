@@ -12,8 +12,6 @@ Covers:
 import asyncio
 import logging
 
-import pytest
-
 from app.services.aims_coaching_handler import AimsCoachingHandler
 
 

@@ -1,7 +1,8 @@
-from app.config import settings
 import json
+
 from fastapi.testclient import TestClient
 
+from app.config import settings
 from app.main import app
 
 client = TestClient(app)
@@ -18,7 +19,6 @@ def test_chat_validation_empty_message():
 
 
 def test_chat_size_limit_rejected(monkeypatch):
-    import app.main as m
     # Ensure env values are present for route checks
     monkeypatch.setattr(settings, "PROJECT_ID", "proj")
 
@@ -31,7 +31,6 @@ def test_chat_size_limit_rejected(monkeypatch):
 
 
 def test_chat_missing_project_id(monkeypatch):
-    import app.main as m
     # Force settings.PROJECT_ID to None and verify 500 structured error
     monkeypatch.setattr(settings, "PROJECT_ID", None)
 
@@ -46,7 +45,6 @@ def test_chat_missing_project_id(monkeypatch):
 
 def test_chat_success_with_mock(monkeypatch):
     # Mock the async vertex helper function used by legacy chat handler
-    import app.main as m
     from app.services import vertex_helpers
 
     # Mock the async function that actually makes the API call

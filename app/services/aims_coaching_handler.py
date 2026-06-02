@@ -13,24 +13,30 @@ Behavior-preserving extraction from the massive coaching section in app.main.cha
 """
 from __future__ import annotations
 
-import json
-import time
 import asyncio
-import uuid
+import json
 import os
-import re
+import time
+import uuid
 from typing import Any, Dict, List, Optional
 
 from fastapi import Request
 
-from app.models import ChatRequest
-from app.config import settings
 from app.aims_engine import evaluate_turn, load_mapping
+from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, ROLE_COACH, get_ui_attributes
+from app.config import settings
+from app.json_schemas import (
+    REPLY_SCHEMA,
+    validate_json
+)
+from app.models import ChatRequest
+from app.prompts.aims import build_patient_reply_prompt
 from app.services.chat_context import ChatContext
+from app.services.chat_helpers import strip_appointment_headers
 from app.services.classifier_service import ClassifierService
 from app.services.coach_post import (
-    VaccineRelevanceGate, 
-    AimsPostProcessor, 
+    VaccineRelevanceGate,
+    AimsPostProcessor,
     EndGameDetector,
     build_endgame_bullets_fallback,
     endgame_title,
@@ -41,29 +47,17 @@ from app.services.conversation_service import (
     mark_mirrored_multi,
     mark_secured_by_topic,
 )
-from app.services.prompt_builders import AimsPromptBuilder
 from app.services.security_guard import JailbreakGuard
 from app.services.vertex_helpers import (
-    vertex_call_with_fallback_text,
-    vertex_call_with_fallback_json,
     avertex_call_with_fallback_text,
     avertex_call_with_fallback_json,
     get_last_model_used
 )
-from app.prompts.aims import build_patient_reply_prompt
 from app.telemetry.events import (
-    log_event as telemetry_log_event, 
+    log_event as telemetry_log_event,
     truncate_for_log as telemetry_truncate
 )
-from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, ROLE_COACH, get_ui_attributes
 from app.vertex import VertexClient
-from app.json_schemas import (
-    REPLY_SCHEMA, 
-    CLASSIFY_SCHEMA, 
-    ENDGAME_DETECT_SCHEMA, 
-    validate_json
-)
-from app.services.chat_helpers import strip_appointment_headers
 
 
 class AimsCoachingHandler:

@@ -1,8 +1,10 @@
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+
+from app.constants import MSG_INTRO_REQUIRED, MSG_RESUME_THREAD
 from app.services.chainlit.orchestrator import ChainlitOrchestrator
-from app.constants import SESSION_USER, SESSION_ID, MSG_INTRO_REQUIRED, MSG_RESUME_THREAD
-from app.chat_roles import ROLE_USER, ROLE_ASSISTANT
+
 
 @pytest.fixture
 def mock_services():

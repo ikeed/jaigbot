@@ -13,14 +13,14 @@ Design goals:
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Optional, Tuple
+import logging
 import time
 import uuid
-import logging
+from dataclasses import dataclass
+from typing import Any, Optional, Tuple
 
 logger = logging.getLogger(__name__)
-from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, ROLE_COACH
+from app.chat_roles import ROLE_USER, ROLE_ASSISTANT
 
 
 @dataclass(frozen=True)

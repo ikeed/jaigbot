@@ -1,4 +1,3 @@
-from app.config import settings
 import json
 from typing import Any
 
@@ -6,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.main as m
-from app.vertex import VertexAIError
+from app.config import settings
 
 
 class GWStub:

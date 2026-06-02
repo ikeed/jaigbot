@@ -12,7 +12,7 @@ unit testing.
 from __future__ import annotations
 
 from typing import Optional
-import re
+
 
 # Keep regex definitions local to avoid cross-module coupling for now.
 # If they are duplicated elsewhere, we will centralize them in app/constants.py

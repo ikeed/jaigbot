@@ -12,15 +12,14 @@ Behavior-preserving extraction from the else/fallback path in app.main.chat().
 from __future__ import annotations
 
 import time
-from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, ROLE_COACH, get_ui_attributes
 from typing import Any, Dict
 
 from fastapi import Request
 
+from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, get_ui_attributes
 from app.models import ChatRequest
 from app.services.chat_context import ChatContext
 from app.services.security_guard import JailbreakGuard
-from app.services.vertex_helpers import vertex_call_with_fallback_text
 from app.vertex import VertexClient
 
 

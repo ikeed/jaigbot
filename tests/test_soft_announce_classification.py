@@ -14,8 +14,6 @@ Per the AIMS framework:
 - Inquire = open-ended questions to elicit *concerns/hesitancy* (NOT status questions)
 - A trailing status question after a vaccine introduction stays as Announce.
 """
-import pytest
-from unittest.mock import MagicMock
 
 from app.models import Coaching, ClassifierResult
 from app.services.classifier_service import ClassifierService

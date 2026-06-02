@@ -1,4 +1,3 @@
-import json
 from typing import List, Optional, Callable
 
 from ..vertex import VertexClient as DefaultVertexClient

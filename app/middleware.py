@@ -1,9 +1,11 @@
-from fastapi import Request, Response
+from fastapi import Request
 from fastapi.responses import RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+
 from app.chainlit_thread_state import get_current_thread_id
-from app.security.auth import authenticated_user_identifier
 from app.constants import PATH_CHAT, ROUTE_CHAT_LOGIN, ROUTE_CHAT_LOGIN_CALLBACK
+from app.security.auth import authenticated_user_identifier
+
 
 class AuthRedirectMiddleware(BaseHTTPMiddleware):
     """
