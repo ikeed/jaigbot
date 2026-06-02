@@ -1,5 +1,6 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="AIMSBot (Unified)" type="PythonConfigurationType" factoryName="Python">
+    <output_file path="$PROJECT_DIR$/console.log" />
     <module name="aimsbot" />
     <option name="ENV_FILES" value="" />
     <option name="INTERPRETER_OPTIONS" value="" />
@@ -16,7 +17,7 @@
       <env name="OAUTH_GOOGLE_CLIENT_SECRET" value="" />
     </envs>
     <option name="SDK_HOME" value="" />
-    <option name="SDK_NAME" value="Python 3.13 (AIMSBot)" />
+    <option name="SDK_NAME" value="Python 3.13 (AIMSBot) (2)" />
     <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
     <option name="IS_MODULE_SDK" value="false" />
     <option name="ADD_CONTENT_ROOTS" value="true" />

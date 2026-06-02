@@ -171,7 +171,8 @@ class AimsCoachingHandler:
                     or req.headers.get("x-request-id")
                     or str(uuid.uuid4())
                 )
-            except Exception:
+            except Exception as e:
+                self.logger.warning("Failed to get request correlation id: %s", e)
                 return str(uuid.uuid4())
 
         request_id = _req_id()
@@ -248,7 +249,8 @@ class AimsCoachingHandler:
                 self.logger.warning("Classification timed out after %s s, falling back", self.classify_budget_s)
                 try:
                     task_cls.cancel()
-                except Exception:
+                except Exception as e:
+                    self.logger.debug(f"Deterministic classification failed (non-fatal): {e}")
                     pass
             
             # Now await reply task which was already running in parallel
@@ -309,7 +311,8 @@ class AimsCoachingHandler:
         # Try to snapshot model used for classification (may be approximate if overwritten by parallel call)
         try:
             model_used_cls = get_last_model_used() or self.model_id
-        except Exception:
+        except Exception as e:
+            self.logger.debug("Failed to snapshot model used: %s", e)
             model_used_cls = self.model_id
         telemetry_log_event(
             self.logger,
@@ -402,13 +405,14 @@ class AimsCoachingHandler:
                         "coaching_data": structured_coaching
                     })
                     mem["updated"] = now
-        except Exception:
-            pass
+        except Exception as e:
+            self.logger.error("Failed to append coaching to conversation history: %s", e)
 
         # Calculate reply duration from its previously completed task
         try:
             model_used_reply = get_last_model_used() or self.model_id
-        except Exception:
+        except Exception as e:
+            self.logger.warning("Failed to snapshot model used for reply: %s", e)
             model_used_reply = self.model_id
         telemetry_log_event(
             self.logger,
@@ -426,7 +430,8 @@ class AimsCoachingHandler:
             if not (ctx.person_last or "").strip():
                 pr = reply_payload.get("patient_reply", "")
                 reply_payload["patient_reply"] = strip_appointment_headers(pr)
-        except Exception:
+        except Exception as e:
+            self.logger.warning("Failed to strip appointment headers: %s", e)
             pass
         
         # Step 6: Update conversation history
@@ -468,7 +473,8 @@ class AimsCoachingHandler:
         # Report the actual model used (considering fallbacks) when available
         try:
             model_used = get_last_model_used() or self.model_id
-        except Exception:
+        except Exception as e:
+            self.logger.warning("Failed to determine model used for response: %s", e)
             model_used = self.model_id
 
         result = {
@@ -564,8 +570,8 @@ class AimsCoachingHandler:
             cls_payload["phase"] = state.get("phase")
             mem["aims_state"] = state
             
-        except Exception:
-            self.logger.exception("AIMS state update failed")
+        except Exception as e:
+            self.logger.exception(f"AIMS state update failed: {e}")
 
     @classmethod
     def _component_steps(
@@ -723,7 +729,8 @@ class AimsCoachingHandler:
                 cls_payload.setdefault("tips", []).append(tip)
                 try:
                     cls_payload["score"] = min(2, int(cls_payload.get("score", 2)))
-                except Exception:
+                except Exception as e:
+                    self.logger.debug(f"Score normalization failed (secure before inquire): {e}")
                     cls_payload["score"] = 2
                 # Track for de-duplication using existing mechanism
                 recent = state.get("recent_coaching") or []
@@ -782,7 +789,8 @@ class AimsCoachingHandler:
                 cls_payload.setdefault("tips", []).append(tip)
                 try:
                     cls_payload["score"] = min(2, int(cls_payload.get("score", 2)))
-                except Exception:
+                except Exception as e:
+                    self.logger.debug(f"Score normalization failed (secure before mirror): {e}")
                     cls_payload["score"] = 2
 
                 # Track this feedback for future de-duplication
@@ -912,14 +920,15 @@ class AimsCoachingHandler:
                     if arr:
                         try:
                             ra[k] = sum(arr) / len(arr)
-                        except Exception:
+                        except Exception as e:
+                            self.logger.debug(f"Failed to calculate running average for {k}: {e}")
                             pass
                 aims["runningAverage"] = ra
             
             mem["aims"] = aims
             
-        except Exception:
-            self.logger.debug("AIMS metrics update failed")
+        except Exception as e:
+            self.logger.debug(f"AIMS metrics update failed: {e}")
     
     async def _generate_patient_reply(
         self, clinician_message: str, history_text: str, req: Request, session_id: str, *, character: str | None = None, scene: str | None = None
@@ -1038,8 +1047,8 @@ class AimsCoachingHandler:
             mem.setdefault("history", []).append(user_entry)
             mem.setdefault("full_history", []).append({**user_entry, "time": now})
             mem["updated"] = now
-        except Exception:
-            self.logger.debug("User history append failed")
+        except Exception as e:
+            self.logger.debug(f"User history append failed: {e}")
 
     def _append_assistant_history(self, mem: Optional[Dict[str, Any]], assistant_reply: str) -> None:
         """Append an assistant message to history. Mutates mem in place."""
@@ -1057,8 +1066,8 @@ class AimsCoachingHandler:
             from app.services.session_service import SessionService
             mem["history"] = SessionService._trim_history(mem["history"], self.memory_max_turns)
 
-        except Exception:
-            self.logger.debug("Assistant history append failed")
+        except Exception as e:
+            self.logger.debug(f"Assistant history append failed: {e}")
     
     def _build_session_metrics(self, mem: Optional[Dict[str, Any]]) -> Dict[str, Any] | None:
         """Build session metrics snapshot from mem dict."""
@@ -1077,7 +1086,8 @@ class AimsCoachingHandler:
                     if arr:
                         try:
                             running_avg[k] = sum(arr) / len(arr)
-                        except Exception:
+                        except Exception as e:
+                            self.logger.debug(f"Failed to calculate running average: {e}")
                             pass
             
             return {
@@ -1086,7 +1096,8 @@ class AimsCoachingHandler:
                 "runningAverage": running_avg
             }
             
-        except Exception:
+        except Exception as e:
+            self.logger.debug(f"Failed to build session metrics: {e}")
             return None
     
     async def _check_end_game(
@@ -1150,7 +1161,8 @@ class AimsCoachingHandler:
                     mirroredCount=len(mirrored),
                     securedCount=len(secured)
                 )
-            except Exception:
+            except Exception as e:
+                self.logger.debug(f"History persistence failed (non-fatal): {e}")
                 pass
 
             # 3. Call LLM detector via ClassifierService
@@ -1202,7 +1214,8 @@ class AimsCoachingHandler:
                     isEndgame=is_endgame,
                     outcome=outcome
                 )
-            except Exception:
+            except Exception as e:
+                self.logger.debug(f"Telemetry log failed (endgame): {e}")
                 pass
 
             if is_endgame:
@@ -1214,7 +1227,8 @@ class AimsCoachingHandler:
                     fb_bullets = build_endgame_bullets_fallback(session_obj)
                     if fb_bullets:
                         lines.extend(fb_bullets)
-                except Exception:
+                except Exception as e:
+                    self.logger.debug(f"Deterministic evaluation failed: {e}")
                     pass
 
                 return {"title": title, "lines": lines}
@@ -1251,7 +1265,8 @@ class AimsCoachingHandler:
         pro_primary = self.model_id
         try:
             cfg_fallbacks = [m for m in (self.model_fallbacks or []) if m]
-        except Exception:
+        except Exception as e:
+            self.logger.debug(f"Failed to resolve model fallbacks: {e}")
             cfg_fallbacks = []
         flash = "gemini-2.5-flash"
         if lp == "coach_classify":

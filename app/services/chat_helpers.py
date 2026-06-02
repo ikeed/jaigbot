@@ -119,7 +119,8 @@ def format_markers(md: dict) -> str:
                 excerpt = ", ".join(lst[:12])
                 lines.append(f"{step_name}.linguistic: [{excerpt}]")
         return "\n".join(lines)
-    except Exception:
+    except Exception as e:
+        # Avoid circular import, use basic logging if needed, or just return empty
         return ""
 
 

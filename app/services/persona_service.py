@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import logging
 import random
 import time
 from functools import lru_cache
@@ -10,6 +11,8 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Optional
 
 from app.config import DEFAULT_CHARACTER, DEFAULT_SCENE, settings
+
+logger = logging.getLogger(__name__)
 
 
 FALLBACK_PERSONA = {
@@ -37,7 +40,8 @@ def _load_personas_cached() -> tuple[dict, ...]:
         personas = data.get("personas") or []
         loaded = [p for p in personas if p.get("name")]
         return tuple(loaded or [FALLBACK_PERSONA])
-    except Exception:
+    except Exception as e:
+        logger.error("Failed to load personas from %s: %s", _personas_path(), e)
         return (FALLBACK_PERSONA,)
 
 
@@ -69,7 +73,8 @@ def load_robust_persona(name: str | None = None) -> dict:
         try:
             idx = max(0, min(int(settings.PERSONA_INDEX), len(personas) - 1))
             return personas[idx]
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to use PERSONA_INDEX %s: %s", settings.PERSONA_INDEX, e)
             pass
     return random.choice(personas) if personas else FALLBACK_PERSONA
 

@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from app.services.chainlit.orchestrator import ChainlitOrchestrator
-from app.constants import SESSION_USER, SESSION_ID, MSG_INTRO_REQUIRED
+from app.constants import SESSION_USER, SESSION_ID, MSG_INTRO_REQUIRED, MSG_RESUME_THREAD
 from app.chat_roles import ROLE_USER, ROLE_ASSISTANT
 
 @pytest.fixture
@@ -32,6 +32,41 @@ async def test_handle_chat_start_needs_intro(orchestrator, mock_services):
     
     assert mock_services["session"].intro_pending is True
     mock_services["ui"].send_window_message.assert_called_with({"type": MSG_INTRO_REQUIRED})
+
+@pytest.mark.asyncio
+async def test_handle_chat_start_redirects_reconnect_to_persisted_thread(
+    orchestrator, mock_services, monkeypatch
+):
+    mock_services["session"].get_user_identifier.return_value = "user1"
+    mock_services["session"].query_params = {}
+    orchestrator._has_seen_intro_locally_or_persistently = MagicMock(return_value=True)
+    orchestrator._get_thread_id = MagicMock(return_value="new-socket-thread")
+    orchestrator._start_scenario_flow = AsyncMock()
+    mock_services["ui"].send_window_message = AsyncMock()
+    monkeypatch.setattr(
+        "app.services.chainlit.orchestrator.get_current_thread_id",
+        lambda user_id: "persisted-thread",
+    )
+
+    await orchestrator.handle_chat_start()
+
+    mock_services["ui"].send_window_message.assert_awaited_once_with({
+        "type": MSG_RESUME_THREAD,
+        "threadId": "persisted-thread",
+    })
+    orchestrator._start_scenario_flow.assert_not_awaited()
+
+def test_reconnect_redirect_does_not_hijack_explicit_new_chat(
+    orchestrator, mock_services, monkeypatch
+):
+    mock_services["session"].query_params = {"aims_new": "1"}
+    orchestrator._get_thread_id = MagicMock(return_value="new-socket-thread")
+    monkeypatch.setattr(
+        "app.services.chainlit.orchestrator.get_current_thread_id",
+        lambda user_id: "persisted-thread",
+    )
+
+    assert orchestrator._get_reconnect_thread_id("user1") is None
 
 @pytest.mark.asyncio
 async def test_handle_user_message_success(orchestrator, mock_services):

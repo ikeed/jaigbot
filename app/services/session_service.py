@@ -17,6 +17,9 @@ from dataclasses import dataclass
 from typing import Any, Optional, Tuple
 import time
 import uuid
+import logging
+
+logger = logging.getLogger(__name__)
 from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, ROLE_COACH
 
 
@@ -204,13 +207,13 @@ class SessionService:
                         # Note: prune_expired is usually called in the background or between requests,
                         # so we call upload_session directly (blocking this minor loop, not the user).
                         storage_service.upload_session(sid, user_id, archive_data)
-                    except Exception:
-                        pass # Ignore archive errors during prune
+                    except Exception as e:
+                        logger.debug("Failed to archive session %s during prune: %s", sid, e)
                         
                 self._store.pop(sid, None)
-        except Exception:
+        except Exception as e:
             # best-effort only
-            pass
+            logger.debug("Error during prune_expired: %s", e)
 
     # -------- HTTP cookie helper --------
     def apply_cookie(self, response, session_id: str) -> None:
@@ -229,6 +232,6 @@ class SessionService:
                 samesite=self.cookie.samesite,
                 path="/",
             )
-        except Exception:
+        except Exception as e:
             # Best-effort only; ignore failures
-            pass
+            logger.debug("Failed to apply session cookie: %s", e)

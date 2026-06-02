@@ -1,0 +1,633 @@
+DEBUG: Defaulting CHAINLIT_URL to http://localhost:8080
+DEBUG: Starting uvicorn on localhost:8080
+DEBUG: CHAINLIT_URL is http://localhost:8080
+DEBUG: BACKEND_URL is http://localhost:8080/api/chat
+INFO:     Started server process [57226]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://localhost:8080 (Press CTRL+C to quit)
+INFO:     ::1:54915 - "GET /chat/ws/socket.io/?EIO=4&transport=polling&t=Pw76ZNM HTTP/1.1" 200 OK
+INFO:     ::1:54916 - "WebSocket /chat/ws/socket.io/?EIO=4&transport=websocket&sid=cNdsrb_P4Pvyy2siAAAA" [accepted]
+INFO:     connection open
+INFO:     ::1:54915 - "POST /chat/ws/socket.io/?EIO=4&transport=polling&t=Pw76ZO7&sid=cNdsrb_P4Pvyy2siAAAA HTTP/1.1" 200 OK
+INFO:     ::1:54917 - "GET /chat/ws/socket.io/?EIO=4&transport=polling&t=Pw76ZOA&sid=cNdsrb_P4Pvyy2siAAAA HTTP/1.1" 200 OK
+INFO:     ::1:54919 - "GET /chat/ws/socket.io/?EIO=4&transport=polling&t=Pw76a6E HTTP/1.1" 200 OK
+INFO:     ::1:54920 - "WebSocket /chat/ws/socket.io/?EIO=4&transport=websocket&sid=Jb1IorHkiSjlkrfoAAAC" [accepted]
+INFO:     connection open
+INFO:     ::1:54919 - "POST /chat/ws/socket.io/?EIO=4&transport=polling&t=Pw76a6N&sid=Jb1IorHkiSjlkrfoAAAC HTTP/1.1" 200 OK
+INFO:     ::1:54921 - "GET /chat/ws/socket.io/?EIO=4&transport=polling&t=Pw76a6O&sid=Jb1IorHkiSjlkrfoAAAC HTTP/1.1" 200 OK
+INFO:     ::1:54922 - "GET /chat/login HTTP/1.1" 307 Temporary Redirect
+INFO:     ::1:54922 - "GET / HTTP/1.1" 307 Temporary Redirect
+INFO:     ::1:54922 - "GET /chat/thread/8dfd4710-3a48-441a-800d-b4734ce88e2d HTTP/1.1" 200 OK
+INFO:     ::1:54922 - "GET /chat/auth/config HTTP/1.1" 200 OK
+2026-06-01 23:52:03,907 WARNING [chainlit] Translation file for en-CA not found. Using default translation en-US.
+INFO:     ::1:54923 - "GET /chat/user HTTP/1.1" 200 OK
+INFO:     ::1:54922 - "GET /chat/project/translations?language=en-CA& HTTP/1.1" 200 OK
+INFO:     ::1:54922 - "GET /chat/project/settings?language=en-CA& HTTP/1.1" 200 OK
+2026-06-01 23:52:03,984 WARNING [chainlit] Translated markdown file for en-CA not found. Defaulting to chainlit.md.
+INFO:     ::1:54922 - "POST /chat/project/threads HTTP/1.1" 200 OK
+INFO:     ::1:54922 - "POST /chat/project/threads HTTP/1.1" 200 OK
+2026-06-01 23:52:04,250 WARNING [chainlit] Translated markdown file for en-CA not found. Defaulting to chainlit.md.
+INFO:     ::1:54922 - "GET /chat/project/settings?language=en-CA&chat_profile=AIMSBot& HTTP/1.1" 200 OK
+INFO:     ::1:54922 - "POST /chat/set-session-cookie HTTP/1.1" 200 OK
+INFO:     ::1:54922 - "GET /chat/ws/socket.io/?EIO=4&transport=polling&t=Pw76epI HTTP/1.1" 200 OK
+INFO:     ::1:54925 - "WebSocket /chat/ws/socket.io/?EIO=4&transport=websocket&sid=Yb2nQVca6xZkdYsyAAAE" [accepted]
+INFO:     connection open
+INFO:     ::1:54922 - "POST /chat/ws/socket.io/?EIO=4&transport=polling&t=Pw76epq&sid=Yb2nQVca6xZkdYsyAAAE HTTP/1.1" 200 OK
+INFO:     ::1:54923 - "GET /chat/ws/socket.io/?EIO=4&transport=polling&t=Pw76epw&sid=Yb2nQVca6xZkdYsyAAAE HTTP/1.1" 200 OK
+INFO:     ::1:54924 - "POST /chat/set-session-cookie HTTP/1.1" 200 OK
+INFO:     ::1:54926 - "POST /chat/set-session-cookie HTTP/1.1" 200 OK
+INFO:     ::1:54926 - "POST /chat/project/threads HTTP/1.1" 200 OK
+INFO:     connection closed
+INFO:     ::1:54924 - "GET /chat/ws/socket.io/?EIO=4&transport=polling&t=Pw76eu_ HTTP/1.1" 200 OK
+INFO:     ::1:54923 - "GET /chat/ws/socket.io/?EIO=4&transport=polling&t=Pw76evO HTTP/1.1" 200 OK
+2026-06-01 23:52:05,458 INFO [app] {"event": "request_start", "method": "POST", "path": "/api/session", "client": "::1", "requestId": "37269b5f-37de-4696-923d-f9c376a19ae5", "bodySize": 2982, "body": "{\"sessionId\":\"8dfd4710-3a48-441a-800d-b4734ce88e2d\",\"connectionId\":\"2eb5e4f2-7e34-4541-96fa-64c78374c937\",\"personaId\":null,\"userInfo\":{\"identifier\":\"craig.burnett@gmail.com\",\"metadata\":{\"image\":\"https://lh3.googleusercontent.com/a/ACg8ocKYTlrf-LMNjitaxsMdlRu24ytf3OCMSYFPf7ujXjcEeXxmK8jb=s96-c\",\"provider\":\"google\",\"name\":\"Craig Burnett\"}},\"force\":false,\"character\":\"You are roleplaying as a person in a clinical setting. Maintain your character and respond naturally to the clinician.\\n\\nSpecific Persona: Sarah\\nDetailed Biography and Motivations: Sarah is a single mother in Moncton-Dieppe, NB, working as a manager for a sports centre. She is Francophone, a vegetarian, and practices yoga. She followed the vaccine schedule for her daughter Emily when she was a baby but now feels measles is not dangerous\u2014just a childhood illness from the past. She has an 'optimism bias' because she hasn't seen any cases in her circle. Dominant foundations: Implicit purity + optimism bias. Need for cognition: Low. Epistemic trust ", "headers": null}
+INFO:     ::1:54929 - "WebSocket /chat/ws/socket.io/?EIO=4&transport=websocket&sid=S3EXi0F9Lb9HVx-hAAAH" [accepted]
+INFO:     connection open
+2026-06-01 23:52:05,488 INFO [app] {"event": "request_start", "method": "POST", "path": "/api/session/deregister", "client": "::1", "requestId": "05d19d0b-83b8-4393-b32e-f71457f750e8", "bodySize": 106, "body": {"sessionId": "8dfd4710-3a48-441a-800d-b4734ce88e2d", "connectionId": "2eb5e4f2-7e34-4541-96fa-64c78374c937"}, "headers": null}
+2026-06-01 23:52:05,490 INFO [app] Initializing session 8dfd4710-3a48-441a-800d-b4734ce88e2d
+2026-06-01 23:52:05,490 INFO [app] Recovered personaId 'Sarah' from existing memory for session 8dfd4710-3a48-441a-800d-b4734ce88e2d
+2026-06-01 23:52:05,497 INFO [app] Session initialized: 8dfd4710-3a48-441a-800d-b4734ce88e2d
+2026-06-01 23:52:05,510 INFO [app] {"event": "request_end", "method": "POST", "path": "/api/session", "status": 200, "latencyMs": 56, "requestId": "37269b5f-37de-4696-923d-f9c376a19ae5"}
+2026-06-01 23:52:05,513 INFO [httpx] HTTP Request: POST http://localhost:8080/api/session "HTTP/1.1 200 OK"
+INFO:     ::1:54927 - "POST /api/session HTTP/1.1" 200 OK
+INFO:     ::1:54924 - "POST /chat/ws/socket.io/?EIO=4&transport=polling&t=Pw76e_N&sid=S3EXi0F9Lb9HVx-hAAAH HTTP/1.1" 200 OK
+INFO:     ::1:54923 - "GET /chat/ws/socket.io/?EIO=4&transport=polling&t=Pw76e_O&sid=S3EXi0F9Lb9HVx-hAAAH HTTP/1.1" 200 OK
+2026-06-01 23:52:05,525 INFO [app] Connection deregistered: 2eb5e4f2-7e34-4541-96fa-64c78374c937 for session 8dfd4710-3a48-441a-800d-b4734ce88e2d
+2026-06-01 23:52:05,527 INFO [app] {"event": "request_end", "method": "POST", "path": "/api/session/deregister", "status": 200, "latencyMs": 47, "requestId": "05d19d0b-83b8-4393-b32e-f71457f750e8"}
+INFO:     ::1:54928 - "POST /api/session/deregister HTTP/1.1" 200 OK
+2026-06-01 23:52:05,586 INFO [httpx] HTTP Request: POST http://localhost:8080/api/session/deregister "HTTP/1.1 200 OK"
+2026-06-01 23:52:05,630 INFO [app] {"event": "request_start", "method": "GET", "path": "/api/history", "client": "::1", "requestId": "438ecd1d-73eb-48c6-b63d-5ce6798d4b79", "bodySize": 0, "body": null, "headers": null}
+INFO:     ::1:54930 - "GET /api/history?sessionId=8dfd4710-3a48-441a-800d-b4734ce88e2d HTTP/1.1" 200 OK
+2026-06-01 23:52:05,655 INFO [app] {"event": "request_end", "method": "GET", "path": "/api/history", "status": 200, "latencyMs": 27, "requestId": "438ecd1d-73eb-48c6-b63d-5ce6798d4b79"}
+2026-06-01 23:52:06,017 INFO [httpx] HTTP Request: GET http://localhost:8080/api/history?sessionId=8dfd4710-3a48-441a-800d-b4734ce88e2d "HTTP/1.1 200 OK"
+2026-06-01 23:52:06,039 INFO [app] {"event": "request_start", "method": "POST", "path": "/api/session", "client": "::1", "requestId": "0536e278-7198-4c1c-86d9-c3039c6e45cf", "bodySize": 2982, "body": "{\"sessionId\":\"8dfd4710-3a48-441a-800d-b4734ce88e2d\",\"connectionId\":\"2eb5e4f2-7e34-4541-96fa-64c78374c937\",\"personaId\":null,\"userInfo\":{\"identifier\":\"craig.burnett@gmail.com\",\"metadata\":{\"image\":\"https://lh3.googleusercontent.com/a/ACg8ocKYTlrf-LMNjitaxsMdlRu24ytf3OCMSYFPf7ujXjcEeXxmK8jb=s96-c\",\"provider\":\"google\",\"name\":\"Craig Burnett\"}},\"force\":false,\"character\":\"You are roleplaying as a person in a clinical setting. Maintain your character and respond naturally to the clinician.\\n\\nSpecific Persona: Sarah\\nDetailed Biography and Motivations: Sarah is a single mother in Moncton-Dieppe, NB, working as a manager for a sports centre. She is Francophone, a vegetarian, and practices yoga. She followed the vaccine schedule for her daughter Emily when she was a baby but now feels measles is not dangerous\u2014just a childhood illness from the past. She has an 'optimism bias' because she hasn't seen any cases in her circle. Dominant foundations: Implicit purity + optimism bias. Need for cognition: Low. Epistemic trust ", "headers": null}
+2026-06-01 23:52:06,040 INFO [app] Initializing session 8dfd4710-3a48-441a-800d-b4734ce88e2d
+2026-06-01 23:52:06,041 INFO [app] Recovered personaId 'Sarah' from existing memory for session 8dfd4710-3a48-441a-800d-b4734ce88e2d
+2026-06-01 23:52:06,048 INFO [app] Session initialized: 8dfd4710-3a48-441a-800d-b4734ce88e2d
+INFO:     ::1:54931 - "POST /api/session HTTP/1.1" 200 OK
+2026-06-01 23:52:06,059 INFO [app] {"event": "request_end", "method": "POST", "path": "/api/session", "status": 200, "latencyMs": 20, "requestId": "0536e278-7198-4c1c-86d9-c3039c6e45cf"}
+2026-06-01 23:52:06,060 INFO [httpx] HTTP Request: POST http://localhost:8080/api/session "HTTP/1.1 200 OK"
+INFO:     ::1:54932 - "GET /api/history?sessionId=8dfd4710-3a48-441a-800d-b4734ce88e2d HTTP/1.1" 200 OK
+2026-06-01 23:52:06,126 INFO [app] {"event": "request_start", "method": "GET", "path": "/api/history", "client": "::1", "requestId": "a631e2e8-ae3c-4319-a071-0c9c2952f950", "bodySize": 0, "body": null, "headers": null}
+2026-06-01 23:52:06,127 INFO [app] {"event": "request_end", "method": "GET", "path": "/api/history", "status": 200, "latencyMs": 1, "requestId": "a631e2e8-ae3c-4319-a071-0c9c2952f950"}
+2026-06-01 23:52:06,127 INFO [httpx] HTTP Request: GET http://localhost:8080/api/history?sessionId=8dfd4710-3a48-441a-800d-b4734ce88e2d "HTTP/1.1 200 OK"
+INFO:     ::1:54924 - "GET /chat/user HTTP/1.1" 200 OK
+2026-06-01 23:52:44,795 WARNING [chainlit] Translation file for en-CA not found. Using default translation en-US.
+INFO:     ::1:54936 - "GET /chat/user HTTP/1.1" 200 OK
+INFO:     ::1:54937 - "GET /chat/project/translations?language=en-CA& HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     connection closed
+INFO:     connection closed
+INFO:     connection closed
+INFO:     Waiting for background tasks to complete. (CTRL+C to force quit)
+2026-06-01 23:59:16,289 ERROR [chainlit] All connection attempts failed
+Traceback (most recent call last):
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
+    yield
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_transports/default.py", line 394, in handle_async_request
+    resp = await self._pool.handle_async_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpcore/_async/connection_pool.py", line 256, in handle_async_request
+    raise exc from None
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpcore/_async/connection_pool.py", line 236, in handle_async_request
+    response = await connection.handle_async_request(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        pool_request.request
+        ^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpcore/_async/connection.py", line 101, in handle_async_request
+    raise exc
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpcore/_async/connection.py", line 78, in handle_async_request
+    stream = await self._connect(request)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpcore/_async/connection.py", line 124, in _connect
+    stream = await self._network_backend.connect_tcp(**kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpcore/_backends/auto.py", line 31, in connect_tcp
+    return await self._backend.connect_tcp(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+    )
+    ^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpcore/_backends/anyio.py", line 113, in connect_tcp
+    with map_exceptions(exc_map):
+         ~~~~~~~~~~~~~~^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpcore/_exceptions.py", line 14, in map_exceptions
+    raise to_exc(exc) from exc
+httpcore.ConnectError: All connection attempts failed
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/chainlit/utils.py", line 57, in wrapper
+    return await user_function(**params_values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/chainlit_app.py", line 79, in on_chat_end
+    await backend_client.deregister_session(session_id, connection_id)
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/app/services/chainlit/backend_client.py", line 125, in deregister_session
+    await client.post(
+    ...<5 lines>...
+    )
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_client.py", line 1859, in post
+    return await self.request(
+           ^^^^^^^^^^^^^^^^^^^
+    ...<13 lines>...
+    )
+    ^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_client.py", line 1540, in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_client.py", line 1629, in send
+    response = await self._send_handling_auth(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_client.py", line 1657, in _send_handling_auth
+    response = await self._send_handling_redirects(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_client.py", line 1694, in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_client.py", line 1730, in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_transports/default.py", line 393, in handle_async_request
+    with map_httpcore_exceptions():
+         ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_transports/default.py", line 118, in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+httpx.ConnectError: All connection attempts failed
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [57226]
+2026-06-01 23:59:32,550 INFO [app] {"event": "request_start", "method": "POST", "path": "/api/session", "client": "::1", "requestId": "e6b127ae-3058-4833-9850-57053652b700", "bodySize": 2982, "body": "{\"sessionId\":\"8dfd4710-3a48-441a-800d-b4734ce88e2d\",\"connectionId\":\"2eb5e4f2-7e34-4541-96fa-64c78374c937\",\"personaId\":null,\"userInfo\":{\"identifier\":\"craig.burnett@gmail.com\",\"metadata\":{\"image\":\"https://lh3.googleusercontent.com/a/ACg8ocKYTlrf-LMNjitaxsMdlRu24ytf3OCMSYFPf7ujXjcEeXxmK8jb=s96-c\",\"provider\":\"google\",\"name\":\"Craig Burnett\"}},\"force\":false,\"character\":\"You are roleplaying as a person in a clinical setting. Maintain your character and respond naturally to the clinician.\\n\\nSpecific Persona: Sarah\\nDetailed Biography and Motivations: Sarah is a single mother in Moncton-Dieppe, NB, working as a manager for a sports centre. She is Francophone, a vegetarian, and practices yoga. She followed the vaccine schedule for her daughter Emily when she was a baby but now feels measles is not dangerous\u2014just a childhood illness from the past. She has an 'optimism bias' because she hasn't seen any cases in her circle. Dominant foundations: Implicit purity + optimism bias. Need for cognition: Low. Epistemic trust ", "headers": null}
+2026-06-01 23:59:32,594 INFO [app] Initializing session 8dfd4710-3a48-441a-800d-b4734ce88e2d
+2026-06-01 23:59:32,594 INFO [app] Recovered personaId 'Sarah' from existing memory for session 8dfd4710-3a48-441a-800d-b4734ce88e2d
+2026-06-01 23:59:32,609 INFO [app] Session initialized: 8dfd4710-3a48-441a-800d-b4734ce88e2d
+2026-06-01 23:59:32,630 INFO [app] {"event": "request_end", "method": "POST", "path": "/api/session", "status": 200, "latencyMs": 96, "requestId": "e6b127ae-3058-4833-9850-57053652b700"}
+2026-06-01 23:59:32,635 INFO [httpx] HTTP Request: POST http://localhost:8080/api/session "HTTP/1.1 200 OK"
+2026-06-01 23:59:32,736 INFO [app] {"event": "request_start", "method": "GET", "path": "/api/history", "client": "::1", "requestId": "e3ef86b9-7bdb-49cb-a537-901b51637058", "bodySize": 0, "body": null, "headers": null}
+2026-06-01 23:59:32,740 INFO [app] {"event": "request_end", "method": "GET", "path": "/api/history", "status": 200, "latencyMs": 4, "requestId": "e3ef86b9-7bdb-49cb-a537-901b51637058"}
+2026-06-01 23:59:32,744 INFO [httpx] HTTP Request: GET http://localhost:8080/api/history?sessionId=8dfd4710-3a48-441a-800d-b4734ce88e2d "HTTP/1.1 200 OK"
+2026-06-01 23:59:58,457 WARNING [chainlit] Translation file for en-CA not found. Using default translation en-US.
+2026-06-02 00:00:09,886 INFO [app] {"event": "request_start", "method": "POST", "path": "/api/chat", "client": "::1", "requestId": "ef49cdc3-d0d4-4aa4-a2d4-3a73e3e802d6", "bodySize": 2477, "body": "{\"message\":\"time for her vaccinations\",\"sessionId\":\"8dfd4710-3a48-441a-800d-b4734ce88e2d\",\"character\":\"You are roleplaying as a person in a clinical setting. Maintain your character and respond naturally to the clinician.\\n\\nSpecific Persona: Sarah\\nDetailed Biography and Motivations: Sarah is a single mother in Moncton-Dieppe, NB, working as a manager for a sports centre. She is Francophone, a vegetarian, and practices yoga. She followed the vaccine schedule for her daughter Emily when she was a baby but now feels measles is not dangerous\u2014just a childhood illness from the past. She has an 'optimism bias' because she hasn't seen any cases in her circle. Dominant foundations: Implicit purity + optimism bias. Need for cognition: Low. Epistemic trust style: Social-norm driven. Core tension: Low perceived susceptibility; disease feels abstract or historical. Signal: 'Isn't measles basically gone?', 'I've never even heard of a case'.\\n\\nBehavioral Guidance:\\nCommunication needs:\\n- Needs the risk made concrete w", "headers": null}
+2026-06-02 00:00:10,173 INFO [app] {"event": "aims_classify_begin", "sessionId": "8dfd4710-3a48-441a-800d-b4734ce88e2d", "userInfo": {"identifier": "craig.burnett@gmail.com", "metadata": {"image": "https://lh3.googleusercontent.com/a/ACg8ocKYTlrf-LMNjitaxsMdlRu24ytf3OCMSYFPf7ujXjcEeXxmK8jb=s96-c", "provider": "google", "name": "Craig Burnett"}}, "requestId": "8bd28215-6a93-42f4-86e9-c78ae61d6e77", "modelId": "gemini-2.5-pro"}
+2026-06-02 00:00:10,174 INFO [app] {"event": "aims_reply_begin", "sessionId": "8dfd4710-3a48-441a-800d-b4734ce88e2d", "userInfo": {"identifier": "craig.burnett@gmail.com", "metadata": {"image": "https://lh3.googleusercontent.com/a/ACg8ocKYTlrf-LMNjitaxsMdlRu24ytf3OCMSYFPf7ujXjcEeXxmK8jb=s96-c", "provider": "google", "name": "Craig Burnett"}}, "requestId": "8bd28215-6a93-42f4-86e9-c78ae61d6e77", "modelId": "gemini-2.5-pro"}
+2026-06-02 00:00:10,325 INFO [google_genai.models] AFC is enabled with max remote calls: 10.
+2026-06-02 00:00:10,545 INFO [google_genai.models] AFC is enabled with max remote calls: 10.
+2026-06-02 00:00:16,689 INFO [app.vertex] {"event": "genai_async_response", "modelId": "gemini-2.5-flash", "finishReason": "STOP", "textLen": 160, "thoughtLen": 0, "cachedContentTokens": null, "hasText": true}
+2026-06-02 00:00:17,914 INFO [app.vertex] {"event": "genai_async_response", "modelId": "gemini-2.5-pro", "finishReason": "STOP", "textLen": 1119, "thoughtLen": 0, "cachedContentTokens": null, "hasText": true}
+2026-06-02 00:00:17,914 INFO [app] {"event": "aims_classify_end", "sessionId": "8dfd4710-3a48-441a-800d-b4734ce88e2d", "requestId": "8bd28215-6a93-42f4-86e9-c78ae61d6e77", "durationMs": 7741, "modelUsed": "gemini-2.5-pro", "step": "Announce", "score": 2}
+2026-06-02 00:00:17,915 INFO [app] {"event": "aims_reply_end", "sessionId": "8dfd4710-3a48-441a-800d-b4734ce88e2d", "requestId": "8bd28215-6a93-42f4-86e9-c78ae61d6e77", "durationMs": 7741, "modelUsed": "gemini-2.5-pro", "textLen": 135}
+2026-06-02 00:00:17,922 INFO [app] {"event": "aims_turn", "sessionId": "8dfd4710-3a48-441a-800d-b4734ce88e2d", "userInfo": {"identifier": "craig.burnett@gmail.com", "metadata": {"image": "https://lh3.googleusercontent.com/a/ACg8ocKYTlrf-LMNjitaxsMdlRu24ytf3OCMSYFPf7ujXjcEeXxmK8jb=s96-c", "provider": "google", "name": "Craig Burnett"}}, "status": "ok", "latencyMs": 7750, "modelId": "gemini-2.5-pro", "step": "Announce", "score": 2}
+2026-06-02 00:00:17,923 INFO [app] {"event": "request_end", "method": "POST", "path": "/api/chat", "status": 200, "latencyMs": 8037, "requestId": "ef49cdc3-d0d4-4aa4-a2d4-3a73e3e802d6"}
+2026-06-02 00:00:17,931 INFO [httpx] HTTP Request: POST http://localhost:8080/api/chat "HTTP/1.1 200 OK"
+2026-06-02 00:00:26,240 ERROR [chainlit] All connection attempts failed
+Traceback (most recent call last):
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
+    yield
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_transports/default.py", line 394, in handle_async_request
+    resp = await self._pool.handle_async_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpcore/_async/connection_pool.py", line 256, in handle_async_request
+    raise exc from None
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpcore/_async/connection_pool.py", line 236, in handle_async_request
+    response = await connection.handle_async_request(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        pool_request.request
+        ^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpcore/_async/connection.py", line 101, in handle_async_request
+    raise exc
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpcore/_async/connection.py", line 78, in handle_async_request
+    stream = await self._connect(request)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpcore/_async/connection.py", line 124, in _connect
+    stream = await self._network_backend.connect_tcp(**kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpcore/_backends/auto.py", line 31, in connect_tcp
+    return await self._backend.connect_tcp(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+    )
+    ^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpcore/_backends/anyio.py", line 113, in connect_tcp
+    with map_exceptions(exc_map):
+         ~~~~~~~~~~~~~~^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpcore/_exceptions.py", line 14, in map_exceptions
+    raise to_exc(exc) from exc
+httpcore.ConnectError: All connection attempts failed
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/chainlit/utils.py", line 57, in wrapper
+    return await user_function(**params_values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/chainlit_app.py", line 79, in on_chat_end
+    await backend_client.deregister_session(session_id, connection_id)
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/app/services/chainlit/backend_client.py", line 125, in deregister_session
+    await client.post(
+    ...<5 lines>...
+    )
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_client.py", line 1859, in post
+    return await self.request(
+           ^^^^^^^^^^^^^^^^^^^
+    ...<13 lines>...
+    )
+    ^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_client.py", line 1540, in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_client.py", line 1629, in send
+    response = await self._send_handling_auth(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_client.py", line 1657, in _send_handling_auth
+    response = await self._send_handling_redirects(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_client.py", line 1694, in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_client.py", line 1730, in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_transports/default.py", line 393, in handle_async_request
+    with map_httpcore_exceptions():
+         ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_transports/default.py", line 118, in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+httpx.ConnectError: All connection attempts failed
+2026-06-02 00:00:33,419 INFO [app] {"event": "request_start", "method": "POST", "path": "/api/session", "client": "::1", "requestId": "e0e71dc1-c7f8-4550-b2d6-0bf6f35da9bc", "bodySize": 2982, "body": "{\"sessionId\":\"8dfd4710-3a48-441a-800d-b4734ce88e2d\",\"connectionId\":\"2eb5e4f2-7e34-4541-96fa-64c78374c937\",\"personaId\":null,\"userInfo\":{\"identifier\":\"craig.burnett@gmail.com\",\"metadata\":{\"image\":\"https://lh3.googleusercontent.com/a/ACg8ocKYTlrf-LMNjitaxsMdlRu24ytf3OCMSYFPf7ujXjcEeXxmK8jb=s96-c\",\"provider\":\"google\",\"name\":\"Craig Burnett\"}},\"force\":false,\"character\":\"You are roleplaying as a person in a clinical setting. Maintain your character and respond naturally to the clinician.\\n\\nSpecific Persona: Sarah\\nDetailed Biography and Motivations: Sarah is a single mother in Moncton-Dieppe, NB, working as a manager for a sports centre. She is Francophone, a vegetarian, and practices yoga. She followed the vaccine schedule for her daughter Emily when she was a baby but now feels measles is not dangerous\u2014just a childhood illness from the past. She has an 'optimism bias' because she hasn't seen any cases in her circle. Dominant foundations: Implicit purity + optimism bias. Need for cognition: Low. Epistemic trust ", "headers": null}
+2026-06-02 00:00:33,421 INFO [app] Initializing session 8dfd4710-3a48-441a-800d-b4734ce88e2d
+2026-06-02 00:00:33,421 INFO [app] Recovered personaId 'Sarah' from existing memory for session 8dfd4710-3a48-441a-800d-b4734ce88e2d
+2026-06-02 00:00:33,428 INFO [app] Session initialized: 8dfd4710-3a48-441a-800d-b4734ce88e2d
+2026-06-02 00:00:33,436 INFO [app] {"event": "request_end", "method": "POST", "path": "/api/session", "status": 200, "latencyMs": 17, "requestId": "e0e71dc1-c7f8-4550-b2d6-0bf6f35da9bc"}
+2026-06-02 00:00:33,437 INFO [httpx] HTTP Request: POST http://localhost:8080/api/session "HTTP/1.1 200 OK"
+2026-06-02 00:00:33,517 INFO [app] {"event": "request_start", "method": "GET", "path": "/api/history", "client": "::1", "requestId": "89d301bc-ae47-406b-8392-56ec92bf4ba7", "bodySize": 0, "body": null, "headers": null}
+2026-06-02 00:00:33,519 INFO [app] {"event": "request_end", "method": "GET", "path": "/api/history", "status": 200, "latencyMs": 3, "requestId": "89d301bc-ae47-406b-8392-56ec92bf4ba7"}
+2026-06-02 00:00:33,520 INFO [httpx] HTTP Request: GET http://localhost:8080/api/history?sessionId=8dfd4710-3a48-441a-800d-b4734ce88e2d "HTTP/1.1 200 OK"
+2026-06-02 00:00:44,981 WARNING [chainlit] Translation file for en-CA not found. Using default translation en-US.
+2026-06-02 00:01:18,103 WARNING [chainlit] Translation file for en-CA not found. Using default translation en-US.
+2026-06-02 00:01:27,898 ERROR [chainlit] All connection attempts failed
+Traceback (most recent call last):
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
+    yield
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_transports/default.py", line 394, in handle_async_request
+    resp = await self._pool.handle_async_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpcore/_async/connection_pool.py", line 256, in handle_async_request
+    raise exc from None
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpcore/_async/connection_pool.py", line 236, in handle_async_request
+    response = await connection.handle_async_request(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        pool_request.request
+        ^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpcore/_async/connection.py", line 101, in handle_async_request
+    raise exc
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpcore/_async/connection.py", line 78, in handle_async_request
+    stream = await self._connect(request)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpcore/_async/connection.py", line 124, in _connect
+    stream = await self._network_backend.connect_tcp(**kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpcore/_backends/auto.py", line 31, in connect_tcp
+    return await self._backend.connect_tcp(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+    )
+    ^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpcore/_backends/anyio.py", line 113, in connect_tcp
+    with map_exceptions(exc_map):
+         ~~~~~~~~~~~~~~^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpcore/_exceptions.py", line 14, in map_exceptions
+    raise to_exc(exc) from exc
+httpcore.ConnectError: All connection attempts failed
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/chainlit/utils.py", line 57, in wrapper
+    return await user_function(**params_values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/chainlit_app.py", line 79, in on_chat_end
+    await backend_client.deregister_session(session_id, connection_id)
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/app/services/chainlit/backend_client.py", line 125, in deregister_session
+    await client.post(
+    ...<5 lines>...
+    )
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_client.py", line 1859, in post
+    return await self.request(
+           ^^^^^^^^^^^^^^^^^^^
+    ...<13 lines>...
+    )
+    ^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_client.py", line 1540, in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_client.py", line 1629, in send
+    response = await self._send_handling_auth(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_client.py", line 1657, in _send_handling_auth
+    response = await self._send_handling_redirects(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_client.py", line 1694, in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_client.py", line 1730, in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_transports/default.py", line 393, in handle_async_request
+    with map_httpcore_exceptions():
+         ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_transports/default.py", line 118, in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+httpx.ConnectError: All connection attempts failed
+2026-06-02 00:01:36,908 INFO [app] {"event": "request_start", "method": "POST", "path": "/api/session", "client": "::1", "requestId": "51a1d18d-5da1-4284-9ddd-e8f8b911d826", "bodySize": 2982, "body": "{\"sessionId\":\"8dfd4710-3a48-441a-800d-b4734ce88e2d\",\"connectionId\":\"2eb5e4f2-7e34-4541-96fa-64c78374c937\",\"personaId\":null,\"userInfo\":{\"identifier\":\"craig.burnett@gmail.com\",\"metadata\":{\"image\":\"https://lh3.googleusercontent.com/a/ACg8ocKYTlrf-LMNjitaxsMdlRu24ytf3OCMSYFPf7ujXjcEeXxmK8jb=s96-c\",\"provider\":\"google\",\"name\":\"Craig Burnett\"}},\"force\":false,\"character\":\"You are roleplaying as a person in a clinical setting. Maintain your character and respond naturally to the clinician.\\n\\nSpecific Persona: Sarah\\nDetailed Biography and Motivations: Sarah is a single mother in Moncton-Dieppe, NB, working as a manager for a sports centre. She is Francophone, a vegetarian, and practices yoga. She followed the vaccine schedule for her daughter Emily when she was a baby but now feels measles is not dangerous\u2014just a childhood illness from the past. She has an 'optimism bias' because she hasn't seen any cases in her circle. Dominant foundations: Implicit purity + optimism bias. Need for cognition: Low. Epistemic trust ", "headers": null}
+2026-06-02 00:01:36,910 INFO [app] Initializing session 8dfd4710-3a48-441a-800d-b4734ce88e2d
+2026-06-02 00:01:36,910 INFO [app] Recovered personaId 'Sarah' from existing memory for session 8dfd4710-3a48-441a-800d-b4734ce88e2d
+2026-06-02 00:01:36,919 INFO [app] Session initialized: 8dfd4710-3a48-441a-800d-b4734ce88e2d
+2026-06-02 00:01:36,926 INFO [app] {"event": "request_end", "method": "POST", "path": "/api/session", "status": 200, "latencyMs": 19, "requestId": "51a1d18d-5da1-4284-9ddd-e8f8b911d826"}
+2026-06-02 00:01:36,928 INFO [httpx] HTTP Request: POST http://localhost:8080/api/session "HTTP/1.1 200 OK"
+2026-06-02 00:01:36,972 INFO [app] {"event": "request_start", "method": "GET", "path": "/api/history", "client": "::1", "requestId": "52f40a93-f130-4f0c-b86d-4460c2e5c2ac", "bodySize": 0, "body": null, "headers": null}
+2026-06-02 00:01:36,974 INFO [app] {"event": "request_end", "method": "GET", "path": "/api/history", "status": 200, "latencyMs": 2, "requestId": "52f40a93-f130-4f0c-b86d-4460c2e5c2ac"}
+2026-06-02 00:01:36,975 INFO [httpx] HTTP Request: GET http://localhost:8080/api/history?sessionId=8dfd4710-3a48-441a-800d-b4734ce88e2d "HTTP/1.1 200 OK"
+2026-06-02 00:02:04,065 WARNING [chainlit] Translation file for en-CA not found. Using default translation en-US.
+2026-06-02 00:14:34,190 ERROR [chainlit] All connection attempts failed
+Traceback (most recent call last):
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
+    yield
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_transports/default.py", line 394, in handle_async_request
+    resp = await self._pool.handle_async_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpcore/_async/connection_pool.py", line 256, in handle_async_request
+    raise exc from None
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpcore/_async/connection_pool.py", line 236, in handle_async_request
+    response = await connection.handle_async_request(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        pool_request.request
+        ^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpcore/_async/connection.py", line 101, in handle_async_request
+    raise exc
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpcore/_async/connection.py", line 78, in handle_async_request
+    stream = await self._connect(request)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpcore/_async/connection.py", line 124, in _connect
+    stream = await self._network_backend.connect_tcp(**kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpcore/_backends/auto.py", line 31, in connect_tcp
+    return await self._backend.connect_tcp(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+    )
+    ^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpcore/_backends/anyio.py", line 113, in connect_tcp
+    with map_exceptions(exc_map):
+         ~~~~~~~~~~~~~~^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpcore/_exceptions.py", line 14, in map_exceptions
+    raise to_exc(exc) from exc
+httpcore.ConnectError: All connection attempts failed
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/chainlit/utils.py", line 57, in wrapper
+    return await user_function(**params_values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/chainlit_app.py", line 79, in on_chat_end
+    connection_id = session_manager.connection_id
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/app/services/chainlit/backend_client.py", line 125, in deregister_session
+    await client.post(
+    ...<5 lines>...
+    )
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_client.py", line 1859, in post
+    return await self.request(
+           ^^^^^^^^^^^^^^^^^^^
+    ...<13 lines>...
+    )
+    ^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_client.py", line 1540, in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_client.py", line 1629, in send
+    response = await self._send_handling_auth(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_client.py", line 1657, in _send_handling_auth
+    response = await self._send_handling_redirects(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_client.py", line 1694, in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_client.py", line 1730, in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_transports/default.py", line 393, in handle_async_request
+    with map_httpcore_exceptions():
+         ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/Users/craigburnett/PycharmProjects/AIMSBot/.venv/lib/python3.13/site-packages/httpx/_transports/default.py", line 118, in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+httpx.ConnectError: All connection attempts failed
+2026-06-02 00:14:58,548 WARNING [chainlit] Translation file for en-CA not found. Using default translation en-US.
+2026-06-02 00:14:58,647 WARNING [chainlit] Translated markdown file for en-CA not found. Defaulting to chainlit.md.
+2026-06-02 00:14:59,329 WARNING [chainlit] Translated markdown file for en-CA not found. Defaulting to chainlit.md.
+2026-06-02 00:15:00,972 INFO [app] {"event": "request_start", "method": "POST", "path": "/api/session", "client": "::1", "requestId": "2ce7eb3a-94f6-4876-a3d9-f02c7331b96b", "bodySize": 2982, "body": "{\"sessionId\":\"8dfd4710-3a48-441a-800d-b4734ce88e2d\",\"connectionId\":\"2eb5e4f2-7e34-4541-96fa-64c78374c937\",\"personaId\":null,\"userInfo\":{\"identifier\":\"craig.burnett@gmail.com\",\"metadata\":{\"image\":\"https://lh3.googleusercontent.com/a/ACg8ocKYTlrf-LMNjitaxsMdlRu24ytf3OCMSYFPf7ujXjcEeXxmK8jb=s96-c\",\"provider\":\"google\",\"name\":\"Craig Burnett\"}},\"force\":false,\"character\":\"You are roleplaying as a person in a clinical setting. Maintain your character and respond naturally to the clinician.\\n\\nSpecific Persona: Sarah\\nDetailed Biography and Motivations: Sarah is a single mother in Moncton-Dieppe, NB, working as a manager for a sports centre. She is Francophone, a vegetarian, and practices yoga. She followed the vaccine schedule for her daughter Emily when she was a baby but now feels measles is not dangerous\u2014just a childhood illness from the past. She has an 'optimism bias' because she hasn't seen any cases in her circle. Dominant foundations: Implicit purity + optimism bias. Need for cognition: Low. Epistemic trust ", "headers": null}
+2026-06-02 00:15:00,977 INFO [app] Initializing session 8dfd4710-3a48-441a-800d-b4734ce88e2d
+2026-06-02 00:15:00,977 INFO [app] Recovered personaId 'Sarah' from existing memory for session 8dfd4710-3a48-441a-800d-b4734ce88e2d
+2026-06-02 00:15:00,996 INFO [app] Session initialized: 8dfd4710-3a48-441a-800d-b4734ce88e2d
+2026-06-02 00:15:01,013 INFO [app] {"event": "request_end", "method": "POST", "path": "/api/session", "status": 200, "latencyMs": 42, "requestId": "2ce7eb3a-94f6-4876-a3d9-f02c7331b96b"}
+2026-06-02 00:15:01,017 INFO [httpx] HTTP Request: POST http://localhost:8080/api/session "HTTP/1.1 200 OK"
+2026-06-02 00:15:01,106 INFO [app] {"event": "request_start", "method": "GET", "path": "/api/history", "client": "::1", "requestId": "f93f8770-6d97-48a6-85d2-50070007602a", "bodySize": 0, "body": null, "headers": null}
+2026-06-02 00:15:01,115 INFO [app] {"event": "request_end", "method": "GET", "path": "/api/history", "status": 200, "latencyMs": 9, "requestId": "f93f8770-6d97-48a6-85d2-50070007602a"}
+2026-06-02 00:15:01,116 INFO [httpx] HTTP Request: GET http://localhost:8080/api/history?sessionId=8dfd4710-3a48-441a-800d-b4734ce88e2d "HTTP/1.1 200 OK"
+2026-06-02 00:15:20,462 INFO [app] {"event": "request_start", "method": "POST", "path": "/api/session", "client": "::1", "requestId": "6f696401-728c-4b0b-aa98-502bf1191d82", "bodySize": 2982, "body": "{\"sessionId\":\"8dfd4710-3a48-441a-800d-b4734ce88e2d\",\"connectionId\":\"2eb5e4f2-7e34-4541-96fa-64c78374c937\",\"personaId\":null,\"userInfo\":{\"identifier\":\"craig.burnett@gmail.com\",\"metadata\":{\"image\":\"https://lh3.googleusercontent.com/a/ACg8ocKYTlrf-LMNjitaxsMdlRu24ytf3OCMSYFPf7ujXjcEeXxmK8jb=s96-c\",\"provider\":\"google\",\"name\":\"Craig Burnett\"}},\"force\":false,\"character\":\"You are roleplaying as a person in a clinical setting. Maintain your character and respond naturally to the clinician.\\n\\nSpecific Persona: Sarah\\nDetailed Biography and Motivations: Sarah is a single mother in Moncton-Dieppe, NB, working as a manager for a sports centre. She is Francophone, a vegetarian, and practices yoga. She followed the vaccine schedule for her daughter Emily when she was a baby but now feels measles is not dangerous\u2014just a childhood illness from the past. She has an 'optimism bias' because she hasn't seen any cases in her circle. Dominant foundations: Implicit purity + optimism bias. Need for cognition: Low. Epistemic trust ", "headers": null}
+2026-06-02 00:15:20,469 INFO [app] Initializing session 8dfd4710-3a48-441a-800d-b4734ce88e2d
+2026-06-02 00:15:20,470 INFO [app] Recovered personaId 'Sarah' from existing memory for session 8dfd4710-3a48-441a-800d-b4734ce88e2d
+2026-06-02 00:15:20,482 INFO [app] Session initialized: 8dfd4710-3a48-441a-800d-b4734ce88e2d
+2026-06-02 00:15:20,490 INFO [app] {"event": "request_end", "method": "POST", "path": "/api/session", "status": 200, "latencyMs": 30, "requestId": "6f696401-728c-4b0b-aa98-502bf1191d82"}
+2026-06-02 00:15:20,492 INFO [httpx] HTTP Request: POST http://localhost:8080/api/session "HTTP/1.1 200 OK"
+2026-06-02 00:15:20,617 INFO [app] {"event": "request_start", "method": "GET", "path": "/api/history", "client": "::1", "requestId": "8c624bd5-1dc1-4dc7-af6f-f11eca00ae65", "bodySize": 0, "body": null, "headers": null}
+2026-06-02 00:15:20,625 INFO [app] {"event": "request_end", "method": "GET", "path": "/api/history", "status": 200, "latencyMs": 10, "requestId": "8c624bd5-1dc1-4dc7-af6f-f11eca00ae65"}
+2026-06-02 00:15:20,629 INFO [httpx] HTTP Request: GET http://localhost:8080/api/history?sessionId=8dfd4710-3a48-441a-800d-b4734ce88e2d "HTTP/1.1 200 OK"
+2026-06-02 00:16:07,566 WARNING [chainlit] Translation file for en-CA not found. Using default translation en-US.
+2026-06-02 00:16:11,594 INFO [app] {"event": "request_start", "method": "POST", "path": "/api/session/deregister", "client": "::1", "requestId": "9cf936f8-e652-4649-b695-e9c0d6a9ea09", "bodySize": 106, "body": {"sessionId": "8dfd4710-3a48-441a-800d-b4734ce88e2d", "connectionId": "2eb5e4f2-7e34-4541-96fa-64c78374c937"}, "headers": null}
+2026-06-02 00:16:11,616 INFO [app] Connection deregistered: 2eb5e4f2-7e34-4541-96fa-64c78374c937 for session 8dfd4710-3a48-441a-800d-b4734ce88e2d
+2026-06-02 00:16:11,616 INFO [app] {"event": "request_end", "method": "POST", "path": "/api/session/deregister", "status": 200, "latencyMs": 23, "requestId": "9cf936f8-e652-4649-b695-e9c0d6a9ea09"}
+2026-06-02 00:16:11,619 INFO [httpx] HTTP Request: POST http://localhost:8080/api/session/deregister "HTTP/1.1 200 OK"
+2026-06-02 00:16:12,109 WARNING [chainlit] Translation file for en-CA not found. Using default translation en-US.
+2026-06-02 00:16:12,321 WARNING [chainlit] Translated markdown file for en-CA not found. Defaulting to chainlit.md.
+2026-06-02 00:16:12,726 WARNING [chainlit] Translated markdown file for en-CA not found. Defaulting to chainlit.md.
+2026-06-02 00:16:13,822 INFO [app] {"event": "request_start", "method": "POST", "path": "/api/session", "client": "::1", "requestId": "da7aba70-4c9b-4814-b5be-8f4715c8baf1", "bodySize": 2982, "body": "{\"sessionId\":\"8dfd4710-3a48-441a-800d-b4734ce88e2d\",\"connectionId\":\"2eb5e4f2-7e34-4541-96fa-64c78374c937\",\"personaId\":null,\"userInfo\":{\"identifier\":\"craig.burnett@gmail.com\",\"metadata\":{\"image\":\"https://lh3.googleusercontent.com/a/ACg8ocKYTlrf-LMNjitaxsMdlRu24ytf3OCMSYFPf7ujXjcEeXxmK8jb=s96-c\",\"provider\":\"google\",\"name\":\"Craig Burnett\"}},\"force\":false,\"character\":\"You are roleplaying as a person in a clinical setting. Maintain your character and respond naturally to the clinician.\\n\\nSpecific Persona: Sarah\\nDetailed Biography and Motivations: Sarah is a single mother in Moncton-Dieppe, NB, working as a manager for a sports centre. She is Francophone, a vegetarian, and practices yoga. She followed the vaccine schedule for her daughter Emily when she was a baby but now feels measles is not dangerous\u2014just a childhood illness from the past. She has an 'optimism bias' because she hasn't seen any cases in her circle. Dominant foundations: Implicit purity + optimism bias. Need for cognition: Low. Epistemic trust ", "headers": null}
+2026-06-02 00:16:13,834 INFO [app] Initializing session 8dfd4710-3a48-441a-800d-b4734ce88e2d
+2026-06-02 00:16:13,834 INFO [app] Recovered personaId 'Sarah' from existing memory for session 8dfd4710-3a48-441a-800d-b4734ce88e2d
+2026-06-02 00:16:13,856 INFO [app] Session initialized: 8dfd4710-3a48-441a-800d-b4734ce88e2d
+2026-06-02 00:16:13,932 INFO [app] {"event": "request_end", "method": "POST", "path": "/api/session", "status": 200, "latencyMs": 111, "requestId": "da7aba70-4c9b-4814-b5be-8f4715c8baf1"}
+2026-06-02 00:16:13,947 INFO [httpx] HTTP Request: POST http://localhost:8080/api/session "HTTP/1.1 200 OK"
+2026-06-02 00:16:14,048 INFO [app] {"event": "request_start", "method": "GET", "path": "/api/history", "client": "::1", "requestId": "95ae5904-a1f3-419a-bab1-68bcc8039c22", "bodySize": 0, "body": null, "headers": null}
+2026-06-02 00:16:14,064 INFO [app] {"event": "request_end", "method": "GET", "path": "/api/history", "status": 200, "latencyMs": 17, "requestId": "95ae5904-a1f3-419a-bab1-68bcc8039c22"}
+2026-06-02 00:16:14,067 INFO [httpx] HTTP Request: GET http://localhost:8080/api/history?sessionId=8dfd4710-3a48-441a-800d-b4734ce88e2d "HTTP/1.1 200 OK"
+2026-06-02 00:17:17,864 WARNING [chainlit] Translation file for en-CA not found. Using default translation en-US.
+2026-06-02 00:17:18,006 WARNING [chainlit] Translated markdown file for en-CA not found. Defaulting to chainlit.md.
+2026-06-02 00:17:18,275 WARNING [chainlit] Translated markdown file for en-CA not found. Defaulting to chainlit.md.
+2026-06-02 00:17:20,132 INFO [app.services.chainlit.orchestrator] Starting scenario flow
+2026-06-02 00:17:20,227 INFO [app] {"event": "request_start", "method": "GET", "path": "/api/history", "client": "::1", "requestId": "33077b56-7ea3-4674-a7ab-c1df04f47a4d", "bodySize": 0, "body": null, "headers": null}
+2026-06-02 00:17:20,228 INFO [app] {"event": "request_end", "method": "GET", "path": "/api/history", "status": 200, "latencyMs": 2, "requestId": "33077b56-7ea3-4674-a7ab-c1df04f47a4d"}
+2026-06-02 00:17:20,229 INFO [httpx] HTTP Request: GET http://localhost:8080/api/history?sessionId=7925eb62-929d-4d86-85ed-d6255cea9e8c "HTTP/1.1 200 OK"
+2026-06-02 00:17:20,231 INFO [app.services.chainlit.orchestrator] Initializing session with backend: 7925eb62-929d-4d86-85ed-d6255cea9e8c
+2026-06-02 00:17:20,279 INFO [app] {"event": "request_start", "method": "POST", "path": "/api/session", "client": "::1", "requestId": "3f631077-20bd-47e6-9117-25bd00e24fae", "bodySize": 354, "body": {"sessionId": "7925eb62-929d-4d86-85ed-d6255cea9e8c", "connectionId": "0af2bea7-68ec-4c47-8393-5e910b4404ac", "personaId": null, "userInfo": {"identifier": "craig.burnett@gmail.com", "metadata": {"image": "https://lh3.googleusercontent.com/a/ACg8ocKYTlrf-LMNjitaxsMdlRu24ytf3OCMSYFPf7ujXjcEeXxmK8jb=s96-c", "provider": "google", "name": "Craig Burnett"}}, "force": false}, "headers": null}
+2026-06-02 00:17:20,280 INFO [app] Initializing session 7925eb62-929d-4d86-85ed-d6255cea9e8c
+2026-06-02 00:17:20,424 INFO [app] Session initialized: 7925eb62-929d-4d86-85ed-d6255cea9e8c
+2026-06-02 00:17:20,436 INFO [app] {"event": "request_end", "method": "POST", "path": "/api/session", "status": 200, "latencyMs": 156, "requestId": "3f631077-20bd-47e6-9117-25bd00e24fae"}
+2026-06-02 00:17:20,443 INFO [httpx] HTTP Request: POST http://localhost:8080/api/session "HTTP/1.1 200 OK"
+2026-06-02 00:17:20,450 INFO [app.services.chainlit.orchestrator] Session data received from backend.
+2026-06-02 00:17:20,450 INFO [app.services.chainlit.orchestrator] Presenting scenario card to UI
+2026-06-02 00:17:20,466 INFO [app.services.chainlit.orchestrator] Running preflight checks
+2026-06-02 00:17:20,760 INFO [app] {"event": "request_start", "method": "GET", "path": "/api/healthz", "client": "::1", "requestId": "64f6189b-5dd9-407e-a2bd-fc5086ab36e8", "bodySize": 0, "body": null, "headers": null}
+2026-06-02 00:17:20,769 INFO [app] {"event": "request_end", "method": "GET", "path": "/api/healthz", "status": 200, "latencyMs": 11, "requestId": "64f6189b-5dd9-407e-a2bd-fc5086ab36e8"}
+2026-06-02 00:17:20,771 INFO [httpx] HTTP Request: GET http://localhost:8080/api/healthz "HTTP/1.1 200 OK"
+2026-06-02 00:17:20,828 INFO [app] {"event": "request_start", "method": "GET", "path": "/api/config", "client": "::1", "requestId": "271bd80a-e3f1-4d70-8727-37e6cb42f1d7", "bodySize": 0, "body": null, "headers": null}
+2026-06-02 00:17:20,830 INFO [app] {"event": "request_end", "method": "GET", "path": "/api/config", "status": 200, "latencyMs": 2, "requestId": "271bd80a-e3f1-4d70-8727-37e6cb42f1d7"}
+2026-06-02 00:17:20,832 INFO [httpx] HTTP Request: GET http://localhost:8080/api/config "HTTP/1.1 200 OK"
+2026-06-02 00:17:20,884 INFO [app] {"event": "request_start", "method": "GET", "path": "/api/modelcheck", "client": "::1", "requestId": "f1fffc03-4d4f-40d2-821e-eeae9c205de7", "bodySize": 0, "body": null, "headers": null}
+2026-06-02 00:17:20,885 INFO [app] {"event": "request_end", "method": "GET", "path": "/api/modelcheck", "status": 200, "latencyMs": 1, "requestId": "f1fffc03-4d4f-40d2-821e-eeae9c205de7"}
+2026-06-02 00:17:20,886 INFO [httpx] HTTP Request: GET http://localhost:8080/api/modelcheck "HTTP/1.1 200 OK"
+2026-06-02 00:17:20,887 INFO [app.services.chainlit.orchestrator] Startup flow complete
+2026-06-02 00:17:36,428 INFO [app] {"event": "request_start", "method": "POST", "path": "/api/chat", "client": "::1", "requestId": "856f5441-26fe-435e-8124-04e185085c30", "bodySize": 3095, "body": "{\"message\":\"time for her vaccines\",\"sessionId\":\"7925eb62-929d-4d86-85ed-d6255cea9e8c\",\"character\":\"You are roleplaying as a person in a clinical setting. Maintain your character and respond naturally to the clinician.\\n\\nSpecific Persona: Jasmine\\nDetailed Biography and Motivations: Jasmine is a 29-year-old first time parent. Her partner, Joshua, is 33 years old. They live in Edmonton, Alberta with their 2-month-old baby girl, Sophia. Jasmine is on her 1-year parental leave from her position in human resources; Joshua is a journeyman electrician. Jasmine is Indigenous (Saddle Creek First Nation); Joshua's family has been in Canada for 4 generations. Jasmine is a nervous first-time mom, exhausted from Sophia not sleeping through the night. She wants to be a good mother but has read about potential risks of vaccines and is concerned about preservatives/ingredients. Dominant foundations: Care/harm + Purity. Need for cognition: Moderate. Epistemic trust style: Relational. Core tension: Fear of doing something irr", "headers": null}
+2026-06-02 00:17:36,480 INFO [app] {"event": "aims_classify_begin", "sessionId": "7925eb62-929d-4d86-85ed-d6255cea9e8c", "userInfo": {"identifier": "craig.burnett@gmail.com", "metadata": {"image": "https://lh3.googleusercontent.com/a/ACg8ocKYTlrf-LMNjitaxsMdlRu24ytf3OCMSYFPf7ujXjcEeXxmK8jb=s96-c", "provider": "google", "name": "Craig Burnett"}}, "requestId": "5d5a5659-07e5-4af3-b3e0-4d2129e14c49", "modelId": "gemini-2.5-pro"}
+2026-06-02 00:17:36,480 INFO [app] {"event": "aims_reply_begin", "sessionId": "7925eb62-929d-4d86-85ed-d6255cea9e8c", "userInfo": {"identifier": "craig.burnett@gmail.com", "metadata": {"image": "https://lh3.googleusercontent.com/a/ACg8ocKYTlrf-LMNjitaxsMdlRu24ytf3OCMSYFPf7ujXjcEeXxmK8jb=s96-c", "provider": "google", "name": "Craig Burnett"}}, "requestId": "5d5a5659-07e5-4af3-b3e0-4d2129e14c49", "modelId": "gemini-2.5-pro"}
+2026-06-02 00:17:36,734 INFO [google_genai.models] AFC is enabled with max remote calls: 10.
+2026-06-02 00:17:36,978 INFO [google_genai.models] AFC is enabled with max remote calls: 10.
+2026-06-02 00:17:43,932 INFO [app.vertex] {"event": "genai_async_response", "modelId": "gemini-2.5-flash", "finishReason": "STOP", "textLen": 167, "thoughtLen": 0, "cachedContentTokens": null, "hasText": true}
+2026-06-02 00:17:51,360 INFO [app.vertex] {"event": "genai_async_response", "modelId": "gemini-2.5-pro", "finishReason": "STOP", "textLen": 1141, "thoughtLen": 0, "cachedContentTokens": null, "hasText": true}
+2026-06-02 00:17:51,360 INFO [app] {"event": "aims_classify_end", "sessionId": "7925eb62-929d-4d86-85ed-d6255cea9e8c", "requestId": "5d5a5659-07e5-4af3-b3e0-4d2129e14c49", "durationMs": 14880, "modelUsed": "gemini-2.5-pro", "step": "Announce", "score": 2}
+2026-06-02 00:17:51,361 INFO [app] {"event": "aims_reply_end", "sessionId": "7925eb62-929d-4d86-85ed-d6255cea9e8c", "requestId": "5d5a5659-07e5-4af3-b3e0-4d2129e14c49", "durationMs": 14880, "modelUsed": "gemini-2.5-pro", "textLen": 146}
+2026-06-02 00:17:51,370 INFO [app] {"event": "aims_turn", "sessionId": "7925eb62-929d-4d86-85ed-d6255cea9e8c", "userInfo": {"identifier": "craig.burnett@gmail.com", "metadata": {"image": "https://lh3.googleusercontent.com/a/ACg8ocKYTlrf-LMNjitaxsMdlRu24ytf3OCMSYFPf7ujXjcEeXxmK8jb=s96-c", "provider": "google", "name": "Craig Burnett"}}, "status": "ok", "latencyMs": 14891, "modelId": "gemini-2.5-pro", "step": "Announce", "score": 2}
+2026-06-02 00:17:51,371 INFO [app] {"event": "request_end", "method": "POST", "path": "/api/chat", "status": 200, "latencyMs": 14945, "requestId": "856f5441-26fe-435e-8124-04e185085c30"}
+2026-06-02 00:17:51,376 INFO [httpx] HTTP Request: POST http://localhost:8080/api/chat "HTTP/1.1 200 OK"
+2026-06-02 00:17:59,789 INFO [app] {"event": "request_start", "method": "POST", "path": "/api/session/deregister", "client": "::1", "requestId": "a9ccfb96-e658-48fb-84b0-40b59ccdb69c", "bodySize": 106, "body": {"sessionId": "7925eb62-929d-4d86-85ed-d6255cea9e8c", "connectionId": "0af2bea7-68ec-4c47-8393-5e910b4404ac"}, "headers": null}
+2026-06-02 00:17:59,861 INFO [app] Connection deregistered: 0af2bea7-68ec-4c47-8393-5e910b4404ac for session 7925eb62-929d-4d86-85ed-d6255cea9e8c
+2026-06-02 00:17:59,867 INFO [app] {"event": "request_end", "method": "POST", "path": "/api/session/deregister", "status": 200, "latencyMs": 78, "requestId": "a9ccfb96-e658-48fb-84b0-40b59ccdb69c"}
+2026-06-02 00:17:59,872 INFO [httpx] HTTP Request: POST http://localhost:8080/api/session/deregister "HTTP/1.1 200 OK"
+2026-06-02 00:18:06,886 INFO [httpx] HTTP Request: POST https://oauth2.googleapis.com/token "HTTP/1.1 200 OK"
+2026-06-02 00:18:07,018 INFO [httpx] HTTP Request: GET https://www.googleapis.com/userinfo/v2/me "HTTP/1.1 200 OK"
+2026-06-02 00:18:08,491 WARNING [chainlit] Translation file for en-CA not found. Using default translation en-US.
+2026-06-02 00:18:08,668 WARNING [chainlit] Translated markdown file for en-CA not found. Defaulting to chainlit.md.
+2026-06-02 00:18:09,080 WARNING [chainlit] Translated markdown file for en-CA not found. Defaulting to chainlit.md.
+2026-06-02 00:18:12,034 INFO [app.services.chainlit.orchestrator] Starting scenario flow
+2026-06-02 00:18:12,123 INFO [app] {"event": "request_start", "method": "GET", "path": "/api/history", "client": "::1", "requestId": "fffbbb38-9442-46f5-ac3b-ad1361c6b8e2", "bodySize": 0, "body": null, "headers": null}
+2026-06-02 00:18:12,125 INFO [app] {"event": "request_end", "method": "GET", "path": "/api/history", "status": 200, "latencyMs": 2, "requestId": "fffbbb38-9442-46f5-ac3b-ad1361c6b8e2"}
+2026-06-02 00:18:12,126 INFO [httpx] HTTP Request: GET http://localhost:8080/api/history?sessionId=98c5bed2-6cf3-48be-b3dd-3966c09a0e2e "HTTP/1.1 200 OK"
+2026-06-02 00:18:12,127 INFO [app.services.chainlit.orchestrator] Initializing session with backend: 98c5bed2-6cf3-48be-b3dd-3966c09a0e2e
+2026-06-02 00:18:12,182 INFO [app] {"event": "request_start", "method": "POST", "path": "/api/session", "client": "::1", "requestId": "6e89d5d9-92bf-427f-9052-fcee2414b04d", "bodySize": 354, "body": {"sessionId": "98c5bed2-6cf3-48be-b3dd-3966c09a0e2e", "connectionId": "6f3a4f8c-08a5-4193-9d9d-9735eb2fc622", "personaId": null, "userInfo": {"identifier": "craig.burnett@gmail.com", "metadata": {"image": "https://lh3.googleusercontent.com/a/ACg8ocKYTlrf-LMNjitaxsMdlRu24ytf3OCMSYFPf7ujXjcEeXxmK8jb=s96-c", "provider": "google", "name": "Craig Burnett"}}, "force": false}, "headers": null}
+2026-06-02 00:18:12,184 INFO [app] Initializing session 98c5bed2-6cf3-48be-b3dd-3966c09a0e2e
+2026-06-02 00:18:12,226 INFO [app] Session initialized: 98c5bed2-6cf3-48be-b3dd-3966c09a0e2e
+2026-06-02 00:18:12,233 INFO [app] {"event": "request_end", "method": "POST", "path": "/api/session", "status": 200, "latencyMs": 55, "requestId": "6e89d5d9-92bf-427f-9052-fcee2414b04d"}
+2026-06-02 00:18:12,234 INFO [httpx] HTTP Request: POST http://localhost:8080/api/session "HTTP/1.1 200 OK"
+2026-06-02 00:18:12,235 INFO [app.services.chainlit.orchestrator] Session data received from backend.
+2026-06-02 00:18:12,235 INFO [app.services.chainlit.orchestrator] Presenting scenario card to UI
+2026-06-02 00:18:12,248 INFO [app.services.chainlit.orchestrator] Running preflight checks
+2026-06-02 00:18:12,370 INFO [app] {"event": "request_start", "method": "GET", "path": "/api/healthz", "client": "::1", "requestId": "23df9957-6ba5-465e-8fdb-ad061460d5df", "bodySize": 0, "body": null, "headers": null}
+2026-06-02 00:18:12,373 INFO [app] {"event": "request_end", "method": "GET", "path": "/api/healthz", "status": 200, "latencyMs": 3, "requestId": "23df9957-6ba5-465e-8fdb-ad061460d5df"}
+2026-06-02 00:18:12,375 INFO [httpx] HTTP Request: GET http://localhost:8080/api/healthz "HTTP/1.1 200 OK"
+2026-06-02 00:18:12,626 INFO [app] {"event": "request_start", "method": "GET", "path": "/api/config", "client": "::1", "requestId": "9b8a266e-7467-4dad-8eb1-1027d26e296f", "bodySize": 0, "body": null, "headers": null}
+2026-06-02 00:18:12,633 INFO [app] {"event": "request_end", "method": "GET", "path": "/api/config", "status": 200, "latencyMs": 7, "requestId": "9b8a266e-7467-4dad-8eb1-1027d26e296f"}
+2026-06-02 00:18:12,638 INFO [httpx] HTTP Request: GET http://localhost:8080/api/config "HTTP/1.1 200 OK"
+2026-06-02 00:18:12,793 INFO [app] {"event": "request_start", "method": "GET", "path": "/api/modelcheck", "client": "::1", "requestId": "33825341-5bc7-4b51-b763-d8a1b2d07f7a", "bodySize": 0, "body": null, "headers": null}
+2026-06-02 00:18:12,793 INFO [app] {"event": "request_end", "method": "GET", "path": "/api/modelcheck", "status": 200, "latencyMs": 0, "requestId": "33825341-5bc7-4b51-b763-d8a1b2d07f7a"}
+2026-06-02 00:18:12,794 INFO [httpx] HTTP Request: GET http://localhost:8080/api/modelcheck "HTTP/1.1 200 OK"
+2026-06-02 00:18:12,795 INFO [app.services.chainlit.orchestrator] Startup flow complete
+2026-06-02 03:40:20,345 WARNING [chainlit] Translation file for en-CA not found. Using default translation en-US.
+2026-06-02 04:05:22,228 INFO [app.services.chainlit.orchestrator] Redirecting reconnect to persisted thread: 98c5bed2-6cf3-48be-b3dd-3966c09a0e2e
+2026-06-02 04:06:50,442 WARNING [chainlit] Translation file for en-CA not found. Using default translation en-US.
+2026-06-02 04:06:50,654 WARNING [chainlit] Translated markdown file for en-CA not found. Defaulting to chainlit.md.
+2026-06-02 04:06:51,318 WARNING [chainlit] Translated markdown file for en-CA not found. Defaulting to chainlit.md.
+2026-06-02 04:06:52,482 INFO [app] {"event": "request_start", "method": "POST", "path": "/api/session", "client": "::1", "requestId": "69001131-171e-4ef9-9c77-2f4f0e83a807", "bodySize": 354, "body": {"sessionId": "98c5bed2-6cf3-48be-b3dd-3966c09a0e2e", "connectionId": "521de980-8577-4f24-a262-1025c0be95d4", "personaId": null, "userInfo": {"identifier": "craig.burnett@gmail.com", "metadata": {"image": "https://lh3.googleusercontent.com/a/ACg8ocKYTlrf-LMNjitaxsMdlRu24ytf3OCMSYFPf7ujXjcEeXxmK8jb=s96-c", "provider": "google", "name": "Craig Burnett"}}, "force": false}, "headers": null}
+2026-06-02 04:06:52,485 INFO [app] Initializing session 98c5bed2-6cf3-48be-b3dd-3966c09a0e2e
+2026-06-02 04:06:52,485 INFO [app] Recovered personaId 'Jasmine' from existing memory for session 98c5bed2-6cf3-48be-b3dd-3966c09a0e2e
+2026-06-02 04:06:52,497 INFO [app] Session initialized: 98c5bed2-6cf3-48be-b3dd-3966c09a0e2e
+2026-06-02 04:06:52,507 INFO [app] {"event": "request_end", "method": "POST", "path": "/api/session", "status": 200, "latencyMs": 25, "requestId": "69001131-171e-4ef9-9c77-2f4f0e83a807"}
+2026-06-02 04:06:52,512 INFO [httpx] HTTP Request: POST http://localhost:8080/api/session "HTTP/1.1 200 OK"
+2026-06-02 04:06:52,600 INFO [app] {"event": "request_start", "method": "GET", "path": "/api/history", "client": "::1", "requestId": "e236d542-20f0-4276-9083-1175a0f49f89", "bodySize": 0, "body": null, "headers": null}
+2026-06-02 04:06:52,604 INFO [app] {"event": "request_end", "method": "GET", "path": "/api/history", "status": 200, "latencyMs": 4, "requestId": "e236d542-20f0-4276-9083-1175a0f49f89"}
+2026-06-02 04:06:52,605 INFO [httpx] HTTP Request: GET http://localhost:8080/api/history?sessionId=98c5bed2-6cf3-48be-b3dd-3966c09a0e2e "HTTP/1.1 200 OK"
+2026-06-02 04:07:07,077 INFO [app] {"event": "request_start", "method": "POST", "path": "/api/chat", "client": "::1", "requestId": "0dc111b4-0038-4dc6-b7b8-4c5308946cbe", "bodySize": 2656, "body": "{\"message\":\"it's time for vsaccinations\",\"sessionId\":\"98c5bed2-6cf3-48be-b3dd-3966c09a0e2e\",\"character\":\"You are roleplaying as a person in a clinical setting. Maintain your character and respond naturally to the clinician.\\n\\nSpecific Persona: Jasmine\\nDetailed Biography and Motivations: Jasmine is a 29-year-old first time parent. Her partner, Joshua, is 33 years old. They live in Edmonton, Alberta with their 2-month-old baby girl, Sophia. Jasmine is on her 1-year parental leave from her position in human resources; Joshua is a journeyman electrician. Jasmine is Indigenous (Saddle Creek First Nation); Joshua's family has been in Canada for 4 generations. Jasmine is a nervous first-time mom, exhausted from Sophia not sleeping through the night. She wants to be a good mother but has read about potential risks of vaccines and is concerned about preservatives/ingredients. Dominant foundations: Care/harm + Purity. Need for cognition: Moderate. Epistemic trust style: Relational. Core tension: Fear of doing somethi", "headers": null}
+2026-06-02 04:07:07,255 INFO [app] {"event": "aims_classify_begin", "sessionId": "98c5bed2-6cf3-48be-b3dd-3966c09a0e2e", "userInfo": {"identifier": "craig.burnett@gmail.com", "metadata": {"image": "https://lh3.googleusercontent.com/a/ACg8ocKYTlrf-LMNjitaxsMdlRu24ytf3OCMSYFPf7ujXjcEeXxmK8jb=s96-c", "provider": "google", "name": "Craig Burnett"}}, "requestId": "0054a645-8918-449b-a92d-5abf9a4f41fb", "modelId": "gemini-2.5-pro"}
+2026-06-02 04:07:07,256 INFO [app] {"event": "aims_reply_begin", "sessionId": "98c5bed2-6cf3-48be-b3dd-3966c09a0e2e", "userInfo": {"identifier": "craig.burnett@gmail.com", "metadata": {"image": "https://lh3.googleusercontent.com/a/ACg8ocKYTlrf-LMNjitaxsMdlRu24ytf3OCMSYFPf7ujXjcEeXxmK8jb=s96-c", "provider": "google", "name": "Craig Burnett"}}, "requestId": "0054a645-8918-449b-a92d-5abf9a4f41fb", "modelId": "gemini-2.5-pro"}
+2026-06-02 04:07:07,481 INFO [google_genai.models] AFC is enabled with max remote calls: 10.
+2026-06-02 04:07:07,744 INFO [google_genai.models] AFC is enabled with max remote calls: 10.
+2026-06-02 04:07:12,389 INFO [app.vertex] {"event": "genai_async_response", "modelId": "gemini-2.5-flash", "finishReason": "STOP", "textLen": 140, "thoughtLen": 0, "cachedContentTokens": null, "hasText": true}
+2026-06-02 04:07:14,074 INFO [app.vertex] {"event": "genai_async_response", "modelId": "gemini-2.5-pro", "finishReason": "STOP", "textLen": 1189, "thoughtLen": 0, "cachedContentTokens": null, "hasText": true}
+2026-06-02 04:07:14,075 INFO [app] {"event": "aims_classify_end", "sessionId": "98c5bed2-6cf3-48be-b3dd-3966c09a0e2e", "requestId": "0054a645-8918-449b-a92d-5abf9a4f41fb", "durationMs": 6819, "modelUsed": "gemini-2.5-pro", "step": null, "score": 0}
+2026-06-02 04:07:14,075 INFO [app] {"event": "aims_reply_end", "sessionId": "98c5bed2-6cf3-48be-b3dd-3966c09a0e2e", "requestId": "0054a645-8918-449b-a92d-5abf9a4f41fb", "durationMs": 6819, "modelUsed": "gemini-2.5-pro", "textLen": 119}
+2026-06-02 04:07:14,085 INFO [app] {"event": "aims_turn", "sessionId": "98c5bed2-6cf3-48be-b3dd-3966c09a0e2e", "userInfo": {"identifier": "craig.burnett@gmail.com", "metadata": {"image": "https://lh3.googleusercontent.com/a/ACg8ocKYTlrf-LMNjitaxsMdlRu24ytf3OCMSYFPf7ujXjcEeXxmK8jb=s96-c", "provider": "google", "name": "Craig Burnett"}}, "status": "ok", "latencyMs": 6830, "modelId": "gemini-2.5-pro", "step": null, "score": 0}
+2026-06-02 04:07:14,086 INFO [app] {"event": "request_end", "method": "POST", "path": "/api/chat", "status": 200, "latencyMs": 7009, "requestId": "0dc111b4-0038-4dc6-b7b8-4c5308946cbe"}
+2026-06-02 04:07:14,092 INFO [httpx] HTTP Request: POST http://localhost:8080/api/chat "HTTP/1.1 200 OK"
+2026-06-02 04:07:29,595 WARNING [chainlit] Translation file for en-CA not found. Using default translation en-US.
+2026-06-02 04:07:42,248 WARNING [chainlit] Translation file for en-CA not found. Using default translation en-US.
+2026-06-02 04:07:42,343 INFO [app] {"event": "request_start", "method": "POST", "path": "/api/session/deregister", "client": "::1", "requestId": "09f05409-7dac-4d90-892e-9d79b3d9ce34", "bodySize": 106, "body": {"sessionId": "98c5bed2-6cf3-48be-b3dd-3966c09a0e2e", "connectionId": "521de980-8577-4f24-a262-1025c0be95d4"}, "headers": null}
+2026-06-02 04:07:42,366 INFO [app] Connection deregistered: 521de980-8577-4f24-a262-1025c0be95d4 for session 98c5bed2-6cf3-48be-b3dd-3966c09a0e2e
+2026-06-02 04:07:42,367 INFO [app] {"event": "request_end", "method": "POST", "path": "/api/session/deregister", "status": 200, "latencyMs": 83, "requestId": "09f05409-7dac-4d90-892e-9d79b3d9ce34"}
+2026-06-02 04:07:42,368 INFO [httpx] HTTP Request: POST http://localhost:8080/api/session/deregister "HTTP/1.1 200 OK"
+2026-06-02 04:07:42,530 WARNING [chainlit] Translated markdown file for en-CA not found. Defaulting to chainlit.md.
+2026-06-02 04:07:42,984 WARNING [chainlit] Translated markdown file for en-CA not found. Defaulting to chainlit.md.
+2026-06-02 04:07:44,331 INFO [app] {"event": "request_start", "method": "POST", "path": "/api/session", "client": "::1", "requestId": "3b4214ef-d9c0-4752-af6f-c5dcf23d64be", "bodySize": 3017, "body": "{\"sessionId\":\"98c5bed2-6cf3-48be-b3dd-3966c09a0e2e\",\"connectionId\":\"521de980-8577-4f24-a262-1025c0be95d4\",\"personaId\":null,\"userInfo\":{\"identifier\":\"craig.burnett@gmail.com\",\"metadata\":{\"image\":\"https://lh3.googleusercontent.com/a/ACg8ocKYTlrf-LMNjitaxsMdlRu24ytf3OCMSYFPf7ujXjcEeXxmK8jb=s96-c\",\"provider\":\"google\",\"name\":\"Craig Burnett\"}},\"force\":false,\"character\":\"You are roleplaying as a person in a clinical setting. Maintain your character and respond naturally to the clinician.\\n\\nSpecific Persona: Jasmine\\nDetailed Biography and Motivations: Jasmine is a 29-year-old first time parent. Her partner, Joshua, is 33 years old. They live in Edmonton, Alberta with their 2-month-old baby girl, Sophia. Jasmine is on her 1-year parental leave from her position in human resources; Joshua is a journeyman electrician. Jasmine is Indigenous (Saddle Creek First Nation); Joshua's family has been in Canada for 4 generations. Jasmine is a nervous first-time mom, exhausted from Sophia not sleeping through the night. She wan", "headers": null}
+2026-06-02 04:07:44,332 INFO [app] Initializing session 98c5bed2-6cf3-48be-b3dd-3966c09a0e2e
+2026-06-02 04:07:44,332 INFO [app] Recovered personaId 'Jasmine' from existing memory for session 98c5bed2-6cf3-48be-b3dd-3966c09a0e2e
+2026-06-02 04:07:44,344 INFO [app] Session initialized: 98c5bed2-6cf3-48be-b3dd-3966c09a0e2e
+2026-06-02 04:07:44,356 INFO [app] {"event": "request_end", "method": "POST", "path": "/api/session", "status": 200, "latencyMs": 26, "requestId": "3b4214ef-d9c0-4752-af6f-c5dcf23d64be"}
+2026-06-02 04:07:44,360 INFO [httpx] HTTP Request: POST http://localhost:8080/api/session "HTTP/1.1 200 OK"
+2026-06-02 04:07:44,441 INFO [app] {"event": "request_start", "method": "GET", "path": "/api/history", "client": "::1", "requestId": "86898db7-1f10-433f-9073-3a199e0e9803", "bodySize": 0, "body": null, "headers": null}
+2026-06-02 04:07:44,443 INFO [app] {"event": "request_end", "method": "GET", "path": "/api/history", "status": 200, "latencyMs": 3, "requestId": "86898db7-1f10-433f-9073-3a199e0e9803"}
+2026-06-02 04:07:44,444 INFO [httpx] HTTP Request: GET http://localhost:8080/api/history?sessionId=98c5bed2-6cf3-48be-b3dd-3966c09a0e2e "HTTP/1.1 200 OK"

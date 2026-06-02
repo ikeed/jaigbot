@@ -82,7 +82,8 @@ def main() -> int:
     print(f"[check] Project={project} region={region}")
     try:
         account = creds.service_account_email if hasattr(creds, "service_account_email") else getattr(creds, "_service_account_email", None)
-    except Exception:
+    except Exception as e:
+        print(f"[check] Could not determine account email: {e}", file=sys.stderr)
         account = None
     try:
         from google.auth.transport.requests import Request as _Req

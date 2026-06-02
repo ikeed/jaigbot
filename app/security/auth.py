@@ -1,9 +1,12 @@
 import os
+import logging
 from pathlib import Path
 from fastapi import Request
 from chainlit.auth import get_token_from_cookies, decode_jwt
 from app.chainlit_thread_state import clear_current_thread_id
 from app.constants import DIR_CHAINLIT, FILE_SESSION_ID
+
+logger = logging.getLogger(__name__)
 
 def _get_chainlit_dir() -> str:
     """Get absolute path to .chainlit directory relative to project root."""
@@ -18,7 +21,8 @@ def authenticated_user_identifier(request: Request) -> str | None:
         return None
     try:
         user = decode_jwt(token)
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to decode JWT token: %s", e)
         return None
     return user.identifier if user else None
 
@@ -36,6 +40,7 @@ def clear_persistent_session_id(user_identifier: str | None = None) -> None:
             path = os.path.join(_get_chainlit_dir(), filename)
             if os.path.exists(path):
                 os.remove(path)
-    except Exception:
+    except Exception as e:
         # Best effort cleanup
+        logger.debug("Failed to clear persistent session id files: %s", e)
         pass

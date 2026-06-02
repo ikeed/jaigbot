@@ -25,6 +25,7 @@ ROUTE_LOGIN = "/login"
 ROUTE_LOGOUT = "/logout"
 ROUTE_DUPLICATE = "/duplicate"
 ROUTE_CHAT_LOGIN = f"{PATH_CHAT}{ROUTE_LOGIN}"
+ROUTE_CHAT_LOGIN_CALLBACK = f"{ROUTE_CHAT_LOGIN}/callback"
 ROUTE_CHAT_LOGOUT = f"{PATH_CHAT}{ROUTE_LOGOUT}"
 ROUTE_OAUTH_CALLBACK = "/auth/oauth/{provider}/callback"
 
@@ -100,6 +101,7 @@ MSG_LOGOUT = "on_logout"
 MSG_REPORT_ISSUE = "report_issue"
 MSG_NEW_CHAT = "new_chat"
 MSG_INTRO_CONTINUE = "aims_intro_continue"
+MSG_RESUME_THREAD = "aims_resume_thread"
 
 # OAuth Providers
 PROVIDER_GOOGLE = "google"

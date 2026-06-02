@@ -2,6 +2,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from chainlit.auth import clear_auth_cookie
+from app.chainlit_thread_state import get_current_thread_id
 from app.config import settings
 from app.security.auth import authenticated_user_identifier, clear_persistent_session_id
 from app.security.oauth import get_enabled_oauth_providers, is_valid_env_val
@@ -29,6 +30,12 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 @router.get(ROUTE_ROOT, response_class=HTMLResponse)
 async def custom_login_page(request: Request):
     """Render the custom SSO landing page."""
+    user_id = authenticated_user_identifier(request)
+    if user_id:
+        thread_id = get_current_thread_id(user_id)
+        target_url = f"{PATH_CHAT}/thread/{thread_id}" if thread_id else PATH_CHAT
+        return RedirectResponse(url=target_url)
+
     providers = get_enabled_oauth_providers()
     auth_secret_set = is_valid_env_val(settings.CHAINLIT_AUTH_SECRET)
     return templates.TemplateResponse(

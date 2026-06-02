@@ -4,6 +4,8 @@ import asyncio
 import json
 import logging
 from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, ROLE_COACH, get_ui_attributes
+
+logger = logging.getLogger(__name__)
 import re
 from typing import Any
 
@@ -87,7 +89,8 @@ def _running_average(aims: dict) -> dict[str, float]:
         if scores:
             try:
                 running_avg[key] = sum(scores) / len(scores)
-            except Exception:
+            except Exception as e:
+                logger.debug("Failed to calculate running average for %s: %s", key, e)
                 pass
     return running_avg
 
@@ -139,7 +142,8 @@ async def _analysis_bullets(
     try:
         from app.services.coach_post import sanitize_endgame_bullets
         bullets = sanitize_endgame_bullets(bullets_raw)
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to sanitize bullets: %s", e)
         bullets = [line.strip(" -\t") for line in bullets_raw]
 
     return _enforce_metrics_consistency(bullets, per_counts)
@@ -155,7 +159,8 @@ def _build_transcript(mem: dict) -> str:
             if text:
                 parts.append(f"{author}: {text}")
         return "\n".join(parts)
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to build transcript: %s", e)
         return ""
 
 
@@ -168,7 +173,8 @@ def _load_mapping(app_state: Any) -> dict:
         mapping = load_mapping()
         app_state.aims_mapping = mapping
         return mapping
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to load mapping: %s", e)
         return {}
 
 

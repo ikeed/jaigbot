@@ -8,8 +8,29 @@ class StubLogger:
     def __init__(self):
         self.lines = []
 
-    def info(self, msg):
-        self.lines.append(msg)
+    def info(self, msg, *args):
+        if args:
+            self.lines.append(msg % args)
+        else:
+            self.lines.append(msg)
+
+    def warning(self, msg, *args):
+        if args:
+            self.lines.append(msg % args)
+        else:
+            self.lines.append(msg)
+
+    def error(self, msg, *args):
+        if args:
+            self.lines.append(msg % args)
+        else:
+            self.lines.append(msg)
+
+    def debug(self, msg, *args):
+        if args:
+            self.lines.append(msg % args)
+        else:
+            self.lines.append(msg)
 
 
 def test_truncate_for_log_caps_length_and_is_safe():

@@ -1,3 +1,4 @@
+import logging
 import chainlit as cl
 from typing import Any, Dict, List, Optional
 from app.chat_roles import (
@@ -8,6 +9,8 @@ from app.chat_roles import (
     get_ui_attributes,
     is_scenario_card,
 )
+
+logger = logging.getLogger(__name__)
 
 class UIHandler:
     """Handles all formatting and sending of messages to the Chainlit frontend."""
@@ -40,7 +43,8 @@ class UIHandler:
                     if coach_text:
                         await cl.Message(content=coach_text, author=author, type=msg_type).send()
                         continue
-                except Exception:
+                except Exception as e:
+                    logger.debug(f"Failed to format coach message during replay (non-fatal): {e}")
                     pass
 
             # Non-coach or fallback
@@ -119,5 +123,6 @@ class UIHandler:
         try:
             lines = [ln for ln in (text or "").splitlines() if ln.strip() and not ln.strip().lower().startswith("avatar for ")]
             return "\n".join(lines)
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Error stripping artifacts from text: {e}")
             return text

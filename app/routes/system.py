@@ -59,10 +59,12 @@ def create_system_router(
                     content = it.get("content")
                     if isinstance(role, str) and isinstance(content, str):
                         out.append({"role": role, "content": content})
-                except Exception:
+                except Exception as e:
+                    logger.debug("Failed to parse history item: %s. Error: %s", it, e)
                     continue
             return {"history": out}
-        except Exception:
+        except Exception as e:
+            logger.error("Error retrieving history for session %s: %s", sessionId, e)
             return {"history": []}
 
     @router.get(ENDPOINT_CONFIG)

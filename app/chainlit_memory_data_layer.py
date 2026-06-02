@@ -13,6 +13,7 @@ from app.config import settings
 
 LEGACY_USER_KEY_PREFIX = "chainlit:user:"
 LEGACY_THREAD_KEY_PREFIX = "chainlit:thread:"
+TRANSIENT_DISCONNECT_ERROR_OUTPUTS = {"All connection attempts failed"}
 
 
 def _user_key_prefix() -> str:
@@ -69,6 +70,15 @@ def _ordered_steps(steps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return sorted(steps or [], key=lambda step: (_step_time(step), step.get("id") or ""))
 
 
+def _is_transient_disconnect_error_step(step: Dict[str, Any]) -> bool:
+    return (
+        step.get("type") == "assistant_message"
+        and step.get("name") == "Error"
+        and step.get("isError") is True
+        and str(step.get("output") or "").strip() in TRANSIENT_DISCONNECT_ERROR_OUTPUTS
+    )
+
+
 def _canonical_session_id(thread: Dict[str, Any]) -> str:
     metadata = thread.get("metadata") or {}
     return metadata.get("session_id") or thread.get("id")
@@ -103,6 +113,19 @@ class MemoryDataLayer(BaseDataLayer):
     def _get_thread(self, thread_id: str) -> Dict[str, Any] | None:
         return self._get_first(_thread_keys(thread_id))
 
+    def _clean_thread_steps(self, thread: Dict[str, Any]) -> Dict[str, Any]:
+        original_steps = thread.get("steps", [])
+        clean_steps = _ordered_steps([
+            step for step in original_steps
+            if not _is_transient_disconnect_error_step(step)
+        ])
+        if clean_steps != original_steps:
+            thread["steps"] = clean_steps
+            self._put(_thread_key(thread["id"]), thread)
+        else:
+            thread["steps"] = clean_steps
+        return thread
+
     def _ensure_thread(self, thread_id: str) -> Dict[str, Any]:
         key = _thread_key(thread_id)
         thread = self._get_thread(thread_id)
@@ -110,8 +133,7 @@ class MemoryDataLayer(BaseDataLayer):
             thread.setdefault("steps", [])
             thread.setdefault("elements", [])
             thread.setdefault("metadata", {})
-            thread["steps"] = _ordered_steps(thread["steps"])
-            return thread
+            return self._clean_thread_steps(thread)
 
         thread = {
             "id": thread_id,
@@ -192,6 +214,8 @@ class MemoryDataLayer(BaseDataLayer):
         self._put(_thread_key(thread_id), thread)
 
     async def create_step(self, step_dict: Dict[str, Any]):
+        if _is_transient_disconnect_error_step(step_dict):
+            return
         thread_id = step_dict["threadId"]
         thread = self._ensure_thread(thread_id)
         steps = [s for s in thread.get("steps", []) if s.get("id") != step_dict.get("id")]
@@ -242,8 +266,7 @@ class MemoryDataLayer(BaseDataLayer):
             if session_id != thread_id and session_id in canonical_thread_ids:
                 continue
             value = dict(value)
-            value["steps"] = _ordered_steps(value.get("steps", []))
-            threads.append(value)
+            threads.append(self._clean_thread_steps(value))
 
         threads.sort(key=lambda t: t.get("createdAt") or "", reverse=True)
         first = pagination.first or len(threads)
@@ -264,8 +287,7 @@ class MemoryDataLayer(BaseDataLayer):
         thread.setdefault("steps", [])
         thread.setdefault("elements", [])
         thread.setdefault("metadata", {})
-        thread["steps"] = _ordered_steps(thread["steps"])
-        return thread
+        return self._clean_thread_steps(thread)
 
     async def update_thread(
         self,

@@ -3,7 +3,7 @@ from fastapi.responses import RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from app.chainlit_thread_state import get_current_thread_id
 from app.security.auth import authenticated_user_identifier
-from app.constants import PATH_CHAT, ROUTE_CHAT_LOGIN
+from app.constants import PATH_CHAT, ROUTE_CHAT_LOGIN, ROUTE_CHAT_LOGIN_CALLBACK
 
 class AuthRedirectMiddleware(BaseHTTPMiddleware):
     """
@@ -15,12 +15,18 @@ class AuthRedirectMiddleware(BaseHTTPMiddleware):
         if request.url.path == ROUTE_CHAT_LOGIN:
             return RedirectResponse(url="/")
 
-        # 2. Redirect /chat or /chat/ to the current thread if it exists
+        # 2. Redirect chat entry points to the current thread if it exists.
+        # Chainlit's OAuth flow lands on /chat/login/callback and can initialize
+        # a blank conversation client-side without requesting /chat first.
         chat_path = PATH_CHAT
         chat_slash_path = f"{PATH_CHAT}/"
         if (
             request.method == "GET"
-            and request.url.path in {chat_path, chat_slash_path}
+            and request.url.path in {
+                chat_path,
+                chat_slash_path,
+                ROUTE_CHAT_LOGIN_CALLBACK,
+            }
             and request.query_params.get("aims_new") != "1"
         ):
             user_identifier = authenticated_user_identifier(request)

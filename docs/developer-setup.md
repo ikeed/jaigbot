@@ -53,6 +53,9 @@ You can also use:
 
 `dev_run.sh` sets local defaults and starts the backend with reload. It also defaults `MEMORY_PERSIST_PATH` to `.chainlit/session_memory.json`.
 
+With `APP_ENV=local`, application logs are also written to `./console.log`. In
+staging and production, logs are emitted to stdout/stderr for Cloud Logging.
+
 ## 3) PyCharm setup
 
 Open the project directory in PyCharm and select the committed run configuration:

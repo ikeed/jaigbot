@@ -82,7 +82,8 @@ class LegacyChatHandler:
             if not (ctx.person_last or "").strip():
                 from app.services.chat_helpers import strip_appointment_headers
                 reply_text = strip_appointment_headers(reply_text)
-        except Exception:
+        except Exception as e:
+            self.logger.debug(f"Failed to strip appointment headers: {e}")
             pass
         
         # Update conversation history
@@ -107,7 +108,8 @@ class LegacyChatHandler:
         try:
             from app.services.vertex_helpers import get_last_model_used
             model_used = get_last_model_used() or self.model_id
-        except Exception:
+        except Exception as e:
+            self.logger.debug(f"Failed to determine last model used: {e}")
             model_used = self.model_id
 
         return {
@@ -191,5 +193,5 @@ class LegacyChatHandler:
             mem["updated"] = now
             self.memory_store[session_id] = mem
             
-        except Exception:
-            self.logger.debug("Memory persistence failed for session %s", session_id)
+        except Exception as e:
+            self.logger.debug("Memory persistence failed for session %s: %s", session_id, e)

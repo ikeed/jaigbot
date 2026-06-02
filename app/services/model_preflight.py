@@ -4,6 +4,8 @@ import json
 import logging
 from typing import Any
 
+logger = logging.getLogger(__name__)
+
 
 async def run_model_preflight(application: Any, *, settings: Any, logger: logging.Logger) -> None:
     """Best-effort check whether the configured Vertex model is visible.
@@ -65,8 +67,8 @@ async def run_model_preflight(application: Any, *, settings: Any, logger: loggin
                 "modelId": settings.MODEL_ID,
                 "region": settings.VERTEX_LOCATION,
             }))
-        except Exception:
-            logger.info("model preflight error: %s", exc)
+        except Exception as log_exc:
+            logger.info("model preflight error: %s (and logging failure: %s)", exc, log_exc)
         application.state.model_check["available"] = "unknown"
         application.state.model_check["error"] = str(exc)
 
@@ -84,7 +86,8 @@ def _check_models_list(application: Any, *, settings: Any, session: Any) -> None
     if response.status_code == 200:
         try:
             data = response.json()
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to parse models list JSON: %s", e)
             data = {}
         models = data.get("models", []) or []
         application.state.model_check["listCount"] = len(models)
@@ -105,5 +108,5 @@ def _set_generate_url(application: Any, *, settings: Any) -> None:
             f"/locations/{loc}/publishers/google/models/{settings.MODEL_ID}:generateContent"
         )
         application.state.model_check["baseGenerateUrlPrimary"] = base_gen_url
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Failed to construct base generate URL: %s", e)
