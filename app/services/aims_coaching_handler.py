@@ -441,7 +441,7 @@ class AimsCoachingHandler:
         session_obj = self._build_session_metrics(mem)
         
         # Step 8: Check for end-game scenarios
-        coach_post = await self._check_end_game(mem, reply_payload, session_obj)
+        coach_post = await self._check_end_game(mem, reply_payload, session_obj, ctx.session_id)
         
         # Save coach_post to memory if it exists, so it can be archived
         if coach_post and mem is not None:
@@ -919,7 +919,7 @@ class AimsCoachingHandler:
                 for k, arr in (aims.get("scores", {}) or {}).items():
                     if arr:
                         try:
-                            ra[k] = sum(arr) / len(arr)
+                            ra[k] = float(sum(arr)) / len(arr)
                         except Exception as e:
                             self.logger.debug(f"Failed to calculate running average for {k}: {e}")
                             pass
@@ -1085,7 +1085,7 @@ class AimsCoachingHandler:
                 for k, arr in (aims.get("scores", {}) or {}).items():
                     if arr:
                         try:
-                            running_avg[k] = sum(arr) / len(arr)
+                            running_avg[k] = float(sum(arr)) / len(arr)
                         except Exception as e:
                             self.logger.debug(f"Failed to calculate running average: {e}")
                             pass
@@ -1101,7 +1101,7 @@ class AimsCoachingHandler:
             return None
     
     async def _check_end_game(
-        self, mem: Optional[Dict[str, Any]], reply_payload: Dict[str, Any], session_obj: Dict[str, Any] | None
+        self, mem: Optional[Dict[str, Any]], reply_payload: Dict[str, Any], session_obj: Dict[str, Any] | None, session_id: str
     ) -> Dict[str, Any] | None:
         """Check for end-game scenarios using LLM-centric detection with heuristic fallback."""
         eg_begin_time = time.time()
