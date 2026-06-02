@@ -31,6 +31,7 @@ def initialize_session(
         return {"status": "ok"}
 
     sid = body.sessionId
+    logger.info("Initializing session %s", sid)
     now = time.time()
     mem = memory_store.get(sid)
 

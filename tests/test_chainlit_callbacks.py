@@ -21,6 +21,7 @@ mock_cl.Message = MagicMock()
 mock_cl.Action = MagicMock()
 mock_cl.send_window_message = AsyncMock()
 mock_cl.AskUserMessage = MagicMock()
+mock_cl.Avatar = MagicMock(side_effect=KeyError("Avatar"))
 
 # Decorators
 def mock_decorator(func): return func
@@ -95,6 +96,7 @@ with patch("app.config.settings") as mock_settings:
         mock_orch_instance = mock_orch_cls.return_value
         import chainlit_app
 
+
 @pytest.mark.asyncio
 async def test_auth_callback_success(monkeypatch):
     monkeypatch.setenv("AUTH_PASSWORD", "secret")
@@ -123,9 +125,24 @@ def test_oauth_callback_google():
 
 @pytest.mark.asyncio
 async def test_start_chat_delegates_to_orchestrator():
+    mock_cl.Avatar.reset_mock()
     chainlit_app.orchestrator.handle_chat_start = AsyncMock()
     await chainlit_app.start_chat()
     chainlit_app.orchestrator.handle_chat_start.assert_called_once()
+    mock_cl.Avatar.assert_not_called()
+
+@pytest.mark.asyncio
+async def test_on_chat_end_ignores_deregister_failure(monkeypatch):
+    session_manager = MagicMock(session_id="session-1", connection_id="connection-1")
+    deregister_session = AsyncMock(
+        side_effect=RuntimeError("All connection attempts failed")
+    )
+    monkeypatch.setattr(chainlit_app, "session_manager", session_manager)
+    monkeypatch.setattr(chainlit_app.backend_client, "deregister_session", deregister_session)
+
+    await chainlit_app.on_chat_end()
+
+    deregister_session.assert_awaited_once_with("session-1", "connection-1")
 
 @pytest.mark.asyncio
 async def test_handle_message_delegates_to_orchestrator():

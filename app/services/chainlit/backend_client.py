@@ -1,7 +1,10 @@
 import httpx
 import uuid
+import logging
 from typing import Any, Dict, List, Optional
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 from app.constants import (
     ENDPOINT_HISTORY,
     ENDPOINT_SESSION,
@@ -38,7 +41,10 @@ class BackendClient:
                 )
                 if r.status_code == 200 and r.headers.get("content-type", "").startswith("application/json"):
                     return (r.json() or {}).get("history") or []
-        except Exception:
+                else:
+                    logger.warning("Failed to fetch history: status=%s, content-type=%s", r.status_code, r.headers.get("content-type"))
+        except Exception as e:
+            logger.error("Failed to fetch history from backend: %s", e)
             pass
         return []
 
@@ -128,9 +134,11 @@ class BackendClient:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             for url in [f"{self.base_url}{ENDPOINT_HEALTHZ}", f"{self.base_url}/api{ENDPOINT_HEALTHZ}"]:
                 try:
-                    if (await client.get(url)).status_code == 200:
+                    resp = await client.get(url)
+                    if resp.status_code == 200:
                         return True
-                except Exception:
+                except Exception as e:
+                    logger.debug("Health check failed for %s: %s", url, e)
                     pass
         return False
 

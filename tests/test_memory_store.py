@@ -39,6 +39,25 @@ def test_in_memory_store_pop_updates_persisted_file(tmp_path):
         assert json.load(f) == {}
 
 
+def test_in_memory_store_recovers_from_corrupt_persisted_file(tmp_path):
+    path = tmp_path / "session_memory.json"
+    path.write_text("{", encoding="utf-8")
+
+    store = InMemoryStore(persist_path=str(path))
+
+    assert store.items() == []
+
+
+def test_in_memory_store_ignores_persist_failure(tmp_path):
+    path = tmp_path / "session_memory.json"
+    store = InMemoryStore(persist_path=str(path))
+    path.mkdir()
+
+    store["sid"] = {"history": []}
+
+    assert store["sid"] == {"history": []}
+
+
 @pytest.mark.asyncio
 async def test_chainlit_memory_data_layer_persists_threads_and_steps():
     store = InMemoryStore()
@@ -75,6 +94,50 @@ async def test_chainlit_memory_data_layer_persists_threads_and_steps():
     assert thread["steps"][0]["output"] == "Person: Sarah"
     assert "chainlit:local:user:doctor@example.com" in dict(store.items())
     assert "chainlit:local:thread:thread-1" in dict(store.items())
+
+
+@pytest.mark.asyncio
+async def test_chainlit_memory_data_layer_discards_transient_disconnect_errors():
+    store = InMemoryStore()
+    store["chainlit:local:thread:thread-1"] = {
+        "id": "thread-1",
+        "steps": [
+            {
+                "id": "restart-error",
+                "threadId": "thread-1",
+                "type": "assistant_message",
+                "name": "Error",
+                "isError": True,
+                "output": "All connection attempts failed",
+            },
+            {
+                "id": "real-message",
+                "threadId": "thread-1",
+                "type": "assistant_message",
+                "name": "Assistant",
+                "isError": False,
+                "output": "Hello",
+            },
+        ],
+    }
+    layer = MemoryDataLayer(store)
+
+    thread = await layer.get_thread("thread-1")
+    await layer.create_step(
+        {
+            "id": "another-restart-error",
+            "threadId": "thread-1",
+            "type": "assistant_message",
+            "name": "Error",
+            "isError": True,
+            "output": "All connection attempts failed",
+        }
+    )
+
+    assert [step["id"] for step in thread["steps"]] == ["real-message"]
+    assert [step["id"] for step in store["chainlit:local:thread:thread-1"]["steps"]] == [
+        "real-message"
+    ]
 
 
 @pytest.mark.asyncio

@@ -12,7 +12,8 @@ logger = logging.getLogger(__name__)
 # Cache git hash once at startup
 try:
     GIT_HASH = subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode('ascii').strip()
-except Exception:
+except Exception as e:
+    logger.debug("Git hash lookup failed: %s", e)
     GIT_HASH = "unknown"
 
 class StorageService:
@@ -255,17 +256,25 @@ class StorageService:
         try:
             from app.services.persona_service import extract_persona_name_from_archive
 
+            logger.info("Starting GCS persona count for user %s", user_id)
+            count = 0
             for prefix in prefixes:
                 for blob in self.client.list_blobs(self.bucket_name, prefix=prefix):
+                    count += 1
+                    if count > 100: # Safety cap
+                        logger.warning("User %s has >100 sessions, capping count", user_id)
+                        break
                     if not str(getattr(blob, "name", "")).endswith(".json"):
                         continue
                     try:
                         data = json.loads(blob.download_as_string())
-                    except Exception:
+                    except Exception as e:
+                        logger.debug("Failed to download or parse blob %s: %s", getattr(blob, "name", "unknown"), e)
                         continue
                     persona_name = extract_persona_name_from_archive(data)
                     if persona_name in counts:
                         counts[persona_name] += 1
+            logger.info("Finished GCS persona count for user %s. Processed %d blobs.", user_id, count)
         except Exception as e:
             logger.warning("Failed to count personas for user %s from GCS: %s", user_id, e)
         return counts

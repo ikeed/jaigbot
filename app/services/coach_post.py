@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from typing import Dict, List
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class VaccineRelevanceGate:
     """Applies vaccine-relevance gating to a classification payload.
@@ -119,7 +123,8 @@ class AimsPostProcessor:
                     filtered = ["Keep framing neutral and open; invite questions."]
                 cls_payload = dict(cls_payload)
                 cls_payload["reasons"] = filtered
-        except Exception:
+        except Exception as e:
+            logger.debug(f"AimsPostProcessor.post_process failed (non-fatal): {e}")
             pass
         return cls_payload
 
@@ -218,7 +223,8 @@ class EndGameDetector:
             for sent in parts:
                 if sentence_accepts(sent):
                     return {"reason": "accepted_now"}
-        except Exception:
+        except Exception as e:
+            logger.debug(f"EndGameDetector.detect failed during sentence processing: {e}")
             # Fallback to original behavior if something goes wrong
             if any(cue in lt for cue in EndGameDetector.ACCEPT_NOW_CUES):
                 return {"reason": "accepted_now"}
@@ -319,7 +325,8 @@ def endgame_title(session_obj: Dict | None, outcome: str = "") -> str:
         if overall >= 55:
             return "👏 Good job!"
         return "💪 Nice job!"
-    except Exception:
+    except Exception as e:
+        logger.debug(f"Error determining endgame title: {e}")
         return "🎉 Great job!"
 
 
@@ -376,7 +383,8 @@ def build_endgame_bullets_fallback(session_obj: Dict | None) -> List[str]:
         try:
             v = ra.get(step)
             return float(v) if isinstance(v, (int, float)) else float("nan")
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Error calculating average score for {step}: {e}")
             return float("nan")
 
     def _pct(a: float) -> int:

@@ -89,7 +89,7 @@ try:
             try:
                 frontend.terminate()
                 frontend.wait(timeout=5)
-            except Exception:
+            except Exception as _e:
                 pass
             sys.exit(ret_backend)
         if ret_frontend is not None:
@@ -97,7 +97,7 @@ try:
             try:
                 backend.terminate()
                 backend.wait(timeout=5)
-            except Exception:
+            except Exception as _e:
                 pass
             sys.exit(ret_frontend)
         time.sleep(0.5)
@@ -105,18 +105,18 @@ except KeyboardInterrupt:
     print("[dev_run.py] KeyboardInterrupt: terminating children...")
     try:
         backend.terminate()
-    except Exception:
+    except Exception as _e:
         pass
     try:
         frontend.terminate()
-    except Exception:
+    except Exception as _e:
         pass
     try:
         backend.wait(timeout=5)
-    except Exception:
+    except Exception as _e:
         pass
     try:
         frontend.wait(timeout=5)
-    except Exception:
+    except Exception as _e:
         pass
     sys.exit(130)
