@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
 from .http_handlers import get_request_id as _get_request_id, install_http_handlers
 from .vertex import VertexClient
-from .runtime import VertexClientCache, create_memory_store
+from .runtime import VertexClientCache, create_memory_store, get_logging_config
 from .routes.chat import create_chat_router
 from .routes.session import create_session_router
 from .routes.summary import create_summary_router
@@ -21,10 +21,7 @@ _VERTEX_CLIENT_CACHE = VertexClientCache()
 def _get_vertex_client(project: str, region: str, model_id: str):
     return _VERTEX_CLIENT_CACHE.get(project, region, model_id, VertexClient)
 
-logging.basicConfig(
-    level=getattr(logging, settings.LOG_LEVEL, logging.INFO),
-    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
-)
+logging.basicConfig(**get_logging_config(settings))
 logger = logging.getLogger("app")
 
 MEMORY_STORE = create_memory_store(settings, logger)

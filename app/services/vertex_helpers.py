@@ -1,9 +1,12 @@
 import contextvars
 import json
 import re
+import logging
 from typing import Callable, Optional
 
-from ..vertex import VertexClient
+from ..vertex import VertexAIError, VertexClient
+
+_logger = logging.getLogger(__name__)
 
 # Track the model that produced the most recent response, per async task.
 # Using ContextVar instead of a module-level global avoids race conditions
@@ -42,20 +45,23 @@ def _extract_json_payload(text: str) -> Optional[object]:
             continue
         try:
             return json.loads(body)
-        except Exception:
+        except Exception as e:
+            _logger.debug("Failed to extract JSON from labeled block: %s", e)
             pass
     # Second pass: unlabeled fences
     for _, body in matches:
         try:
             return json.loads(body)
-        except Exception:
+        except Exception as e:
+            _logger.debug("Failed to extract JSON from unlabeled block: %s", e)
             pass
 
     # 2) Minimal cleanup fallback: remove raw fence markers/backticks and try once
     cleaned = s.replace("```", "").strip()
     try:
         return json.loads(cleaned)
-    except Exception:
+    except Exception as e:
+        _logger.debug("Failed to extract JSON from cleaned text: %s", e)
         return None
 
 
@@ -149,9 +155,13 @@ def vertex_call_with_fallback_text(
                 )
                 return plain
             return result
-        except Exception:
+        except Exception as e:
+            _logger.warning("Secondary generate_text call failed for legacy path: %s", e)
             return result
-    except Exception:
+    except VertexAIError:
+        raise
+    except Exception as e:
+        _logger.error("Primary vertex call failed: %s", e)
         result = gateway.generate_text(
             prompt=prompt,
             system_instruction=system_instruction,
@@ -240,11 +250,13 @@ async def avertex_call_with_fallback_text(
                 )
                 return plain
             return result
-        except Exception:
+        except Exception as e:
+            _logger.warning("Secondary agenerate_text call failed for legacy path: %s", e)
             return result
     except VertexAIError:
         raise
-    except Exception:
+    except Exception as e:
+        _logger.error("Primary avertex call failed: %s", e)
         result = await gateway.agenerate_text(
             prompt=prompt,
             system_instruction=system_instruction,
@@ -314,7 +326,8 @@ async def avertex_call_with_fallback_json(
             if reply:
                 return json.dumps({"patient_reply": reply}, separators=(",", ":"))
             return json.dumps(obj, separators=(",", ":"))
-        except Exception:
+        except Exception as e:
+            _logger.warning("Failed to re-serialize JSON payload: %s", e)
             pass
     return result
 
@@ -381,6 +394,7 @@ def vertex_call_with_fallback_json(
             if reply:
                 return json.dumps({"patient_reply": reply}, separators=(",", ":"))
             return json.dumps(obj, separators=(",", ":"))
-        except Exception:
+        except Exception as e:
+            _logger.warning("Failed to re-serialize JSON payload: %s", e)
             pass
     return result

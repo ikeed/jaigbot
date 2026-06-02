@@ -30,6 +30,7 @@ __pycache__/
 # Environment & OS
 .env
 .DS_Store
+console.log
 
 # Large media
 /docs/aims_videos/

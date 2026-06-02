@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 
 import chainlit as cl
@@ -35,6 +36,7 @@ backend_client = BackendClient()
 ui_handler = UIHandler()
 session_manager = SessionManager()
 orchestrator = ChainlitOrchestrator(backend_client, ui_handler, session_manager)
+logger = logging.getLogger(__name__)
 
 @cl.data_layer
 def get_chainlit_data_layer():
@@ -44,7 +46,7 @@ def get_chainlit_data_layer():
 @cl.set_chat_profiles
 async def chat_profiles():
     try:
-        icon = "/public/avatars/spinner.svg"
+        icon = "/public/avatars/aimsbot.svg"
         return [
             cl.ChatProfile(
                 name="AIMSBot",
@@ -53,7 +55,10 @@ async def chat_profiles():
                 default=True,
             )
         ]
-    except Exception:
+    except Exception as e:
+        # Import cl here if not available, though it should be.
+        import logging
+        logging.warning("Failed to load chat profiles, using default: %s", e)
         return [cl.ChatProfile(name="AIMSBot", markdown_description="Loading your scenario…", default=True)]
 
 @cl.on_chat_start
@@ -73,7 +78,12 @@ async def on_chat_end():
     session_id = session_manager.session_id
     connection_id = session_manager.connection_id
     if session_id and connection_id:
-        await backend_client.deregister_session(session_id, connection_id)
+        try:
+            await backend_client.deregister_session(session_id, connection_id)
+        except Exception as e:
+            # During unified-process shutdown the backend can disappear before
+            # Chainlit closes its sockets. Deregistration is best-effort.
+            logger.debug("Failed to deregister closing session (non-fatal): %s", e)
 
 @cl.action_callback("report_issue")
 async def on_report_issue(action: cl.Action):
@@ -118,7 +128,9 @@ async def on_window_message(message: str):
             key = f"aims:{settings.APP_ENV}:intro_seen:{user_id.strip().lower()}" if user_id else None
             if key:
                 MEMORY_STORE[key] = {"seen": True, "updated": time.time()}
-        except Exception:
+        except Exception as e:
+            import logging
+            logging.error("Failed to mark intro as seen in memory store: %s", e)
             pass
         session_manager.local_intro_seen = True
         session_manager.intro_pending = False

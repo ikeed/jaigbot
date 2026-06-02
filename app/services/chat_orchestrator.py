@@ -119,7 +119,8 @@ class ChatOrchestrator:
         # Validate size limit 2 KiB
         try:
             encoded = body.message.encode("utf-8")
-        except Exception:
+        except Exception as e:
+            self.logger.warning(f"UTF-8 encoding failed for message: {e}")
             raise HTTPException(
                 status_code=400,
                 detail={"error": {"message": "Invalid UTF-8 in message", "code": 400}}
@@ -175,7 +176,8 @@ class ChatOrchestrator:
             # Always include the sessionId for clients that track by id
             try:
                 response_payload["sessionId"] = ctx.session_id
-            except Exception:
+            except Exception as e:
+                self.logger.debug(f"Failed to set sessionId in response (non-fatal): {e}")
                 pass
             
             # Add optional coach post for end-game scenarios
@@ -217,7 +219,8 @@ class ChatOrchestrator:
             # Set session cookie
             try:
                 self.session_service.apply_cookie(resp, ctx.session_id)
-            except Exception:
+            except Exception as e:
+                self.logger.debug(f"Failed to apply session cookie (non-fatal): {e}")
                 pass
             
             return resp
@@ -267,7 +270,8 @@ class ChatOrchestrator:
             # Always include the sessionId for clients that track by id
             try:
                 response_payload["sessionId"] = ctx.session_id
-            except Exception:
+            except Exception as e:
+                self.logger.debug(f"Failed to set sessionId in legacy response (non-fatal): {e}")
                 pass
             
             # Add optional coaching/session if enabled and requested
@@ -281,7 +285,8 @@ class ChatOrchestrator:
             # Set session cookie
             try:
                 self.session_service.apply_cookie(resp, ctx.session_id)
-            except Exception:
+            except Exception as e:
+                self.logger.debug(f"Failed to apply session cookie in legacy path (non-fatal): {e}")
                 pass
             
             return resp
@@ -337,7 +342,8 @@ class ChatOrchestrator:
         # Set session cookie
         try:
             self.session_service.apply_cookie(resp, session_id)
-        except Exception:
+        except Exception as e:
+            self.logger.debug(f"Failed to apply session cookie (vertex error path): {e}")
             pass
         
         return resp
@@ -434,7 +440,8 @@ class ChatOrchestrator:
         
         try:
             return getattr(request.state, "request_id", None) or self._generate_uuid()
-        except Exception:
+        except Exception as e:
+            self.logger.debug(f"Error retrieving request ID: {e}")
             return self._generate_uuid()
     
     def _generate_uuid(self) -> str:

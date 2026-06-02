@@ -11,8 +11,11 @@ configuration values via the constructor in app.main.
 from __future__ import annotations
 
 import json
+import logging
 import os
 from typing import Any, Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 
 class InMemoryStore:
@@ -43,7 +46,8 @@ class InMemoryStore:
                         value["active_connections"] = []
         except FileNotFoundError:
             return
-        except Exception:
+        except Exception as e:
+            logger.error("Failed to load memory store from %s: %s", self._persist_path, e)
             self._store = {}
 
     def _persist(self) -> None:
@@ -57,7 +61,8 @@ class InMemoryStore:
             with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump(self._store, f, ensure_ascii=False)
             os.replace(tmp_path, self._persist_path)
-        except Exception:
+        except Exception as e:
+            logger.error("Failed to persist memory store to %s: %s", self._persist_path, e)
             pass
 
     def get(self, key: str) -> Optional[Dict[str, Any]]:
@@ -110,10 +115,13 @@ class RedisStore:
         prefix: str = "aims:session:",
         fallback_prefixes: Optional[List[str]] = None,
         ttl: int = 3600,
+        logger: Optional[logging.Logger] = None,
     ) -> None:
+        self.logger = logger or logging.getLogger(__name__)
         try:
             import redis  # type: ignore
-        except Exception as e:  # pragma: no cover - import error path
+        except Exception as e:
+            self.logger.error("Failed to import Redis library: %s", e)
             raise RuntimeError(f"Redis library not available: {e}")
 
         self._prefix = prefix
@@ -144,14 +152,16 @@ class RedisStore:
                 continue
             try:
                 return json.loads(raw)
-            except Exception:  # pragma: no cover - corrupt value
+            except Exception as e:
+                self.logger.error(f"Failed to parse Redis value for key {redis_key}: {e}")
                 return None
         return None
 
     def set(self, key: str, value: Dict[str, Any], ttl: Optional[int] = None) -> None:
         try:
             raw = json.dumps(value)
-        except Exception:  # pragma: no cover - serialization error
+        except Exception as e:
+            self.logger.exception(f"Failed to serialize value for key {key}: {e}")
             raw = "{}"
         pipe = self.r.pipeline()
         pipe.set(self._k(key), raw)
@@ -179,7 +189,8 @@ class RedisStore:
                             continue
                         try:
                             data = json.loads(v)
-                        except Exception:
+                        except Exception as e:
+                            self.logger.debug(f"Failed to parse Redis value for key {k}: {e}")
                             data = None
                         if data is not None:
                             sid = k[len(prefix) :]

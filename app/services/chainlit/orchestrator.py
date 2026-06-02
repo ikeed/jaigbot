@@ -1,3 +1,4 @@
+import logging
 import uuid
 import json
 import time
@@ -9,6 +10,7 @@ from app.config import settings
 from app.constants import (
     MSG_INTRO_REQUIRED,
     MSG_DUPLICATE_TAB,
+    MSG_RESUME_THREAD,
     SESSION_INTRO_PENDING,
 )
 from app.chat_roles import (
@@ -23,7 +25,9 @@ from app.persona import DEFAULT_CHARACTER, DEFAULT_SCENE
 from app.services.chainlit.backend_client import BackendClient
 from app.services.chainlit.ui_handler import UIHandler
 from app.services.chainlit.session_manager import SessionManager
-from app.chainlit_thread_state import set_current_thread_id
+from app.chainlit_thread_state import get_current_thread_id, set_current_thread_id
+
+logger = logging.getLogger(__name__)
 
 class ChainlitOrchestrator:
     """Orchestrates the high-level flow of the Chainlit application."""
@@ -45,6 +49,15 @@ class ChainlitOrchestrator:
             if not self._has_seen_intro_locally_or_persistently(user_id):
                 self.session.intro_pending = True
                 await self.ui.send_window_message({"type": MSG_INTRO_REQUIRED})
+                return
+
+            reconnect_thread_id = self._get_reconnect_thread_id(user_id)
+            if reconnect_thread_id:
+                logger.info("Redirecting reconnect to persisted thread: %s", reconnect_thread_id)
+                await self.ui.send_window_message({
+                    "type": MSG_RESUME_THREAD,
+                    "threadId": reconnect_thread_id,
+                })
                 return
 
             self.session.intro_pending = False
@@ -140,7 +153,8 @@ class ChainlitOrchestrator:
                 # Always refresh history from backend source of truth
                 history = await self.backend.fetch_history(session_id)
                 self.session.history = history
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Failed to refresh history during resume (non-fatal): {e}")
                 pass
 
             # Fallbacks for missing state
@@ -171,8 +185,8 @@ class ChainlitOrchestrator:
             await self.ui.show_error(f"An error occurred while reporting: {str(e)}")
 
     # --- Private Helpers ---
-
     async def _start_scenario_flow(self):
+        logger.info("Starting scenario flow")
         connection_id = self._ensure_connection_id()
         session_id = self._resolve_session_id(self._get_thread_id())
         self.session.session_id = session_id
@@ -184,6 +198,7 @@ class ChainlitOrchestrator:
         persona_id = self._recover_persona_from_history(history)
 
         # Init session
+        logger.info("Initializing session with backend: %s", session_id)
         session_data = await self.backend.initialize_session(
             session_id=session_id,
             connection_id=connection_id,
@@ -196,6 +211,8 @@ class ChainlitOrchestrator:
             await self.ui.send_window_message({"type": MSG_DUPLICATE_TAB})
             return
 
+        logger.info("Session data received from backend.")
+        logger.debug("Character: %s, Scene: %s", session_data.get("character"), session_data.get("scene"))
         # Update local state
         self.session.character = session_data.get("character")
         self.session.scene = session_data.get("scene")
@@ -205,14 +222,18 @@ class ChainlitOrchestrator:
             self.session.history = history if history else []
 
         if history:
+            logger.info("Injecting scenario into scene from history")
             self._inject_scenario_into_scene(history, user_card)
         else:
+            logger.info("Presenting scenario card to UI")
             await self.ui.present_scenario_card(user_card)
             new_history = [{"role": ROLE_SYSTEM, "content": user_card}]
             self.session.history = new_history
             self._inject_scenario_into_scene(new_history, user_card)
 
+        logger.info("Running preflight checks")
         await self._run_preflight_checks()
+        logger.info("Startup flow complete")
 
     def _has_seen_intro_locally_or_persistently(self, user_id: Optional[str]) -> bool:
         if self.session.local_intro_seen:
@@ -230,7 +251,8 @@ class ChainlitOrchestrator:
             
             value = MEMORY_STORE.get(key) or MEMORY_STORE.get(legacy_key)
             return bool(value.get("seen")) if isinstance(value, dict) else bool(value)
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Error checking intro status in MEMORY_STORE: {e}")
             return False
 
     def _ensure_connection_id(self) -> str:
@@ -239,6 +261,15 @@ class ChainlitOrchestrator:
             cid = str(uuid.uuid4())
             self.session.connection_id = cid
         return cid
+
+    def _get_reconnect_thread_id(self, user_id: Optional[str]) -> Optional[str]:
+        if self.session.query_params.get("aims_new") == "1":
+            return None
+        persisted_thread_id = get_current_thread_id(user_id)
+        context_thread_id = self._get_thread_id()
+        if persisted_thread_id and persisted_thread_id != context_thread_id:
+            return persisted_thread_id
+        return None
 
     def _resolve_session_id(self, thread_id: Optional[str], metadata_id: Optional[str] = None) -> str:
         current = self.session.session_id
@@ -271,7 +302,8 @@ class ChainlitOrchestrator:
             if persisted:
                 await dl.update_thread(thread_id=thread_id, user_id=persisted.id, metadata={"session_id": session_id})
                 set_current_thread_id(user.identifier, thread_id)
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Failed to bind thread (non-fatal): {e}")
             pass
 
     def _recover_persona_from_history(self, history: List[Dict[str, Any]]) -> Optional[str]:
@@ -340,13 +372,17 @@ class ChainlitOrchestrator:
             proj = config.get("projectId") or config.get("project_id") or config.get("project")
             if proj in (None, "", "<unset>"):
                 await self.ui.show_error("Warning: Backend PROJECT_ID appears unset.")
-        except Exception: pass
+        except Exception as e:
+            logger.debug(f"Failed to check backend config during preflight: {e}")
+            pass
 
         try:
             mc = await self.backend.check_model()
             if mc.get("available") is False:
                 await self.ui.show_error(f"Model '{mc.get('modelId')}' not available in '{mc.get('region')}'.")
-        except Exception: pass
+        except Exception as e:
+            logger.debug(f"Failed to check model availability during preflight: {e}")
+            pass
 
     async def _report_error_silently(self, error: Exception, context: str):
         try:
@@ -355,5 +391,6 @@ class ChainlitOrchestrator:
                 reason=f"Auto-reported error in {context}: {str(error)}",
                 user_info=self._get_user_info()
             )
-        except Exception:
+        except Exception as e:
+            logger.error(f"Failed to report error silently: {e}")
             pass
