@@ -37,6 +37,113 @@ def test_apply_cookie_sets_expected_fields():
     assert resp.cookies["path"] == "/"
 
 
+def test_ensure_session_prefers_body_then_cookie_and_populates_user_info():
+    store = {
+        "body-sid": {
+            "history": [],
+            "updated": 1,
+        }
+    }
+    svc = SessionService(
+        store,
+        cookie=CookieSettings(name="sid", secure=False, samesite="lax", max_age=3600),
+        memory_enabled=True,
+        memory_max_turns=8,
+        memory_ttl_seconds=3600,
+    )
+    request = MagicMock(cookies={"sid": "cookie-sid"})
+
+    sid, set_cookie = svc.ensure_session(
+        request,
+        "body-sid",
+        user_info={"identifier": "doctor@example.com"},
+    )
+
+    assert sid == "body-sid"
+    assert set_cookie is False
+    assert store["body-sid"]["full_history"] == []
+    assert store["body-sid"]["updated"] == 1
+    assert store["body-sid"]["session_started"] >= 1
+    assert store["body-sid"]["user_info"] == {"identifier": "doctor@example.com"}
+
+
+def test_ensure_session_uses_cookie_without_creating_cookie():
+    store = {}
+    svc = SessionService(
+        store,
+        cookie=CookieSettings(name="sid", secure=False, samesite="lax", max_age=3600),
+        memory_enabled=True,
+        memory_max_turns=8,
+        memory_ttl_seconds=3600,
+    )
+    request = MagicMock(cookies={"sid": "cookie-sid"})
+
+    sid, set_cookie = svc.ensure_session(request, None)
+
+    assert sid == "cookie-sid"
+    assert set_cookie is False
+    assert store["cookie-sid"]["history"] == []
+
+
+def test_save_and_state_helpers_are_noops_when_memory_disabled():
+    store = {}
+    svc = SessionService(
+        store,
+        cookie=CookieSettings(name="sid", secure=False, samesite="lax", max_age=3600),
+        memory_enabled=False,
+        memory_max_turns=8,
+        memory_ttl_seconds=3600,
+    )
+
+    assert svc.get_mem("sid") == {}
+    assert svc.get_aims_state("sid") == {}
+    assert svc.get_aims_metrics("sid") == {}
+
+    svc.save_mem("sid", {"history": []})
+    svc.update_persona_scene("sid", "patient", "scene")
+    svc.append_history("sid", "user", "hello")
+    svc.set_aims_state("sid", {"step": "Announce"})
+    svc.set_aims_metrics("sid", {"score": 1})
+
+    assert store == {}
+
+
+def test_persona_scene_and_aims_helpers_persist_memory():
+    store = {}
+    svc = SessionService(
+        store,
+        cookie=CookieSettings(name="sid", secure=False, samesite="lax", max_age=3600),
+        memory_enabled=True,
+        memory_max_turns=8,
+        memory_ttl_seconds=3600,
+    )
+
+    mem = svc.update_persona_scene("sid", "  patient  ", "  clinic  ")
+    svc.set_aims_state("sid", {"step": "Announce"})
+    svc.set_aims_metrics("sid", {"score": 1})
+
+    assert mem["character"] == "patient"
+    assert mem["scene"] == "clinic"
+    assert svc.get_aims_state("sid") == {"step": "Announce"}
+    assert svc.get_aims_metrics("sid") == {"score": 1}
+
+
+def test_apply_cookie_ignores_response_errors():
+    response = MagicMock()
+    response.set_cookie.side_effect = RuntimeError("headers sent")
+    svc = SessionService(
+        {},
+        cookie=CookieSettings(name="sid", secure=True, samesite="strict", max_age=60),
+        memory_enabled=True,
+        memory_max_turns=8,
+        memory_ttl_seconds=3600,
+    )
+
+    svc.apply_cookie(response, "sid")
+
+    response.set_cookie.assert_called_once()
+
+
 def test_prune_expired_archives_and_removes_old_sessions(monkeypatch):
     now = 1_800_000_000.0
     store = {

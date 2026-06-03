@@ -5,7 +5,18 @@ import httpx
 import pytest
 
 from app.chat_roles import ROLE_ASSISTANT, ROLE_COACH, ROLE_USER
-from app.constants import SESSION_USER, SESSION_ID
+from app.constants import (
+    SESSION_CHARACTER,
+    SESSION_CONNECTION_ID,
+    SESSION_HISTORY,
+    SESSION_ID,
+    SESSION_INTRO_PENDING,
+    SESSION_INTRO_SEEN,
+    SESSION_QUERY_PARAMS,
+    SESSION_SCENE,
+    SESSION_SESSION_ENDED,
+    SESSION_USER,
+)
 from app.services.chainlit.backend_client import BackendClient
 from app.services.chainlit.session_manager import SessionManager
 from app.services.chainlit.ui_handler import UIHandler
@@ -30,6 +41,44 @@ def test_session_manager_properties(mock_cl_user_session):
     
     mock_cl_user_session.get.return_value = "123"
     assert sm.session_id == "123"
+
+
+def test_session_manager_all_properties_use_chainlit_session(mock_cl_user_session):
+    sm = SessionManager()
+
+    sm.history = [{"role": "user", "content": "hello"}]
+    mock_cl_user_session.set.assert_called_with(
+        SESSION_HISTORY, [{"role": "user", "content": "hello"}]
+    )
+    mock_cl_user_session.get.return_value = None
+    assert sm.history == []
+
+    sm.character = "Character"
+    mock_cl_user_session.set.assert_called_with(SESSION_CHARACTER, "Character")
+    sm.scene = "Scene"
+    mock_cl_user_session.set.assert_called_with(SESSION_SCENE, "Scene")
+    sm.connection_id = "connection"
+    mock_cl_user_session.set.assert_called_with(SESSION_CONNECTION_ID, "connection")
+    sm.query_params = {"force": "true"}
+    mock_cl_user_session.set.assert_called_with(SESSION_QUERY_PARAMS, {"force": "true"})
+
+    mock_cl_user_session.get.return_value = None
+    assert sm.query_params == {}
+    assert sm.session_ended is False
+    assert sm.intro_pending is False
+    assert sm.local_intro_seen is False
+
+    sm.session_ended = True
+    mock_cl_user_session.set.assert_called_with(SESSION_SESSION_ENDED, True)
+    sm.intro_pending = True
+    mock_cl_user_session.set.assert_called_with(SESSION_INTRO_PENDING, True)
+    sm.local_intro_seen = True
+    mock_cl_user_session.set.assert_called_with(SESSION_INTRO_SEEN, True)
+
+    mock_cl_user_session.get.return_value = "value"
+    assert sm.character == "value"
+    assert sm.scene == "value"
+    assert sm.connection_id == "value"
 
 @pytest.mark.asyncio
 async def test_backend_client_fetch_history(respx_mock):

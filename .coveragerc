@@ -32,6 +32,8 @@ omit =
     app/static/*
     # transport/client layer is covered by VertexGateway tests; exclude low-level transport
     app/vertex.py
+    # Protocol-only dependency contracts; no runtime behavior to test
+    app/services/aims_dependencies.py
     # in-memory store backends are exercised via API/session tests; unit coverage is low and integration-heavy
     app/memory_store.py
     # Exclude scripts and tests from coverage

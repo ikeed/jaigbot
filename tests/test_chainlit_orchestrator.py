@@ -239,6 +239,30 @@ async def test_handle_session_resume_refreshes_backend_history(orchestrator, moc
 
 
 @pytest.mark.asyncio
+async def test_handle_session_resume_requires_intro(orchestrator, mock_services):
+    mock_services["session"].get_user_identifier.return_value = "user@example.com"
+    orchestrator._has_seen_intro_locally_or_persistently = MagicMock(return_value=False)
+    mock_services["ui"].send_window_message = AsyncMock()
+
+    await orchestrator.handle_session_resume({"id": "thread-1", "metadata": {}})
+
+    assert mock_services["session"].intro_pending is True
+    mock_services["ui"].send_window_message.assert_awaited_once_with({"type": MSG_INTRO_REQUIRED})
+
+
+@pytest.mark.asyncio
+async def test_handle_session_resume_reports_outer_failure(orchestrator, mock_services):
+    mock_services["session"].get_user_identifier.side_effect = RuntimeError("session failed")
+    orchestrator._report_error_silently = AsyncMock()
+    mock_services["ui"].show_error = AsyncMock()
+
+    await orchestrator.handle_session_resume({"id": "thread-1", "metadata": {}})
+
+    orchestrator._report_error_silently.assert_awaited_once()
+    mock_services["ui"].show_error.assert_awaited_once_with("An error occurred while resuming the chat.")
+
+
+@pytest.mark.asyncio
 async def test_handle_session_resume_duplicate_tab_short_circuits(orchestrator, mock_services):
     mock_services["session"].get_user_identifier.return_value = "user@example.com"
     mock_services["session"].connection_id = "connection-1"
@@ -315,6 +339,22 @@ async def test_process_backend_response_dispatches_coaching_reply_and_coach_post
         "Scenario complete\nOutcome: accepted literature"
     )
     mock_services["ui"].send_assistant_reply.assert_awaited_once_with("I need to understand more.")
+
+
+@pytest.mark.asyncio
+async def test_process_backend_response_handles_empty_coaching_and_default_coach_post_title(orchestrator, mock_services):
+    mock_services["session"].history = []
+    mock_services["ui"].send_coach_message = AsyncMock()
+    mock_services["ui"].send_assistant_reply = AsyncMock()
+
+    await orchestrator._process_backend_response({
+        "coaching": {"reasons": [], "tips": []},
+        "coachPost": {"lines": ["Line"]},
+    })
+
+    assert mock_services["session"].history == []
+    mock_services["ui"].send_assistant_reply.assert_not_awaited()
+    mock_services["ui"].send_coach_message.assert_awaited_once_with("✅ Scenario complete\nLine")
 
 
 @pytest.mark.asyncio
@@ -398,6 +438,47 @@ async def test_bind_thread_creates_user_and_updates_thread(orchestrator, mock_se
 
 
 @pytest.mark.asyncio
+async def test_bind_thread_noops_without_thread_user_or_data_layer(orchestrator, mock_services, monkeypatch):
+    mock_services["session"].user = MagicMock(identifier="doctor@example.com")
+    orchestrator._get_thread_id = MagicMock(return_value=None)
+
+    await orchestrator._bind_thread("session-1")
+
+    orchestrator._get_thread_id = MagicMock(return_value="thread-1")
+    mock_services["session"].user = None
+    await orchestrator._bind_thread("session-1")
+
+    mock_services["session"].user = MagicMock(identifier="doctor@example.com")
+    chainlit_data = ModuleType("chainlit.data")
+    chainlit_data.get_data_layer = lambda: None
+    monkeypatch.setitem(sys.modules, "chainlit.data", chainlit_data)
+
+    await orchestrator._bind_thread("session-1")
+
+
+@pytest.mark.asyncio
+async def test_bind_thread_uses_existing_user_and_ignores_data_layer_errors(orchestrator, mock_services, monkeypatch):
+    user = MagicMock(identifier="doctor@example.com")
+    mock_services["session"].user = user
+    orchestrator._get_thread_id = MagicMock(return_value="thread-1")
+    data_layer = MagicMock()
+    data_layer.get_user = AsyncMock(return_value=SimpleNamespace(id="existing-user-id"))
+    data_layer.create_user = AsyncMock()
+    data_layer.update_thread = AsyncMock()
+    chainlit_data = ModuleType("chainlit.data")
+    chainlit_data.get_data_layer = lambda: data_layer
+    monkeypatch.setitem(sys.modules, "chainlit.data", chainlit_data)
+
+    await orchestrator._bind_thread("session-1")
+
+    data_layer.create_user.assert_not_awaited()
+    data_layer.update_thread.assert_awaited_once()
+
+    data_layer.update_thread.side_effect = RuntimeError("update failed")
+    await orchestrator._bind_thread("session-1")
+
+
+@pytest.mark.asyncio
 async def test_run_preflight_checks_reports_health_project_and_model_warnings(orchestrator, mock_services):
     mock_services["ui"].show_error = AsyncMock()
 
@@ -423,6 +504,18 @@ async def test_run_preflight_checks_reports_health_project_and_model_warnings(or
 
 
 @pytest.mark.asyncio
+async def test_run_preflight_checks_ignores_config_and_model_errors(orchestrator, mock_services):
+    mock_services["backend"].check_health = AsyncMock(return_value=True)
+    mock_services["backend"].get_config = AsyncMock(side_effect=RuntimeError("config down"))
+    mock_services["backend"].check_model = AsyncMock(side_effect=RuntimeError("model down"))
+    mock_services["ui"].show_error = AsyncMock()
+
+    await orchestrator._run_preflight_checks()
+
+    mock_services["ui"].show_error.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_report_error_silently_ignores_report_failure(orchestrator, mock_services):
     mock_services["session"].session_id = None
     mock_services["session"].user = MagicMock(identifier="user@example.com", metadata={})
@@ -434,6 +527,71 @@ async def test_report_error_silently_ignores_report_failure(orchestrator, mock_s
     report_call = mock_services["backend"].report_issue.await_args.kwargs
     assert report_call["session_id"].startswith("error-")
     assert report_call["reason"] == "Auto-reported error in context: boom"
+
+
+def test_intro_seen_resolution_paths(orchestrator, mock_services, monkeypatch):
+    mock_services["session"].local_intro_seen = True
+    assert orchestrator._has_seen_intro_locally_or_persistently("user@example.com") is True
+
+    mock_services["session"].local_intro_seen = False
+    assert orchestrator._has_seen_intro_locally_or_persistently(None) is False
+
+    monkeypatch.setattr(
+        "app.main.MEMORY_STORE",
+        {"aims:local:intro_seen:user@example.com": {"seen": True}},
+    )
+    assert orchestrator._has_seen_intro_locally_or_persistently("USER@example.com") is True
+
+    monkeypatch.setattr("app.main.MEMORY_STORE", {"aims:intro_seen:user@example.com": True})
+    assert orchestrator._has_seen_intro_locally_or_persistently("user@example.com") is True
+
+
+def test_resolve_session_id_precedence_user_info_and_recovery_helpers(orchestrator, mock_services, monkeypatch):
+    mock_services["session"].session_id = "current"
+    mock_services["session"].user = MagicMock(identifier="doctor@example.com", metadata={"name": "Doctor"})
+    assert orchestrator._get_user_info() == {
+        "identifier": "doctor@example.com",
+        "metadata": {"name": "Doctor"},
+    }
+
+    monkeypatch.setattr(
+        "app.services.chainlit.orchestrator.settings",
+        SimpleNamespace(FIXED_SESSION_ID="fixed", SESSION_ID=None),
+    )
+    assert orchestrator._resolve_session_id("thread", "metadata") == "fixed"
+
+    monkeypatch.setattr(
+        "app.services.chainlit.orchestrator.settings",
+        SimpleNamespace(FIXED_SESSION_ID=None, SESSION_ID=None),
+    )
+    assert orchestrator._resolve_session_id("thread", "metadata") == "metadata"
+    assert orchestrator._resolve_session_id("thread", None) == "thread"
+    assert orchestrator._resolve_session_id(None, None) == "current"
+
+    history = [
+        {"role": "user", "content": "hello"},
+        {"role": "system", "content": "Person: Zia\nBackground: Test\nReason for visit: Test"},
+    ]
+    assert orchestrator._recover_persona_from_history(history) == "Zia"
+    assert orchestrator._recover_scenario_card(history).startswith("Person: Zia")
+    assert orchestrator._recover_scenario_card([{"role": "user", "content": "hello"}]) is None
+
+    mock_services["session"].scene = "Already has Scenario details"
+    orchestrator._inject_scenario_into_scene(history, "fallback")
+    assert mock_services["session"].scene == "Already has Scenario details"
+
+
+@pytest.mark.asyncio
+async def test_handle_report_issue_reports_backend_error(orchestrator, mock_services):
+    mock_services["session"].session_id = "sess1"
+    mock_services["backend"].report_issue = AsyncMock(side_effect=RuntimeError("report failed"))
+    mock_services["ui"].show_error = AsyncMock()
+
+    await orchestrator.handle_report_issue("reason")
+
+    mock_services["ui"].show_error.assert_awaited_once_with(
+        "An error occurred while reporting: report failed"
+    )
 
 
 @pytest.mark.asyncio

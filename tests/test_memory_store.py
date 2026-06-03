@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 
 import pytest
 from chainlit.types import Pagination, ThreadFilter
@@ -191,3 +192,139 @@ async def test_chainlit_memory_data_layer_hides_alias_threads():
     result = await layer.list_threads(Pagination(first=10), ThreadFilter(userId=user.id))
 
     assert {thread["id"] for thread in result.data} == {"other-alias", "thread-original"}
+
+
+@pytest.mark.asyncio
+async def test_chainlit_memory_data_layer_reads_legacy_user_and_reuses_existing_user():
+    store = InMemoryStore()
+    layer = MemoryDataLayer(store)
+    store["chainlit:user:doctor@example.com"] = {
+        "id": "legacy-user-id",
+        "createdAt": "2026-01-01T00:00:00Z",
+        "identifier": "doctor@example.com",
+        "display_name": "Dr Example",
+        "metadata": {"provider": "google"},
+    }
+
+    user = await layer.get_user("doctor@example.com")
+    created = await layer.create_user(User(identifier="doctor@example.com"))
+
+    assert user.id == "legacy-user-id"
+    assert user.display_name == "Dr Example"
+    assert created.id == "legacy-user-id"
+
+
+@pytest.mark.asyncio
+async def test_chainlit_memory_data_layer_feedback_stubs_are_chainlit_compatible():
+    layer = MemoryDataLayer(InMemoryStore())
+
+    generated_id = await layer.upsert_feedback(SimpleNamespace(id=None))
+    existing_id = await layer.upsert_feedback(SimpleNamespace(id="feedback-id"))
+
+    assert generated_id
+    assert existing_id == "feedback-id"
+    assert await layer.delete_feedback("feedback-id") is True
+
+
+@pytest.mark.asyncio
+async def test_chainlit_memory_data_layer_element_crud_and_noops():
+    store = InMemoryStore()
+    layer = MemoryDataLayer(store)
+    element = SimpleNamespace(
+        id="element-1",
+        thread_id="thread-1",
+        to_dict=lambda: {"id": "element-1", "name": "file.txt"},
+    )
+
+    await layer.delete_element("element-1")
+    await layer.delete_element("element-1", thread_id="missing-thread")
+    assert await layer.get_element("missing-thread", "element-1") is None
+
+    await layer.create_element(element)
+    assert await layer.get_element("thread-1", "element-1") == {
+        "id": "element-1",
+        "name": "file.txt",
+    }
+
+    replacement = SimpleNamespace(
+        id="element-1",
+        thread_id="thread-1",
+        to_dict=lambda: {"id": "element-1", "name": "updated.txt"},
+    )
+    await layer.create_element(replacement)
+    updated_element = await layer.get_element("thread-1", "element-1")
+    assert updated_element["name"] == "updated.txt"
+
+    await layer.delete_element("element-1", thread_id="thread-1")
+    assert await layer.get_element("thread-1", "element-1") is None
+
+
+@pytest.mark.asyncio
+async def test_chainlit_memory_data_layer_step_delete_update_author_and_thread_delete():
+    store = InMemoryStore()
+    layer = MemoryDataLayer(store)
+    await layer.update_thread("thread-1", metadata={"session_id": "thread-1"})
+    await layer.update_thread("thread-1", tags=["tag"])
+    await layer.update_step(
+        {
+            "id": "step-1",
+            "threadId": "thread-1",
+            "createdAt": "2026-01-01T00:00:02Z",
+            "output": "second",
+        }
+    )
+    await layer.create_step(
+        {
+            "id": "step-0",
+            "threadId": "thread-1",
+            "createdAt": "2026-01-01T00:00:01Z",
+            "output": "first",
+        }
+    )
+    store["chainlit:thread:legacy-thread"] = {
+        "id": "legacy-thread",
+        "userIdentifier": "legacy@example.com",
+        "metadata": {},
+        "steps": [{"id": "legacy-step"}],
+        "elements": [],
+    }
+
+    thread = await layer.get_thread("thread-1")
+    assert [step["id"] for step in thread["steps"]] == ["step-0", "step-1"]
+    assert thread["tags"] == ["tag"]
+    assert await layer.get_thread_author("legacy-thread") == "legacy@example.com"
+    assert await layer.get_thread_author("missing-thread") == ""
+
+    await layer.delete_step("step-1")
+    await layer.delete_step("legacy-step")
+    assert [step["id"] for step in (await layer.get_thread("thread-1"))["steps"]] == ["step-0"]
+    assert store["chainlit:thread:legacy-thread"]["steps"] == []
+
+    await layer.delete_thread("thread-1")
+    assert await layer.get_thread("thread-1") is None
+    assert await layer.build_debug_url() == ""
+    assert await layer.close() is None
+
+
+@pytest.mark.asyncio
+async def test_chainlit_memory_data_layer_list_threads_paginates_and_favorites():
+    store = InMemoryStore()
+    layer = MemoryDataLayer(store)
+    user = await layer.create_user(User(identifier="doctor@example.com"))
+    await layer.update_thread("older", user_id=user.id, metadata={"session_id": "older"})
+    await layer.update_thread("newer", user_id=user.id, metadata={"session_id": "newer"})
+    store["chainlit:local:thread:older"]["createdAt"] = "2026-01-01T00:00:00Z"
+    store["chainlit:local:thread:newer"]["createdAt"] = "2026-01-02T00:00:00Z"
+    store["chainlit:local:thread:newer"]["steps"] = [
+        {"id": "favorite", "metadata": {"favorite": True}},
+        {"id": "plain", "metadata": {}},
+    ]
+
+    page = await layer.list_threads(Pagination(first=1), ThreadFilter(userId=user.id))
+    favorites = await layer.get_favorite_steps(user.id)
+
+    assert [thread["id"] for thread in page.data] == ["newer"]
+    assert page.pageInfo.hasNextPage is True
+    assert page.pageInfo.startCursor == "newer"
+    assert page.pageInfo.endCursor == "newer"
+    assert [step["id"] for step in favorites] == ["favorite"]
