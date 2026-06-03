@@ -1,0 +1,65 @@
+name: Quality Checks
+
+on:
+  pull_request:
+    branches: [ "staging" ]
+  push:
+    branches: [ "staging" ]
+
+env:
+  # Simulate deployment environment variables for testing
+  PROJECT_ID: test-project
+  REGION: us-central1
+  MODEL_ID: gemini-2.0-flash
+  TEMPERATURE: "0.2"
+  MAX_TOKENS: "768"
+  AIMS_COACHING_ENABLED: "true"
+  AIMS_COACHING_DEFAULT: "true"
+  MEMORY_BACKEND: memory
+  CHAINLIT_AUTH_SECRET: test-chainlit-secret-for-ci
+  OAUTH_GOOGLE_CLIENT_ID: test-client-id-for-ci
+  OAUTH_GOOGLE_CLIENT_SECRET: test-client-secret-for-ci
+
+jobs:
+  lint-and-sec:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6.0.3
+      - name: Set up Python
+        uses: actions/setup-python@v6.2.0
+        with:
+          python-version: '3.13'
+      - name: Install Linting Tools
+        run: pip install ruff mypy bandit
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
+      - name: Run Ruff
+        run: ruff check .
+      - name: Run Mypy
+        run: mypy app
+      - name: Run Bandit
+        run: bandit -r app -x tests,scripts
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6.0.3
+        with:
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@v6.2.0
+        with:
+          python-version: '3.13'
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
+      - name: Run Tests with Coverage
+        run: |
+          export PYTHONPATH="$GITHUB_WORKSPACE:${PYTHONPATH:-}"
+          pytest --ignore=tests/integration --cov=app --cov-report=xml
+      - name: Enforce Coverage on Changed Files
+        uses: orgoro/coverage@v3.3.1
+        with:
+          coverageFile: coverage.xml
+          token: ${{ secrets.GITHUB_TOKEN }}
+          thresholdModified: 0.85
+          thresholdNew: 0.85
