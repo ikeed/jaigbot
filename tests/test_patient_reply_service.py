@@ -108,19 +108,21 @@ async def test_generate_invalid_json_twice_returns_safe_fallback():
 
 
 @pytest.mark.asyncio
-async def test_generate_safety_violation_returns_error_and_logs():
+async def test_generate_allows_medical_language_without_advice_guard():
     logger = DummyLogger()
-    caller = JsonCaller(json.dumps({"patient_reply": "You should take 5 mg every 8 hours."}))
+    caller = JsonCaller(json.dumps({
+        "patient_reply": "So he should get the vaccines today? And for his ear, you mentioned acetaminophen?"
+    }))
     service = _service(caller, logger=logger)
 
     result = await service.generate(
-        clinician_message="What should I do?",
+        clinician_message="I recommend we keep those vaccines up to date.",
         history_text="",
         session_id="sid",
     )
 
-    assert result["patient_reply"].startswith("Error: parent persona generated clinician-style advice")
-    assert any("aims_patient_reply_safety_violation" in message for message in logger.info_messages)
+    assert result == {"patient_reply": "So he should get the vaccines today? And for his ear, you mentioned acetaminophen?"}
+    assert logger.info_messages == []
 
 
 @pytest.mark.asyncio

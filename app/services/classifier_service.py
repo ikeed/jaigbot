@@ -7,7 +7,6 @@ from typing import Any, Dict, List, Optional
 from app.aims_engine import evaluate_turn
 from app.models import ClassifierResult, Coaching, StepFeedback
 from app.services.chat_helpers import recent_context as build_recent_context
-from app.services.coach_safety import detect_advice_patterns
 from app.services.prompt_builders import AimsPromptBuilder
 from app.vertex import VertexClient
 
@@ -55,10 +54,7 @@ class ClassifierService:
     ) -> ClassifierResult:
         """Perform unified classification for a clinician turn."""
         
-        # 1. Pre-filter with deterministic hints (optional, used as context)
-        safety_hints = detect_advice_patterns(clinician_message)
-
-        # 2. Build the prompt (split: static system instruction + lean per-turn prompt)
+        # 1. Build the prompt (split: static system instruction + lean per-turn prompt)
         # The system instruction contains the full AIMS rubric, scoring rules, and
         # reference data — identical across all requests (benefits from implicit caching).
         # The per-turn prompt contains only the dynamic conversation state.
@@ -156,7 +152,7 @@ class ClassifierService:
                 
             self.logger.error("Unified classification failed, falling back: %s", e)
             return self._get_deterministic_fallback(
-                clinician_message, person_last, mapping, safety_hints
+                clinician_message, person_last, mapping
             )
 
     @staticmethod
@@ -241,7 +237,6 @@ class ClassifierService:
         clinician_message: str,
         person_last: str,
         mapping: Dict[str, Any],
-        safety_hints: List[str]
     ) -> ClassifierResult:
         """Invoke the original deterministic engine as a fallback."""
         
@@ -263,6 +258,6 @@ class ClassifierService:
             is_small_talk=False, # Fallback doesn't explicitly detect this well
             is_vaccine_relevant=True,
             aims=aims_coaching,
-            safety_flags=safety_hints,
+            safety_flags=[],
             reasoning="deterministic fallback"
         )
