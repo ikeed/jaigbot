@@ -123,3 +123,100 @@ def test_storage_service_error_handling(mock_storage_client):
     
     result = service.upload_session("sid", "uid", {"data": "test"})
     assert result is False
+
+
+def test_storage_service_returns_false_when_bucket_initialization_fails(monkeypatch):
+    service = StorageService(bucket_name="test-bucket")
+    mock_client = MagicMock()
+    mock_client.bucket.side_effect = RuntimeError("permission denied")
+    service._client = mock_client
+
+    assert service.bucket is None
+    assert service.upload_session("sid", "uid", {"data": "test"}) is False
+
+
+def test_storage_service_reports_bucket_uses_reports_bucket_name(monkeypatch):
+    service = StorageService(bucket_name="session-bucket")
+    service.reports_bucket_name = "reports-bucket"
+    report_bucket = MagicMock()
+    report_blob = MagicMock()
+    report_bucket.blob.return_value = report_blob
+    service._reports_bucket = report_bucket
+
+    assert service.upload_session("sid", "uid", {"full_history": []}, is_report=True) is True
+
+    report_bucket.blob.assert_called_once_with(
+        "env=local/sessions/v1/user_id=uid/session_id=sid.json"
+    )
+    report_blob.upload_from_string.assert_called_once()
+
+
+def test_storage_service_download_session_handles_missing_and_legacy_prod_path(monkeypatch):
+    service = StorageService(bucket_name="test-bucket")
+    bucket = MagicMock()
+    current_blob = MagicMock()
+    legacy_blob = MagicMock()
+    bucket.blob.side_effect = [current_blob, legacy_blob]
+    current_blob.exists.return_value = False
+    legacy_blob.exists.return_value = True
+    legacy_blob.download_as_string.return_value = b'{"ok": true}'
+    service._bucket = bucket
+    monkeypatch.setattr("app.services.storage_service.settings.APP_ENV", "prod")
+
+    assert service.download_session("sid", "uid") == {"ok": True}
+    assert bucket.blob.call_args_list[0].args == (
+        "env=prod/sessions/v1/user_id=uid/session_id=sid.json",
+    )
+    assert bucket.blob.call_args_list[1].args == (
+        "sessions/v1/user_id=uid/session_id=sid.json",
+    )
+
+
+def test_storage_service_download_session_returns_none_on_blob_error():
+    service = StorageService(bucket_name="test-bucket")
+    bucket = MagicMock()
+    blob = MagicMock()
+    bucket.blob.return_value = blob
+    blob.exists.side_effect = RuntimeError("gcs down")
+    service._bucket = bucket
+
+    assert service.download_session("sid", "uid") is None
+
+
+def test_storage_service_count_personas_handles_blob_parse_errors_and_cap(monkeypatch):
+    service = StorageService(bucket_name="test-bucket")
+    service._bucket = MagicMock()
+
+    bad_blob = MagicMock(name="bad_blob")
+    bad_blob.name = "bad.json"
+    bad_blob.download_as_string.side_effect = ValueError("bad json")
+
+    ignored_blob = MagicMock(name="ignored_blob")
+    ignored_blob.name = "notes.txt"
+
+    good_blob = MagicMock(name="good_blob")
+    good_blob.name = "good.json"
+    good_blob.download_as_string.return_value = b'{"persona": {"name": "Jasmine"}}'
+
+    client = MagicMock()
+    client.list_blobs.return_value = [bad_blob, ignored_blob, good_blob]
+    service._client = client
+    monkeypatch.setattr(
+        "app.services.persona_service.extract_persona_name_from_archive",
+        lambda data: data.get("persona", {}).get("name"),
+    )
+
+    assert service.count_personas_for_user("uid", ["Jasmine", "Sophia"]) == {
+        "Jasmine": 1,
+        "Sophia": 0,
+    }
+
+
+def test_storage_service_count_personas_returns_zero_counts_on_list_failure():
+    service = StorageService(bucket_name="test-bucket")
+    service._bucket = MagicMock()
+    client = MagicMock()
+    client.list_blobs.side_effect = RuntimeError("list failed")
+    service._client = client
+
+    assert service.count_personas_for_user("uid", ["Jasmine"]) == {"Jasmine": 0}

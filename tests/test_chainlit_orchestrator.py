@@ -1,4 +1,5 @@
-from types import SimpleNamespace
+import sys
+from types import ModuleType, SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -364,6 +365,36 @@ async def test_start_scenario_flow_duplicate_tab_short_circuits(orchestrator, mo
     await orchestrator._start_scenario_flow()
 
     mock_services["ui"].send_window_message.assert_awaited_once_with({"type": MSG_DUPLICATE_TAB})
+
+
+@pytest.mark.asyncio
+async def test_bind_thread_creates_user_and_updates_thread(orchestrator, mock_services, monkeypatch):
+    user = MagicMock(identifier="doctor@example.com")
+    mock_services["session"].user = user
+    orchestrator._get_thread_id = MagicMock(return_value="thread-1")
+    data_layer = MagicMock()
+    data_layer.get_user = AsyncMock(return_value=None)
+    data_layer.create_user = AsyncMock(return_value=SimpleNamespace(id="user-id"))
+    data_layer.update_thread = AsyncMock()
+    set_current_thread_id = MagicMock()
+    chainlit_data = ModuleType("chainlit.data")
+    chainlit_data.get_data_layer = lambda: data_layer
+    monkeypatch.setitem(sys.modules, "chainlit.data", chainlit_data)
+    monkeypatch.setattr(
+        "app.services.chainlit.orchestrator.set_current_thread_id",
+        set_current_thread_id,
+    )
+
+    await orchestrator._bind_thread("session-1")
+
+    data_layer.get_user.assert_awaited_once_with("doctor@example.com")
+    data_layer.create_user.assert_awaited_once_with(user)
+    data_layer.update_thread.assert_awaited_once_with(
+        thread_id="thread-1",
+        user_id="user-id",
+        metadata={"session_id": "session-1"},
+    )
+    set_current_thread_id.assert_called_once_with("doctor@example.com", "thread-1")
 
 
 @pytest.mark.asyncio
