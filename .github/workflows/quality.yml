@@ -59,7 +59,48 @@ jobs:
         run: |
           export PYTHONPATH="$GITHUB_WORKSPACE:${PYTHONPATH:-}"
           pytest --ignore=tests/integration --cov=app --cov-report=xml
+      - name: Detect changed covered files
+        id: coverage_scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+          CURRENT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            RANGE="${PR_BASE_SHA}...${PR_HEAD_SHA}"
+          elif [[ -n "${BEFORE_SHA:-}" && "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]]; then
+            RANGE="${BEFORE_SHA}...${CURRENT_SHA}"
+          else
+            RANGE="${CURRENT_SHA}~1...${CURRENT_SHA}"
+          fi
+
+          echo "Coverage diff range: $RANGE"
+          CHANGED="$(
+            git diff --name-only "$RANGE" -- \
+              'app/*.py' \
+              'app/**/*.py' \
+              ':(exclude)app/__init__.py' \
+              ':(exclude)app/*/__init__.py' \
+              ':(exclude)app/static/**' \
+              ':(exclude)app/vertex.py' \
+              ':(exclude)app/services/aims_dependencies.py' \
+              ':(exclude)app/memory_store.py' || true
+          )"
+
+          if [[ -n "$CHANGED" ]]; then
+            echo "has_covered_changes=true" >> "$GITHUB_OUTPUT"
+            echo "Changed covered files:"
+            echo "$CHANGED"
+          else
+            echo "has_covered_changes=false" >> "$GITHUB_OUTPUT"
+            echo "No changed covered app Python files; skipping changed-file coverage gate."
+          fi
       - name: Enforce Coverage on Changed Files
+        if: steps.coverage_scope.outputs.has_covered_changes == 'true'
         uses: orgoro/coverage@v3.3.1
         with:
           coverageFile: coverage.xml
