@@ -125,7 +125,7 @@ def _is_small_talk(text: str) -> bool:
     return False
 
 
-def classify_step(person_last: str, clinician_last: str, mapping: Dict[str, Any]) -> ClassificationResult:
+def classify_step(clinician_last: str, mapping: Dict[str, Any]) -> ClassificationResult:
     """Classify the clinician's last message into one AIMS step.
 
     Implements the decision rules and tie-breakers from mapping['meta'].
@@ -134,7 +134,6 @@ def classify_step(person_last: str, clinician_last: str, mapping: Dict[str, Any]
     markers = meta.get("per_step_classification_markers", {})
     reasons: List[str] = []
     text = (clinician_last or "").strip()
-    pt = (person_last or "").strip().lower()
     lt = text.lower()
 
     mirror_stems = [
@@ -196,7 +195,7 @@ def classify_step(person_last: str, clinician_last: str, mapping: Dict[str, Any]
     # Broadened safety-netting detection, allowing non-contiguous call ... if and common variants
     safety_re = re.compile(
         r"\b(what to expect|watch for|reach (out|me|us)|how to reach|contact|after[- ]?hours|on[- ]?call|nurse line|public health nurse|er|ed|urgent care|fever|redness|soreness|swelling|severe reaction|emergency|911|tylenol|acetaminophen|ibuprofen|worsen(?:ing)?|if (you('re| are) )?(worried|concerned))\b"
-        r"|call\b[^\n\r\.]*(\bif\b)"
+        r"|call\b[^\n\r.]*(\bif\b)"
     )
 
     has_autonomy = _stem_match(lt, autonomy_cues)
@@ -308,21 +307,20 @@ def _introduces_new_info(lt: str) -> bool:
     return False
 
 
-def score_step(step: str, person_last: str, clinician_last: str, mapping: Dict[str, Any]) -> ScoreResult:
+def score_step(step: str, clinician_last: str, mapping: Dict[str, Any]) -> ScoreResult:
     """Score 0–3 based on mapping heuristics per step.
 
     This is a lightweight heuristic implementation to support unit tests and
     provide deterministic scoring. It is not intended to be exhaustive.
     """
     lt = (clinician_last or "").strip().lower()
-    pt = (person_last or "").strip().lower()
     reasons: List[str] = []
     score = 2  # start at 2 as 'decent', then adjust
 
     if step == "Mirror+Inquire":
         # Score as Mirror + Inquire combo
-        mir_scr = score_step("Mirror", person_last, clinician_last, mapping)
-        inq_scr = score_step("Inquire", person_last, clinician_last, mapping)
+        mir_scr = score_step("Mirror", clinician_last, mapping)
+        inq_scr = score_step("Inquire", clinician_last, mapping)
         score = (mir_scr.score + inq_scr.score) // 2
         reasons.extend(mir_scr.reasons)
         reasons.extend(inq_scr.reasons)
@@ -410,7 +408,7 @@ def score_step(step: str, person_last: str, clinician_last: str, mapping: Dict[s
             r")\b",
             lt,
         ))
-        safety = bool(re.search(r"\b(what to expect|watch for|reach (out|me|us)|how to reach|contact|after[- ]?hours|on[- ]?call|nurse line|public health nurse|er|ed|urgent care|fever|redness|soreness|swelling|severe reaction|emergency|911|tylenol|acetaminophen|ibuprofen|worsen(?:ing)?|if (you('re| are) )?(worried|concerned))\b|call\b[^\n\r\.]*(\bif\b)", lt))
+        safety = bool(re.search(r"\b(what to expect|watch for|reach (out|me|us)|how to reach|contact|after[- ]?hours|on[- ]?call|nurse line|public health nurse|er|ed|urgent care|fever|redness|soreness|swelling|severe reaction|emergency|911|tylenol|acetaminophen|ibuprofen|worsen(?:ing)?|if (you('re| are) )?(worried|concerned))\b|call\b[^\n\r.]*(\bif\b)", lt))
         if autonomy and options:
             score = max(score, 2)
             reasons.append("Autonomy affirmed with concrete option(s)")
@@ -426,8 +424,8 @@ def score_step(step: str, person_last: str, clinician_last: str, mapping: Dict[s
     return ScoreResult(score=score, reasons=reasons)
 
 
-def evaluate_turn(person_last: str, clinician_last: str, mapping: Dict[str, Any]) -> Dict[str, Any]:
-    cls = classify_step(person_last, clinician_last, mapping)
+def evaluate_turn(clinician_last: str, mapping: Dict[str, Any]) -> Dict[str, Any]:
+    cls = classify_step(clinician_last, mapping)
 
     # Handle rapport/pleasantries (no AIMS step attempted)
     if cls.step not in AIMS_STEPS:
@@ -444,10 +442,10 @@ def evaluate_turn(person_last: str, clinician_last: str, mapping: Dict[str, Any]
             "tips": tips,
         }
 
-    scr = score_step(cls.step, person_last, clinician_last, mapping)
+    scr = score_step(cls.step, clinician_last, mapping)
 
     # Context-sensitive coaching tips: only include when an actionable improvement is evident.
-    tips: List[str] = []
+    tips = []
     lt = (clinician_last or "").strip().lower()
     if scr.score < 3:
         if cls.step == "Inquire":

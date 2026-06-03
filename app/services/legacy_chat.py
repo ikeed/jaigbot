@@ -1,11 +1,11 @@
-from __future__ import annotations
-
 """
 Helpers for the legacy (non-coach) chat path.
 
 Behavior-preserving extractions from app.main to reduce handler size and
 improve unit test coverage.
 """
+from __future__ import annotations
+
 from typing import Any, Tuple
 
 

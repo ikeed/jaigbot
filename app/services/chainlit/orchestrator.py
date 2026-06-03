@@ -2,8 +2,8 @@ import logging
 import uuid
 from typing import Any, Dict, List, Optional
 
-import chainlit as cl
 from chainlit.context import context as cl_context
+from chainlit.message import Message
 
 from app.chainlit_thread_state import get_current_thread_id, set_current_thread_id
 from app.chat_roles import (
@@ -63,7 +63,7 @@ class ChainlitOrchestrator:
             await self._report_error_silently(e, "handle_chat_start")
             await self.ui.show_error("An error occurred while starting the chat. Please try refreshing.")
 
-    async def handle_user_message(self, message: cl.Message):
+    async def handle_user_message(self, message: Message):
         """Processes an incoming user message."""
         if self.session.session_ended:
             await self.ui.show_error("This session has ended. Please start a new chat.")
@@ -72,7 +72,8 @@ class ChainlitOrchestrator:
             await self.ui.send_window_message({"type": MSG_INTRO_REQUIRED})
             return
 
-        content = message.content.strip()
+        raw_content = getattr(message, "content", "")
+        content = raw_content.strip() if isinstance(raw_content, str) else str(raw_content or "").strip()
         if not content:
             await self.ui.show_error("Please enter a message.")
             return
@@ -86,13 +87,17 @@ class ChainlitOrchestrator:
         self.session.history = history
 
         try:
+            session_id = self.session.session_id
+            if not session_id:
+                raise RuntimeError("Missing Chainlit session id")
+
             # Call backend
             coach_enabled = bool(settings.CHAINLIT_COACH_DEFAULT if settings.CHAINLIT_COACH_DEFAULT is not None else settings.AIMS_COACHING_ENABLED)
             data = await self.backend.send_chat_message(
                 message=content,
-                session_id=self.session.session_id,
-                character=self.session.character,
-                scene=self.session.scene,
+                session_id=session_id,
+                character=self.session.character or DEFAULT_CHARACTER,
+                scene=self.session.scene or DEFAULT_SCENE,
                 user_info=self._get_user_info(),
                 coach_enabled=coach_enabled
             )
@@ -127,14 +132,17 @@ class ChainlitOrchestrator:
             
             # Sync with backend
             try:
-                metadata_history = metadata.get("history") if isinstance(metadata.get("history"), list) else []
+                metadata_history = [
+                    item for item in metadata.get("history", [])
+                    if isinstance(item, dict)
+                ] if isinstance(metadata.get("history"), list) else []
                 init_data = await self.backend.initialize_session(
                     session_id=session_id,
                     connection_id=connection_id,
                     persona_id=None,
                     user_info=self._get_user_info(),
-                    character=metadata.get("character"),
-                    scene=metadata.get("scene"),
+                    character=metadata.get("character") if isinstance(metadata.get("character"), str) else None,
+                    scene=metadata.get("scene") if isinstance(metadata.get("scene"), str) else None,
                     initial_card=self._recover_scenario_card(metadata_history)
                 )
 
@@ -167,8 +175,12 @@ class ChainlitOrchestrator:
     async def handle_report_issue(self, reason: str):
         """Handles user-initiated issue reporting."""
         try:
+            session_id = self.session.session_id
+            if not session_id:
+                raise RuntimeError("Missing Chainlit session id")
+
             await self.backend.report_issue(
-                session_id=self.session.session_id,
+                session_id=session_id,
                 reason=reason,
                 user_info=self._get_user_info()
             )
@@ -272,14 +284,18 @@ class ChainlitOrchestrator:
         current = self.session.session_id
         fixed = settings.FIXED_SESSION_ID or settings.SESSION_ID
         
-        if fixed: return fixed
-        if metadata_id: return metadata_id
-        if thread_id: return thread_id
+        if fixed:
+            return fixed
+        if metadata_id:
+            return metadata_id
+        if thread_id:
+            return thread_id
         return current or str(uuid.uuid4())
 
     def _get_user_info(self) -> Optional[Dict[str, Any]]:
         user = self.session.user
-        if not user: return None
+        if not user:
+            return None
         return {"identifier": user.identifier, "metadata": user.metadata}
 
     def _get_thread_id(self) -> Optional[str]:
@@ -288,12 +304,14 @@ class ChainlitOrchestrator:
     async def _bind_thread(self, session_id: str):
         thread_id = self._get_thread_id()
         user = self.session.user
-        if not thread_id or not user: return
+        if not thread_id or not user:
+            return
         
         try:
             from chainlit.data import get_data_layer
             dl = get_data_layer()
-            if not dl: return
+            if not dl:
+                return
             
             persisted = await dl.get_user(user.identifier) or await dl.create_user(user)
             if persisted:
@@ -322,7 +340,8 @@ class ChainlitOrchestrator:
 
     def _inject_scenario_into_scene(self, history: List[Dict[str, Any]], default_card: str):
         scene = self.session.scene or ""
-        if "Scenario details" in scene: return
+        if "Scenario details" in scene:
+            return
         
         card = self._recover_scenario_card(history) or default_card
         suffix = f"\n\nScenario details (use these exact names; do not change them):\n{card}\n\nIf asked for names, respond naturally but keep the same names."
@@ -335,9 +354,12 @@ class ChainlitOrchestrator:
         coaching = data.get("coaching")
         if coaching:
             parts = []
-            if coaching.get("step"): parts.append(f"Detected step: {coaching['step']}")
-            if coaching.get("reasons"): parts.append(f"Feedback: {coaching['reasons'][0]}")
-            if coaching.get("tips"): parts.append(f"Tip: {coaching['tips'][0]}")
+            if coaching.get("step"):
+                parts.append(f"Detected step: {coaching['step']}")
+            if coaching.get("reasons"):
+                parts.append(f"Feedback: {coaching['reasons'][0]}")
+            if coaching.get("tips"):
+                parts.append(f"Tip: {coaching['tips'][0]}")
             
             if parts:
                 coach_text = " | ".join(parts)

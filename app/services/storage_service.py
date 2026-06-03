@@ -100,7 +100,8 @@ class StorageService:
             duration = round(ended_at - started_at, 2)
 
         def iso(ts):
-            if not ts: return None
+            if not ts:
+                return None
             return datetime.datetime.fromtimestamp(ts, datetime.timezone.utc).isoformat().replace("+00:00", "Z")
 
         # Re-group transcript into turns

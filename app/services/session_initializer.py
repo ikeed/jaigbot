@@ -205,7 +205,8 @@ def _track_connection(body: Any, sid: str, mem: dict, memory_store: Any, logger:
 
 
 def _session_response(body: Any, sid: str, mem: dict, already_active: bool, initial_card: str | None) -> dict:
-    persona = mem.get("persona") if isinstance(mem.get("persona"), dict) else {}
+    persona_data = mem.get("persona")
+    persona = persona_data if isinstance(persona_data, dict) else {}
     return {
         "status": "ok",
         "sessionId": sid,

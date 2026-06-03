@@ -10,6 +10,7 @@ This test runs in the cloud on GitHub Actions and should verify:
 """
 
 import os
+import google.auth
 from unittest.mock import MagicMock
 
 import pytest
@@ -226,6 +227,21 @@ class TestEnvironmentVariableValidation:
         settings = Settings()
         assert settings.PROJECT_ID == "fallback-project"
 
+    def test_project_id_google_auth_failure_is_nonfatal(self, monkeypatch):
+        """Verify missing ADC leaves PROJECT_ID unset instead of failing settings load."""
+        monkeypatch.delenv("PROJECT_ID", raising=False)
+        monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+        monkeypatch.delenv("GCP_PROJECT", raising=False)
+        monkeypatch.delenv("GCP_PROJECT_ID", raising=False)
+
+        def raise_default():
+            raise RuntimeError("no adc")
+
+        monkeypatch.setattr(google.auth, "default", raise_default)
+
+        settings = Settings()
+        assert settings.PROJECT_ID is None
+
     def test_region_defaults_to_us_central1(self, monkeypatch):
         """Verify REGION defaults to us-central1 if not set."""
         monkeypatch.delenv("REGION", raising=False)
@@ -290,31 +306,6 @@ class TestDeploymentIntegration:
         """Verify that all env vars in deploy.yaml are supported by Settings."""
         # This is a static check of the deploy.yaml configuration
         # against the Settings class
-
-        # Expected env vars from deploy.yaml
-        deployment_env_vars = [
-            "APP_ENV",
-            "PROJECT_ID",
-            "REGION",
-            "GAR_REPO",  # Not in Settings, but used in deployment
-            "SERVICE_NAME",  # Not in Settings, but used in deployment
-            "STAGING_SERVICE_NAME",  # Not in Settings, but used in deployment
-            "MODEL_ID",
-            "TEMPERATURE",
-            "MAX_TOKENS",
-            "AIMS_COACHING_ENABLED",
-            "CHAINLIT_AUTH_SECRET",
-            "CHAINLIT_URL",  # Not in Settings, but used in deployment
-            "STAGING_CHAINLIT_URL",  # Not in Settings, but used in deployment
-            "OAUTH_GOOGLE_CLIENT_ID",
-            "OAUTH_GOOGLE_CLIENT_SECRET",
-            "MEMORY_BACKEND",
-            "REDIS_URL",
-            "TF_BACKEND_BUCKET",  # Not in Settings, used for Terraform
-            "TF_BACKEND_PREFIX",  # Not in Settings, used for Terraform
-            "VPC_CONNECTOR",  # Not in Settings, used by deployment
-        ]
-
         settings_fields = {f for f in dir(Settings()) if not f.startswith("_")}
 
         # Check that Settings-specific variables exist in the class
