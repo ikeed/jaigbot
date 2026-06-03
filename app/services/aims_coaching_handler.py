@@ -13,7 +13,7 @@ Behavior-preserving extraction from the massive coaching section in app.main.cha
 """
 from __future__ import annotations
 
-import asyncio
+import logging
 import os
 import time
 import uuid
@@ -21,8 +21,8 @@ from typing import Any, Dict, List, Optional, Protocol
 
 from fastapi import Request
 
-from app.aims_engine import evaluate_turn, load_mapping
-from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, get_ui_attributes
+from app.aims_engine import load_mapping
+from app.chat_roles import ROLE_USER, ROLE_ASSISTANT
 from app.config import settings
 from app.constants import (
     KEY_AIMS_STATE,
@@ -30,16 +30,6 @@ from app.constants import (
     KEY_COACH_POST,
     KEY_GAME_OVER,
     PHASE_PRE_ANNOUNCE,
-    PHASE_INQUIRE_MIRROR,
-    PHASE_SECURE,
-    STEP_ANNOUNCE,
-    STEP_INQUIRE,
-    STEP_MIRROR,
-    STEP_SECURE,
-    STEP_ANNOUNCE_INQUIRE,
-    STEP_MIRROR_INQUIRE,
-    STEP_MIRROR_SECURE,
-    STEP_SECURE_INQUIRE,
     SESSION_HISTORY,
     KEY_UPDATED,
     SESSION_CHARACTER,
@@ -51,28 +41,22 @@ from app.services.chat_context import ChatContext
 from app.services.chat_helpers import strip_appointment_headers
 from app.services.classifier_service import ClassifierService
 from app.services.clinician_identity import clinician_display_name_from_user_info
+from app.services.aims_endgame_service import AimsEndgameService
+from app.services.aims_handler_config import AimsMemoryConfig, AimsVertexConfig
 from app.services.aims_metrics_service import AimsMetricsService
+from app.services.aims_state_service import AimsStateService
+from app.services.aims_turn_telemetry import AimsTurnTelemetry
+from app.services.aims_turn_coordinator import AimsTurnCoordinator, AimsTurnResult
 from app.services.coach_feedback_history_service import CoachFeedbackHistoryService
 from app.services.coach_post import (
     VaccineRelevanceGate,
     AimsPostProcessor,
-    EndGameDetector,
-    build_endgame_bullets_fallback,
-    endgame_title,
-)
-from app.services.conversation_service import (
-    maybe_add_person_concern,
-    mark_mirrored_multi,
-    mark_secured_by_topic,
 )
 from app.services.patient_reply_service import PatientReplyService
 from app.services.vertex_helpers import (
     avertex_call_with_fallback_text,
     avertex_call_with_fallback_json,
     get_last_model_used
-)
-from app.telemetry.events import (
-    log_event as telemetry_log_event,
 )
 from app.vertex import VertexClient
 
@@ -146,49 +130,122 @@ class CoachFeedbackHistoryDependency(Protocol):
         ...
 
 
+class AimsStateDependency(Protocol):
+    def update(
+        self,
+        mem: dict[str, Any] | None,
+        cls_payload: dict[str, Any],
+        clinician_message: str,
+        person_last: str,
+        llm_topic: str | None = None,
+    ) -> None:
+        ...
+
+    def apply_coaching_guidance(
+        self,
+        cls_payload: dict[str, Any],
+        step_current: str,
+        state: dict[str, Any],
+        clinician_message: str,
+        person_last: str,
+        *,
+        character: str | None = None,
+    ) -> None:
+        ...
+
+    def update_observational_state(
+        self,
+        state: dict[str, Any],
+        step_current: str,
+        steps: list[str] | None = None,
+    ) -> None:
+        ...
+
+
+class AimsEndgameDependency(Protocol):
+    async def check(
+        self,
+        mem: dict[str, Any] | None,
+        reply_payload: dict[str, Any],
+        session_obj: dict[str, Any] | None,
+        session_id: str,
+    ) -> dict[str, Any] | None:
+        ...
+
+
+class AimsTelemetryDependency(Protocol):
+    def classify_begin(
+        self, *, session_id: str, user_info: dict[str, Any] | None, request_id: str
+    ) -> None:
+        ...
+
+    def reply_begin(
+        self, *, session_id: str, user_info: dict[str, Any] | None, request_id: str
+    ) -> None:
+        ...
+
+    def classify_end(
+        self,
+        *,
+        session_id: str,
+        request_id: str,
+        started: float,
+        model_used: str,
+        step: str | None,
+        score: int | None,
+    ) -> None:
+        ...
+
+    def reply_end(
+        self,
+        *,
+        session_id: str,
+        request_id: str,
+        started: float,
+        model_used: str,
+        text_len: int,
+    ) -> None:
+        ...
+
+    def turn_ok(
+        self,
+        *,
+        latency_ms: int,
+        session_id: str,
+        user_info: dict[str, Any] | None,
+        step: str | None,
+        score: int | None,
+    ) -> None:
+        ...
+
+
+class AimsTurnCoordinatorDependency(Protocol):
+    async def run(
+        self,
+        *,
+        clinician_message: str,
+        person_last: str,
+        history: list[dict[str, str]],
+        prior_announced: bool,
+        prior_phase: str,
+        mapping: dict[str, Any],
+        context_turns: int,
+        max_concerns: int,
+        inquired_concerns_list: list[str],
+        mirrored_concerns_list: list[str],
+        history_text: str,
+        session_id: str,
+        character: str | None,
+        scene: str | None,
+        clinician_name: str | None,
+    ) -> AimsTurnResult:
+        ...
+
+
 class AimsCoachingHandler:
     """Handles the full AIMS coaching flow."""
     
-    # Topical cues for concern tracking.
-    # NOTE: Only include terms that are specific to vaccine HESITANCY contexts.
-    # Generic medical symptom words (fever, swelling, redness) are excluded because
-    # they appear in clinical assessments of illness — not just vaccine concerns —
-    # and cause false registrations of vaccine concerns from symptom descriptions.
-    _TOPICAL_CUES = {
-        "autism": ["autism", "asd"],
-        "immune_load": ["too many", "too soon", "immune overload", "immune system load",
-                       "viral load", "overwhelm the immune", "overload the immune"],
-        "side_effects": ["side effect", "adverse event", "vaers", "reaction to the vaccine",
-                        "reaction to the shot", "after the shot", "after the vaccine"],
-        "ingredients": ["thimerosal", "aluminum", "adjuvant", "preservative", "ingredient"],
-        "schedule_timing": ["schedule", "spacing", "delay", "alternative schedule", "wait"],
-        "disease_risk": [
-            "measles was pretty much gone", "measles is pretty much gone",
-            "measles was gone", "measles is gone", "measles basically gone",
-            "thing of the past", "old disease", "from the past",
-            "don't see it around", "do not see it around",
-            "haven't seen any cases", "have not seen any cases",
-            "never seen a case", "never seen it", "never actually seen it",
-            "hard to picture", "hard to imagine", "real threat", "real danger",
-            "still around", "catching it", "actually catching it",
-        ],
-        "effectiveness": ["effective", "efficacy", "works", "breakthrough"],
-        "trust": [
-            "data", "study", "studies", "pharma", "big pharma", "trust",
-            # Research/epistemic autonomy language common in vaccine-hesitant parents
-            "look into things", "look things up", "own research", "do my own research",
-            "find out myself", "find out for myself", "look it up",
-            "informed decision", "informed choice", "conflicting information",
-            "hard to know what to believe", "sort through",
-        ],
-        # Liberty/autonomy concerns: 'I don't like feeling pressured', 'it's my choice'
-        "autonomy": [
-            "pressured", "pressure", "pushed", "cornered", "forced", "lectured",
-            "steamroll", "don't like being told", "my choice", "my decision",
-            "right to choose", "right to decide", "your choice", "your decision",
-            "not ready", "without pressure", "not pushed",
-        ],
-    }
+    _TOPICAL_CUES = AimsStateService.TOPICAL_CUES
     
     def __init__(
         self,
@@ -199,22 +256,26 @@ class AimsCoachingHandler:
         logger: Any,
         classifier_service: ClassifierDependency | None = None,
         patient_reply_service: PatientReplyDependency | None = None,
+        state_service: AimsStateDependency | None = None,
         metrics_service: AimsMetricsDependency | None = None,
         coach_feedback_history_service: CoachFeedbackHistoryDependency | None = None,
+        endgame_service: AimsEndgameDependency | None = None,
+        telemetry: AimsTelemetryDependency | None = None,
+        turn_coordinator: AimsTurnCoordinatorDependency | None = None,
     ):
         self.memory_store = memory_store
-        self.vertex_config = vertex_config
-        self.memory_config = memory_config
+        self.vertex_config = AimsVertexConfig.from_mapping(vertex_config)
+        self.memory_config = AimsMemoryConfig.from_mapping(memory_config)
         self.logger = logger
         
         # Extract frequently used config
-        self.project_id = vertex_config["project_id"]
-        self.region = vertex_config["region"] 
-        self.vertex_location = vertex_config["vertex_location"]
-        self.model_id = vertex_config["model_id"]
-        self.model_fallbacks = vertex_config["model_fallbacks"]
-        self.temperature = vertex_config["temperature"]
-        self.max_tokens = vertex_config["max_tokens"]
+        self.project_id = self.vertex_config.project_id
+        self.region = self.vertex_config.region
+        self.vertex_location = self.vertex_config.vertex_location
+        self.model_id = self.vertex_config.model_id
+        self.model_fallbacks = self.vertex_config.model_fallbacks
+        self.temperature = self.vertex_config.temperature
+        self.max_tokens = self.vertex_config.max_tokens
         
         # Per-call tuning (env-configurable) for latency/cost-sensitive JSON tasks
         self.classify_temperature = float(os.getenv("AIMS_CLASSIFY_TEMPERATURE", "0.1"))
@@ -224,10 +285,10 @@ class AimsCoachingHandler:
         self.classify_budget_s = float(os.getenv("AIMS_CLASSIFY_BUDGET_S", "30.0"))
 
         # Allow tests to monkeypatch the client via app.main.VertexClient
-        self.client_cls = vertex_config.get("client_cls", None) or VertexClient
+        self.client_cls = self.vertex_config.client_cls or VertexClient
         
-        self.memory_enabled = memory_config["enabled"]
-        self.memory_max_turns = memory_config["max_turns"]
+        self.memory_enabled = self.memory_config.enabled
+        self.memory_max_turns = self.memory_config.max_turns
         
         self.classifier_service = classifier_service or ClassifierService(
             project_id=self.project_id,
@@ -245,9 +306,24 @@ class AimsCoachingHandler:
             max_tokens=self.max_tokens,
         )
         self.metrics_service = metrics_service or AimsMetricsService(logger=self.logger)
+        self.state_service = state_service or AimsStateService(logger=self.logger)
         self.coach_feedback_history_service = (
             coach_feedback_history_service
             or CoachFeedbackHistoryService(logger=self.logger)
+        )
+        self.endgame_service = endgame_service or AimsEndgameService(
+            logger=self.logger,
+            classifier_service_getter=lambda: self.classifier_service,
+        )
+        self.telemetry = telemetry or AimsTurnTelemetry(
+            logger=self.logger,
+            model_id=self.model_id,
+        )
+        self.turn_coordinator = turn_coordinator or AimsTurnCoordinator(
+            classifier_service=self.classifier_service,
+            patient_reply_service=self.patient_reply_service,
+            classify_budget_s=self.classify_budget_s,
+            logger=self.logger,
         )
     
     async def handle(
@@ -276,21 +352,15 @@ class AimsCoachingHandler:
         # Step 1 & 2: Unified Classification (LLM with deterministic fallback)
         cls_start = time.time()
         reply_start = time.time()
-        telemetry_log_event(
-            self.logger,
-            "aims_classify_begin",
-            sessionId=ctx.session_id,
-            userInfo=ctx.user_info,
-            requestId=request_id,
-            modelId=self.model_id,
+        self.telemetry.classify_begin(
+            session_id=ctx.session_id,
+            user_info=ctx.user_info,
+            request_id=request_id,
         )
-        telemetry_log_event(
-            self.logger,
-            "aims_reply_begin",
-            sessionId=ctx.session_id,
-            userInfo=ctx.user_info,
-            requestId=request_id,
-            modelId=self.model_id,
+        self.telemetry.reply_begin(
+            session_id=ctx.session_id,
+            user_info=ctx.user_info,
+            request_id=request_id,
         )
 
         # Load session memory once for the entire request; all sub-methods
@@ -300,77 +370,33 @@ class AimsCoachingHandler:
         prior_announced = bool(prior_state.get("announced", False))
         prior_phase = prior_state.get("phase", PHASE_PRE_ANNOUNCE)
 
-        # Launch classification and reply generation in parallel
-        task_cls = asyncio.create_task(
-            self.classifier_service.classify_turn(
-                clinician_message=body.message,
-                person_last=ctx.person_last,
-                history=ctx.mem.get(SESSION_HISTORY, []) if ctx.mem else [],
-                prior_announced=prior_announced,
-                prior_phase=prior_phase,
-                mapping=mapping,
-                context_turns=settings.AIMS_CLASSIFY_CONTEXT_TURNS,
-                max_concerns=settings.AIMS_CLASSIFY_MAX_CONCERNS,
-                inquired_concerns_list=[c["topic"] for c in (prior_state or {}).get("parent_concerns", [])],
-                mirrored_concerns_list=[c["topic"] for c in (prior_state or {}).get("parent_concerns", []) if c.get("is_mirrored")],
-            )
+        turn = await self.turn_coordinator.run(
+            clinician_message=body.message,
+            person_last=ctx.person_last,
+            history=ctx.mem.get(SESSION_HISTORY, []) if ctx.mem else [],
+            prior_announced=prior_announced,
+            prior_phase=prior_phase,
+            mapping=mapping,
+            context_turns=settings.AIMS_CLASSIFY_CONTEXT_TURNS,
+            max_concerns=settings.AIMS_CLASSIFY_MAX_CONCERNS,
+            inquired_concerns_list=[
+                c["topic"] for c in (prior_state or {}).get("parent_concerns", [])
+            ],
+            mirrored_concerns_list=[
+                c["topic"]
+                for c in (prior_state or {}).get("parent_concerns", [])
+                if c.get("is_mirrored")
+            ],
+            history_text=ctx.history_text,
+            session_id=ctx.session_id,
+            character=ctx.effective_character,
+            scene=ctx.effective_scene,
+            clinician_name=clinician_display_name_from_user_info(ctx.user_info),
         )
-        task_reply = asyncio.create_task(
-            self.patient_reply_service.generate(
-                clinician_message=body.message,
-                history_text=ctx.history_text,
-                session_id=ctx.session_id,
-                character=ctx.effective_character,
-                scene=ctx.effective_scene,
-                clinician_name=clinician_display_name_from_user_info(ctx.user_info),
-            )
-        )
-
-        # Step 1 & 2: Wait for both classification and reply generation to complete in parallel
-        # This significantly reduces overall response time by overlapping two LLM calls.
-        is_vax = True
-        is_small_talk = False
-        classification_result = None
-        reply_payload = {}
-        try:
-            # We await both tasks together. Note that task_cls has a timeout logic in the original code,
-            # so we'll handle that by awaiting them individually but after both have had a chance to run.
-            # Actually, to maintain the timeout logic for task_cls while keeping task_reply running:
-            try:
-                classification_result = await asyncio.wait_for(task_cls, timeout=self.classify_budget_s)
-            except asyncio.TimeoutError:
-                self.logger.warning("Classification timed out after %s s, falling back", self.classify_budget_s)
-                try:
-                    task_cls.cancel()
-                except Exception as e:
-                    self.logger.debug(f"Deterministic classification failed (non-fatal): {e}")
-                    pass
-            
-            # Now await reply task which was already running in parallel
-            reply_payload = await task_reply
-        except Exception as e:
-            self.logger.exception("Parallel tasks failed in handler")
-            status_code = getattr(e, "status_code", None)
-            if status_code and status_code in {403, 404, 429}:
-                raise e
-
-        if classification_result:
-            # Use dictionary for compatibility with legacy post-processors
-            cls_payload = classification_result.aims.model_dump()
-            is_vax = classification_result.is_vaccine_relevant
-            is_small_talk = classification_result.is_small_talk
-        else:
-            # If we timed out or failed, use the deterministic fallback immediately
-            fb = evaluate_turn(ctx.person_last, body.message, mapping)
-            cls_payload = {
-                "step": fb.get("step"),
-                "score": fb.get("score", 2),
-                "reasons": fb.get("reasons", []) + ["fallback"],
-                "tips": fb.get("tips", [])
-            }
-            # Fallback doesn't explicitly detect these well, but we can assume normal for now
-            is_vax = True
-            is_small_talk = False
+        cls_payload = turn.cls_payload
+        is_small_talk = turn.is_small_talk
+        classification_result = turn.classification_result
+        reply_payload = turn.reply_payload
 
         # Apply post-processors to BOTH LLM and fallback results
         # Vaccine relevance gate
@@ -407,21 +433,23 @@ class AimsCoachingHandler:
         except Exception as e:
             self.logger.debug("Failed to snapshot model used: %s", e)
             model_used_cls = self.model_id
-        telemetry_log_event(
-            self.logger,
-            "aims_classify_end",
-            sessionId=ctx.session_id,
-            requestId=request_id,
-            durationMs=int((time.time() - cls_start) * 1000),
-            modelUsed=model_used_cls,
+        self.telemetry.classify_end(
+            session_id=ctx.session_id,
+            request_id=request_id,
+            started=cls_start,
+            model_used=model_used_cls,
             step=cls_payload.get("step"),
             score=cls_payload.get("score"),
         )
 
         # Step 3: Update AIMS state and provide coaching guidance (after classification completes)
         llm_topic = classification_result.person_topic if classification_result else None
-        self._update_aims_state(
-            mem, cls_payload, body.message, ctx.person_last, llm_topic
+        self.state_service.update(
+            mem,
+            cls_payload,
+            body.message,
+            ctx.person_last,
+            llm_topic,
         )
 
         # Step 4: Persist AIMS metrics (after state update)
@@ -447,14 +475,12 @@ class AimsCoachingHandler:
         except Exception as e:
             self.logger.warning("Failed to snapshot model used for reply: %s", e)
             model_used_reply = self.model_id
-        telemetry_log_event(
-            self.logger,
-            "aims_reply_end",
-            sessionId=ctx.session_id,
-            requestId=request_id,
-            durationMs=int((time.time() - reply_start) * 1000),
-            modelUsed=model_used_reply,
-            textLen=len((reply_payload.get("patient_reply") or "").strip()),
+        self.telemetry.reply_end(
+            session_id=ctx.session_id,
+            request_id=request_id,
+            started=reply_start,
+            model_used=model_used_reply,
+            text_len=len((reply_payload.get("patient_reply") or "").strip()),
         )
 
         # If this is the first assistant turn in the session, strip any accidental
@@ -474,7 +500,7 @@ class AimsCoachingHandler:
         session_obj = self.metrics_service.build_summary(mem)
         
         # Step 8: Check for end-game scenarios
-        coach_post = await self._check_end_game(mem, reply_payload, session_obj, ctx.session_id)
+        coach_post = await self.endgame_service.check(mem, reply_payload, session_obj, ctx.session_id)
         
         # Save coach_post to memory if it exists, so it can be archived
         if coach_post and mem is not None:
@@ -490,14 +516,10 @@ class AimsCoachingHandler:
         latency_ms = int((time.time() - started) * 1000)
         
         # Log successful completion
-        telemetry_log_event(
-            self.logger,
-            "aims_turn",
-            status="ok",
-            latencyMs=latency_ms,
-            modelId=self.model_id,
-            sessionId=ctx.session_id,
-            userInfo=ctx.user_info,
+        self.telemetry.turn_ok(
+            latency_ms=latency_ms,
+            session_id=ctx.session_id,
+            user_info=ctx.user_info,
             step=cls_payload.get("step"),
             score=cls_payload.get("score"),
         )
@@ -563,74 +585,15 @@ class AimsCoachingHandler:
         clinician_message: str, person_last: str,
         llm_topic: Optional[str] = None
     ) -> None:
-        """Update AIMS state and coaching guidance. Mutates mem in place."""
-        if mem is None:
-            return
-        
-        try:
-            state = mem.setdefault(KEY_AIMS_STATE, {
-                "announced": False, "phase": PHASE_PRE_ANNOUNCE,
-                "first_inquire_done": False, "pending_concerns": True, 
-                "parent_concerns": []
-            })
-            step_main = cls_payload.get("step")
-            steps = self._component_steps(step_main, cls_payload.get("steps"))
-            
-            # Add latest person concern if any, avoiding duplicates by topic
-            if person_last:
-                maybe_add_person_concern(state, person_last, self._TOPICAL_CUES, llm_topic)
-            
-            # 1. Update Mirror/Secure status based on clinician message
-            if STEP_MIRROR in steps:
-                mark_mirrored_multi(
-                    state, clinician_message, person_last,
-                    self._TOPICAL_CUES, llm_topic=llm_topic
-                )
-            if STEP_SECURE in steps:
-                mark_secured_by_topic(state, clinician_message, self._TOPICAL_CUES)
-
-            # 2. Apply coaching guidance rules
-            character = mem.get(SESSION_CHARACTER)
-            self._apply_coaching_guidance(
-                cls_payload, step_main, state, clinician_message, person_last,
-                character=character,
-            )
-            
-            # 3. Update observational state (announced, phase)
-            self._update_observational_state(state, step_main, steps)
-            
-            # Sync the updated phase back to the classification payload
-            cls_payload["phase"] = state.get("phase")
-            mem[KEY_AIMS_STATE] = state
-            
-        except Exception as e:
-            self.logger.exception(f"AIMS state update failed: {e}")
+        """Compatibility wrapper for tests and older internal callers."""
+        self._state().update(mem, cls_payload, clinician_message, person_last, llm_topic)
 
     @classmethod
     def _component_steps(
         cls, step_current: str | None, steps: List[str] | None = None
     ) -> List[str]:
-        """Return de-duplicated atomic AIMS steps for state transitions.
-
-        Classifier payloads normally include both ``step`` and ``steps``, but
-        deterministic fallbacks and older tests can provide only a compound
-        scalar such as ``Mirror+Secure+Inquire``.  State updates should still
-        credit each operation in that turn.
-        """
-        out: List[str] = []
-
-        def add(step: str | None) -> None:
-            if not step:
-                return
-            expanded = cls._COMPOUND_EXPANSIONS.get(step, [step])
-            for item in expanded:
-                if item and item not in out:
-                    out.append(item)
-
-        for step in steps or []:
-            add(step)
-        add(step_current)
-        return out
+        """Compatibility wrapper for tests and older internal callers."""
+        return AimsStateService.component_steps(step_current, steps)
     
     @classmethod
     def _first_user_facing_reason(cls, reasons: list[str], step: str | None = None) -> str | None:
@@ -642,242 +605,42 @@ class AimsCoachingHandler:
         """Compatibility wrapper for tests and older internal callers."""
         return CoachFeedbackHistoryService.filter_user_facing_reasons(reasons, step=step)
 
-    # Trust style detection keywords and corresponding tip templates
-    _ANALYTICAL_KEYWORDS = (
-        "analytical", "data", "evidence", "need for cognition",
-        "epistemic", "statistical", "peer-reviewed", "research",
-    )
-
     @classmethod
     def _detect_trust_style(cls, character: str | None) -> str:
-        """Detect the persona's epistemic trust style from character text.
-
-        Returns 'analytical', 'emotional', or 'default'.
-        """
-        if not character:
-            return "default"
-        lt = character.lower()
-        if any(kw in lt for kw in cls._ANALYTICAL_KEYWORDS):
-            return "analytical"
-        # Could add emotional detection here in future
-        return "default"
+        """Compatibility wrapper for tests and older internal callers."""
+        return AimsStateService.detect_trust_style(character)
 
     def _apply_coaching_guidance(
         self, cls_payload: Dict[str, Any], step_current: str, state: Dict[str, Any],
         clinician_message: str, person_last: str,
         *, character: str | None = None,
     ) -> None:
-        """Apply coaching-specific guidance rules."""
-        # Suppress tips about mirroring or 'what else' if all known concerns have been mirrored
-        concerns_list = state.get("parent_concerns") or []
-        if concerns_list:
-            # Group by topic and check if all topics have at least one mirrored concern
-            topics: Dict[str, bool] = {}
-            for c in concerns_list:
-                t = str(c.get("topic", "unknown"))
-                m = bool(c.get("is_mirrored"))
-                topics[t] = topics.get(t, False) or m
-            
-            all_topics_mirrored = all(topics.values())
-            if all_topics_mirrored:
-                tip_list = cls_payload.get("tips") or []
-                filtered_tips = []
-                for tip in tip_list:
-                    tip_l = (tip or "").lower()
-                    # Check if tip suggests asking "what else" or mirroring
-                    is_mirror_tip = "mirror" in tip_l
-                    is_what_else_tip = "what else" in tip_l
-                    
-                    if not (is_mirror_tip or is_what_else_tip):
-                        filtered_tips.append(tip)
-                cls_payload["tips"] = filtered_tips
-        
-        # NOTE: Announce-after-inquiry is now handled by the phase guard
-        # (_apply_phase_guard) which reclassifies the step before coaching
-        # guidance runs.  The block below is kept only as a safety net for
-        # edge cases where the phase guard didn't fire (e.g. Announce was
-        # added by a post-processor after the guard).
-        if step_current == STEP_ANNOUNCE and state.get("phase") == PHASE_INQUIRE_MIRROR:
-            reasons = list(cls_payload.get("reasons") or [])
-            if not any("announce after inquiry" in s.lower() for s in reasons):
-                reasons.insert(0, "Avoid moving to Announce after inquiry before all concerns are mirrored.")
-            cls_payload["reasons"] = reasons
-            cls_payload["score"] = min(2, int(cls_payload.get("score", 2)))
-            cls_payload.setdefault("tips", []).append(
-                "Keep it brief and invite input (e.g., 'How does that sound?')."
-            )
-        
-        component_steps = set(self._component_steps(step_current))
-
-        # Handle mirroring for plain and compound Mirror turns.
-        if STEP_MIRROR in component_steps:
-            mark_mirrored_multi(state, clinician_message, person_last, self._TOPICAL_CUES)
-        
-        # Handle securing
-        if STEP_SECURE in component_steps and step_current != STEP_SECURE:
-            # Compound step: securing is part of the blended turn. No "secure before mirror"
-            # warning — the Mirror component, when present, handles it in the same turn.
-            mark_secured_by_topic(state, clinician_message, self._TOPICAL_CUES)
-        elif step_current == STEP_SECURE:
-            # Priority check: if no Inquire has ever occurred, the deeper issue is
-            # "Securing before inquiring" — the clinician is educating/reassuring
-            # before eliciting the person's actual concerns.
-            first_inquire_done = state.get("first_inquire_done", False)
-            if not first_inquire_done:
-                reason = "You moved into reassurance before asking about their concerns — try an open question first"
-                tip = "Ask what's on their mind (e.g., 'What are your thoughts about the vaccines we discussed?') before offering reassurance."
-                cls_payload["reasons"] = [reason] + (cls_payload.get("reasons") or [])
-                cls_payload.setdefault("tips", []).append(tip)
-                try:
-                    cls_payload["score"] = min(2, int(cls_payload.get("score", 2)))
-                except Exception as e:
-                    self.logger.debug(f"Score normalization failed (secure before inquire): {e}")
-                    cls_payload["score"] = 2
-                # Track for de-duplication using existing mechanism
-                recent = state.get("recent_coaching") or []
-                recent.append("secure_before_inquire")
-                state["recent_coaching"] = recent[-3:]
-            else:
-                # Fall through to existing "secure before mirroring" check
-                pass
-
-            needs_mirror = any(not c.get("is_mirrored") for c in (state.get("parent_concerns") or []))
-            # Suppress the warning if Mirror turns have already been detected in this session.
-            # Keyword matching sometimes fails to update is_mirrored even when genuine
-            # mirroring occurred; trusting the step-count avoids repetitive false alarms.
-            mirrors_done = state.get("mirrors_done", 0)
-            if needs_mirror and mirrors_done > 0:
-                needs_mirror = False  # mirroring happened — suppress the warning
-            # Don't stack "secure before mirroring" on top of "secure before inquiring"
-            if needs_mirror and first_inquire_done:
-                # De-duplicate: check how many times the "secure before mirror"
-                # feedback has been given recently and escalate accordingly.
-                recent = state.get("recent_coaching") or []
-                secure_before_mirror_key = "secure_before_mirror"
-                repeat_count = sum(1 for r in recent if r == secure_before_mirror_key)
-
-                # Find first unmirrored concern topic for specificity
-                unmirrored_topics = [
-                    c.get("topic", "unknown")
-                    for c in (state.get("parent_concerns") or [])
-                    if not c.get("is_mirrored")
-                ]
-                first_unmirrored = unmirrored_topics[0] if unmirrored_topics else None
-
-                trust_style = self._detect_trust_style(character)
-
-                if repeat_count == 0:
-                    # First time: standard feedback, persona-adapted
-                    if trust_style == "analytical":
-                        reason = "You're educating before reflecting — try validating their reasoning first; this person values having their logic acknowledged"
-                        tip = "Reflect the reasoning (e.g., 'You want to weigh absolute vs. relative risk individually — did I capture that right?')."
-                    else:
-                        reason = "You moved into education before reflecting the concern — try mirroring first so they feel heard"
-                        tip = "Before educating, briefly reflect the concern (e.g., 'It feels like a lot at once — did I get that right?')."
-                elif repeat_count == 1:
-                    # Second time: add specificity about which concern
-                    topic_hint = f" ('{first_unmirrored}')" if first_unmirrored else ""
-                    reason = f"You're still educating without reflecting — the concern{topic_hint} hasn't been mirrored yet"
-                    tip = f"Try reflecting the specific concern{topic_hint} before more education."
-                else:
-                    # Third+ time: escalate to pattern-level observation
-                    n = repeat_count + 1
-                    topic_hint = f" about '{first_unmirrored}'" if first_unmirrored else ""
-                    reason = f"You've had {n} Secure turns without mirroring{topic_hint} — try pausing to reflect before more education"
-                    tip = f"Pause and mirror: acknowledge the concern{topic_hint} before sharing more facts."
-
-                cls_payload["reasons"] = [reason] + (cls_payload.get("reasons") or [])
-                cls_payload.setdefault("tips", []).append(tip)
-                try:
-                    cls_payload["score"] = min(2, int(cls_payload.get("score", 2)))
-                except Exception as e:
-                    self.logger.debug(f"Score normalization failed (secure before mirror): {e}")
-                    cls_payload["score"] = 2
-
-                # Track this feedback for future de-duplication
-                recent.append(secure_before_mirror_key)
-                state["recent_coaching"] = recent[-3:]  # keep last 3
-            else:
-                # Reset the counter when concerns ARE mirrored
-                state["recent_coaching"] = []
-            mark_secured_by_topic(state, clinician_message, self._TOPICAL_CUES)
+        """Compatibility wrapper for tests and older internal callers."""
+        self._state().apply_coaching_guidance(
+            cls_payload,
+            step_current,
+            state,
+            clinician_message,
+            person_last,
+            character=character,
+        )
     
     def _update_observational_state(
         self, state: Dict[str, Any], step_current: str, steps: List[str] = None
     ) -> None:
-        """Update observational state based on detected step(s).
-
-        Checks both step_current (legacy primary step) and the full steps list so
-        that compound turns like Announce+Inquire correctly set announced=True even
-        when the primary reported step is Inquire.
-        """
-        all_steps = set(self._component_steps(step_current, steps))
-
-        # Announce in any step sets the announced flag
-        if STEP_ANNOUNCE in all_steps:
-            state["announced"] = True
-            # Phase stays PreAnnounce until inquiry begins
-
-        # Track how many turns have included a Mirror component.  Used to
-        # suppress false-alarm "secure before mirroring" warnings when
-        # keyword matching fails to update is_mirrored on individual concerns.
-        if STEP_MIRROR in all_steps:
-            state["mirrors_done"] = state.get("mirrors_done", 0) + 1
-
-        # Inquire / Announce+Inquire / Mirror+Inquire / Secure+Inquire always sets phase to InquireMirror,
-        # even from Secure — AIMS is cyclical, not a one-way state machine.
-        if step_current in (STEP_INQUIRE, STEP_ANNOUNCE_INQUIRE, STEP_MIRROR_INQUIRE, STEP_SECURE_INQUIRE) or STEP_INQUIRE in all_steps:
-            state["first_inquire_done"] = True
-            state["phase"] = PHASE_INQUIRE_MIRROR
-        elif step_current == STEP_MIRROR_SECURE:
-            # Compound step: both Mirror and Secure done in one turn.
-            # If all concerns are now mirrored (which mark_mirrored_multi just handled),
-            # allow phase to advance to Secure; otherwise stay in InquireMirror.
-            pc = state.get("parent_concerns") or []
-            all_mirrored = all(c.get("is_mirrored") for c in pc) if pc else True
-            if all_mirrored:
-                state["phase"] = PHASE_SECURE
-            else:
-                state["phase"] = PHASE_INQUIRE_MIRROR
-            state["pending_concerns"] = not all(
-                c.get("is_mirrored") and c.get("is_secured") for c in pc
-            ) if pc else False
-        elif step_current == STEP_MIRROR or (STEP_MIRROR in all_steps and STEP_SECURE not in all_steps):
-            # Plain Mirror: cycle back to InquireMirror regardless of prior phase
-            state["phase"] = PHASE_INQUIRE_MIRROR
-        elif step_current == STEP_SECURE:
-            # Only advance to Secure phase when all concerns are mirrored.
-            # If unmirrored concerns remain, stay in InquireMirror to signal
-            # that the clinician should mirror before continuing to educate.
-            pc = state.get("parent_concerns") or []
-            all_mirrored = all(c.get("is_mirrored") for c in pc) if pc else True
-            if all_mirrored:
-                state["phase"] = PHASE_SECURE
-
-        # --- Global reconciliation ---
-        # Recompute pending_concerns from the actual concern list on EVERY
-        # transition, not just Secure/Mirror+Secure.  This prevents stale
-        # pending_concerns=True when all concerns have been resolved via
-        # transitions that previously skipped this check (plain Mirror,
-        # Inquire, etc.).
-        pc = state.get("parent_concerns") or []
-        all_resolved = (
-            all(c.get("is_mirrored") and c.get("is_secured") for c in pc)
-            if pc else True
-        )
-        state["pending_concerns"] = not all_resolved
-
-        # If all concerns are fully resolved and the AIMS sequence has
-        # progressed past Announce+Inquire, ensure phase reflects Secure
-        # regardless of which step triggered the transition.
-        # Only fires when there are actual tracked concerns (pc is non-empty);
-        # with no concerns, the step-specific cyclical logic governs phase
-        # (Mirror/Inquire cycle back to InquireMirror as AIMS intends).
-        if all_resolved and pc and state.get("announced") and state.get("first_inquire_done"):
-            state["phase"] = PHASE_SECURE
+        """Compatibility wrapper for tests and older internal callers."""
+        self._state().update_observational_state(state, step_current, steps)
     
-    _COMPOUND_EXPANSIONS = AimsMetricsService.COMPOUND_EXPANSIONS
-    _VALID_STEPS = AimsMetricsService.VALID_STEPS
+    _COMPOUND_EXPANSIONS = AimsStateService.COMPOUND_EXPANSIONS
+    _VALID_STEPS = AimsStateService.VALID_STEPS
+
+    def _state(self) -> AimsStateDependency:
+        service = getattr(self, "state_service", None)
+        if service is None:
+            logger = getattr(self, "logger", None) or logging.getLogger(__name__)
+            service = AimsStateService(logger=logger)
+            self.state_service = service
+        return service
 
     def _metrics(self) -> AimsMetricsService:
         service = getattr(self, "metrics_service", None)
@@ -937,141 +700,16 @@ class AimsCoachingHandler:
     async def _check_end_game(
         self, mem: Optional[Dict[str, Any]], reply_payload: Dict[str, Any], session_obj: Dict[str, Any] | None, session_id: str
     ) -> Dict[str, Any] | None:
-        """Check for end-game scenarios using LLM-centric detection with heuristic fallback."""
-        eg_begin_time = time.time()
-        try:
-            if mem is None:
-                return None
-
-            hist = mem.get(SESSION_HISTORY) or []
-            aims_state = mem.get(KEY_AIMS_STATE) or {}
-
-            # 1. Hard guards to avoid unnecessary LLM calls
-            phase = aims_state.get("phase", PHASE_PRE_ANNOUNCE)
-            announced = aims_state.get("announced", False)
-            if phase == PHASE_PRE_ANNOUNCE:
-                return None
-
-            assistant_count = sum(1 for it in hist if it.get("role") == ROLE_ASSISTANT and (it.get("content") or "").strip())
-            if not announced and assistant_count <= 1:
-                return None
-
-            # 1b. Block endgame when concerns remain unmirrored.
-            # Use the actual concern list as source of truth rather than
-            # relying only on pending_concerns which may lag state transitions.
-            concerns = aims_state.get("parent_concerns") or []
-            has_unmirrored = any(not c.get("is_mirrored") for c in concerns)
-            if concerns and has_unmirrored:
-                return None
-
-            # 2. Extract context for LLM
-            # Filter out coach entries so only dialogue reaches the model
-            history_text = "\n".join([
-                f"{get_ui_attributes(m.get('role'))['author']}: {m.get('content')}"
-                for m in hist[-10:]
-                if m.get("role") in (ROLE_USER, ROLE_ASSISTANT)
-            ])
-
-            # Pre-compute recent person replies for heuristic fallback and dual-consent gate
-            combined_reply_text = " ".join(
-                m.get("content", "")
-                for m in reversed(hist[-6:])
-                if m.get("role") == ROLE_ASSISTANT and (m.get("content") or "").strip()
-            )[:500]
-
-            # Extract concern states
-            concerns = aims_state.get("parent_concerns") or []
-            inquired = [c["topic"] for c in concerns]
-            mirrored = [c["topic"] for c in concerns if c.get("is_mirrored")]
-            secured = [c["topic"] for c in concerns if c.get("is_secured")]
-
-            # Telemetry begin
-            try:
-                telemetry_log_event(
-                    self.logger,
-                    "aims_endgame_begin",
-                    sessionId=session_id,
-                    inquiredCount=len(inquired),
-                    mirroredCount=len(mirrored),
-                    securedCount=len(secured)
-                )
-            except Exception as e:
-                self.logger.debug(f"History persistence failed (non-fatal): {e}")
-                pass
-
-            # 3. Call LLM detector via ClassifierService
-            result = await self.classifier_service.detect_endgame(
-                history_text=history_text,
-                announced=announced,
-                inquired_concerns=inquired,
-                mirrored_concerns=mirrored,
-                secured_concerns=secured
+        """Compatibility wrapper for tests and older internal callers."""
+        service = getattr(self, "endgame_service", None)
+        if service is None:
+            logger = getattr(self, "logger", None) or logging.getLogger(__name__)
+            service = AimsEndgameService(
+                logger=logger,
+                classifier_service_getter=lambda: self.classifier_service,
             )
-
-            is_endgame = result.get("is_endgame", False)
-            outcome = result.get("resolution_type", "not_resolved")
-            summary = result.get("summary", "")
-
-            # 4. Heuristic cross-check: always consult EndGameDetector when
-            #    the LLM says no endgame.  The LLM occasionally misses clear
-            #    acceptance signals ("I'm comfortable proceeding", "I'll look
-            #    forward to reviewing that material"); the heuristic catches
-            #    these via keyword cues and provides a safety net.  This is
-            #    safe because the heuristic has high precision (requires
-            #    FOLLOWUP+LITERATURE or LITERATURE+"appreciate"/"home").
-            if not is_endgame:
-                eg_local = EndGameDetector.detect(combined_reply_text)
-                if eg_local:
-                    is_endgame = True
-                    heuristic_reason = eg_local.get("reason", "")
-                    outcome = "accepted_vaccine" if heuristic_reason == "accepted_now" else "accepted_literature"
-                    summary = ""
-
-            # 5. High-stakes gate: require heuristic confirmation ONLY for accepted_vaccine
-            # (consent to vaccinate today is irreversible, so we require a double-check).
-            # For accepted_literature we trust the LLM.
-            if is_endgame and outcome == "accepted_vaccine":
-                eg_local = EndGameDetector.detect(combined_reply_text)
-                if not eg_local or eg_local.get("reason") != "accepted_now":
-                    is_endgame = False
-            
-            # 5b. Force is_endgame to false for deferred (user correction)
-            if outcome == "deferred":
-                is_endgame = False
-
-            try:
-                telemetry_log_event(
-                    self.logger,
-                    "aims_endgame_end",
-                    sessionId=session_id,
-                    durationMs=int((time.time() - eg_begin_time) * 1000),
-                    isEndgame=is_endgame,
-                    outcome=outcome
-                )
-            except Exception as e:
-                self.logger.debug(f"Telemetry log failed (endgame): {e}")
-                pass
-
-            if is_endgame:
-                title = endgame_title(session_obj, outcome=outcome)
-                lines = [f"Outcome: {summary}"] if summary else []
-
-                # Add fallback metrics bullets if available
-                try:
-                    fb_bullets = build_endgame_bullets_fallback(session_obj)
-                    if fb_bullets:
-                        lines.extend(fb_bullets)
-                except Exception as e:
-                    self.logger.debug(f"Deterministic evaluation failed: {e}")
-                    pass
-
-                return {"title": title, "lines": lines}
-
-            return None
-
-        except Exception as e:
-            self.logger.exception("LLM endgame detection failed: %s", e)
-            return None
+            self.endgame_service = service
+        return await service.check(mem, reply_payload, session_obj, session_id)
     
     async def _call_vertex_text(self, prompt: str) -> str:
         """Call Vertex for text generation with fallbacks (native async)."""
