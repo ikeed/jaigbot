@@ -159,7 +159,7 @@ class LegacyChatHandler:
             
             return (raw_response or "").strip() or "I'm sorry, I didn't understand that. Could you please rephrase?"
             
-        except VertexAIError as e:
+        except VertexAIError:
             # Re-raise VertexAI errors so the orchestrator can handle them properly
             raise
         except Exception as e:

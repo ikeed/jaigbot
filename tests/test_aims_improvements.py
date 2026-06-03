@@ -1,6 +1,7 @@
 import pytest
 
-from app.aims_engine import load_mapping, classify_step, evaluate_turn
+from app.aims_engine import classify_step, evaluate_turn, load_mapping
+from app.services.aims_state_service import AimsStateService
 
 
 @pytest.fixture(scope="module")
@@ -71,8 +72,6 @@ def test_multisentence_rapport_q_is_smalltalk(aims_mapping):
 # ---------------------------------------------------------------------------
 # Phase flexibility tests (Fix 5)
 # ---------------------------------------------------------------------------
-
-from app.services.aims_state_service import AimsStateService
 
 
 def _make_state(phase="Secure", concerns=None):

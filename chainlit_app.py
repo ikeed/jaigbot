@@ -1,14 +1,14 @@
+from app.utils.env import load_and_sanitize_env
+
+# 1. Load and sanitize environment variables at the absolute top!
+load_and_sanitize_env()
+
 import json
 import logging
 import os
 
 import chainlit as cl
 from fastapi import Request, Response
-
-from app.utils.env import load_and_sanitize_env
-
-# 1. Load and sanitize environment variables at the absolute top!
-load_and_sanitize_env()
 
 from app.config import settings
 from app.utils.env import is_valid_env_val
@@ -153,7 +153,8 @@ if is_oauth_enabled or is_valid_env_val(settings.CHAINLIT_AUTH_SECRET) or settin
         def auth_callback(username: str, password: str) -> cl.User | None:
             expected_user = os.getenv("AUTH_USERNAME", "admin")
             expected_pass = os.getenv("AUTH_PASSWORD")
-            if not expected_pass: return None
+            if not expected_pass:
+                return None
             if username == expected_user and password == expected_pass:
                 return cl.User(identifier=username, metadata={"name": username, "provider": "password"})
             return None

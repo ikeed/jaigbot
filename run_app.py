@@ -1,35 +1,34 @@
-import os
 from app.utils.env import load_and_sanitize_env
 
 # 1. Load and sanitize environment variables at the absolute top!
 load_and_sanitize_env()
 
-import uvicorn
+import os
 
+import uvicorn
+from chainlit.utils import mount_chainlit
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from chainlit.utils import mount_chainlit
 
+from app.config import settings
 from app.constants import (
+    DEFAULT_CHAT_TARGET,
+    DEFAULT_HOST,
+    DIR_CHAINLIT_PUBLIC,
+    DIR_PUBLIC,
     ENV_BACKEND_URL,
-    ENV_CHAINLIT_URL,
-    ENV_K_SERVICE,
     ENV_CHAINLIT_AUTH_SECRET,
+    ENV_CHAINLIT_URL,
     ENV_HOST,
+    ENV_K_SERVICE,
     PATH_API,
     PATH_CHAT,
     PATH_PUBLIC,
-    DEFAULT_HOST,
-    DEFAULT_CHAT_TARGET,
-    DIR_PUBLIC,
-    DIR_CHAINLIT_PUBLIC
 )
-
 # Import the existing backend app and modular components
 from app.main import app as backend_app
-from app.config import settings
-from app.routes.ui import router as ui_router
 from app.middleware import AuthRedirectMiddleware
+from app.routes.ui import router as ui_router
 from app.security.oauth import is_valid_env_val
 
 app = FastAPI()

@@ -290,31 +290,6 @@ class TestDeploymentIntegration:
         """Verify that all env vars in deploy.yaml are supported by Settings."""
         # This is a static check of the deploy.yaml configuration
         # against the Settings class
-
-        # Expected env vars from deploy.yaml
-        deployment_env_vars = [
-            "APP_ENV",
-            "PROJECT_ID",
-            "REGION",
-            "GAR_REPO",  # Not in Settings, but used in deployment
-            "SERVICE_NAME",  # Not in Settings, but used in deployment
-            "STAGING_SERVICE_NAME",  # Not in Settings, but used in deployment
-            "MODEL_ID",
-            "TEMPERATURE",
-            "MAX_TOKENS",
-            "AIMS_COACHING_ENABLED",
-            "CHAINLIT_AUTH_SECRET",
-            "CHAINLIT_URL",  # Not in Settings, but used in deployment
-            "STAGING_CHAINLIT_URL",  # Not in Settings, but used in deployment
-            "OAUTH_GOOGLE_CLIENT_ID",
-            "OAUTH_GOOGLE_CLIENT_SECRET",
-            "MEMORY_BACKEND",
-            "REDIS_URL",
-            "TF_BACKEND_BUCKET",  # Not in Settings, used for Terraform
-            "TF_BACKEND_PREFIX",  # Not in Settings, used for Terraform
-            "VPC_CONNECTOR",  # Not in Settings, used by deployment
-        ]
-
         settings_fields = {f for f in dir(Settings()) if not f.startswith("_")}
 
         # Check that Settings-specific variables exist in the class
