@@ -424,30 +424,30 @@ class TestEvaluateTurnBranches:
     def test_additional_branch_coverage(self):
         """Additional tests to hit remaining uncovered branches"""
         # Test empty text scenarios
-        result1 = classify_step("", "", {})
+        result1 = classify_step("", {})
         assert isinstance(result1.step, str)
         
         # Test score clamping
-        result2 = score_step("Unknown", "", "", {})
+        result2 = score_step("Unknown", "", {})
         assert 0 <= result2.score <= 3
         
         # Test parent expressed emotion branch
-        result3 = classify_step("I'm worried and scared", "What concerns you?", {})
+        result3 = classify_step("What concerns you?", {})
         assert result3.step == "Inquire"
         
         # Test exception handling in evaluate_turn
-        result4 = evaluate_turn("", "", {})
+        result4 = evaluate_turn("", {})
         assert "step" in result4
         assert "score" in result4
         
         # Test very long text for different scoring branches
         long_text = "What are your specific concerns about vaccines? " * 10
-        result5 = score_step("Inquire", "", long_text, {})
+        result5 = score_step("Inquire", long_text, {})
         assert isinstance(result5.score, int)
         
     def test_evaluate_turn_multiple_tips_truncated(self, aims_mapping):
         """Test evaluate_turn limits tips to one when multiple are generated"""
         # Use real mapping so Announce markers are available
-        result = evaluate_turn("I'm hesitant", "Today we will give Emily her vaccines", aims_mapping)
+        result = evaluate_turn("Today we will give Emily her vaccines", aims_mapping)
         assert result["step"] == "Announce"
         assert len(result["tips"]) <= 1  # Should be truncated to at most one tip
