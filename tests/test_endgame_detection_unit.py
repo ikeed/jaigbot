@@ -1,5 +1,5 @@
 """
-Unit tests for AimsCoachingHandler._check_end_game.
+Unit tests for AimsEndgameService.check.
 
 Covers:
 - Coach-role entries are filtered from history_text sent to the LLM
@@ -12,35 +12,23 @@ Covers:
 import asyncio
 import logging
 
-from app.services.aims_coaching_handler import AimsCoachingHandler
+from app.services.aims_endgame_service import AimsEndgameService
+from app.services.aims_state_service import AimsStateService
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_handler(memory_store: dict, classifier_service=None) -> AimsCoachingHandler:
-    """Instantiate a minimal AimsCoachingHandler for unit testing _check_end_game."""
-    vertex_config = {
-        "project_id": "test-proj",
-        "region": "us-central1",
-        "vertex_location": "us-central1",
-        "model_id": "gemini-test",
-        "model_fallbacks": [],
-        "temperature": 0.0,
-        "max_tokens": 256,
-        "client_cls": None,
-    }
-    memory_config = {"enabled": True, "max_turns": 10}
-    handler = AimsCoachingHandler(
-        memory_store=memory_store,
-        vertex_config=vertex_config,
-        memory_config=memory_config,
+def _make_endgame_service(classifier_service) -> AimsEndgameService:
+    return AimsEndgameService(
         logger=logging.getLogger("test"),
+        classifier_service_getter=lambda: classifier_service,
     )
-    if classifier_service is not None:
-        handler.classifier_service = classifier_service
-    return handler
+
+
+def _make_state_service() -> AimsStateService:
+    return AimsStateService(logger=logging.getLogger("test"))
 
 
 def _run(coro):
@@ -91,8 +79,8 @@ def test_coach_entries_excluded_from_history_text():
             "aims_state": _announced_state(),
         }
     }
-    handler = _make_handler(store, mock_svc)
-    _run(handler._check_end_game(store["s1"], {"patient_reply": ""}, None, "s1"))
+    service = _make_endgame_service(mock_svc)
+    _run(service.check(store["s1"], {"patient_reply": ""}, None, "s1"))
 
     ht = mock_svc.last_history_text
     assert "coach" not in ht.lower(), "Coach role should not appear in history_text"
@@ -114,8 +102,8 @@ def test_assistant_role_labelled_assistant_not_parent():
             "aims_state": _announced_state(),
         }
     }
-    handler = _make_handler(store, mock_svc)
-    _run(handler._check_end_game(store["s2"], {"patient_reply": ""}, None, "s2"))
+    service = _make_endgame_service(mock_svc)
+    _run(service.check(store["s2"], {"patient_reply": ""}, None, "s2"))
 
     ht = mock_svc.last_history_text
     assert "Assistant:" in ht, "Assistant role should be labelled 'Assistant:'"
@@ -136,8 +124,8 @@ def test_doctor_role_labelled_correctly():
             "aims_state": _announced_state(),
         }
     }
-    handler = _make_handler(store, mock_svc)
-    _run(handler._check_end_game(store["s3"], {"patient_reply": ""}, None, "s3"))
+    service = _make_endgame_service(mock_svc)
+    _run(service.check(store["s3"], {"patient_reply": ""}, None, "s3"))
 
     ht = mock_svc.last_history_text
     assert "Doctor:" in ht
@@ -158,8 +146,8 @@ def test_returns_none_in_preannounce_phase():
             "aims_state": _announced_state(phase="PreAnnounce", announced=False),
         }
     }
-    handler = _make_handler(store, mock_svc)
-    result = _run(handler._check_end_game(store["s4"], {}, None, "s4"))
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s4"], {}, None, "s4"))
     assert result is None
     assert mock_svc.last_history_text == "", "LLM should not be called in PreAnnounce phase"
 
@@ -175,8 +163,8 @@ def test_returns_none_when_not_announced_and_single_turn():
             "aims_state": _announced_state(phase="InquireMirror", announced=False),
         }
     }
-    handler = _make_handler(store, mock_svc)
-    result = _run(handler._check_end_game(store["s5"], {}, None, "s5"))
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s5"], {}, None, "s5"))
     assert result is None
 
 
@@ -199,8 +187,8 @@ def test_heuristic_fallback_fires_on_detection_error():
             "aims_state": _announced_state(),
         }
     }
-    handler = _make_handler(store, mock_svc)
-    result = _run(handler._check_end_game(store["s6"], {}, None, "s6"))
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s6"], {}, None, "s6"))
     assert result is not None, "Heuristic fallback should produce a result on detection_error"
     assert "Great job" in result.get("title", "")
 
@@ -219,8 +207,8 @@ def test_heuristic_fallback_silent_on_no_endgame_match():
             "aims_state": _announced_state(),
         }
     }
-    handler = _make_handler(store, mock_svc)
-    result = _run(handler._check_end_game(store["s7"], {}, None, "s7"))
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s7"], {}, None, "s7"))
     assert result is None
 
 
@@ -248,8 +236,8 @@ def test_dual_consent_gate_blocks_vaccine_without_heuristic_confirmation():
             "aims_state": _announced_state(),
         }
     }
-    handler = _make_handler(store, mock_svc)
-    result = _run(handler._check_end_game(store["s8"], {}, None, "s8"))
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s8"], {}, None, "s8"))
     assert result is None, "Dual-consent gate should block without heuristic confirmation"
 
 
@@ -273,8 +261,8 @@ def test_dual_consent_gate_allows_vaccine_when_both_agree():
             "aims_state": _announced_state(),
         }
     }
-    handler = _make_handler(store, mock_svc)
-    result = _run(handler._check_end_game(store["s9"], {}, None, "s9"))
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s9"], {}, None, "s9"))
     assert result is not None, "Both LLM and heuristic agree — endgame should fire"
     assert "Great job" in result["title"]
     assert result["lines"][0].startswith("Outcome:")
@@ -299,8 +287,8 @@ def test_dual_consent_gate_does_not_block_literature_outcome():
             "aims_state": _announced_state(),
         }
     }
-    handler = _make_handler(store, mock_svc)
-    result = _run(handler._check_end_game(store["s10"], {}, None, "s10"))
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s10"], {}, None, "s10"))
     assert result is not None, "accepted_literature should bypass the dual-consent gate"
     assert "Great job" in result["title"]
 
@@ -324,8 +312,8 @@ def test_deferred_outcome_does_not_trigger_endgame():
             "aims_state": _announced_state(),
         }
     }
-    handler = _make_handler(store, mock_svc)
-    result = _run(handler._check_end_game(store["s11"], {}, None, "s11"))
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s11"], {}, None, "s11"))
     assert result is None, "Deferred should no longer trigger endgame"
 
 
@@ -360,8 +348,8 @@ def test_unmirrored_concerns_block_endgame():
             },
         }
     }
-    handler = _make_handler(store, mock_svc)
-    result = _run(handler._check_end_game(store["s12"], {}, None, "s12"))
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s12"], {}, None, "s12"))
     assert result is None, "Endgame should be blocked when unmirrored concerns exist"
     # The LLM should never have been called
     assert mock_svc.last_history_text == ""
@@ -392,8 +380,8 @@ def test_all_concerns_mirrored_allows_endgame():
             },
         }
     }
-    handler = _make_handler(store, mock_svc)
-    result = _run(handler._check_end_game(store["s13"], {}, None, "s13"))
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s13"], {}, None, "s13"))
     assert result is not None, "Endgame should proceed when all concerns are mirrored"
 
 
@@ -428,10 +416,8 @@ def test_compound_turn_resolving_final_concern_allows_endgame():
             },
         }
     }
-    handler = _make_handler(store, mock_svc)
-
     cls = {"step": "Mirror+Secure+Inquire", "score": 3, "reasons": [], "tips": []}
-    handler._update_aims_state(
+    _make_state_service().update(
         store["s13b"],
         cls,
         "You're worried about side effects. Serious side effects are rare. What else would help?",
@@ -443,7 +429,8 @@ def test_compound_turn_resolving_final_concern_allows_endgame():
     assert concern["is_mirrored"] is True
     assert concern["is_secured"] is True
 
-    result = _run(handler._check_end_game(store["s13b"], {}, None, "s13b"))
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s13b"], {}, None, "s13b"))
     assert result is not None, "Endgame should proceed after the compound turn resolves the final concern"
     assert mock_svc.last_history_text != "", "LLM should be called once concern guard is satisfied"
 
@@ -467,8 +454,8 @@ def test_no_concerns_allows_endgame():
             "aims_state": _announced_state(),  # empty parent_concerns
         }
     }
-    handler = _make_handler(store, mock_svc)
-    result = _run(handler._check_end_game(store["s14"], {}, None, "s14"))
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s14"], {}, None, "s14"))
     assert result is not None, "Endgame should proceed when no concerns are registered"
 
 
@@ -498,8 +485,8 @@ def test_llm_accepted_literature_trusted_without_keyword_match():
             "aims_state": _announced_state(),
         }
     }
-    handler = _make_handler(store, mock_svc)
-    result = _run(handler._check_end_game(store["s15"], {}, None, "s15"))
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s15"], {}, None, "s15"))
     assert result is not None, "LLM accepted_literature should fire without requiring keyword match"
     assert result["title"] == "\U0001f389 Great job!"
 
@@ -523,8 +510,8 @@ def test_llm_deferred_not_trusted_as_endgame():
             "aims_state": _announced_state(),
         }
     }
-    handler = _make_handler(store, mock_svc)
-    result = _run(handler._check_end_game(store["s16"], {}, None, "s16"))
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s16"], {}, None, "s16"))
     assert result is None, "LLM deferred should NOT fire endgame"
 
 
@@ -547,6 +534,6 @@ def test_deferred_llm_endgame_blocked():
             "aims_state": _announced_state(),
         }
     }
-    handler = _make_handler(store, mock_svc)
-    result = _run(handler._check_end_game(store["s17"], {}, None, "s17"))
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s17"], {}, None, "s17"))
     assert result is None, "Deferred endgame should be blocked even when LLM and language agree"

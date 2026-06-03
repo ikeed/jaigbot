@@ -13,11 +13,10 @@ Behavior-preserving extraction from the massive coaching section in app.main.cha
 """
 from __future__ import annotations
 
-import logging
 import os
 import time
 import uuid
-from typing import Any, Dict, List, Optional, Protocol
+from typing import Any, Dict, Optional
 
 from fastapi import Request
 
@@ -36,17 +35,27 @@ from app.constants import (
     SESSION_SCENE,
     DEFAULT_MODEL_FLASH
 )
-from app.models import ChatRequest, ClassifierResult
+from app.models import ChatRequest
 from app.services.chat_context import ChatContext
 from app.services.chat_helpers import strip_appointment_headers
 from app.services.classifier_service import ClassifierService
 from app.services.clinician_identity import clinician_display_name_from_user_info
+from app.services.aims_dependencies import (
+    AimsEndgameDependency,
+    AimsMetricsDependency,
+    AimsStateDependency,
+    AimsTelemetryDependency,
+    AimsTurnCoordinatorDependency,
+    ClassifierDependency,
+    CoachFeedbackHistoryDependency,
+    PatientReplyDependency,
+)
 from app.services.aims_endgame_service import AimsEndgameService
 from app.services.aims_handler_config import AimsMemoryConfig, AimsVertexConfig
 from app.services.aims_metrics_service import AimsMetricsService
 from app.services.aims_state_service import AimsStateService
 from app.services.aims_turn_telemetry import AimsTurnTelemetry
-from app.services.aims_turn_coordinator import AimsTurnCoordinator, AimsTurnResult
+from app.services.aims_turn_coordinator import AimsTurnCoordinator
 from app.services.coach_feedback_history_service import CoachFeedbackHistoryService
 from app.services.coach_post import (
     VaccineRelevanceGate,
@@ -59,187 +68,6 @@ from app.services.vertex_helpers import (
     get_last_model_used
 )
 from app.vertex import VertexClient
-
-
-class ClassifierDependency(Protocol):
-    async def classify_turn(
-        self,
-        *,
-        clinician_message: str,
-        person_last: str,
-        history: List[Dict[str, str]],
-        prior_announced: bool,
-        prior_phase: str,
-        mapping: Dict[str, Any],
-        context_turns: int = 3,
-        max_concerns: int = 3,
-        inquired_concerns_list: List[str] | None = None,
-        mirrored_concerns_list: List[str] | None = None,
-    ) -> ClassifierResult:
-        ...
-
-    async def detect_endgame(
-        self,
-        *,
-        history_text: str,
-        announced: bool,
-        inquired_concerns: List[str],
-        mirrored_concerns: List[str],
-        secured_concerns: List[str],
-    ) -> Dict[str, Any]:
-        ...
-
-
-class PatientReplyDependency(Protocol):
-    async def generate(
-        self,
-        *,
-        clinician_message: str,
-        history_text: str,
-        session_id: str,
-        character: str | None = None,
-        scene: str | None = None,
-        clinician_name: str | None = None,
-    ) -> dict[str, Any]:
-        ...
-
-
-class AimsMetricsDependency(Protocol):
-    def persist(self, mem: dict[str, Any] | None, cls_payload: dict[str, Any]) -> None:
-        ...
-
-    def build_summary(self, mem: dict[str, Any] | None) -> dict[str, Any] | None:
-        ...
-
-
-class CoachFeedbackHistoryDependency(Protocol):
-    def append(
-        self,
-        *,
-        mem: dict[str, Any] | None,
-        memory_enabled: bool,
-        session_id: str | None,
-        cls_payload: dict[str, Any],
-        reply_payload: dict[str, Any],
-    ) -> None:
-        ...
-
-    def filter_user_facing_reasons(
-        self, reasons: list[str], step: str | None = None
-    ) -> list[str]:
-        ...
-
-
-class AimsStateDependency(Protocol):
-    def update(
-        self,
-        mem: dict[str, Any] | None,
-        cls_payload: dict[str, Any],
-        clinician_message: str,
-        person_last: str,
-        llm_topic: str | None = None,
-    ) -> None:
-        ...
-
-    def apply_coaching_guidance(
-        self,
-        cls_payload: dict[str, Any],
-        step_current: str,
-        state: dict[str, Any],
-        clinician_message: str,
-        person_last: str,
-        *,
-        character: str | None = None,
-    ) -> None:
-        ...
-
-    def update_observational_state(
-        self,
-        state: dict[str, Any],
-        step_current: str,
-        steps: list[str] | None = None,
-    ) -> None:
-        ...
-
-
-class AimsEndgameDependency(Protocol):
-    async def check(
-        self,
-        mem: dict[str, Any] | None,
-        reply_payload: dict[str, Any],
-        session_obj: dict[str, Any] | None,
-        session_id: str,
-    ) -> dict[str, Any] | None:
-        ...
-
-
-class AimsTelemetryDependency(Protocol):
-    def classify_begin(
-        self, *, session_id: str, user_info: dict[str, Any] | None, request_id: str
-    ) -> None:
-        ...
-
-    def reply_begin(
-        self, *, session_id: str, user_info: dict[str, Any] | None, request_id: str
-    ) -> None:
-        ...
-
-    def classify_end(
-        self,
-        *,
-        session_id: str,
-        request_id: str,
-        started: float,
-        model_used: str,
-        step: str | None,
-        score: int | None,
-    ) -> None:
-        ...
-
-    def reply_end(
-        self,
-        *,
-        session_id: str,
-        request_id: str,
-        started: float,
-        model_used: str,
-        text_len: int,
-    ) -> None:
-        ...
-
-    def turn_ok(
-        self,
-        *,
-        latency_ms: int,
-        session_id: str,
-        user_info: dict[str, Any] | None,
-        step: str | None,
-        score: int | None,
-    ) -> None:
-        ...
-
-
-class AimsTurnCoordinatorDependency(Protocol):
-    async def run(
-        self,
-        *,
-        clinician_message: str,
-        person_last: str,
-        history: list[dict[str, str]],
-        prior_announced: bool,
-        prior_phase: str,
-        mapping: dict[str, Any],
-        context_turns: int,
-        max_concerns: int,
-        inquired_concerns_list: list[str],
-        mirrored_concerns_list: list[str],
-        history_text: str,
-        session_id: str,
-        character: str | None,
-        scene: str | None,
-        clinician_name: str | None,
-    ) -> AimsTurnResult:
-        ...
 
 
 class AimsCoachingHandler:
@@ -580,79 +408,6 @@ class AimsCoachingHandler:
         mem.setdefault(KEY_FULL_HISTORY, [])
         return mem
 
-    def _update_aims_state(
-        self, mem: Optional[Dict[str, Any]], cls_payload: Dict[str, Any],
-        clinician_message: str, person_last: str,
-        llm_topic: Optional[str] = None
-    ) -> None:
-        """Compatibility wrapper for tests and older internal callers."""
-        self._state().update(mem, cls_payload, clinician_message, person_last, llm_topic)
-
-    @classmethod
-    def _component_steps(
-        cls, step_current: str | None, steps: List[str] | None = None
-    ) -> List[str]:
-        """Compatibility wrapper for tests and older internal callers."""
-        return AimsStateService.component_steps(step_current, steps)
-    
-    @classmethod
-    def _first_user_facing_reason(cls, reasons: list[str], step: str | None = None) -> str | None:
-        """Compatibility wrapper for tests and older internal callers."""
-        return CoachFeedbackHistoryService.first_user_facing_reason(reasons, step=step)
-
-    @classmethod
-    def _filter_user_facing_reasons(cls, reasons: list[str], step: str | None = None) -> list[str]:
-        """Compatibility wrapper for tests and older internal callers."""
-        return CoachFeedbackHistoryService.filter_user_facing_reasons(reasons, step=step)
-
-    @classmethod
-    def _detect_trust_style(cls, character: str | None) -> str:
-        """Compatibility wrapper for tests and older internal callers."""
-        return AimsStateService.detect_trust_style(character)
-
-    def _apply_coaching_guidance(
-        self, cls_payload: Dict[str, Any], step_current: str, state: Dict[str, Any],
-        clinician_message: str, person_last: str,
-        *, character: str | None = None,
-    ) -> None:
-        """Compatibility wrapper for tests and older internal callers."""
-        self._state().apply_coaching_guidance(
-            cls_payload,
-            step_current,
-            state,
-            clinician_message,
-            person_last,
-            character=character,
-        )
-    
-    def _update_observational_state(
-        self, state: Dict[str, Any], step_current: str, steps: List[str] = None
-    ) -> None:
-        """Compatibility wrapper for tests and older internal callers."""
-        self._state().update_observational_state(state, step_current, steps)
-    
-    _COMPOUND_EXPANSIONS = AimsStateService.COMPOUND_EXPANSIONS
-    _VALID_STEPS = AimsStateService.VALID_STEPS
-
-    def _state(self) -> AimsStateDependency:
-        service = getattr(self, "state_service", None)
-        if service is None:
-            logger = getattr(self, "logger", None) or logging.getLogger(__name__)
-            service = AimsStateService(logger=logger)
-            self.state_service = service
-        return service
-
-    def _metrics(self) -> AimsMetricsService:
-        service = getattr(self, "metrics_service", None)
-        if service is None:
-            service = AimsMetricsService(logger=self.logger)
-            self.metrics_service = service
-        return service
-
-    def _persist_aims_metrics(self, mem: Optional[Dict[str, Any]], cls_payload: Dict[str, Any]) -> None:
-        """Compatibility wrapper for tests and older internal callers."""
-        self._metrics().persist(mem, cls_payload)
-    
     def _append_history(
         self, mem: Optional[Dict[str, Any]], user_message: str, assistant_reply: str
     ) -> None:
@@ -692,24 +447,6 @@ class AimsCoachingHandler:
 
         except Exception as e:
             self.logger.debug(f"Assistant history append failed: {e}")
-    
-    def _build_session_metrics(self, mem: Optional[Dict[str, Any]]) -> Dict[str, Any] | None:
-        """Compatibility wrapper for tests and older internal callers."""
-        return self._metrics().build_summary(mem)
-    
-    async def _check_end_game(
-        self, mem: Optional[Dict[str, Any]], reply_payload: Dict[str, Any], session_obj: Dict[str, Any] | None, session_id: str
-    ) -> Dict[str, Any] | None:
-        """Compatibility wrapper for tests and older internal callers."""
-        service = getattr(self, "endgame_service", None)
-        if service is None:
-            logger = getattr(self, "logger", None) or logging.getLogger(__name__)
-            service = AimsEndgameService(
-                logger=logger,
-                classifier_service_getter=lambda: self.classifier_service,
-            )
-            self.endgame_service = service
-        return await service.check(mem, reply_payload, session_obj, session_id)
     
     async def _call_vertex_text(self, prompt: str) -> str:
         """Call Vertex for text generation with fallbacks (native async)."""

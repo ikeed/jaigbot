@@ -8,7 +8,7 @@ from app.services.aims_coaching_handler import AimsCoachingHandler
 from app.services.chat_context import ChatContext
 
 
-def _handler(*, classifier, patient_reply, metrics, feedback):
+def _handler(*, classifier, patient_reply, metrics, feedback, endgame):
     return AimsCoachingHandler(
         memory_store={},
         vertex_config={
@@ -27,6 +27,7 @@ def _handler(*, classifier, patient_reply, metrics, feedback):
         patient_reply_service=patient_reply,
         metrics_service=metrics,
         coach_feedback_history_service=feedback,
+        endgame_service=endgame,
     )
 
 
@@ -75,21 +76,20 @@ async def test_handle_uses_injected_services(monkeypatch):
         kwargs["mem"]["coach_feedback_appended"] = True
 
     feedback.append.side_effect = append_feedback
+    endgame = Mock()
+    endgame.check = AsyncMock(return_value=None)
     handler = _handler(
         classifier=classifier,
         patient_reply=patient_reply,
         metrics=metrics,
         feedback=feedback,
+        endgame=endgame,
     )
 
     async def fake_mapping():
         return {}
 
-    async def fake_endgame(mem, reply_payload, session_obj, session_id):
-        return None
-
     monkeypatch.setattr(handler, "_load_aims_mapping", fake_mapping)
-    monkeypatch.setattr(handler, "_check_end_game", fake_endgame)
 
     ctx = ChatContext(
         session_id="sid",
@@ -131,3 +131,5 @@ async def test_handle_uses_injected_services(monkeypatch):
     feedback_call = feedback.append.call_args.kwargs
     assert feedback_call["session_id"] == "sid"
     assert feedback_call["reply_payload"] == {"patient_reply": "Thanks, Doctor."}
+
+    endgame.check.assert_awaited_once()
