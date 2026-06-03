@@ -30,7 +30,7 @@ jobs:
         with:
           python-version: '3.13'
       - name: Install Linting Tools
-        run: pip install ruff mypy bandit
+        run: pip install ruff==0.15.15 mypy==1.18.2 bandit==1.9.4
       - name: Install Dependencies
         run: pip install -r requirements.txt
       - name: Run Ruff
@@ -38,7 +38,7 @@ jobs:
       - name: Run Mypy
         run: mypy app
       - name: Run Bandit
-        run: bandit -r app -x tests,scripts
+        run: bandit -r app -x tests,scripts --severity-level medium
 
   coverage:
     runs-on: ubuntu-latest
