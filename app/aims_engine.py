@@ -307,7 +307,7 @@ def _introduces_new_info(lt: str) -> bool:
     return False
 
 
-def score_step(step: str, person_last: str, clinician_last: str, mapping: Dict[str, Any]) -> ScoreResult:
+def score_step(step: str, clinician_last: str, mapping: Dict[str, Any]) -> ScoreResult:
     """Score 0–3 based on mapping heuristics per step.
 
     This is a lightweight heuristic implementation to support unit tests and
@@ -319,8 +319,8 @@ def score_step(step: str, person_last: str, clinician_last: str, mapping: Dict[s
 
     if step == "Mirror+Inquire":
         # Score as Mirror + Inquire combo
-        mir_scr = score_step("Mirror", person_last, clinician_last, mapping)
-        inq_scr = score_step("Inquire", person_last, clinician_last, mapping)
+        mir_scr = score_step("Mirror", clinician_last, mapping)
+        inq_scr = score_step("Inquire", clinician_last, mapping)
         score = (mir_scr.score + inq_scr.score) // 2
         reasons.extend(mir_scr.reasons)
         reasons.extend(inq_scr.reasons)
@@ -424,8 +424,8 @@ def score_step(step: str, person_last: str, clinician_last: str, mapping: Dict[s
     return ScoreResult(score=score, reasons=reasons)
 
 
-def evaluate_turn(person_last: str, clinician_last: str, mapping: Dict[str, Any]) -> Dict[str, Any]:
-    cls = classify_step(person_last, clinician_last, mapping)
+def evaluate_turn(clinician_last: str, mapping: Dict[str, Any]) -> Dict[str, Any]:
+    cls = classify_step(clinician_last, mapping)
 
     # Handle rapport/pleasantries (no AIMS step attempted)
     if cls.step not in AIMS_STEPS:
@@ -442,7 +442,7 @@ def evaluate_turn(person_last: str, clinician_last: str, mapping: Dict[str, Any]
             "tips": tips,
         }
 
-    scr = score_step(cls.step, person_last, clinician_last, mapping)
+    scr = score_step(cls.step, clinician_last, mapping)
 
     # Context-sensitive coaching tips: only include when an actionable improvement is evident.
     tips: List[str] = []
