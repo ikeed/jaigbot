@@ -125,7 +125,7 @@ def _is_small_talk(text: str) -> bool:
     return False
 
 
-def classify_step(person_last: str, clinician_last: str, mapping: Dict[str, Any]) -> ClassificationResult:
+def classify_step(clinician_last: str, mapping: Dict[str, Any]) -> ClassificationResult:
     """Classify the clinician's last message into one AIMS step.
 
     Implements the decision rules and tie-breakers from mapping['meta'].
@@ -134,7 +134,6 @@ def classify_step(person_last: str, clinician_last: str, mapping: Dict[str, Any]
     markers = meta.get("per_step_classification_markers", {})
     reasons: List[str] = []
     text = (clinician_last or "").strip()
-    pt = (person_last or "").strip().lower()
     lt = text.lower()
 
     mirror_stems = [
@@ -315,7 +314,6 @@ def score_step(step: str, person_last: str, clinician_last: str, mapping: Dict[s
     provide deterministic scoring. It is not intended to be exhaustive.
     """
     lt = (clinician_last or "").strip().lower()
-    pt = (person_last or "").strip().lower()
     reasons: List[str] = []
     score = 2  # start at 2 as 'decent', then adjust
 

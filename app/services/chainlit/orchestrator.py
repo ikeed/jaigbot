@@ -272,14 +272,18 @@ class ChainlitOrchestrator:
         current = self.session.session_id
         fixed = settings.FIXED_SESSION_ID or settings.SESSION_ID
         
-        if fixed: return fixed
-        if metadata_id: return metadata_id
-        if thread_id: return thread_id
+        if fixed:
+            return fixed
+        if metadata_id:
+            return metadata_id
+        if thread_id:
+            return thread_id
         return current or str(uuid.uuid4())
 
     def _get_user_info(self) -> Optional[Dict[str, Any]]:
         user = self.session.user
-        if not user: return None
+        if not user:
+            return None
         return {"identifier": user.identifier, "metadata": user.metadata}
 
     def _get_thread_id(self) -> Optional[str]:
@@ -288,12 +292,14 @@ class ChainlitOrchestrator:
     async def _bind_thread(self, session_id: str):
         thread_id = self._get_thread_id()
         user = self.session.user
-        if not thread_id or not user: return
+        if not thread_id or not user:
+            return
         
         try:
             from chainlit.data import get_data_layer
             dl = get_data_layer()
-            if not dl: return
+            if not dl:
+                return
             
             persisted = await dl.get_user(user.identifier) or await dl.create_user(user)
             if persisted:
@@ -322,7 +328,8 @@ class ChainlitOrchestrator:
 
     def _inject_scenario_into_scene(self, history: List[Dict[str, Any]], default_card: str):
         scene = self.session.scene or ""
-        if "Scenario details" in scene: return
+        if "Scenario details" in scene:
+            return
         
         card = self._recover_scenario_card(history) or default_card
         suffix = f"\n\nScenario details (use these exact names; do not change them):\n{card}\n\nIf asked for names, respond naturally but keep the same names."
@@ -335,9 +342,12 @@ class ChainlitOrchestrator:
         coaching = data.get("coaching")
         if coaching:
             parts = []
-            if coaching.get("step"): parts.append(f"Detected step: {coaching['step']}")
-            if coaching.get("reasons"): parts.append(f"Feedback: {coaching['reasons'][0]}")
-            if coaching.get("tips"): parts.append(f"Tip: {coaching['tips'][0]}")
+            if coaching.get("step"):
+                parts.append(f"Detected step: {coaching['step']}")
+            if coaching.get("reasons"):
+                parts.append(f"Feedback: {coaching['reasons'][0]}")
+            if coaching.get("tips"):
+                parts.append(f"Tip: {coaching['tips'][0]}")
             
             if parts:
                 coach_text = " | ".join(parts)

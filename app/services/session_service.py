@@ -19,8 +19,9 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple
 
-logger = logging.getLogger(__name__)
 from app.chat_roles import ROLE_USER, ROLE_ASSISTANT
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)

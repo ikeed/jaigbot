@@ -3,14 +3,13 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-
-from app.chat_roles import ROLE_ASSISTANT, get_ui_attributes
-
-logger = logging.getLogger(__name__)
 import re
 from typing import Any
 
+from app.chat_roles import ROLE_ASSISTANT, get_ui_attributes
 from app.telemetry.events import log_event as telemetry_log_event
+
+logger = logging.getLogger(__name__)
 
 
 DEFAULT_STEP_COVERAGE = {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0}
