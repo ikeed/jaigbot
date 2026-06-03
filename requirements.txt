@@ -12,7 +12,7 @@ PyJWT>=2.13.0
 python-dotenv>=1.2.0
 redis>=8.0.0
 jsonschema>=4.26.0
-types-jsonschema>=4.26.0.20251110
+types-jsonschema>=4.26.0.20260518
 
 # Dev / test (install with: pip install ".[dev]")
 pytest>=9.0.3
