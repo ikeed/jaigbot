@@ -15,12 +15,14 @@ terraform/crash.log
 !/.idea/runConfigurations/
 /.idea/runConfigurations/*
 !/.idea/runConfigurations/AIMSBot__Unified_.xml
+!/.idea/runConfigurations/PyTests__No_Integration_.xml
 /.vscode/
 
 # Coverage & test cache
 /.coverage
 /.coverage.ide
-/.coveragerc
+/.coverage.*
+/.test-reports/
 tests/.coverage
 /.pytest_cache/
 

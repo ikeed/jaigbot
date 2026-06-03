@@ -3,12 +3,22 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from app.models import ClassifierResult, Coaching
+from app.models import ChatRequest, ClassifierResult, Coaching
 from app.services.aims_coaching_handler import AimsCoachingHandler
+from app.services.aims_turn_coordinator import AimsTurnResult
 from app.services.chat_context import ChatContext
 
 
-def _handler(*, classifier, patient_reply, metrics, feedback, endgame):
+def _handler(
+    *,
+    classifier,
+    patient_reply,
+    metrics,
+    feedback,
+    endgame,
+    telemetry=None,
+    turn_coordinator=None,
+):
     return AimsCoachingHandler(
         memory_store={},
         vertex_config={
@@ -28,6 +38,78 @@ def _handler(*, classifier, patient_reply, metrics, feedback, endgame):
         metrics_service=metrics,
         coach_feedback_history_service=feedback,
         endgame_service=endgame,
+        telemetry=telemetry,
+        turn_coordinator=turn_coordinator,
+    )
+
+
+def _basic_context() -> ChatContext:
+    return ChatContext(
+        session_id="sid",
+        generated_session=False,
+        mem={"history": [], "full_history": []},
+        effective_character="Persona text",
+        effective_scene="Scene text",
+        system_instruction=None,
+        history_text="Clinician: hello",
+        person_last="",
+        user_info={"identifier": "clinician@example.com", "metadata": {"name": "Craig Burnett"}},
+    )
+
+
+def _metrics(summary=None):
+    metrics = Mock()
+    metrics.persist.return_value = None
+    metrics.build_summary.return_value = summary or {
+        "totalTurns": 1,
+        "perStepCounts": {"Announce": 1},
+        "runningAverage": {"Announce": 2.0},
+    }
+    return metrics
+
+
+def _feedback():
+    feedback = Mock()
+    feedback.filter_user_facing_reasons.side_effect = lambda reasons, step=None: list(reasons or [])
+    feedback.append.return_value = None
+    return feedback
+
+
+def _endgame(coach_post=None):
+    endgame = Mock()
+    endgame.check = AsyncMock(return_value=coach_post)
+    return endgame
+
+
+def _turn(
+    *,
+    step="Announce",
+    score=2,
+    reasons=None,
+    tips=None,
+    is_small_talk=False,
+    patient_reply="Thanks, Doctor.",
+):
+    classification_result = ClassifierResult(
+        is_small_talk=is_small_talk,
+        is_vaccine_relevant=True,
+        aims=Coaching(
+            step=step,
+            steps=[step] if step else [],
+            score=score,
+            reasons=reasons or ["Clear recommendation."],
+            tips=tips or ["Ask what questions they have."],
+        ),
+        safety_flags=[],
+        person_topic=None,
+        reasoning="test",
+    )
+    return AimsTurnResult(
+        cls_payload=classification_result.aims.model_dump(),
+        is_vaccine_relevant=True,
+        is_small_talk=is_small_talk,
+        classification_result=classification_result,
+        reply_payload={"patient_reply": patient_reply},
     )
 
 
@@ -91,19 +173,7 @@ async def test_handle_uses_injected_services(monkeypatch):
 
     monkeypatch.setattr(handler, "_load_aims_mapping", fake_mapping)
 
-    ctx = ChatContext(
-        session_id="sid",
-        generated_session=False,
-        mem={"history": [], "full_history": []},
-        effective_character="Persona text",
-        effective_scene="Scene text",
-        system_instruction=None,
-        history_text="Clinician: hello",
-        person_last="",
-        user_info={"identifier": "clinician@example.com", "metadata": {"name": "Craig Burnett"}},
-    )
-
-    from app.models import ChatRequest
+    ctx = _basic_context()
 
     result = await handler.handle(
         req=None,
@@ -133,3 +203,94 @@ async def test_handle_uses_injected_services(monkeypatch):
     assert feedback_call["reply_payload"] == {"patient_reply": "Thanks, Doctor."}
 
     endgame.check.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_handle_continues_when_telemetry_and_metrics_fail(monkeypatch):
+    telemetry = Mock()
+    for method_name in (
+        "classify_begin",
+        "reply_begin",
+        "classify_end",
+        "reply_end",
+        "turn_ok",
+    ):
+        getattr(telemetry, method_name).side_effect = RuntimeError(f"{method_name} failed")
+
+    metrics = _metrics()
+    metrics.persist.side_effect = RuntimeError("persist failed")
+    metrics.build_summary.side_effect = RuntimeError("summary failed")
+
+    feedback = _feedback()
+    endgame = _endgame()
+    turn_coordinator = Mock()
+    turn_coordinator.run = AsyncMock(return_value=_turn(patient_reply="Okay."))
+
+    handler = _handler(
+        classifier=Mock(),
+        patient_reply=Mock(),
+        metrics=metrics,
+        feedback=feedback,
+        endgame=endgame,
+        telemetry=telemetry,
+        turn_coordinator=turn_coordinator,
+    )
+
+    async def fake_mapping():
+        return {}
+
+    monkeypatch.setattr(handler, "_load_aims_mapping", fake_mapping)
+
+    result = await handler.handle(
+        req=Mock(headers={}),
+        body=ChatRequest(message="I recommend the vaccine today.", sessionId="sid", coach=True),
+        ctx=_basic_context(),
+    )
+
+    assert result["reply"] == "Okay."
+    assert result["session"] == {}
+    metrics.persist.assert_called_once()
+    metrics.build_summary.assert_called_once()
+    endgame.check.assert_awaited_once()
+    telemetry.classify_begin.assert_called_once()
+    telemetry.turn_ok.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_handle_small_talk_without_step_clears_coaching(monkeypatch):
+    feedback = _feedback()
+    endgame = _endgame()
+    turn_coordinator = Mock()
+    turn_coordinator.run = AsyncMock(return_value=_turn(
+        step=None,
+        score=None,
+        reasons=["rapport only"],
+        tips=[],
+        is_small_talk=True,
+        patient_reply="He's doing well.",
+    ))
+
+    handler = _handler(
+        classifier=Mock(),
+        patient_reply=Mock(),
+        metrics=_metrics(summary={"totalTurns": 1}),
+        feedback=feedback,
+        endgame=endgame,
+        turn_coordinator=turn_coordinator,
+    )
+
+    async def fake_mapping():
+        return {}
+
+    monkeypatch.setattr(handler, "_load_aims_mapping", fake_mapping)
+
+    result = await handler.handle(
+        req=Mock(headers={}),
+        body=ChatRequest(message="How has he been sleeping?", sessionId="sid", coach=True),
+        ctx=_basic_context(),
+    )
+
+    assert result["reply"] == "He's doing well."
+    assert result["coaching"]["step"] is None
+    assert result["coaching"]["score"] == 0
+    assert "LLM flagged as small talk" in result["coaching"]["reasons"]

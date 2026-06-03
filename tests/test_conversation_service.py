@@ -22,6 +22,13 @@ def test_topics_in_detects_multiple():
     assert found == {"sleep", "screen_time"}
 
 
+def test_topics_and_concern_helpers_handle_empty_inputs():
+    assert topics_in(None, TOPICAL_CUES) == set()
+    assert topics_in("sleep", {}) == set()
+    assert concern_topic(None, TOPICAL_CUES) is None
+    assert is_duplicate_concern([], "late bedtime", "sleep") is False
+
+
 def test_concern_topic_picks_first_match_by_order():
     # Order matters when both cues present
     text = "The screen is on at bedtime which ruins sleep"
@@ -84,6 +91,31 @@ def test_maybe_add_person_concern_skips_when_no_topic():
     assert st["parent_concerns"] == []
 
 
+def test_maybe_add_person_concern_skips_empty_acceptance_and_duplicates():
+    st = {"parent_concerns": []}
+
+    maybe_add_person_concern(st, "", TOPICAL_CUES)
+    maybe_add_person_concern(st, "That's helpful, the sleep plan makes sense.", TOPICAL_CUES)
+    assert st["parent_concerns"] == []
+
+    maybe_add_person_concern(st, "I'm worried about sleep.", TOPICAL_CUES)
+    maybe_add_person_concern(st, "I'm worried about sleep.", TOPICAL_CUES)
+    assert len(st["parent_concerns"]) == 1
+
+
+def test_materials_followup_acceptance_requires_plan_cue_and_no_active_concern():
+    st = {"parent_concerns": []}
+
+    maybe_add_person_concern(
+        st,
+        "I want a handout because I still worry about trust.",
+        TOPICAL_CUES,
+        llm_topic="trust",
+    )
+
+    assert st["parent_concerns"][0]["topic"] == "trust"
+
+
 def test_mark_mirrored_multi_prefers_clinician_topics():
     st = {"parent_concerns": [
         {"desc": "late bedtime", "topic": "sleep", "is_mirrored": False, "is_secured": False},
@@ -104,6 +136,42 @@ def test_mark_mirrored_multi_fallbacks_when_no_topics_found():
     mark_mirrored_multi(st, clinician_text="hello there", person_text="random", topical_cues=TOPICAL_CUES)
     # Should mirror the first unmirrored concern as final fallback
     assert any(c["is_mirrored"] for c in st["parent_concerns"]) is True
+
+
+def test_mark_mirrored_multi_uses_person_topic_then_llm_topic():
+    st = {"parent_concerns": [
+        {"desc": "late bedtime", "topic": "sleep", "is_mirrored": False, "is_secured": False},
+        {"desc": "too much screen", "topic": "screen_time", "is_mirrored": False, "is_secured": False},
+    ]}
+
+    mark_mirrored_multi(st, clinician_text="I hear you.", person_text="The tablet is too much", topical_cues=TOPICAL_CUES)
+    assert st["parent_concerns"][1]["is_mirrored"] is True
+
+    st = {"parent_concerns": [
+        {"desc": "late bedtime", "topic": "sleep", "is_mirrored": False, "is_secured": False},
+        {"desc": "too much screen", "topic": "screen_time", "is_mirrored": False, "is_secured": False},
+    ]}
+    mark_mirrored_multi(
+        st,
+        clinician_text="Wanting to look into it yourself is reasonable.",
+        person_text="no keyword",
+        topical_cues=TOPICAL_CUES,
+        llm_topic="screen_time",
+    )
+    assert st["parent_concerns"][1]["is_mirrored"] is True
+
+
+def test_mark_mirrored_helpers_noop_without_concerns_or_unmirrored_items():
+    empty = {}
+    mark_mirrored_multi(empty, clinician_text="sleep", person_text="sleep", topical_cues=TOPICAL_CUES)
+    mark_best_match_mirrored(empty, person_text="sleep", topical_cues=TOPICAL_CUES)
+    assert empty == {}
+
+    mirrored = {"parent_concerns": [
+        {"desc": "late bedtime", "topic": "sleep", "is_mirrored": True, "is_secured": False},
+    ]}
+    mark_best_match_mirrored(mirrored, person_text="no topic", topical_cues=TOPICAL_CUES)
+    assert mirrored["parent_concerns"][0]["is_mirrored"] is True
 
 
 def test_mark_best_match_mirrored_uses_person_text():
@@ -149,3 +217,22 @@ def test_mark_secured_by_topic_does_not_guess_between_multiple_concerns():
     ]}
     mark_secured_by_topic(st, clinician_text="no match text", topical_cues=TOPICAL_CUES)
     assert not any(c["is_secured"] for c in st["parent_concerns"])
+
+
+def test_mark_secured_by_topic_uses_llm_topic_and_noops_without_candidates():
+    empty = {}
+    mark_secured_by_topic(empty, clinician_text="sleep", topical_cues=TOPICAL_CUES)
+    assert empty == {}
+
+    st = {"parent_concerns": [
+        {"desc": "late bedtime", "topic": "sleep", "is_mirrored": True, "is_secured": False},
+        {"desc": "too much screen", "topic": "screen_time", "is_mirrored": True, "is_secured": False},
+    ]}
+    mark_secured_by_topic(st, clinician_text="no keyword", topical_cues=TOPICAL_CUES, llm_topic="screen_time")
+    assert st["parent_concerns"][1]["is_secured"] is True
+
+    no_candidate = {"parent_concerns": [
+        {"desc": "late bedtime", "topic": "sleep", "is_mirrored": False, "is_secured": False},
+    ]}
+    mark_secured_by_topic(no_candidate, clinician_text="no keyword", topical_cues=TOPICAL_CUES)
+    assert no_candidate["parent_concerns"][0]["is_secured"] is False

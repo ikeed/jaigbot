@@ -105,11 +105,12 @@ async def test_auth_callback_success(monkeypatch):
     assert user.identifier == "admin"
 
 @pytest.mark.asyncio
-async def test_on_logout():
+async def test_on_logout(monkeypatch):
     mock_request = MagicMock()
     mock_response = MagicMock()
-    mock_user = MagicMock(identifier="test-user")
-    mock_cl.user_session.get.return_value = mock_user
+    session_manager = MagicMock()
+    session_manager.get_user_identifier.return_value = "test-user"
+    monkeypatch.setattr(chainlit_app, "session_manager", session_manager)
 
     with patch("chainlit_app.clear_persistent_session_id") as mock_clear:
         await chainlit_app.on_logout(mock_request, mock_response)

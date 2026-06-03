@@ -180,12 +180,14 @@ class AimsCoachingHandler:
         # Step 1 & 2: Unified Classification (LLM with deterministic fallback)
         cls_start = time.time()
         reply_start = time.time()
-        self.telemetry.classify_begin(
+        self._emit_telemetry(
+            "classify_begin",
             session_id=ctx.session_id,
             user_info=ctx.user_info,
             request_id=request_id,
         )
-        self.telemetry.reply_begin(
+        self._emit_telemetry(
+            "reply_begin",
             session_id=ctx.session_id,
             user_info=ctx.user_info,
             request_id=request_id,
@@ -261,7 +263,8 @@ class AimsCoachingHandler:
         except Exception as e:
             self.logger.debug("Failed to snapshot model used: %s", e)
             model_used_cls = self.model_id
-        self.telemetry.classify_end(
+        self._emit_telemetry(
+            "classify_end",
             session_id=ctx.session_id,
             request_id=request_id,
             started=cls_start,
@@ -281,7 +284,10 @@ class AimsCoachingHandler:
         )
 
         # Step 4: Persist AIMS metrics (after state update)
-        self.metrics_service.persist(mem, cls_payload)
+        try:
+            self.metrics_service.persist(mem, cls_payload)
+        except Exception as e:
+            self.logger.debug("AIMS metrics persist failed: %s", e)
 
         # Record the clinician turn before any coaching note so replay keeps
         # the same order the live UI showed: user -> coach -> assistant.
@@ -303,7 +309,8 @@ class AimsCoachingHandler:
         except Exception as e:
             self.logger.warning("Failed to snapshot model used for reply: %s", e)
             model_used_reply = self.model_id
-        self.telemetry.reply_end(
+        self._emit_telemetry(
+            "reply_end",
             session_id=ctx.session_id,
             request_id=request_id,
             started=reply_start,
@@ -325,7 +332,11 @@ class AimsCoachingHandler:
         self._append_assistant_history(mem, reply_payload.get("patient_reply", ""))
         
         # Step 7: Build session metrics
-        session_obj = self.metrics_service.build_summary(mem)
+        try:
+            session_obj = self.metrics_service.build_summary(mem)
+        except Exception as e:
+            self.logger.debug("AIMS metrics summary failed: %s", e)
+            session_obj = {}
         
         # Step 8: Check for end-game scenarios
         coach_post = await self.endgame_service.check(mem, reply_payload, session_obj, ctx.session_id)
@@ -344,7 +355,8 @@ class AimsCoachingHandler:
         latency_ms = int((time.time() - started) * 1000)
         
         # Log successful completion
-        self.telemetry.turn_ok(
+        self._emit_telemetry(
+            "turn_ok",
             latency_ms=latency_ms,
             session_id=ctx.session_id,
             user_info=ctx.user_info,
@@ -394,6 +406,13 @@ class AimsCoachingHandler:
         except Exception as e:
             self.logger.warning("AIMS mapping failed to load: %s", e)
             return {}
+
+    def _emit_telemetry(self, method_name: str, **kwargs: Any) -> None:
+        """Emit non-critical telemetry without letting logging failures abort chat."""
+        try:
+            getattr(self.telemetry, method_name)(**kwargs)
+        except Exception as e:
+            self.logger.debug("AIMS telemetry %s failed: %s", method_name, e)
     
     def _load_mem(self, session_id: str) -> Optional[Dict[str, Any]]:
         """Load session memory once. Returns None if memory is disabled."""

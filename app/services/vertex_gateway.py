@@ -40,6 +40,15 @@ class VertexGateway:
             return str(result[0])
         return str(result)
 
+    @staticmethod
+    def _log_fallback(log_fallback: Optional[Callable], model_id: str) -> None:
+        if not log_fallback:
+            return
+        try:
+            log_fallback(model_id)
+        except Exception:
+            pass
+
     def generate_text(
         self,
         prompt: str,
@@ -65,8 +74,7 @@ class VertexGateway:
                 return self._normalize_result(result)
             except Exception as e:
                 last_err = e
-                if log_fallback:
-                    log_fallback(mid)
+                self._log_fallback(log_fallback, mid)
                 continue
         if last_err:
             raise last_err
@@ -100,8 +108,7 @@ class VertexGateway:
                 return self._normalize_result(result)
             except Exception as e:
                 last_err = e
-                if log_fallback:
-                    log_fallback(mid)
+                self._log_fallback(log_fallback, mid)
                 continue
         if last_err:
             raise last_err
@@ -128,8 +135,7 @@ class VertexGateway:
                 return result
             except Exception as e:
                 last_err = e
-                if log_fallback:
-                    log_fallback(mid)
+                self._log_fallback(log_fallback, mid)
                 continue
         if last_err:
             raise last_err
@@ -159,8 +165,7 @@ class VertexGateway:
                 return result
             except Exception as e:
                 last_err = e
-                if log_fallback:
-                    log_fallback(mid)
+                self._log_fallback(log_fallback, mid)
                 continue
         if last_err:
             raise last_err
