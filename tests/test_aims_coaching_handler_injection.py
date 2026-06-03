@@ -294,3 +294,59 @@ async def test_handle_small_talk_without_step_clears_coaching(monkeypatch):
     assert result["coaching"]["step"] is None
     assert result["coaching"]["score"] == 0
     assert "LLM flagged as small talk" in result["coaching"]["reasons"]
+
+
+@pytest.mark.asyncio
+async def test_handle_strips_initial_reply_headers_only_on_first_assistant_turn(monkeypatch):
+    feedback = _feedback()
+    endgame = _endgame()
+    turn_coordinator = Mock()
+    turn_coordinator.run = AsyncMock(return_value=_turn(
+        patient_reply="Person: Taylor Lopez\nPurpose: Flu vaccination\nHere is my reply.",
+    ))
+
+    handler = _handler(
+        classifier=Mock(),
+        patient_reply=Mock(),
+        metrics=_metrics(summary={"totalTurns": 1}),
+        feedback=feedback,
+        endgame=endgame,
+        turn_coordinator=turn_coordinator,
+    )
+
+    async def fake_mapping():
+        return {}
+
+    monkeypatch.setattr(handler, "_load_aims_mapping", fake_mapping)
+
+    result = await handler.handle(
+        req=Mock(headers={}),
+        body=ChatRequest(message="How are things going?", sessionId="sid", coach=True),
+        ctx=_basic_context(),
+    )
+
+    assert result["reply"] == "Here is my reply."
+
+    # Once there is prior assistant text, the handler should leave the reply alone.
+    second_ctx = _basic_context()
+    second_ctx = ChatContext(
+        session_id=second_ctx.session_id,
+        generated_session=second_ctx.generated_session,
+        mem={"history": [{"role": "assistant", "content": "Existing reply"}], "full_history": []},
+        effective_character=second_ctx.effective_character,
+        effective_scene=second_ctx.effective_scene,
+        system_instruction=second_ctx.system_instruction,
+        history_text=second_ctx.history_text,
+        person_last="Existing reply",
+        user_info=second_ctx.user_info,
+    )
+    turn_coordinator.run = AsyncMock(return_value=_turn(
+        patient_reply="Person: Taylor Lopez\nPurpose: Flu vaccination\nHere is my reply.",
+    ))
+    result = await handler.handle(
+        req=Mock(headers={}),
+        body=ChatRequest(message="How are things going?", sessionId="sid", coach=True),
+        ctx=second_ctx,
+    )
+
+    assert result["reply"] == "Person: Taylor Lopez\nPurpose: Flu vaccination\nHere is my reply."

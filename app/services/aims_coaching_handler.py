@@ -230,7 +230,7 @@ class AimsCoachingHandler:
 
         # Apply post-processors to BOTH LLM and fallback results
         # Vaccine relevance gate
-        mem = ctx.mem or {}
+        mem = ctx.mem
         aims_state = mem.get(KEY_AIMS_STATE, {}) or {}
         parent_concerns = aims_state.get("parent_concerns", [])
         recent_concerns_texts = [c["desc"] for c in parent_concerns] if parent_concerns else []
@@ -318,15 +318,7 @@ class AimsCoachingHandler:
             text_len=len((reply_payload.get("patient_reply") or "").strip()),
         )
 
-        # If this is the first assistant turn in the session, strip any accidental
-        # scenario headers from the parent reply to avoid duplicating the UI card.
-        try:
-            if not (ctx.person_last or "").strip():
-                pr = reply_payload.get("patient_reply", "")
-                reply_payload["patient_reply"] = strip_appointment_headers(pr)
-        except Exception as e:
-            self.logger.warning("Failed to strip appointment headers: %s", e)
-            pass
+        self._strip_initial_reply_headers(reply_payload, ctx.person_last)
         
         # Step 6: Update conversation history
         self._append_assistant_history(mem, reply_payload.get("patient_reply", ""))
@@ -413,6 +405,24 @@ class AimsCoachingHandler:
             getattr(self.telemetry, method_name)(**kwargs)
         except Exception as e:
             self.logger.debug("AIMS telemetry %s failed: %s", method_name, e)
+
+    def _strip_initial_reply_headers(
+        self,
+        reply_payload: Dict[str, Any],
+        person_last: str,
+    ) -> None:
+        """Remove scenario headers from the first assistant reply.
+
+        The UI already shows the scenario card for the initial turn, so we
+        keep the assistant text focused on the actual reply content.
+        """
+        try:
+            if (person_last or "").strip():
+                return
+            reply = reply_payload.get("patient_reply", "")
+            reply_payload["patient_reply"] = strip_appointment_headers(reply)
+        except Exception as e:
+            self.logger.warning("Failed to strip appointment headers: %s", e)
     
     def _load_mem(self, session_id: str) -> Optional[Dict[str, Any]]:
         """Load session memory once. Returns None if memory is disabled."""
