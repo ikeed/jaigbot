@@ -1,5 +1,4 @@
 import json
-import logging
 
 from app.telemetry.events import truncate_for_log, log_event
 

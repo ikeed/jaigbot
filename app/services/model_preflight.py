@@ -51,7 +51,7 @@ async def run_model_preflight(application: Any, *, settings: Any, logger: loggin
         application.state.model_check["httpStatusPrimary"] = code
 
         if code == 404:
-            _check_models_list(application, settings=settings, session=session)
+            check_models_list(application, settings=settings, session=session)
         else:
             application.state.model_check["httpStatus"] = code
             application.state.model_check["available"] = True if code == 200 else "unknown"
@@ -73,7 +73,7 @@ async def run_model_preflight(application: Any, *, settings: Any, logger: loggin
         application.state.model_check["error"] = str(exc)
 
 
-def _check_models_list(application: Any, *, settings: Any, session: Any) -> None:
+def check_models_list(application: Any, *, settings: Any, session: Any) -> None:
     application.state.model_check["available"] = "unknown"
     loc = settings.VERTEX_LOCATION
     host = "aiplatform.googleapis.com" if str(loc).lower() == "global" else f"{loc}-aiplatform.googleapis.com"

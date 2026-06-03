@@ -1,10 +1,11 @@
-from app.config import settings
+import logging
+
 import pytest
 from fastapi.testclient import TestClient
+
+from app.config import settings
 from app.main import app as fastapi_app
-import json
-import logging
-from unittest.mock import MagicMock
+
 
 def test_chat_with_user_info(monkeypatch):
     """Verify that userInfo in ChatRequest is accepted and logged."""

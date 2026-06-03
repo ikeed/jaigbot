@@ -8,7 +8,7 @@ import random
 import time
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, Optional
+from typing import Any, Callable, Iterable
 
 from app.config import DEFAULT_CHARACTER, DEFAULT_SCENE, settings
 

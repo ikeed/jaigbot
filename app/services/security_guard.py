@@ -42,4 +42,4 @@ class JailbreakGuard:
         u = (user_text or "").lower()
         matched = [c for c in self.LEGACY_CUES if c in u]
         jb = bool(sec_is_jailbreak_or_meta(user_text))
-        return (jb or len(matched) > 0, matched)
+        return jb or len(matched) > 0, matched

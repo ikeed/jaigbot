@@ -1,4 +1,3 @@
-from app.config import settings
 import pytest
 
 from app.services.vertex_gateway import VertexGateway
@@ -21,7 +20,7 @@ class FakeClient:
         if isinstance(action, Exception):
             raise action
         if action == "tuple":
-            return ("tuple-ok %s" % self.model_id, {"usage": 1})
+            return "tuple-ok %s" % self.model_id, {"usage": 1}
         if callable(action):
             return action(*args, **kwargs)
         return str(action)

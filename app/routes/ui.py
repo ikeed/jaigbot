@@ -1,26 +1,24 @@
+from pathlib import Path
+
+from chainlit.auth import clear_auth_cookie
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from chainlit.auth import clear_auth_cookie
+
 from app.chainlit_thread_state import get_current_thread_id
 from app.config import settings
-from app.security.auth import authenticated_user_identifier, clear_persistent_session_id
-from app.security.oauth import get_enabled_oauth_providers, is_valid_env_val
 from app.constants import (
     TEMPLATE_LOGIN,
     TEMPLATE_DUPLICATE,
     ROUTE_ROOT,
-    ROUTE_LOGIN,
-    ROUTE_LOGOUT,
     ROUTE_DUPLICATE,
     ROUTE_CHAT_LOGIN,
     ROUTE_CHAT_LOGOUT,
     ROUTE_OAUTH_CALLBACK,
     PATH_CHAT
 )
-
-import os
-from pathlib import Path
+from app.security.auth import authenticated_user_identifier, clear_persistent_session_id
+from app.security.oauth import get_enabled_oauth_providers, is_valid_env_val
 
 router = APIRouter()
 # Base directory for templates relative to this file (app/routes/ui.py)

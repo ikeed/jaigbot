@@ -4,8 +4,8 @@ Tests for the Announce+Inquire compound step and related coaching fixes.
 Covers:
 1. Step normalization: [Announce, Inquire] → Announce+Inquire when not yet announced
 2. Phase guard: Announce+Inquire → Inquire when already announced
-3. _update_observational_state: Announce+Inquire sets announced=True + first_inquire_done=True
-4. _persist_aims_metrics: Announce+Inquire expands into both Announce and Inquire counts
+3. AimsStateService.update_observational_state: Announce+Inquire sets announced=True + first_inquire_done=True
+4. AimsMetricsService.persist: Announce+Inquire expands into both Announce and Inquire counts
 5. "Securing before inquiring" coaching when first_inquire_done is False
 6. Question Guard scoping: Secure turns ending with ? are not exempt from Inquire flip
 """
@@ -14,6 +14,8 @@ import pytest
 from unittest.mock import MagicMock, AsyncMock
 
 from app.models import Coaching, ClassifierResult
+from app.services.aims_metrics_service import AimsMetricsService
+from app.services.aims_state_service import AimsStateService
 from app.services.classifier_service import ClassifierService
 
 
@@ -118,9 +120,6 @@ class TestObservationalStateAnnounceInquire:
 
     def test_announce_inquire_sets_announced_and_inquire(self):
         """Announce+Inquire should set announced=True and first_inquire_done=True."""
-        from app.services.aims_coaching_handler import AimsCoachingHandler
-
-        handler = AimsCoachingHandler.__new__(AimsCoachingHandler)
         state = {
             "announced": False,
             "phase": "PreAnnounce",
@@ -128,7 +127,9 @@ class TestObservationalStateAnnounceInquire:
             "parent_concerns": [],
             "mirrors_done": 0,
         }
-        handler._update_observational_state(state, "Announce+Inquire", ["Announce", "Inquire"])
+        AimsStateService(logger=MagicMock()).update_observational_state(
+            state, "Announce+Inquire", ["Announce", "Inquire"]
+        )
         assert state["announced"] is True
         assert state["first_inquire_done"] is True
         assert state["phase"] == "InquireMirror"
@@ -143,12 +144,7 @@ class TestMetricsExpansionAnnounceInquire:
     @pytest.mark.asyncio
     async def test_announce_inquire_expands_into_both(self):
         """Announce+Inquire should expand into both Announce and Inquire metrics."""
-        from app.services.aims_coaching_handler import AimsCoachingHandler
         import time
-
-        handler = AimsCoachingHandler.__new__(AimsCoachingHandler)
-        handler.memory_enabled = True
-        handler.logger = MagicMock()
 
         mem = {
             "history": [],
@@ -156,10 +152,9 @@ class TestMetricsExpansionAnnounceInquire:
             "scene": None,
             "updated": time.time(),
         }
-        handler.memory_store = {"test-session": mem}
 
         cls_payload = {"step": "Announce+Inquire", "score": 3, "reasons": [], "tips": []}
-        handler._persist_aims_metrics(mem, cls_payload)
+        AimsMetricsService(logger=MagicMock()).persist(mem, cls_payload)
 
         aims = mem["aims"]
         assert aims["perStepCounts"]["Announce+Inquire"] == 1
@@ -178,10 +173,6 @@ class TestSecuringBeforeInquiringCoaching:
     def test_secure_before_inquire_coaching(self):
         """When step is Secure and first_inquire_done is False,
         coaching should say 'Securing before inquiring'."""
-        from app.services.aims_coaching_handler import AimsCoachingHandler
-
-        handler = AimsCoachingHandler.__new__(AimsCoachingHandler)
-        # Use existing _TOPICAL_CUES in the class
         state = {
             "announced": True,
             "phase": "PreAnnounce",
@@ -197,7 +188,7 @@ class TestSecuringBeforeInquiringCoaching:
             "tips": []
         }
 
-        handler._apply_coaching_guidance(
+        AimsStateService(logger=MagicMock()).apply_coaching_guidance(
             cls_payload, "Secure", state,
             "The vaccine is safe and effective. Most children do fine.",
             "",
@@ -211,10 +202,6 @@ class TestSecuringBeforeInquiringCoaching:
     def test_secure_after_inquire_no_coaching_about_inquiring(self):
         """When first_inquire_done is True and concerns are mirrored,
         should NOT get 'Securing before inquiring' warning."""
-        from app.services.aims_coaching_handler import AimsCoachingHandler
-
-        handler = AimsCoachingHandler.__new__(AimsCoachingHandler)
-        # Use existing _TOPICAL_CUES in the class
         state = {
             "announced": True,
             "phase": "InquireMirror",
@@ -232,7 +219,7 @@ class TestSecuringBeforeInquiringCoaching:
             "tips": []
         }
 
-        handler._apply_coaching_guidance(
+        AimsStateService(logger=MagicMock()).apply_coaching_guidance(
             cls_payload, "Secure", state,
             "The vaccine is safe and effective.",
             "",

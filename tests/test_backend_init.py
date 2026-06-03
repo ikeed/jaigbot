@@ -1,7 +1,7 @@
-import pytest
 from fastapi.testclient import TestClient
-from app.main import app, MEMORY_STORE
+
 from app.chat_roles import ROLE_SYSTEM
+from app.main import app, MEMORY_STORE
 from app.services.persona_service import persona_counted_key, persona_counts_key
 
 client = TestClient(app)

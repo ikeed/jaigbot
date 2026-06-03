@@ -1,6 +1,6 @@
 from typing import List, Optional
-from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, ROLE_COACH, get_ui_attributes
-from app.services.persona_service import load_robust_persona
+
+from app.chat_roles import ROLE_ASSISTANT, get_ui_attributes
 
 
 def build_system_instruction(effective_character: Optional[str], effective_scene: Optional[str]) -> Optional[str]:
@@ -38,7 +38,7 @@ def recent_context(turns: list[dict], n_turns: int) -> str:
     """
     if not turns:
         return ""
-    tail = turns[-(n_turns) :]
+    tail = turns[-n_turns:]
     lines: List[str] = []
     for t in tail:
         role = t.get("role")

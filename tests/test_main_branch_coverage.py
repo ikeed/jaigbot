@@ -3,15 +3,11 @@ Additional tests for main.py to improve branch coverage to 85%+
 
 These tests target specific uncovered branches in the FastAPI application.
 """
-import pytest
-import os
-import json
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock, patch
+
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.models import ChatRequest
-
 
 client = TestClient(app)
 

@@ -12,10 +12,12 @@ from __future__ import annotations
 
 import functools
 import json
-import os
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from docs.aims import aims_mapping
 
 # Regex patterns for small-talk detection of generic well-being questions
 _GENERIC_WELLBEING_Q = re.compile(
@@ -62,32 +64,10 @@ class ScoreResult:
 
 @functools.lru_cache(maxsize=1)
 def load_mapping(path: Optional[str] = None) -> Dict[str, Any]:
-    """Load aims_mapping.json.
-
-    If path is None, attempt to resolve it at docs/aims/aims_mapping.json
-    relative to the repository root (in tests, cwd is repo root).
-    """
-    candidates: List[str] = []
-    if path:
-        candidates.append(path)
-    # relative to project root
-    candidates.append(os.path.join("docs", "aims", "aims_mapping.json"))
-    # sometimes tests may run from a nested cwd; try up to two levels up
-    candidates.append(os.path.join("..", "docs", "aims", "aims_mapping.json"))
-    candidates.append(os.path.join("..", "..", "docs", "aims", "aims_mapping.json"))
-
-    last_err: Optional[Exception] = None
-    for p in candidates:
-        try:
-            with open(p, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:  # pragma: no cover (only on failure path)
-            last_err = e
-            continue
-    # If all failed, raise the last error or a friendly message
-    if last_err:
-        raise FileNotFoundError(f"Unable to load aims_mapping.json; tried: {candidates}: {last_err}")
-    raise FileNotFoundError(f"Unable to load aims_mapping.json; tried: {candidates}")
+    """Load the operational AIMS mapping from an override or bundled path."""
+    mapping_path = Path(path) if path else aims_mapping
+    with mapping_path.open("r", encoding="utf-8") as f:
+        return json.load(f)
 
 
 def _stem_match(text: str, stems: List[str]) -> bool:

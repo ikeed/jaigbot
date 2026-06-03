@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from app.services.model_preflight import _check_models_list
+from app.services.model_preflight import check_models_list
 
 
 def test_check_models_list_treats_malformed_json_as_no_match():
@@ -21,7 +21,7 @@ def test_check_models_list_treats_malformed_json_as_no_match():
         MODEL_ID="test-model",
     )
 
-    _check_models_list(application, settings=settings, session=Session())
+    check_models_list(application, settings=settings, session=Session())
 
     assert application.state.model_check["listCount"] == 0
     assert application.state.model_check["listMatched"] is False

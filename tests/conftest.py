@@ -1,7 +1,8 @@
 import os
 import sys
-import pytest
 from unittest.mock import patch
+
+import pytest
 
 # Ensure project root is on sys.path for `import app.*`
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -144,7 +145,6 @@ def vertex_client_mock(monkeypatch):
     instead of making real REST calls (which fail with 403 in tests).
     """
     import json
-    from app.vertex import VertexClient
 
     class MockVertexClient:
         def __init__(self, *args, **kwargs):

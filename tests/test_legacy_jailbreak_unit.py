@@ -1,9 +1,8 @@
-import types
 import pytest
 
-from app.services.legacy_chat_handler import LegacyChatHandler
-from app.services.chat_context import ChatContext
 from app.models import ChatRequest
+from app.services.chat_context import ChatContext
+from app.services.legacy_chat_handler import LegacyChatHandler
 
 
 class DummyLogger:

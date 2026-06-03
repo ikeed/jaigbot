@@ -4,7 +4,7 @@ Regression tests derived from real session log analysis.
 Session 46fb03fa showed four bugs:
 1. Announce never detected because LLM focused on trailing Inquire and missed
    "What I recommend for kids Emily's age..." → needs positive Announce detector.
-2. announced flag never set True because _update_observational_state only checked
+2. announced flag never set True because observational state only checked
    step_main, not the full steps list.
 3. Sarah's symptom description ("fever, cough, watery eyes") was registered as a
    vaccine 'side_effects' concern because 'fever' was in _TOPICAL_CUES.

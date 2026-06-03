@@ -1,7 +1,6 @@
-from app.config import settings
-import json
 from fastapi.testclient import TestClient
 
+from app.config import settings
 from app.main import app
 
 client = TestClient(app)
@@ -14,7 +13,6 @@ def test_whole_conversation_multi_turns(monkeypatch):
       - records prompts sent for each turn
       - returns deterministic replies so we can assert history growth
     """
-    import app.main as m
 
     # Ensure env values are present for route checks
     monkeypatch.setattr(settings, "PROJECT_ID", "test-project")

@@ -5,10 +5,9 @@ Replays the dialog from conversation.json plus two extra turns.
 Uses live LLM for classification.
 """
 import pytest
-from unittest.mock import patch
 
-from app.config import settings
 import app.main as m
+from app.config import settings
 from .base import (
     TranscriptReplayTest,
     TurnExpectation,

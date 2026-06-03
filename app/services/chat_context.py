@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Optional, Any, Tuple
 import time
+from dataclasses import dataclass
+from typing import Optional, Any
 
+from app.chat_roles import ROLE_ASSISTANT
 from app.persona import DEFAULT_CHARACTER, DEFAULT_SCENE
-from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, ROLE_COACH
-from app.services.session_service import SessionService
 from app.services.chat_helpers import build_system_instruction, format_history
+from app.services.session_service import SessionService
 
 
 @dataclass(frozen=True)

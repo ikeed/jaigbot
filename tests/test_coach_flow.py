@@ -1,12 +1,11 @@
 import json
-import re
+
 import pytest
 from fastapi.testclient import TestClient
 
 from app.config import settings
 from app.main import app
 from app.vertex import VertexAIError
-
 
 client = TestClient(app)
 
@@ -180,7 +179,6 @@ def test_coach_path_safety_violation(monkeypatch, caplog):
 
 
 def test_flag_off_hides_coaching(monkeypatch):
-    import app.main as m
     from app.services import vertex_helpers
 
     # Force coaching off at the module level where chat() reads it

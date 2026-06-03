@@ -1,31 +1,28 @@
 import logging
 import uuid
-import json
-import time
 from typing import Any, Dict, List, Optional
+
 import chainlit as cl
 from chainlit.context import context as cl_context
 
-from app.config import settings
-from app.constants import (
-    MSG_INTRO_REQUIRED,
-    MSG_DUPLICATE_TAB,
-    MSG_RESUME_THREAD,
-    SESSION_INTRO_PENDING,
-)
+from app.chainlit_thread_state import get_current_thread_id, set_current_thread_id
 from app.chat_roles import (
     ROLE_ASSISTANT,
     ROLE_COACH,
     ROLE_SYSTEM,
     ROLE_USER,
-    is_scenario_card,
-    get_ui_attributes
+    is_scenario_card
+)
+from app.config import settings
+from app.constants import (
+    MSG_INTRO_REQUIRED,
+    MSG_DUPLICATE_TAB,
+    MSG_RESUME_THREAD,
 )
 from app.persona import DEFAULT_CHARACTER, DEFAULT_SCENE
 from app.services.chainlit.backend_client import BackendClient
-from app.services.chainlit.ui_handler import UIHandler
 from app.services.chainlit.session_manager import SessionManager
-from app.chainlit_thread_state import get_current_thread_id, set_current_thread_id
+from app.services.chainlit.ui_handler import UIHandler
 
 logger = logging.getLogger(__name__)
 

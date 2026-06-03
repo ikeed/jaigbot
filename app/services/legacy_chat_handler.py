@@ -12,15 +12,14 @@ Behavior-preserving extraction from the else/fallback path in app.main.chat().
 from __future__ import annotations
 
 import time
-from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, ROLE_COACH, get_ui_attributes
 from typing import Any, Dict
 
 from fastapi import Request
 
+from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, get_ui_attributes
 from app.models import ChatRequest
 from app.services.chat_context import ChatContext
 from app.services.security_guard import JailbreakGuard
-from app.services.vertex_helpers import vertex_call_with_fallback_text
 from app.vertex import VertexClient
 
 
@@ -188,7 +187,7 @@ class LegacyChatHandler:
             
             # Trim working history (coach-aware)
             from app.services.session_service import SessionService
-            mem["history"] = SessionService._trim_history(mem["history"], self.memory_max_turns)
+            mem["history"] = SessionService.trim_history(mem["history"], self.memory_max_turns)
             
             mem["updated"] = now
             self.memory_store[session_id] = mem
