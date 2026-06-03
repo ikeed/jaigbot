@@ -1,18 +1,18 @@
-fastapi~=0.136.0
+fastapi~=0.136.3
 uvicorn[standard]~=0.48.0
 google-genai>=2.7.0
-google-cloud-storage~=3.10.0
+google-cloud-storage~=3.11.0
 google-cloud-aiplatform
 protobuf
 pydantic-settings>=2.14.1
-pydantic>=2.13.0
-chainlit>=2.11.0
+pydantic>=2.13.4
+chainlit>=2.11.1
 httpx>=0.28.1
 PyJWT>=2.13.0
-python-dotenv>=1.2.0
+python-dotenv>=1.2.2
 redis>=8.0.0
 jsonschema>=4.26.0
-types-jsonschema>=4.26.0.20251110
+types-jsonschema>=4.26.0.20260518
 
 # Dev / test (install with: pip install ".[dev]")
 pytest>=9.0.3
