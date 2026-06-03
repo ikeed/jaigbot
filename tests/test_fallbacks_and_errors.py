@@ -19,7 +19,6 @@ def test_model_fallback_succeeds(monkeypatch):
 
     primary = "primary-model"
     fallback = "fallback-model"
-    current_model_state = primary
 
     monkeypatch.setattr(settings, "PROJECT_ID", "proj")
     monkeypatch.setattr(settings, "REGION", "us-central1")

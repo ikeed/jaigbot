@@ -13,3 +13,16 @@ build-backend = "setuptools.backends._legacy:_Backend"
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
+
+[tool.ruff.lint.per-file-ignores]
+# These entrypoints intentionally sanitize environment variables before importing
+# app modules that read settings at import time.
+"chainlit_app.py" = ["E402"]
+"run_app.py" = ["E402"]
+
+[tool.mypy]
+implicit_optional = true
+
+[[tool.mypy.overrides]]
+module = ["google.cloud", "google.cloud.*"]
+ignore_missing_imports = true

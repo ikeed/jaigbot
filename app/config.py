@@ -162,7 +162,7 @@ class Settings(BaseSettings):
                 import google.auth
                 _, project = google.auth.default()
                 v = project
-            except Exception as e:
+            except Exception:
                 # Log debug message for visibility if google.auth failed
                 # This is common in environments without ADC or service accounts
                 pass

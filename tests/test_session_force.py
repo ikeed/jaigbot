@@ -44,8 +44,7 @@ def test_middleware_stale_session_bypass():
     # Init session
     client.post("/session", json={"sessionId": sid, "connectionId": "old-conn"})
     mem = MEMORY_STORE[sid]
-    original_updated = mem["updated"]
-    
+
     # Manually make it stale
     mem["updated"] = time.time() - 100
     MEMORY_STORE[sid] = mem

@@ -152,7 +152,7 @@ class ClassifierService:
                 
             self.logger.error("Unified classification failed, falling back: %s", e)
             return self._get_deterministic_fallback(
-                clinician_message, person_last, mapping
+                clinician_message, mapping
             )
 
     @staticmethod
@@ -236,12 +236,11 @@ class ClassifierService:
     def _get_deterministic_fallback(
         self,
         clinician_message: str,
-        person_last: str,
         mapping: Dict[str, Any],
     ) -> ClassifierResult:
         """Invoke the original deterministic engine as a fallback."""
         
-        fb = evaluate_turn(person_last, clinician_message, mapping)
+        fb = evaluate_turn(clinician_message, mapping)
         
         # Map deterministic 'evaluate_turn' result to ClassifierResult
         reasons = fb.get("reasons", [])

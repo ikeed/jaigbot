@@ -162,25 +162,24 @@ class TestClassifyStepBranches:
     
     def test_classify_step_empty_mapping(self):
         """Test classify_step with empty mapping"""
-        result = classify_step("I'm worried", "What concerns you?", {})
+        result = classify_step("What concerns you?", {})
         assert result.step == "Inquire"
     
     def test_classify_step_small_talk_detection(self):
         """Test classify_step detects small talk when no AIMS markers match"""
-        result = classify_step("", "Hi there! Great to see you both!", {})
+        result = classify_step("Hi there! Great to see you both!", {})
         assert result.step == ""  # No AIMS step
         assert "rapport/pleasantries" in result.reasons[0].lower()
         
     def test_classify_step_small_talk_question_not_inquire(self):
         """Test classify_step detects small talk cues"""
-        result = classify_step("", "Hi there! How has he been sleeping?", {})
+        result = classify_step("Hi there! How has he been sleeping?", {})
         # This might still be classified as Inquire, but covers the small talk detection branch
         assert result.step in ["Inquire", ""]
         
     def test_classify_step_mirror_with_new_info(self):
         """Test classify_step Mirror detection with new info"""
         result = classify_step(
-            "I'm scared", 
             "It sounds like you're worried, but the data shows vaccines are safe", 
             {}
         )
@@ -190,7 +189,6 @@ class TestClassifyStepBranches:
     def test_classify_step_didactic_secure(self):
         """Test classify_step didactic education mapping to Secure"""
         result = classify_step(
-            "I don't know", 
             "Studies show vaccines protect against outbreaks", 
             {}
         )
@@ -200,13 +198,13 @@ class TestClassifyStepBranches:
     def test_classify_step_edge_cases(self):
         """Test classify_step edge cases for branch coverage"""
         # Test various edge cases to hit different branches
-        result1 = classify_step("I'm worried", "The data shows vaccines are safe", {})
+        result1 = classify_step("The data shows vaccines are safe", {})
         assert result1.step in ["Secure", "Announce"]
         
-        result2 = classify_step("", "I understand your concerns", {})
+        result2 = classify_step("I understand your concerns", {})
         assert result2.step in ["Mirror", "Announce"]
         
-        result3 = classify_step("I'm hesitant", "We can do it today", {})
+        result3 = classify_step("We can do it today", {})
         # With empty mapping, no Secure (needs autonomy+safety) and no Announce markers
         assert result3.step in ["Secure", "Announce", ""]
         
@@ -218,7 +216,6 @@ class TestClassifyStepBranches:
         # "safe" isn't present either). With the inverted logic, messages that
         # don't match any AIMS marker fall through to rapport.
         result = classify_step(
-            "I'm thinking about it",
             "Thank you for sharing that with me.",
             {}
         )
@@ -233,7 +230,6 @@ class TestScoreStepBranches:
         """Test score_step Mirror with accuracy check gets bonus"""
         result = score_step(
             "Mirror", 
-            "I'm worried", 
             "It sounds like you're concerned. Did I capture that correctly?", 
             {}
         )
@@ -244,7 +240,6 @@ class TestScoreStepBranches:
         """Test score_step Mirror with weak reflective stem"""
         result = score_step(
             "Mirror", 
-            "I'm worried", 
             "I see that you have concerns", 
             {}
         )
@@ -255,7 +250,6 @@ class TestScoreStepBranches:
         """Test score_step Inquire that's not clearly open-ended"""
         result = score_step(
             "Inquire", 
-            "I'm unsure", 
             "You should consider the benefits", 
             {}
         )
@@ -266,7 +260,6 @@ class TestScoreStepBranches:
         """Test score_step Inquire with leading/judgmental phrasing"""
         result = score_step(
             "Inquire", 
-            "I heard myths", 
             "You don't believe those myths, right?", 
             {}
         )
@@ -277,7 +270,6 @@ class TestScoreStepBranches:
         """Test score_step Inquire with good open question"""
         result = score_step(
             "Inquire", 
-            "I'm concerned", 
             "What specific concerns do you have?", 
             {}
         )
@@ -288,7 +280,6 @@ class TestScoreStepBranches:
         """Test score_step Announce without clear recommendation"""
         result = score_step(
             "Announce", 
-            "I'm thinking", 
             "Vaccines are generally good for health", 
             {}
         )
@@ -299,7 +290,6 @@ class TestScoreStepBranches:
         """Test score_step Announce with rationale"""
         result = score_step(
             "Announce", 
-            "I'm not sure", 
             "I recommend the MMR today to protect against measles outbreaks", 
             {}
         )
@@ -310,7 +300,6 @@ class TestScoreStepBranches:
         """Test score_step Announce with dialogue invitation"""
         result = score_step(
             "Announce", 
-            "I'm considering", 
             "I recommend the MMR. How does that sound?", 
             {}
         )
@@ -321,7 +310,6 @@ class TestScoreStepBranches:
         """Test score_step Secure missing both autonomy and options"""
         result = score_step(
             "Secure", 
-            "I'm hesitant", 
             "The vaccine will help protect you", 
             {}
         )
@@ -332,7 +320,6 @@ class TestScoreStepBranches:
         """Test score_step Secure with autonomy and options"""
         result = score_step(
             "Secure", 
-            "I'm unsure", 
             "It's your decision. We can do it today or schedule for next week", 
             {}
         )
@@ -343,7 +330,6 @@ class TestScoreStepBranches:
         """Test score_step Secure with safety netting gets bonus"""
         result = score_step(
             "Secure", 
-            "I'm worried", 
             "It's your choice. We can do it today. Call if you have concerns", 
             {}
         )
@@ -358,7 +344,7 @@ class TestEvaluateTurnBranches:
     
     def test_evaluate_turn_small_talk_no_step(self):
         """Test evaluate_turn with small talk (no AIMS step)"""
-        result = evaluate_turn("", "Hi! Great to see you both!", {})
+        result = evaluate_turn("Hi! Great to see you both!", {})
         assert result["step"] is None
         assert result["score"] == 0
         assert "Rapport/pleasantries" in result["reasons"][0]
@@ -367,21 +353,21 @@ class TestEvaluateTurnBranches:
         
     def test_evaluate_turn_inquire_tips_why_question(self):
         """Test evaluate_turn Inquire tips for 'why' questions"""
-        result = evaluate_turn("I'm unsure", "Why don't you trust vaccines?", {})
+        result = evaluate_turn("Why don't you trust vaccines?", {})
         assert result["step"] == "Inquire"
         assert result["score"] < 3
         assert any("why" in tip.lower() for tip in result["tips"])
         
     def test_evaluate_turn_inquire_tips_leading_phrasing(self):
         """Test evaluate_turn Inquire tips for leading phrasing"""
-        result = evaluate_turn("I heard myths", "You don't believe that, right?", {})
+        result = evaluate_turn("You don't believe that, right?", {})
         assert result["step"] == "Inquire"
         assert result["score"] < 3
         assert any("leading" in tip.lower() or "judgmental" in tip.lower() for tip in result["tips"])
         
     def test_evaluate_turn_inquire_tips_decent_question(self):
         """Test evaluate_turn Inquire tips for decent open question"""
-        result = evaluate_turn("I'm concerned", "What specific concerns do you have?", {})
+        result = evaluate_turn("What specific concerns do you have?", {})
         assert result["step"] == "Inquire"
         # May or may not have tips depending on score, but should not crash
         assert isinstance(result["tips"], list)
@@ -389,7 +375,6 @@ class TestEvaluateTurnBranches:
     def test_evaluate_turn_mirror_tips_new_info(self):
         """Test evaluate_turn Mirror tips when introducing new info"""
         result = evaluate_turn(
-            "I'm scared", 
             "It sounds like you're worried, but the data shows it's safe", 
             {}
         )
@@ -399,7 +384,7 @@ class TestEvaluateTurnBranches:
         
     def test_evaluate_turn_mirror_tips_no_accuracy_check(self):
         """Test evaluate_turn Mirror tips when missing accuracy check"""
-        result = evaluate_turn("I'm worried", "It sounds like you're concerned about safety", {})
+        result = evaluate_turn("It sounds like you're concerned about safety", {})
         assert result["step"] == "Mirror"
         assert result["score"] < 3
         assert any("accuracy" in tip.lower() for tip in result["tips"])
@@ -409,7 +394,6 @@ class TestEvaluateTurnBranches:
         # Has recommendation + rationale but no invitation ("How does that sound?")
         # Needs real mapping so Announce linguistic markers are available.
         result = evaluate_turn(
-            "I'm thinking",
             "I recommend the MMR vaccine today to protect against measles outbreaks.",
             aims_mapping,
         )
@@ -419,7 +403,7 @@ class TestEvaluateTurnBranches:
         
     def test_evaluate_turn_announce_tips_no_rationale(self, aims_mapping):
         """Test evaluate_turn Announce tips when missing rationale"""
-        result = evaluate_turn("I'm not sure", "I recommend the MMR vaccine", aims_mapping)
+        result = evaluate_turn("I recommend the MMR vaccine", aims_mapping)
         assert result["step"] == "Announce"
         assert result["score"] < 3
         assert any("reason" in tip.lower() for tip in result["tips"])
@@ -427,43 +411,43 @@ class TestEvaluateTurnBranches:
     def test_evaluate_turn_various_scenarios(self):
         """Test evaluate_turn with various scenarios for branch coverage"""
         # Test different scenarios to hit various branches in the tips generation
-        result1 = evaluate_turn("I'm considering", "I recommend the MMR today to protect against measles", {})
+        result1 = evaluate_turn("I recommend the MMR today to protect against measles", {})
         assert result1["step"] in ["Announce", "Secure"]
         assert isinstance(result1["tips"], list)
         
-        result2 = evaluate_turn("I'm hesitant", "We can do it today or next week", {})
+        result2 = evaluate_turn("We can do it today or next week", {})
         assert isinstance(result2["tips"], list)
         
-        result3 = evaluate_turn("I'm unsure", "It's your decision and I support you", {})
+        result3 = evaluate_turn("It's your decision and I support you", {})
         assert isinstance(result3["tips"], list)
         
     def test_additional_branch_coverage(self):
         """Additional tests to hit remaining uncovered branches"""
         # Test empty text scenarios
-        result1 = classify_step("", "", {})
+        result1 = classify_step("", {})
         assert isinstance(result1.step, str)
         
         # Test score clamping
-        result2 = score_step("Unknown", "", "", {})
+        result2 = score_step("Unknown", "", {})
         assert 0 <= result2.score <= 3
         
         # Test parent expressed emotion branch
-        result3 = classify_step("I'm worried and scared", "What concerns you?", {})
+        result3 = classify_step("What concerns you?", {})
         assert result3.step == "Inquire"
         
         # Test exception handling in evaluate_turn
-        result4 = evaluate_turn("", "", {})
+        result4 = evaluate_turn("", {})
         assert "step" in result4
         assert "score" in result4
         
         # Test very long text for different scoring branches
         long_text = "What are your specific concerns about vaccines? " * 10
-        result5 = score_step("Inquire", "", long_text, {})
+        result5 = score_step("Inquire", long_text, {})
         assert isinstance(result5.score, int)
         
     def test_evaluate_turn_multiple_tips_truncated(self, aims_mapping):
         """Test evaluate_turn limits tips to one when multiple are generated"""
         # Use real mapping so Announce markers are available
-        result = evaluate_turn("I'm hesitant", "Today we will give Emily her vaccines", aims_mapping)
+        result = evaluate_turn("Today we will give Emily her vaccines", aims_mapping)
         assert result["step"] == "Announce"
         assert len(result["tips"]) <= 1  # Should be truncated to at most one tip

@@ -8,7 +8,8 @@ def test_main_pr_source_guard_requires_staging():
     workflow = (ROOT / ".github/workflows/main-pr-source.yml").read_text(encoding="utf-8")
 
     assert 'branches: [ "main" ]' in workflow
-    assert 'github.head_ref }}" != "staging"' in workflow
+    assert "HEAD_REF: ${{ github.head_ref }}" in workflow
+    assert 'if [[ "$HEAD_REF" != "staging" ]]' in workflow
     assert "Pull requests into main must come from the staging branch." in workflow
 
 

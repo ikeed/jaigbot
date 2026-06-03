@@ -4,8 +4,6 @@ from typing import Any, Dict, List, Optional
 import httpx
 
 from app.config import settings
-
-logger = logging.getLogger(__name__)
 from app.constants import (
     ENDPOINT_HISTORY,
     ENDPOINT_SESSION,
@@ -16,6 +14,8 @@ from app.constants import (
     ENDPOINT_MODELCHECK,
     PATH_CHAT
 )
+
+logger = logging.getLogger(__name__)
 
 class BackendClient:
     """Encapsulates all communication with the FastAPI backend."""
@@ -67,9 +67,12 @@ class BackendClient:
             "userInfo": user_info,
             "force": force,
         }
-        if character: payload["character"] = character
-        if scene: payload["scene"] = scene
-        if initial_card: payload["initialCard"] = initial_card
+        if character:
+            payload["character"] = character
+        if scene:
+            payload["scene"] = scene
+        if initial_card:
+            payload["initialCard"] = initial_card
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             resp = await client.post(

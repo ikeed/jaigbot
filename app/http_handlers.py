@@ -7,10 +7,10 @@ import uuid
 from typing import Any, Optional
 
 from fastapi import FastAPI, HTTPException, Request
-
-logger = logging.getLogger(__name__)
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+
+logger = logging.getLogger(__name__)
 
 
 def get_request_id(request: Request) -> Optional[str]:
@@ -19,7 +19,7 @@ def get_request_id(request: Request) -> Optional[str]:
         return header
     try:
         return getattr(request.state, "request_id", None) or str(uuid.uuid4())
-    except Exception as e:
+    except Exception:
         # Fallback for when request.state is not available or corrupted
         return str(uuid.uuid4())
 
@@ -40,8 +40,10 @@ def install_http_handlers(app: FastAPI, *, settings: Any, logger: logging.Logger
             "method": request.method,
         }))
 
+        base: dict[str, Any]
         if isinstance(exc.detail, dict):
-            base = exc.detail.get("error", exc.detail).copy()
+            error_detail = exc.detail.get("error", exc.detail)
+            base = error_detail.copy() if isinstance(error_detail, dict) else {"message": str(error_detail)}
         elif isinstance(exc.detail, list):
             base = {"errors": exc.detail}
         else:

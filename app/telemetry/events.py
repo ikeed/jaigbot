@@ -57,7 +57,7 @@ def log_event(logger, event_name: str, *, caps: Optional[Dict[str, int]] = None,
         # Fall back to best-effort string logging if JSON serialization fails
         try:
             logger.warning("Telemetry JSON serialization failed: %s. Payload: %s", json_err, str(payload))
-        except Exception as e:
+        except Exception:
             pass
     except Exception as e:
         # Catch-all for other logger issues
