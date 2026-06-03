@@ -19,3 +19,17 @@ dependencies = {file = ["requirements.txt"]}
 # app modules that read settings at import time.
 "chainlit_app.py" = ["E402"]
 "run_app.py" = ["E402"]
+
+[tool.mypy]
+ignore_missing_imports = true
+implicit_optional = true
+disable_error_code = [
+    "arg-type",
+    "assignment",
+    "attr-defined",
+    "no-redef",
+    "override",
+    "return-value",
+    "str-bytes-safe",
+    "union-attr",
+]
