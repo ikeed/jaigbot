@@ -91,7 +91,7 @@ class TestDeterministicSoftAnnounce:
         as a pure Inquire — at minimum it must be Announce or a mixed step."""
         from app.aims_engine import evaluate_turn
         mapping = self._mapping()
-        result = evaluate_turn("", SOFT_ANNOUNCE_WITH_STATUS_Q, mapping)
+        result = evaluate_turn(SOFT_ANNOUNCE_WITH_STATUS_Q, mapping)
         # The deterministic engine may return Announce or Inquire depending on
         # marker matching. The critical assertion is: if it returns Inquire,
         # the reason should not be the ONLY classification for this clear
@@ -107,7 +107,7 @@ class TestDeterministicSoftAnnounce:
         mapping = self._mapping()
         # A soft intro with no presumptive phrasing
         msg = "One thing I want to mention today is vaccines — can I ask about Emily's status?"
-        result = evaluate_turn("", msg, mapping)
+        result = evaluate_turn(msg, mapping)
         if result.get("step") == "Announce" and result.get("score", 3) < 3:
             tips = result.get("tips", [])
             assert tips, "A low-scoring Announce should have a tip"

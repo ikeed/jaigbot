@@ -98,7 +98,6 @@ jobs:
           echo "ref=${{ github.ref }}"
           echo "event_name=${{ github.event_name }}"
           echo "workflow_ref=${{ github.workflow_ref }}"
-          echo "job_workflow_ref=${{ github.job_workflow_ref }}"
           echo "actor=${{ github.actor }}"
 
       - name: Dump OIDC claims (debugging)

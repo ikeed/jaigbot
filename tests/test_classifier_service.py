@@ -222,7 +222,6 @@ def test_get_deterministic_fallback_defaults_score_and_appends_fallback(classifi
 
         result = classifier_service._get_deterministic_fallback(
             clinician_message="It sounds like you're worried.",
-            person_last="I'm worried.",
             mapping={"Mirror": []},
         )
 
@@ -244,7 +243,6 @@ def test_get_deterministic_fallback_does_not_duplicate_fallback_reason(classifie
 
         result = classifier_service._get_deterministic_fallback(
             clinician_message="I recommend the MMR vaccine today.",
-            person_last="Okay.",
             mapping={},
         )
 
