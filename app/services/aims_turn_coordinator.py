@@ -113,7 +113,7 @@ class AimsTurnCoordinator:
                 reply_payload=reply_payload,
             )
 
-        fallback = evaluate_turn(person_last, clinician_message, mapping)
+        fallback = evaluate_turn(clinician_message, mapping)
         return AimsTurnResult(
             cls_payload={
                 "step": fallback.get("step"),
