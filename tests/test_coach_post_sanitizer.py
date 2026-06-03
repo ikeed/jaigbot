@@ -1,4 +1,10 @@
-from app.services.coach_post import build_endgame_bullets_fallback, sanitize_endgame_bullets
+from app.services.coach_post import (
+    AimsPostProcessor,
+    EndGameDetector,
+    build_endgame_bullets_fallback,
+    endgame_title,
+    sanitize_endgame_bullets,
+)
 
 
 def test_sanitize_endgame_bullets_filters_json_like_lines():
@@ -41,3 +47,91 @@ def test_endgame_fallback_inquire_mid_feedback_is_not_generic_stacked_question_w
     assert "remaining concerns" in inquire
     assert "single-barreled" not in inquire
     assert "multiple options" not in inquire
+
+
+def test_aims_post_processor_normalizes_score_and_softens_autonomy_feedback():
+    payload = {
+        "step": "Secure",
+        "score": 0,
+        "reasons": ["This sounds leading.", "Use less judgment."],
+    }
+
+    processed = AimsPostProcessor.post_process(
+        payload,
+        "No pressure. It is your decision, and I am happy to answer any questions.",
+    )
+
+    assert processed["score"] == 1
+    assert processed["reasons"] == ["Keep framing neutral and open; invite questions."]
+    assert payload["score"] == 0
+
+
+def test_aims_post_processor_keeps_non_aims_score_and_filters_mixed_reasons():
+    payload = {
+        "step": None,
+        "score": 0,
+        "reasons": ["Useful feedback.", "This is leading."],
+    }
+
+    processed = AimsPostProcessor.post_process(payload, "It's up to you.")
+
+    assert processed["score"] == 0
+    assert processed["reasons"] == ["Useful feedback."]
+
+
+def test_endgame_detector_guards_conditional_and_question_acceptance():
+    assert EndGameDetector.detect("If we go ahead with it today, what side effects should I expect?") is None
+    assert EndGameDetector.detect("Should we go ahead with it today?") is None
+    assert EndGameDetector.detect("If we go ahead, I consent to the vaccine today.") == {
+        "reason": "accepted_now"
+    }
+
+
+def test_sanitize_endgame_bullets_handles_empty_quotes_duplicates_and_cap():
+    raw = [
+        "''",
+        '""',
+        "patient{bad",
+        "patient_reply: bad",
+        "- Keep this",
+        "- Keep this",
+        *[f"- Item {i}" for i in range(20)],
+    ]
+
+    cleaned = sanitize_endgame_bullets(raw)
+
+    assert cleaned[0] == "Keep this"
+    assert cleaned.count("Keep this") == 1
+    assert len(cleaned) == 8
+    assert not any("patient" in item for item in cleaned)
+
+
+def test_endgame_title_score_tiers_and_deferred_fallback():
+    assert endgame_title(None, outcome="deferred") == "Session Complete"
+    assert endgame_title({}) == "🎉 Great job!"
+    assert endgame_title({"runningAverage": {"Announce": 3.0}}) == "🏆 Excellent job!"
+    assert endgame_title({"runningAverage": {"Announce": 2.1}}) == "🎉 Great job!"
+    assert endgame_title({"runningAverage": {"Announce": 1.7}}) == "👏 Good job!"
+    assert endgame_title({"runningAverage": {"Announce": 1.0}}) == "💪 Nice job!"
+
+
+def test_build_endgame_bullets_fallback_handles_absent_low_mid_high_and_invalid_input():
+    assert build_endgame_bullets_fallback(None)[0].startswith("Announce:")
+
+    bullets = build_endgame_bullets_fallback(
+        {
+            "perStepCounts": {"Announce": 1, "Inquire": 1, "Mirror": 1, "Secure": 0},
+            "runningAverage": {
+                "Announce": 2.8,
+                "Inquire": 2.0,
+                "Mirror": 1.0,
+                "Secure": "bad",
+            },
+        }
+    )
+
+    assert bullets[0] == "Overall AIMS score: 64%"
+    assert any("Announce 93%" in bullet and "well done" in bullet for bullet in bullets)
+    assert any("Inquire 67%" in bullet and "remaining concerns" in bullet for bullet in bullets)
+    assert any("Mirror 33%" in bullet and "reflect" in bullet for bullet in bullets)
+    assert any(bullet.startswith("Secure:") and "absent" not in bullet for bullet in bullets)

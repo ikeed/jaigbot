@@ -41,4 +41,6 @@ def is_valid_env_val(val: str | None) -> bool:
     if not val:
         return False
     val = val.strip()
+    if not val:
+        return False
     return not any(p in val for p in OAUTH_PLACEHOLDERS)

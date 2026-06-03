@@ -39,6 +39,21 @@ class FakeGateway:
             return self.text_return
         return "text-result"
 
+    async def agenerate_text_json(self, *, prompt, response_schema, system_instruction, log_fallback):
+        return self.generate_text_json(
+            prompt=prompt,
+            response_schema=response_schema,
+            system_instruction=system_instruction,
+            log_fallback=log_fallback,
+        )
+
+    async def agenerate_text(self, *, prompt, system_instruction, log_fallback):
+        return self.generate_text(
+            prompt=prompt,
+            system_instruction=system_instruction,
+            log_fallback=log_fallback,
+        )
+
 
 class FailingJsonGateway(FakeGateway):
     def generate_text_json(self, *, prompt, response_schema, system_instruction, log_fallback):
@@ -219,3 +234,97 @@ def test_json_wrapper_empty_block_falls_back(monkeypatch):
         client_cls=object,
     )
     assert out_legacy == "plain-result"
+
+
+def test_extract_json_payload_handles_empty_and_malformed_values():
+    assert vh._extract_json_payload("") is None
+    assert vh._extract_json_payload("```json\nnot json\n```") is None
+    assert vh._extract_json_payload("```\n{\"ok\": true}\n```") == {"ok": True}
+
+
+def test_patient_reply_extractor_requires_non_empty_string():
+    assert vh._maybe_extract_patient_reply({"patient_reply": "  hello  "}) == "hello"
+    assert vh._maybe_extract_patient_reply({"patient_reply": "   "}) is None
+    assert vh._maybe_extract_patient_reply({"patient_reply": 1}) is None
+    assert vh._maybe_extract_patient_reply(None) is None
+
+
+@pytest.mark.asyncio
+async def test_async_vertex_call_with_fallback_text_compacts_patient_reply(monkeypatch):
+    class WrappedGateway(FakeGateway):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.text_json_return = "```json\n{\"patient_reply\": \"Async hello\"}\n```"
+
+    monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", WrappedGateway)
+    logger = DummyLogger()
+
+    out = await vh.avertex_call_with_fallback_text(
+        project="p",
+        region="r",
+        primary_model="m1",
+        fallbacks=["m2"],
+        temperature=0.1,
+        max_tokens=64,
+        prompt="hi",
+        system_instruction=None,
+        log_path="coach_reply",
+        logger=logger,
+        client_cls=object,
+    )
+
+    assert out == '{"patient_reply":"Async hello"}'
+
+
+@pytest.mark.asyncio
+async def test_async_vertex_call_falls_back_to_plain_text(monkeypatch):
+    class AsyncFailingJsonGateway(FakeGateway):
+        async def agenerate_text_json(self, *, prompt, response_schema, system_instruction, log_fallback):
+            raise RuntimeError("json path not supported")
+
+    monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", AsyncFailingJsonGateway)
+    logger = DummyLogger()
+
+    out = await vh.avertex_call_with_fallback_text(
+        project="p",
+        region="r",
+        primary_model="m1",
+        fallbacks=["m2"],
+        temperature=0.1,
+        max_tokens=64,
+        prompt="hi",
+        system_instruction=None,
+        log_path="coach_reply",
+        logger=logger,
+        client_cls=object,
+    )
+
+    assert out == "text-result"
+
+
+@pytest.mark.asyncio
+async def test_async_vertex_call_with_fallback_json_compacts_generic_payload(monkeypatch):
+    class WrappedGateway(FakeGateway):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.text_json_return = "```json\n{\"foo\": \"bar\"}\n```"
+
+    monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", WrappedGateway)
+    logger = DummyLogger()
+
+    out = await vh.avertex_call_with_fallback_json(
+        project="p",
+        region="r",
+        primary_model="m1",
+        fallbacks=["m2"],
+        temperature=0.1,
+        max_tokens=64,
+        prompt="hi",
+        system_instruction=None,
+        schema={"type": "object"},
+        log_path="coach_classify",
+        logger=logger,
+        client_cls=object,
+    )
+
+    assert out == '{"foo":"bar"}'
