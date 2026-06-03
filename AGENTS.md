@@ -25,6 +25,12 @@ Runtime shapes:
 - Chat API behavior: `app/services/chat_orchestrator.py`, then
   `app/services/aims_coaching_handler.py` or
   `app/services/legacy_chat_handler.py`.
+- AIMS coaching internals: start with `docs/aims/README.md` for the service
+  map, then open only the owned service you are changing:
+  `classifier_service.py`, `aims_turn_coordinator.py`,
+  `patient_reply_service.py`, `aims_state_service.py`,
+  `aims_metrics_service.py`, `coach_feedback_history_service.py`,
+  `aims_endgame_service.py`, or `aims_turn_telemetry.py`.
 - Chainlit startup, replay, or avatar UI: `chainlit_app.py`,
   `app/services/chainlit/orchestrator.py`,
   `app/services/chainlit/ui_handler.py`, and `public/`.
@@ -38,9 +44,9 @@ Runtime shapes:
   `docs/developer-setup.md`, and `docs/environments.md`.
 
 Before changing AIMS classification, scoring, phase progression, or endgame
-behavior, read `docs/aims/classification-scoring-rules.md`. Use
-`docs/aims/AIMS_Approach_Summary.md` for theory and
-`docs/aims/aims_mapping.json` for deterministic fallback data.
+behavior, read `docs/aims/classification-scoring-rules.md` and the service map
+in `docs/aims/README.md`. Use `docs/aims/AIMS_Approach_Summary.md` for theory
+and `docs/aims/aims_mapping.json` for deterministic fallback data.
 
 ## Token-Efficient Workflow
 
@@ -104,4 +110,3 @@ unified app and verify the affected `/chat` flow with the in-app browser.
 - `docs/memory-and-persona.md`: memory, persona, and Redis behavior.
 - `docs/chainlit-ui.md`: UI details.
 - `docs/health-checks.md`: deployment URL and health probe behavior.
-

@@ -19,6 +19,16 @@ Every clinician turn is passed through a two-layer pipeline:
 The result of both layers is merged into a single `ClassifierResult` that drives coaching
 feedback, phase-state tracking, and endgame detection.
 
+Runtime ownership is split across injectable services:
+- `AimsCoachingHandler` assembles the turn response and coordinates injected collaborators.
+- `AimsTurnCoordinator` runs classification and patient-reply generation in parallel and applies
+  deterministic classification fallback on timeout/failure.
+- `AimsStateService` owns phase transitions, concern state, and stateful coaching guidance.
+- `AimsMetricsService` owns per-session metrics.
+- `CoachFeedbackHistoryService` owns compact coach-note history entries and public reason filtering.
+- `AimsEndgameService` owns endgame hard guards, LLM/heuristic detection, and final coach posts.
+- `aims_dependencies.py` contains the constructor-injected Protocol contracts.
+
 ---
 
 ## 2. AIMS Steps and Scoring Rubrics
@@ -154,7 +164,25 @@ validation with tailored information.  Normalised from `steps: ["Mirror", "Secur
 
 ---
 
-### 2.8 Secure
+### 2.8 Mirror+Secure+Inquire *(compound step)*
+
+A compound turn: reflection of an expressed concern, autonomy-supportive education, and an open
+question to surface additional concerns in one turn. Normalised from
+`steps: ["Mirror", "Secure", "Inquire"]`.
+
+| Score | Criteria |
+|-------|----------|
+| 3 | Strong Mirror + strong Secure + strong open question for additional concerns. |
+| 2 | Decent execution of all three components, but one component is incomplete. |
+| 1 | One or more components are weak enough that the turn is mostly education, mostly inquiry, or contains a same-clause rebuttal of the reflection. |
+
+**Phase**: Inquire dominates immediately, but if the turn resolves all tracked concerns, the
+global reconciliation can advance phase to `Secure`. Expands into Mirror, Secure, and Inquire in
+session metrics.
+
+---
+
+### 2.9 Secure
 
 Done ONLY after Mirroring: affirm autonomy, offer ONE tailored fact, provide a safety-net.
 Secure is about the relationship, not persuasion.
@@ -181,8 +209,8 @@ Secure is about the relationship, not persuasion.
 ## 3. Dependency Rules
 
 1. The expected order is **Announce → Inquire → Mirror → Secure**.
-2. **Mirror+Secure** is valid once rapport is established; it counts as both Mirror and Secure in
-   the session metrics.
+2. **Mirror+Secure** and **Mirror+Secure+Inquire** are valid once rapport is established; they
+   count against each component step in the session metrics.
 3. Securing for a concern not yet Mirrored → score reduced by 1 (plain Secure only; not
    Mirror+Secure).
 4. Mirroring something the person never expressed → not valid Mirror.
@@ -313,8 +341,10 @@ to support"*, *"not rushed"*, *"you can decide"*, *"entirely up to you"*, etc.
 - **Mirror** always returns to `InquireMirror`, even from `Secure` — the flow is cyclical.
 - **Mirror+Secure**: if all concerns are now mirrored after the turn, phase advances to `Secure`;
   otherwise stays in `InquireMirror`.
-- **Inquire** and **Mirror+Inquire** always set `first_inquire_done = True` and phase to
-  `InquireMirror`, even from `Secure`.
+- **Inquire**, **Announce+Inquire**, **Mirror+Inquire**, **Secure+Inquire**, and
+  **Mirror+Secure+Inquire** set `first_inquire_done = True` and phase to `InquireMirror`,
+  even from `Secure`, unless global reconciliation advances fully resolved concern state to
+  `Secure`.
 
 ---
 
@@ -324,8 +354,11 @@ All step counts and scores are accumulated per session in `aims.perStepCounts` a
 `aims.scores`.
 
 **Expansion of compound steps:**
+- `Announce+Inquire` score → counted in both Announce and Inquire score arrays
 - `Mirror+Inquire` score → counted in both Mirror and Inquire score arrays
 - `Mirror+Secure` score → counted in both Mirror and Secure score arrays
+- `Secure+Inquire` score → counted in both Secure and Inquire score arrays
+- `Mirror+Secure+Inquire` score → counted in Mirror, Secure, and Inquire score arrays
 
 Running averages per step (`runningAverage`) are recalculated after each turn.
 
@@ -364,8 +397,10 @@ three weeks should give me enough time to look things over"* = `accepted_literat
 - **`accepted_vaccine`**: requires heuristic confirmation via `EndGameDetector.detect()` (checks
   `ACCEPT_NOW_CUES` like *"let's do it"*, *"i consent"*, *"go ahead"*).  This gate is retained
   because consenting to vaccinate today is irreversible.
-- **`accepted_literature`** and **`deferred`**: trusted directly from the LLM — natural language
-  for deferral/follow-up is too varied for reliable keyword matching.
+- **`accepted_literature`**: trusted from the LLM when hard guards pass. Natural language for
+  literature plus follow-up is too varied for reliable keyword matching.
+- **`deferred`**: never ends the scenario. If the LLM returns `deferred`, the runtime forces
+  `is_endgame` to false so coaching can continue with a nudge or next-step suggestion.
 
 ### 8.4 Heuristic fallback
 If LLM detection errors (`reason == "detection_error"`), `EndGameDetector.detect()` is used as

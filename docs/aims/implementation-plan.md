@@ -5,7 +5,7 @@
 > not the current source of truth for runtime behavior or defaults. For current
 > classification, scoring, phase-state, and endgame rules, start with
 > `docs/aims/classification-scoring-rules.md`. For the current architecture map,
-> see `docs/plan.md`.
+> see `docs/aims/README.md`.
 
 Context
 - Goal: Migrate from the Ghostbusters scene to a realistic vaccine‑hesitant parent simulator that provides AIMS step classification, per‑turn scoring/coaching, and an end‑of‑session summary — while keeping one LLM call per turn in the common path and maintaining backward compatibility.
