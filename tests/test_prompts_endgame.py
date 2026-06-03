@@ -31,6 +31,20 @@ def test_patient_reply_prompt_uses_person_not_parent_in_boilerplate():
     assert "confused person" in boilerplate
 
 
+def test_patient_reply_prompt_includes_clinician_name_and_bans_placeholders():
+    prompt = build_patient_reply_prompt(
+        history_text="Clinician: Hello",
+        clinician_last="Hello",
+        clinician_name="Dr. Burnett",
+    )
+
+    assert "The clinician's name is Dr. Burnett" in prompt
+    assert "you may use Doctor or Dr. Burnett" in prompt
+    assert "do not address them by name in every reply" in prompt
+    assert "Never output bracketed placeholder text" in prompt
+    assert "[Clinician's last name]" not in prompt
+
+
 def test_build_endgame_summary_prompt_renders_placeholders():
     metrics = {"totalTurns": 3, "perStepCounts": {"Announce": 1, "Inquire": 1, "Mirror": 1, "Secure": 0}}
     transcript = "Doctor: Hi\nPatient: Hello"

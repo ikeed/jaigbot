@@ -5,7 +5,14 @@ from typing import List
 from .loader import load_and_render
 
 
-def build_patient_reply_prompt(*, history_text: str, clinician_last: str, character: str | None = None, scene: str | None = None) -> str:
+def build_patient_reply_prompt(
+    *,
+    history_text: str,
+    clinician_last: str,
+    character: str | None = None,
+    scene: str | None = None,
+    clinician_name: str | None = None,
+) -> str:
     """Render the AIMS patient reply prompt from the template.
 
     This is behavior-preserving relative to the previous inline string in main.py.
@@ -17,7 +24,18 @@ def build_patient_reply_prompt(*, history_text: str, clinician_last: str, charac
         clinician_last=clinician_last,
         character_section=(character or ""),
         scene_section=(scene or ""),
+        clinician_name_section=_clinician_name_section(clinician_name),
     )
+
+
+def _clinician_name_section(clinician_name: str | None) -> str:
+    name = (clinician_name or "").strip()
+    if name:
+        return (
+            f"The clinician's name is {name}. If you naturally address the clinician, "
+            f"you may use Doctor or {name}; vary naturally and do not address them by name in every reply."
+        )
+    return "The clinician's name is unknown. Do not invent one; say doctor or omit direct address."
 
 
 def get_classify_system_instruction() -> str:

@@ -25,6 +25,30 @@ from fastapi import Request
 from app.aims_engine import evaluate_turn, load_mapping
 from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, ROLE_COACH, get_ui_attributes
 from app.config import settings
+from app.constants import (
+    KEY_AIMS_STATE,
+    KEY_AIMS_METRICS,
+    KEY_FULL_HISTORY,
+    KEY_COACH_POST,
+    KEY_GAME_OVER,
+    PHASE_PRE_ANNOUNCE,
+    PHASE_INQUIRE_MIRROR,
+    PHASE_SECURE,
+    STEP_ANNOUNCE,
+    STEP_INQUIRE,
+    STEP_MIRROR,
+    STEP_SECURE,
+    STEP_ANNOUNCE_INQUIRE,
+    STEP_MIRROR_INQUIRE,
+    STEP_MIRROR_SECURE,
+    STEP_SECURE_INQUIRE,
+    STEP_MIRROR_SECURE_INQUIRE,
+    SESSION_HISTORY,
+    KEY_UPDATED,
+    SESSION_CHARACTER,
+    SESSION_SCENE,
+    DEFAULT_MODEL_FLASH
+)
 from app.json_schemas import (
     REPLY_SCHEMA,
     validate_json
@@ -34,6 +58,7 @@ from app.prompts.aims import build_patient_reply_prompt
 from app.services.chat_context import ChatContext
 from app.services.chat_helpers import strip_appointment_headers
 from app.services.classifier_service import ClassifierService
+from app.services.clinician_identity import clinician_display_name_from_user_info
 from app.services.coach_post import (
     VaccineRelevanceGate,
     AimsPostProcessor,
@@ -197,16 +222,16 @@ class AimsCoachingHandler:
         # Load session memory once for the entire request; all sub-methods
         # mutate this dict in place and we write back once at the end.
         mem = self._load_mem(ctx.session_id)
-        prior_state = mem.get("aims_state") or {} if mem else {}
+        prior_state = mem.get(KEY_AIMS_STATE) or {} if mem else {}
         prior_announced = bool(prior_state.get("announced", False))
-        prior_phase = prior_state.get("phase", "PreAnnounce")
+        prior_phase = prior_state.get("phase", PHASE_PRE_ANNOUNCE)
 
         # Launch classification and reply generation in parallel
         task_cls = asyncio.create_task(
             self.classifier_service.classify_turn(
                 clinician_message=body.message,
                 person_last=ctx.person_last,
-                history=ctx.mem.get("history", []) if ctx.mem else [],
+                history=ctx.mem.get(SESSION_HISTORY, []) if ctx.mem else [],
                 prior_announced=prior_announced,
                 prior_phase=prior_phase,
                 mapping=mapping,
@@ -224,6 +249,7 @@ class AimsCoachingHandler:
                 ctx.session_id,
                 character=ctx.effective_character,
                 scene=ctx.effective_scene,
+                clinician_name=clinician_display_name_from_user_info(ctx.user_info),
             )
         )
 
@@ -276,7 +302,7 @@ class AimsCoachingHandler:
         # Apply post-processors to BOTH LLM and fallback results
         # Vaccine relevance gate
         mem = ctx.mem or {}
-        aims_state = mem.get("aims_state", {}) or {}
+        aims_state = mem.get(KEY_AIMS_STATE, {}) or {}
         parent_concerns = aims_state.get("parent_concerns", [])
         recent_concerns_texts = [c["desc"] for c in parent_concerns] if parent_concerns else []
         
@@ -300,7 +326,7 @@ class AimsCoachingHandler:
         cls_payload = AimsPostProcessor.post_process(cls_payload, body.message)
 
         # Populate current phase for UI transparency
-        cls_payload["phase"] = aims_state.get("phase", "PreAnnounce")
+        cls_payload["phase"] = aims_state.get("phase", PHASE_PRE_ANNOUNCE)
         
         # Try to snapshot model used for classification (may be approximate if overwritten by parallel call)
         try:
@@ -361,11 +387,11 @@ class AimsCoachingHandler:
 
                 # Suppress tips that suggest Announce when Announce has already been done.
                 # The LLM occasionally generates these for null-step turns.
-                aims_state_now = mem.get("aims_state") or {}
+                aims_state_now = mem.get(KEY_AIMS_STATE) or {}
                 already_announced = aims_state_now.get("announced", False)
                 tips_to_show = [
                     t for t in tips
-                    if not (already_announced and "announce" in (t or "").lower())
+                    if not (already_announced and STEP_ANNOUNCE.lower() in (t or "").lower())
                 ]
                 # Only show tips when there's no per-step feedback (avoid redundancy)
                 if tips_to_show and not step_feedback:
@@ -379,7 +405,7 @@ class AimsCoachingHandler:
                 if coach_text:
                     now = time.time()
                     coach_entry = {"role": ROLE_COACH, "content": coach_text}
-                    mem.setdefault("history", []).append(coach_entry)
+                    mem.setdefault(SESSION_HISTORY, []).append(coach_entry)
                     
                     # Store structured data in full_history for logical archive schema
                     structured_coaching = {
@@ -393,12 +419,12 @@ class AimsCoachingHandler:
                         ],
                         "phase": phase
                     }
-                    mem.setdefault("full_history", []).append({
+                    mem.setdefault(KEY_FULL_HISTORY, []).append({
                         **coach_entry, 
                         "time": now,
                         "coaching_data": structured_coaching
                     })
-                    mem["updated"] = now
+                    mem[KEY_UPDATED] = now
         except Exception as e:
             self.logger.error("Failed to append coaching to conversation history: %s", e)
 
@@ -439,12 +465,12 @@ class AimsCoachingHandler:
         
         # Save coach_post to memory if it exists, so it can be archived
         if coach_post and mem is not None:
-            mem["coach_post"] = coach_post
-            mem["game_over"] = True
+            mem[KEY_COACH_POST] = coach_post
+            mem[KEY_GAME_OVER] = True
         
         # Single write-back of all accumulated mutations
         if mem is not None and self.memory_enabled and ctx.session_id:
-            mem["updated"] = time.time()
+            mem[KEY_UPDATED] = time.time()
             self.memory_store[ctx.session_id] = mem
         
         # Calculate final latency
@@ -513,10 +539,10 @@ class AimsCoachingHandler:
         mem = self.memory_store.get(session_id)
         if mem is None:
             mem = {
-                "history": [], "full_history": [], "character": None,
-                "scene": None, "updated": time.time(),
+                SESSION_HISTORY: [], KEY_FULL_HISTORY: [], SESSION_CHARACTER: None,
+                SESSION_SCENE: None, KEY_UPDATED: time.time(),
             }
-        mem.setdefault("full_history", [])
+        mem.setdefault(KEY_FULL_HISTORY, [])
         return mem
 
     def _update_aims_state(
@@ -529,8 +555,8 @@ class AimsCoachingHandler:
             return
         
         try:
-            state = mem.setdefault("aims_state", {
-                "announced": False, "phase": "PreAnnounce", 
+            state = mem.setdefault(KEY_AIMS_STATE, {
+                "announced": False, "phase": PHASE_PRE_ANNOUNCE,
                 "first_inquire_done": False, "pending_concerns": True, 
                 "parent_concerns": []
             })
@@ -542,16 +568,16 @@ class AimsCoachingHandler:
                 maybe_add_person_concern(state, person_last, self._TOPICAL_CUES, llm_topic)
             
             # 1. Update Mirror/Secure status based on clinician message
-            if "Mirror" in steps:
+            if STEP_MIRROR in steps:
                 mark_mirrored_multi(
                     state, clinician_message, person_last,
                     self._TOPICAL_CUES, llm_topic=llm_topic
                 )
-            if "Secure" in steps:
+            if STEP_SECURE in steps:
                 mark_secured_by_topic(state, clinician_message, self._TOPICAL_CUES)
 
             # 2. Apply coaching guidance rules
-            character = mem.get("character")
+            character = mem.get(SESSION_CHARACTER)
             self._apply_coaching_guidance(
                 cls_payload, step_main, state, clinician_message, person_last,
                 character=character,
@@ -562,7 +588,7 @@ class AimsCoachingHandler:
             
             # Sync the updated phase back to the classification payload
             cls_payload["phase"] = state.get("phase")
-            mem["aims_state"] = state
+            mem[KEY_AIMS_STATE] = state
             
         except Exception as e:
             self.logger.exception(f"AIMS state update failed: {e}")
@@ -630,7 +656,7 @@ class AimsCoachingHandler:
         for r in reasons or []:
             if any(r.lower().startswith(p) for p in cls._INTERNAL_REASON_PREFIXES):
                 continue
-            if step and step not in {"Announce"} and "no clear recommendation" in r.lower():
+            if step and step not in {STEP_ANNOUNCE} and "no clear recommendation" in r.lower():
                 continue
             out.append(r)
         return out
@@ -690,7 +716,7 @@ class AimsCoachingHandler:
         # guidance runs.  The block below is kept only as a safety net for
         # edge cases where the phase guard didn't fire (e.g. Announce was
         # added by a post-processor after the guard).
-        if step_current == "Announce" and state.get("phase") == "InquireMirror":
+        if step_current == STEP_ANNOUNCE and state.get("phase") == PHASE_INQUIRE_MIRROR:
             reasons = list(cls_payload.get("reasons") or [])
             if not any("announce after inquiry" in s.lower() for s in reasons):
                 reasons.insert(0, "Avoid moving to Announce after inquiry before all concerns are mirrored.")
@@ -703,15 +729,15 @@ class AimsCoachingHandler:
         component_steps = set(self._component_steps(step_current))
 
         # Handle mirroring for plain and compound Mirror turns.
-        if "Mirror" in component_steps:
+        if STEP_MIRROR in component_steps:
             mark_mirrored_multi(state, clinician_message, person_last, self._TOPICAL_CUES)
         
         # Handle securing
-        if "Secure" in component_steps and step_current != "Secure":
+        if STEP_SECURE in component_steps and step_current != STEP_SECURE:
             # Compound step: securing is part of the blended turn. No "secure before mirror"
             # warning — the Mirror component, when present, handles it in the same turn.
             mark_secured_by_topic(state, clinician_message, self._TOPICAL_CUES)
-        elif step_current == "Secure":
+        elif step_current == STEP_SECURE:
             # Priority check: if no Inquire has ever occurred, the deeper issue is
             # "Securing before inquiring" — the clinician is educating/reassuring
             # before eliciting the person's actual concerns.
@@ -807,45 +833,45 @@ class AimsCoachingHandler:
         all_steps = set(self._component_steps(step_current, steps))
 
         # Announce in any step sets the announced flag
-        if "Announce" in all_steps:
+        if STEP_ANNOUNCE in all_steps:
             state["announced"] = True
             # Phase stays PreAnnounce until inquiry begins
 
         # Track how many turns have included a Mirror component.  Used to
         # suppress false-alarm "secure before mirroring" warnings when
         # keyword matching fails to update is_mirrored on individual concerns.
-        if "Mirror" in all_steps:
+        if STEP_MIRROR in all_steps:
             state["mirrors_done"] = state.get("mirrors_done", 0) + 1
 
         # Inquire / Announce+Inquire / Mirror+Inquire / Secure+Inquire always sets phase to InquireMirror,
         # even from Secure — AIMS is cyclical, not a one-way state machine.
-        if step_current in ("Inquire", "Announce+Inquire", "Mirror+Inquire", "Secure+Inquire") or "Inquire" in all_steps:
+        if step_current in (STEP_INQUIRE, STEP_ANNOUNCE_INQUIRE, STEP_MIRROR_INQUIRE, STEP_SECURE_INQUIRE) or STEP_INQUIRE in all_steps:
             state["first_inquire_done"] = True
-            state["phase"] = "InquireMirror"
-        elif step_current == "Mirror+Secure":
+            state["phase"] = PHASE_INQUIRE_MIRROR
+        elif step_current == STEP_MIRROR_SECURE:
             # Compound step: both Mirror and Secure done in one turn.
             # If all concerns are now mirrored (which mark_mirrored_multi just handled),
             # allow phase to advance to Secure; otherwise stay in InquireMirror.
             pc = state.get("parent_concerns") or []
             all_mirrored = all(c.get("is_mirrored") for c in pc) if pc else True
             if all_mirrored:
-                state["phase"] = "Secure"
+                state["phase"] = PHASE_SECURE
             else:
-                state["phase"] = "InquireMirror"
+                state["phase"] = PHASE_INQUIRE_MIRROR
             state["pending_concerns"] = not all(
                 c.get("is_mirrored") and c.get("is_secured") for c in pc
             ) if pc else False
-        elif step_current == "Mirror" or ("Mirror" in all_steps and "Secure" not in all_steps):
+        elif step_current == STEP_MIRROR or (STEP_MIRROR in all_steps and STEP_SECURE not in all_steps):
             # Plain Mirror: cycle back to InquireMirror regardless of prior phase
-            state["phase"] = "InquireMirror"
-        elif step_current == "Secure":
+            state["phase"] = PHASE_INQUIRE_MIRROR
+        elif step_current == STEP_SECURE:
             # Only advance to Secure phase when all concerns are mirrored.
             # If unmirrored concerns remain, stay in InquireMirror to signal
             # that the clinician should mirror before continuing to educate.
             pc = state.get("parent_concerns") or []
             all_mirrored = all(c.get("is_mirrored") for c in pc) if pc else True
             if all_mirrored:
-                state["phase"] = "Secure"
+                state["phase"] = PHASE_SECURE
 
         # --- Global reconciliation ---
         # Recompute pending_concerns from the actual concern list on EVERY
@@ -867,19 +893,19 @@ class AimsCoachingHandler:
         # with no concerns, the step-specific cyclical logic governs phase
         # (Mirror/Inquire cycle back to InquireMirror as AIMS intends).
         if all_resolved and pc and state.get("announced") and state.get("first_inquire_done"):
-            state["phase"] = "Secure"
+            state["phase"] = PHASE_SECURE
     
     # Compound step → individual steps to expand into for coverage metrics
     _COMPOUND_EXPANSIONS: Dict[str, List[str]] = {
-        "Announce+Inquire": ["Announce", "Inquire"],
-        "Mirror+Inquire": ["Mirror", "Inquire"],
-        "Mirror+Secure": ["Mirror", "Secure"],
-        "Secure+Inquire": ["Secure", "Inquire"],
-        "Mirror+Secure+Inquire": ["Mirror", "Secure", "Inquire"],
+        STEP_ANNOUNCE_INQUIRE: [STEP_ANNOUNCE, STEP_INQUIRE],
+        STEP_MIRROR_INQUIRE: [STEP_MIRROR, STEP_INQUIRE],
+        STEP_MIRROR_SECURE: [STEP_MIRROR, STEP_SECURE],
+        STEP_SECURE_INQUIRE: [STEP_SECURE, STEP_INQUIRE],
+        STEP_MIRROR_SECURE_INQUIRE: [STEP_MIRROR, STEP_SECURE, STEP_INQUIRE],
     }
 
     _VALID_STEPS = frozenset({
-        "Announce", "Inquire", "Mirror", "Secure",
+        STEP_ANNOUNCE, STEP_INQUIRE, STEP_MIRROR, STEP_SECURE,
         *_COMPOUND_EXPANSIONS.keys(),
     })
 
@@ -889,7 +915,7 @@ class AimsCoachingHandler:
             return
         
         try:
-            aims = mem.setdefault("aims", {
+            aims = mem.setdefault(KEY_AIMS_METRICS, {
                 "perStepCounts": {s: 0 for s in self._VALID_STEPS},
                 "scores": {s: [] for s in self._VALID_STEPS},
                 "totalTurns": 0
@@ -919,13 +945,21 @@ class AimsCoachingHandler:
                             pass
                 aims["runningAverage"] = ra
             
-            mem["aims"] = aims
+            mem[KEY_AIMS_METRICS] = aims
             
         except Exception as e:
             self.logger.debug(f"AIMS metrics update failed: {e}")
     
     async def _generate_patient_reply(
-        self, clinician_message: str, history_text: str, req: Request, session_id: str, *, character: str | None = None, scene: str | None = None
+        self,
+        clinician_message: str,
+        history_text: str,
+        req: Request,
+        session_id: str,
+        *,
+        character: str | None = None,
+        scene: str | None = None,
+        clinician_name: str | None = None,
     ) -> Dict[str, Any]:
         """Generate patient reply with safety checks and jailbreak detection."""
         # Check for jailbreak attempts first
@@ -953,6 +987,7 @@ class AimsCoachingHandler:
             clinician_last=clinician_message,
             character=character,
             scene=scene,
+            clinician_name=clinician_name,
         )
         
         # Attempt to generate reply with retry and safety checks
@@ -1038,9 +1073,9 @@ class AimsCoachingHandler:
         try:
             now = time.time()
             user_entry = {"role": ROLE_USER, "content": user_message}
-            mem.setdefault("history", []).append(user_entry)
-            mem.setdefault("full_history", []).append({**user_entry, "time": now})
-            mem["updated"] = now
+            mem.setdefault(SESSION_HISTORY, []).append(user_entry)
+            mem.setdefault(KEY_FULL_HISTORY, []).append({**user_entry, "time": now})
+            mem[KEY_UPDATED] = now
         except Exception as e:
             self.logger.debug(f"User history append failed: {e}")
 
@@ -1052,13 +1087,13 @@ class AimsCoachingHandler:
         try:
             now = time.time()
             asst_entry = {"role": ROLE_ASSISTANT, "content": assistant_reply}
-            mem.setdefault("history", []).append(asst_entry)
-            mem.setdefault("full_history", []).append({**asst_entry, "time": now})
-            mem["updated"] = now
+            mem.setdefault(SESSION_HISTORY, []).append(asst_entry)
+            mem.setdefault(KEY_FULL_HISTORY, []).append({**asst_entry, "time": now})
+            mem[KEY_UPDATED] = now
 
             # Trim working history (coach-aware) after the full turn is present.
             from app.services.session_service import SessionService
-            mem["history"] = SessionService.trim_history(mem["history"], self.memory_max_turns)
+            mem[SESSION_HISTORY] = SessionService.trim_history(mem[SESSION_HISTORY], self.memory_max_turns)
 
         except Exception as e:
             self.logger.debug(f"Assistant history append failed: {e}")
@@ -1069,8 +1104,8 @@ class AimsCoachingHandler:
             return None
         
         try:
-            aims = mem.get("aims") or {}
-            counts = {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0, "Announce+Inquire": 0, "Mirror+Inquire": 0, "Mirror+Secure": 0, "Secure+Inquire": 0, "Mirror+Secure+Inquire": 0}
+            aims = mem.get(KEY_AIMS_METRICS) or {}
+            counts = {STEP_ANNOUNCE: 0, STEP_INQUIRE: 0, STEP_MIRROR: 0, STEP_SECURE: 0, STEP_ANNOUNCE_INQUIRE: 0, STEP_MIRROR_INQUIRE: 0, STEP_MIRROR_SECURE: 0, STEP_SECURE_INQUIRE: 0, STEP_MIRROR_SECURE_INQUIRE: 0}
             counts.update(aims.get("perStepCounts", {}))
             
             # Prefer precomputed runningAverage if available
@@ -1103,13 +1138,13 @@ class AimsCoachingHandler:
             if mem is None:
                 return None
 
-            hist = mem.get("history") or []
-            aims_state = mem.get("aims_state") or {}
+            hist = mem.get(SESSION_HISTORY) or []
+            aims_state = mem.get(KEY_AIMS_STATE) or {}
 
             # 1. Hard guards to avoid unnecessary LLM calls
-            phase = aims_state.get("phase", "PreAnnounce")
+            phase = aims_state.get("phase", PHASE_PRE_ANNOUNCE)
             announced = aims_state.get("announced", False)
-            if phase == "PreAnnounce":
+            if phase == PHASE_PRE_ANNOUNCE:
                 return None
 
             assistant_count = sum(1 for it in hist if it.get("role") == ROLE_ASSISTANT and (it.get("content") or "").strip())
@@ -1262,7 +1297,7 @@ class AimsCoachingHandler:
         except Exception as e:
             self.logger.debug(f"Failed to resolve model fallbacks: {e}")
             cfg_fallbacks = []
-        flash = "gemini-2.5-flash"
+        flash = DEFAULT_MODEL_FLASH
         if lp == "coach_classify":
             # Pro primary, ensure Flash is in fallbacks
             fb = [x for x in ([flash] + cfg_fallbacks) if x]
