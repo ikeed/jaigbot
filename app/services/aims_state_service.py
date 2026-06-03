@@ -221,7 +221,7 @@ class AimsStateService:
     def apply_coaching_guidance(
         self,
         cls_payload: dict[str, Any],
-        step_current: str,
+        step_current: str | None,
         state: dict[str, Any],
         clinician_message: str,
         person_last: str,
@@ -348,7 +348,7 @@ class AimsStateService:
     def update_observational_state(
         self,
         state: dict[str, Any],
-        step_current: str,
+        step_current: str | None,
         steps: list[str] | None = None,
     ) -> None:
         """Update observed AIMS phase state from detected step(s)."""

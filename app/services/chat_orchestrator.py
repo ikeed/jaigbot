@@ -385,12 +385,15 @@ class ChatOrchestrator:
             
             # Identify user_id
             user_info = body.userInfo or (mem.get("user_info") if mem else None)
-            user_id = user_info.get("identifier") if user_info else "anonymous"
+            user_id = "anonymous"
+            if isinstance(user_info, dict):
+                user_id = str(user_info.get("identifier") or "anonymous")
 
             if not mem:
                 # If no session found in memory, try to fetch from GCS
                 self.logger.info(f"Session {session_id} not in memory, checking GCS for user {user_id}")
-                mem = storage_service.download_session(session_id, user_id)
+                downloaded = storage_service.download_session(session_id, user_id)
+                mem = downloaded or {}
                 
                 if not mem:
                     # No conversation history, but still archive the report itself

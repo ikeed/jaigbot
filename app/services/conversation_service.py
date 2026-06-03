@@ -10,9 +10,9 @@ incrementally to avoid large diffs while preserving behavior.
 """
 from __future__ import annotations
 
-from typing import Dict, Iterable, List, Optional, Set
+from typing import Dict, Iterable, List, Mapping, Optional, Set
 
-TopicalCues = Dict[str, Iterable[str]]
+TopicalCues = Mapping[str, Iterable[str]]
 Concern = Dict[str, object]
 
 
@@ -51,7 +51,7 @@ def is_duplicate_concern(concerns: List[Concern], desc: str, topic: Optional[str
     dnorm = (desc or "").strip().lower()
     tnorm = (topic or "").strip().lower()
     for c in concerns or []:
-        if (c.get("desc", "").strip().lower() == dnorm) and (str(c.get("topic", "")).strip().lower() == tnorm):
+        if (str(c.get("desc", "")).strip().lower() == dnorm) and (str(c.get("topic", "")).strip().lower() == tnorm):
             return True
     return False
 

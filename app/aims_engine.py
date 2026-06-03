@@ -195,7 +195,7 @@ def classify_step(clinician_last: str, mapping: Dict[str, Any]) -> Classificatio
     # Broadened safety-netting detection, allowing non-contiguous call ... if and common variants
     safety_re = re.compile(
         r"\b(what to expect|watch for|reach (out|me|us)|how to reach|contact|after[- ]?hours|on[- ]?call|nurse line|public health nurse|er|ed|urgent care|fever|redness|soreness|swelling|severe reaction|emergency|911|tylenol|acetaminophen|ibuprofen|worsen(?:ing)?|if (you('re| are) )?(worried|concerned))\b"
-        r"|call\b[^\n\r\.]*(\bif\b)"
+        r"|call\b[^\n\r.]*(\bif\b)"
     )
 
     has_autonomy = _stem_match(lt, autonomy_cues)
@@ -408,7 +408,7 @@ def score_step(step: str, clinician_last: str, mapping: Dict[str, Any]) -> Score
             r")\b",
             lt,
         ))
-        safety = bool(re.search(r"\b(what to expect|watch for|reach (out|me|us)|how to reach|contact|after[- ]?hours|on[- ]?call|nurse line|public health nurse|er|ed|urgent care|fever|redness|soreness|swelling|severe reaction|emergency|911|tylenol|acetaminophen|ibuprofen|worsen(?:ing)?|if (you('re| are) )?(worried|concerned))\b|call\b[^\n\r\.]*(\bif\b)", lt))
+        safety = bool(re.search(r"\b(what to expect|watch for|reach (out|me|us)|how to reach|contact|after[- ]?hours|on[- ]?call|nurse line|public health nurse|er|ed|urgent care|fever|redness|soreness|swelling|severe reaction|emergency|911|tylenol|acetaminophen|ibuprofen|worsen(?:ing)?|if (you('re| are) )?(worried|concerned))\b|call\b[^\n\r.]*(\bif\b)", lt))
         if autonomy and options:
             score = max(score, 2)
             reasons.append("Autonomy affirmed with concrete option(s)")
@@ -445,7 +445,7 @@ def evaluate_turn(clinician_last: str, mapping: Dict[str, Any]) -> Dict[str, Any
     scr = score_step(cls.step, clinician_last, mapping)
 
     # Context-sensitive coaching tips: only include when an actionable improvement is evident.
-    tips: List[str] = []
+    tips = []
     lt = (clinician_last or "").strip().lower()
     if scr.score < 3:
         if cls.step == "Inquire":

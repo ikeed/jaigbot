@@ -2,7 +2,7 @@ import contextvars
 import json
 import logging
 import re
-from typing import Optional
+from typing import Any, Optional
 
 from ..vertex import VertexAIError, VertexClient
 
@@ -20,7 +20,11 @@ def get_last_model_used() -> Optional[str]:
     return _last_model_used_var.get()
 
 
-def _extract_json_payload(text: str) -> Optional[object]:
+def _coerce_json_object(value: Any) -> Optional[dict[Any, Any]]:
+    return value if isinstance(value, dict) else None
+
+
+def _extract_json_payload(text: str) -> Optional[dict[Any, Any]]:
     """Extract a JSON value from a model response without manual brace scanning.
 
     Strategy (stable and maintainable):
@@ -44,14 +48,14 @@ def _extract_json_payload(text: str) -> Optional[object]:
         if lang and lang.lower() not in {"json", "json5"}:
             continue
         try:
-            return json.loads(body)
+            return _coerce_json_object(json.loads(body))
         except Exception as e:
             _logger.debug("Failed to extract JSON from labeled block: %s", e)
             pass
     # Second pass: unlabeled fences
     for _, body in matches:
         try:
-            return json.loads(body)
+            return _coerce_json_object(json.loads(body))
         except Exception as e:
             _logger.debug("Failed to extract JSON from unlabeled block: %s", e)
             pass
@@ -59,7 +63,7 @@ def _extract_json_payload(text: str) -> Optional[object]:
     # 2) Minimal cleanup fallback: remove raw fence markers/backticks and try once
     cleaned = s.replace("```", "").strip()
     try:
-        return json.loads(cleaned)
+        return _coerce_json_object(json.loads(cleaned))
     except Exception as e:
         _logger.debug("Failed to extract JSON from cleaned text: %s", e)
         return None
