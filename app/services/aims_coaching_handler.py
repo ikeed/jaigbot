@@ -14,7 +14,6 @@ Behavior-preserving extraction from the massive coaching section in app.main.cha
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import time
 import uuid
@@ -23,11 +22,10 @@ from typing import Any, Dict, List, Optional
 from fastapi import Request
 
 from app.aims_engine import evaluate_turn, load_mapping
-from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, ROLE_COACH, get_ui_attributes
+from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, get_ui_attributes
 from app.config import settings
 from app.constants import (
     KEY_AIMS_STATE,
-    KEY_AIMS_METRICS,
     KEY_FULL_HISTORY,
     KEY_COACH_POST,
     KEY_GAME_OVER,
@@ -42,23 +40,19 @@ from app.constants import (
     STEP_MIRROR_INQUIRE,
     STEP_MIRROR_SECURE,
     STEP_SECURE_INQUIRE,
-    STEP_MIRROR_SECURE_INQUIRE,
     SESSION_HISTORY,
     KEY_UPDATED,
     SESSION_CHARACTER,
     SESSION_SCENE,
     DEFAULT_MODEL_FLASH
 )
-from app.json_schemas import (
-    REPLY_SCHEMA,
-    validate_json
-)
 from app.models import ChatRequest
-from app.prompts.aims import build_patient_reply_prompt
 from app.services.chat_context import ChatContext
 from app.services.chat_helpers import strip_appointment_headers
 from app.services.classifier_service import ClassifierService
 from app.services.clinician_identity import clinician_display_name_from_user_info
+from app.services.aims_metrics_service import AimsMetricsService
+from app.services.coach_feedback_history_service import CoachFeedbackHistoryService
 from app.services.coach_post import (
     VaccineRelevanceGate,
     AimsPostProcessor,
@@ -66,13 +60,12 @@ from app.services.coach_post import (
     build_endgame_bullets_fallback,
     endgame_title,
 )
-from app.services.coach_safety import detect_advice_patterns
 from app.services.conversation_service import (
     maybe_add_person_concern,
     mark_mirrored_multi,
     mark_secured_by_topic,
 )
-from app.services.security_guard import JailbreakGuard
+from app.services.patient_reply_service import PatientReplyService
 from app.services.vertex_helpers import (
     avertex_call_with_fallback_text,
     avertex_call_with_fallback_json,
@@ -80,7 +73,6 @@ from app.services.vertex_helpers import (
 )
 from app.telemetry.events import (
     log_event as telemetry_log_event,
-    truncate_for_log as telemetry_truncate
 )
 from app.vertex import VertexClient
 
@@ -164,8 +156,6 @@ class AimsCoachingHandler:
         self.memory_enabled = memory_config["enabled"]
         self.memory_max_turns = memory_config["max_turns"]
         
-        # Initialize helper services
-        self.jailbreak_guard = JailbreakGuard()
         self.classifier_service = ClassifierService(
             project_id=self.project_id,
             location=self.vertex_location,
@@ -175,6 +165,14 @@ class AimsCoachingHandler:
             max_tokens=self.classify_max_tokens,
             client_cls=self.client_cls,
         )
+        self.patient_reply_service = PatientReplyService(
+            model_json_caller=self._call_vertex_json,
+            logger=self.logger,
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+        )
+        self.metrics_service = AimsMetricsService(logger=self.logger)
+        self.coach_feedback_history_service = CoachFeedbackHistoryService(logger=self.logger)
     
     async def handle(
         self, req: Request, body: ChatRequest, ctx: ChatContext
@@ -242,11 +240,10 @@ class AimsCoachingHandler:
             )
         )
         task_reply = asyncio.create_task(
-            self._generate_patient_reply(
-                body.message,
-                ctx.history_text,
-                req,
-                ctx.session_id,
+            self.patient_reply_service.generate(
+                clinician_message=body.message,
+                history_text=ctx.history_text,
+                session_id=ctx.session_id,
                 character=ctx.effective_character,
                 scene=ctx.effective_scene,
                 clinician_name=clinician_display_name_from_user_info(ctx.user_info),
@@ -352,81 +349,21 @@ class AimsCoachingHandler:
         )
 
         # Step 4: Persist AIMS metrics (after state update)
-        self._persist_aims_metrics(mem, cls_payload)
+        self.metrics_service.persist(mem, cls_payload)
 
         # Record the clinician turn before any coaching note so replay keeps
         # the same order the live UI showed: user -> coach -> assistant.
         self._append_user_history(mem, body.message)
 
-        # Persist a compact coaching note into conversation history before assistant reply,
-        # so the order is: user -> coach -> assistant. This helps the UI retain coaching on refresh.
-        try:
-            if self.memory_enabled and ctx.session_id and mem is not None:
-                parts: list[str] = []
-                step = cls_payload.get("step")
-                phase = cls_payload.get("phase")
-                reasons = cls_payload.get("reasons") or []
-                tips = cls_payload.get("tips") or []
-                step_feedback = cls_payload.get("step_feedback") or []
-                if step and step not in ("null", "None"):
-                    parts.append(f"Detected step: {step}")
-
-                # Prefer per-step feedback when available; fall back to flat reasons
-                if step_feedback:
-                    for sf in step_feedback:
-                        tone_icon = "\u2713" if sf.get("tone") == "praise" else "\u2192"
-                        sf_step = sf.get("step", "")
-                        sf_text = sf.get("feedback", "")
-                        if sf_text:
-                            parts.append(f"{sf_step}: {tone_icon} {sf_text}")
-                else:
-                    # Legacy fallback: show the first user-facing reason as feedback
-                    feedback = self._first_user_facing_reason(reasons, step=step)
-                    if feedback:
-                        parts.append(f"Feedback: {feedback}")
-
-                # Suppress tips that suggest Announce when Announce has already been done.
-                # The LLM occasionally generates these for null-step turns.
-                aims_state_now = mem.get(KEY_AIMS_STATE) or {}
-                already_announced = aims_state_now.get("announced", False)
-                tips_to_show = [
-                    t for t in tips
-                    if not (already_announced and STEP_ANNOUNCE.lower() in (t or "").lower())
-                ]
-                # Only show tips when there's no per-step feedback (avoid redundancy)
-                if tips_to_show and not step_feedback:
-                    parts.append(f"Tip: {tips_to_show[0]}")
-                
-                # Nudge user towards endgame scenarios if conversation is stalling
-                if reply_payload.get("resolution_type") == "deferred":
-                    parts.append("Nudge: The patient is deferring. Try offering specific literature or a follow-up visit to reach a clear AIMS resolution.")
-
-                coach_text = " | ".join(parts)
-                if coach_text:
-                    now = time.time()
-                    coach_entry = {"role": ROLE_COACH, "content": coach_text}
-                    mem.setdefault(SESSION_HISTORY, []).append(coach_entry)
-                    
-                    # Store structured data in full_history for logical archive schema
-                    structured_coaching = {
-                        "step": step,
-                        "score": cls_payload.get("score"),
-                        "reasons": self._filter_user_facing_reasons(reasons, step=step),
-                        "tips": tips_to_show,
-                        "step_feedback": [
-                            sf if isinstance(sf, dict) else sf.model_dump()
-                            for sf in step_feedback
-                        ],
-                        "phase": phase
-                    }
-                    mem.setdefault(KEY_FULL_HISTORY, []).append({
-                        **coach_entry, 
-                        "time": now,
-                        "coaching_data": structured_coaching
-                    })
-                    mem[KEY_UPDATED] = now
-        except Exception as e:
-            self.logger.error("Failed to append coaching to conversation history: %s", e)
+        # Persist a compact coaching note before assistant reply so replay keeps
+        # the same order the live UI showed: user -> coach -> assistant.
+        self.coach_feedback_history_service.append(
+            mem=mem,
+            memory_enabled=self.memory_enabled,
+            session_id=ctx.session_id,
+            cls_payload=cls_payload,
+            reply_payload=reply_payload,
+        )
 
         # Calculate reply duration from its previously completed task
         try:
@@ -458,7 +395,7 @@ class AimsCoachingHandler:
         self._append_assistant_history(mem, reply_payload.get("patient_reply", ""))
         
         # Step 7: Build session metrics
-        session_obj = self._build_session_metrics(mem)
+        session_obj = self.metrics_service.build_summary(mem)
         
         # Step 8: Check for end-game scenarios
         coach_post = await self._check_end_game(mem, reply_payload, session_obj, ctx.session_id)
@@ -505,7 +442,7 @@ class AimsCoachingHandler:
                 "step": cls_payload.get("step"),
                 "score": cls_payload.get("score"),
                 # Strip internal guard/debug reasons before sending to client
-                "reasons": self._filter_user_facing_reasons(
+                "reasons": self.coach_feedback_history_service.filter_user_facing_reasons(
                     cls_payload.get("reasons", []),
                     step=cls_payload.get("step"),
                 ),
@@ -619,47 +556,15 @@ class AimsCoachingHandler:
         add(step_current)
         return out
     
-    # Prefixes that mark a reason as internal/debug rather than user-facing
-    # coaching feedback.  These are filtered out when building the coach note.
-    _INTERNAL_REASON_PREFIXES = (
-        "phase guard:",
-        "tie-breaker:",
-        "detected recommendation language",
-        "fallback",
-        "llm flagged",
-        "rapport/symptom gathering",
-        "vaccine coaching will begin",
-    )
-
     @classmethod
     def _first_user_facing_reason(cls, reasons: list[str], step: str | None = None) -> str | None:
-        """Return the first reason that is NOT internal classifier logic.
-
-        Accepts an optional step for context-specific filtering:
-        - 'no clear recommendation' is suppressed for Secure steps (it is never
-          valid feedback for a Secure turn and leaks from Announce scoring).
-        """
-        for r in cls._filter_user_facing_reasons(reasons, step=step):
-            return r
-        return None
+        """Compatibility wrapper for tests and older internal callers."""
+        return CoachFeedbackHistoryService.first_user_facing_reason(reasons, step=step)
 
     @classmethod
     def _filter_user_facing_reasons(cls, reasons: list[str], step: str | None = None) -> list[str]:
-        """Return reasons with internal classifier/guard entries removed.
-
-        Used both to pick the single feedback line for the coach note and to
-        clean the full reasons array before it is returned to the client so
-        that debug strings like 'Phase guard: Announce already done → ...' are
-        never shown to the end user.
-        """
-        out = []
-        for r in reasons or []:
-            if any(r.lower().startswith(p) for p in cls._INTERNAL_REASON_PREFIXES):
-                continue
-            if step and step not in {STEP_ANNOUNCE} and "no clear recommendation" in r.lower():
-                continue
-            out.append(r)
-        return out
+        """Compatibility wrapper for tests and older internal callers."""
+        return CoachFeedbackHistoryService.filter_user_facing_reasons(reasons, step=step)
 
     # Trust style detection keywords and corresponding tip templates
     _ANALYTICAL_KEYWORDS = (
@@ -895,168 +800,19 @@ class AimsCoachingHandler:
         if all_resolved and pc and state.get("announced") and state.get("first_inquire_done"):
             state["phase"] = PHASE_SECURE
     
-    # Compound step → individual steps to expand into for coverage metrics
-    _COMPOUND_EXPANSIONS: Dict[str, List[str]] = {
-        STEP_ANNOUNCE_INQUIRE: [STEP_ANNOUNCE, STEP_INQUIRE],
-        STEP_MIRROR_INQUIRE: [STEP_MIRROR, STEP_INQUIRE],
-        STEP_MIRROR_SECURE: [STEP_MIRROR, STEP_SECURE],
-        STEP_SECURE_INQUIRE: [STEP_SECURE, STEP_INQUIRE],
-        STEP_MIRROR_SECURE_INQUIRE: [STEP_MIRROR, STEP_SECURE, STEP_INQUIRE],
-    }
+    _COMPOUND_EXPANSIONS = AimsMetricsService.COMPOUND_EXPANSIONS
+    _VALID_STEPS = AimsMetricsService.VALID_STEPS
 
-    _VALID_STEPS = frozenset({
-        STEP_ANNOUNCE, STEP_INQUIRE, STEP_MIRROR, STEP_SECURE,
-        *_COMPOUND_EXPANSIONS.keys(),
-    })
+    def _metrics(self) -> AimsMetricsService:
+        service = getattr(self, "metrics_service", None)
+        if service is None:
+            service = AimsMetricsService(logger=self.logger)
+            self.metrics_service = service
+        return service
 
     def _persist_aims_metrics(self, mem: Optional[Dict[str, Any]], cls_payload: Dict[str, Any]) -> None:
-        """Update AIMS metrics in mem dict. Mutates mem in place."""
-        if mem is None:
-            return
-        
-        try:
-            aims = mem.setdefault(KEY_AIMS_METRICS, {
-                "perStepCounts": {s: 0 for s in self._VALID_STEPS},
-                "scores": {s: [] for s in self._VALID_STEPS},
-                "totalTurns": 0
-            })
-            
-            step = cls_payload.get("step")
-            aims["totalTurns"] = int(aims.get("totalTurns", 0)) + 1
-            
-            if step in self._VALID_STEPS:
-                score_val = int(cls_payload.get("score", 2))
-                aims["perStepCounts"][step] = aims["perStepCounts"].get(step, 0) + 1
-                aims["scores"].setdefault(step, []).append(score_val)
-                
-                # Expand compound steps into individual components
-                for component in self._COMPOUND_EXPANSIONS.get(step, []):
-                    aims["perStepCounts"][component] = aims["perStepCounts"].get(component, 0) + 1
-                    aims["scores"].setdefault(component, []).append(score_val)
-                
-                # Maintain running averages per step
-                ra: dict[str, float] = {}
-                for k, arr in (aims.get("scores", {}) or {}).items():
-                    if arr:
-                        try:
-                            ra[k] = float(sum(arr)) / len(arr)
-                        except Exception as e:
-                            self.logger.debug(f"Failed to calculate running average for {k}: {e}")
-                            pass
-                aims["runningAverage"] = ra
-            
-            mem[KEY_AIMS_METRICS] = aims
-            
-        except Exception as e:
-            self.logger.debug(f"AIMS metrics update failed: {e}")
-    
-    async def _generate_patient_reply(
-        self,
-        clinician_message: str,
-        history_text: str,
-        req: Request,
-        session_id: str,
-        *,
-        character: str | None = None,
-        scene: str | None = None,
-        clinician_name: str | None = None,
-    ) -> Dict[str, Any]:
-        """Generate patient reply with safety checks and jailbreak detection."""
-        # Check for jailbreak attempts first
-        is_jb, jb_matches = self.jailbreak_guard.detect(clinician_message)
-        if is_jb:
-            confused = "Um… I'm just a parent here for my child's visit. I'm not sure what you mean — are we still talking about the checkup today?"
-            
-            telemetry_log_event(
-                self.logger,
-                "aims_patient_reply_jailbreak_intercept",
-                sessionId=session_id,
-                patterns=jb_matches,
-                requestBody={
-                    "message": clinician_message,
-                    "coach": True,
-                    "sessionId": session_id,
-                },
-            )
-            
-            return {"patient_reply": confused}
-        
-        # Build patient reply prompt
-        reply_prompt = build_patient_reply_prompt(
-            history_text=history_text,
-            clinician_last=clinician_message,
-            character=character,
-            scene=scene,
-            clinician_name=clinician_name,
-        )
-        
-        # Attempt to generate reply with retry and safety checks
-        for attempt in (1, 2):
-            try:
-                # Call JSON-constrained path directly to avoid accepting plain-text bodies
-                raw = await self._call_vertex_json(
-                    reply_prompt,
-                    REPLY_SCHEMA,
-                    log_path="coach_reply",
-                    temperature=self.temperature,
-                    max_tokens=self.max_tokens,
-                )
-                cand = json.loads((raw or "").strip())
-                validate_json(cand, REPLY_SCHEMA)
-                
-                text = cand.get("patient_reply", "").strip()
-                
-                # Safety post-check: parent should never give advice
-                advice_hits = detect_advice_patterns(text)
-                if advice_hits:
-                    violation_id = str(uuid.uuid4())
-                    
-                    # Log safety violation
-                    req_log = json.dumps({
-                        "message": clinician_message,
-                        "coach": True,
-                        "sessionId": session_id,
-                    })
-                    
-                    telemetry_log_event(
-                        self.logger,
-                        "aims_patient_reply_safety_violation",
-                        sessionId=session_id,
-                        violationId=violation_id,
-                        patterns=advice_hits,
-                        requestBody=telemetry_truncate(req_log, 16384),
-                        rawModelResponse=telemetry_truncate(str(raw), 16384),
-                        retryUsed=attempt > 1,
-                    )
-                    
-                    return {
-                        "patient_reply": f"Error: parent persona generated clinician-style advice (id={violation_id}). Logged for debugging. Please try again."
-                    }
-                
-                # Normal safe path; avoid terse 'ok' which fails fallback expectations in tests
-                if text.lower() == "ok":
-                    text = "I'm not sure — I have some questions, but I'd like to hear more."
-                return {"patient_reply": text}
-                
-            except Exception as ve:
-                telemetry_log_event(
-                    self.logger,
-                    "aims_patient_reply_invalid_json",
-                    attempt=attempt,
-                    sessionId=session_id,
-                    jsonInvalid=True,
-                    error=str(ve),
-                )
-                
-                if attempt == 1:
-                    continue
-                
-                # Fallback: minimal safe reply template
-                fallback_text = "I'm not sure — I have some questions, but I'd like to hear more."
-                return {"patient_reply": fallback_text}
-        
-        # Should not reach here, but provide fallback
-        return {"patient_reply": "Okay."}
+        """Compatibility wrapper for tests and older internal callers."""
+        self._metrics().persist(mem, cls_payload)
     
     def _append_history(
         self, mem: Optional[Dict[str, Any]], user_message: str, assistant_reply: str
@@ -1099,35 +855,8 @@ class AimsCoachingHandler:
             self.logger.debug(f"Assistant history append failed: {e}")
     
     def _build_session_metrics(self, mem: Optional[Dict[str, Any]]) -> Dict[str, Any] | None:
-        """Build session metrics snapshot from mem dict."""
-        if mem is None:
-            return None
-        
-        try:
-            aims = mem.get(KEY_AIMS_METRICS) or {}
-            counts = {STEP_ANNOUNCE: 0, STEP_INQUIRE: 0, STEP_MIRROR: 0, STEP_SECURE: 0, STEP_ANNOUNCE_INQUIRE: 0, STEP_MIRROR_INQUIRE: 0, STEP_MIRROR_SECURE: 0, STEP_SECURE_INQUIRE: 0, STEP_MIRROR_SECURE_INQUIRE: 0}
-            counts.update(aims.get("perStepCounts", {}))
-            
-            # Prefer precomputed runningAverage if available
-            running_avg = aims.get("runningAverage") or {}
-            if not running_avg:
-                for k, arr in (aims.get("scores", {}) or {}).items():
-                    if arr:
-                        try:
-                            running_avg[k] = float(sum(arr)) / len(arr)
-                        except Exception as e:
-                            self.logger.debug(f"Failed to calculate running average: {e}")
-                            pass
-            
-            return {
-                "totalTurns": aims.get("totalTurns", 0),
-                "perStepCounts": counts,
-                "runningAverage": running_avg
-            }
-            
-        except Exception as e:
-            self.logger.debug(f"Failed to build session metrics: {e}")
-            return None
+        """Compatibility wrapper for tests and older internal callers."""
+        return self._metrics().build_summary(mem)
     
     async def _check_end_game(
         self, mem: Optional[Dict[str, Any]], reply_payload: Dict[str, Any], session_obj: Dict[str, Any] | None, session_id: str
