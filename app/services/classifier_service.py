@@ -186,10 +186,11 @@ class ClassifierService:
         mirrored_concerns: List[str],
         secured_concerns: List[str],
     ) -> Dict[str, Any]:
-        """Call Gemini to detect if the session has reached a natural conclusion.
+        """Call Gemini to detect whether the session reached a natural conclusion.
 
-        TODO: Wire this into AimsEndgameService.check() as an LLM-based
-        complement/replacement to the heuristic EndGameDetector. Currently prep work only.
+        AimsEndgameService.check() calls this after its hard guards pass. The
+        service then applies deterministic confirmation/fallback gates around
+        this LLM result.
         """
         prompt = AimsPromptBuilder.build_endgame_detector_prompt(
             history_text=history_text,
