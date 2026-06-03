@@ -70,3 +70,14 @@ def test_log_event_fallback_to_str_on_json_fail(monkeypatch):
     log_event(lg, "evt", bad=BadObj())
     # It should have logged something; we don't assert JSON structure here
     assert lg.lines
+
+
+def test_log_event_swallows_warning_logger_failure():
+    class BadPayload:
+        pass
+
+    class WarningFailsLogger(StubLogger):
+        def warning(self, msg, *args):
+            raise RuntimeError("warning failed")
+
+    log_event(WarningFailsLogger(), "evt", bad=BadPayload())

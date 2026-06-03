@@ -10,6 +10,7 @@ This test runs in the cloud on GitHub Actions and should verify:
 """
 
 import os
+import google.auth
 from unittest.mock import MagicMock
 
 import pytest
@@ -225,6 +226,21 @@ class TestEnvironmentVariableValidation:
 
         settings = Settings()
         assert settings.PROJECT_ID == "fallback-project"
+
+    def test_project_id_google_auth_failure_is_nonfatal(self, monkeypatch):
+        """Verify missing ADC leaves PROJECT_ID unset instead of failing settings load."""
+        monkeypatch.delenv("PROJECT_ID", raising=False)
+        monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+        monkeypatch.delenv("GCP_PROJECT", raising=False)
+        monkeypatch.delenv("GCP_PROJECT_ID", raising=False)
+
+        def raise_default():
+            raise RuntimeError("no adc")
+
+        monkeypatch.setattr(google.auth, "default", raise_default)
+
+        settings = Settings()
+        assert settings.PROJECT_ID is None
 
     def test_region_defaults_to_us_central1(self, monkeypatch):
         """Verify REGION defaults to us-central1 if not set."""
