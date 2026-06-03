@@ -15,7 +15,7 @@ jsonschema>=4.26.0
 types-jsonschema>=4.26.0.20251110
 
 # Dev / test (install with: pip install ".[dev]")
-pytest>=9.0.0
+pytest>=9.0.3
 pytest-cov>=7.1.0
 pytest-asyncio>=1.4.0
 respx>=0.23.1
