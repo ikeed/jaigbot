@@ -75,6 +75,12 @@ class TestScoring:
         scr = score_step(cls.step, clinician, aims_mapping)
         assert scr.score >= 2
 
+    def test_mirror_inquire_combo_scores_components(self, aims_mapping):
+        clinician = "You're worried about side effects. What have you heard so far?"
+        scr = score_step("Mirror+Inquire", clinician, aims_mapping)
+        assert scr.score >= 2
+        assert isinstance(scr.reasons, list)
+
 
 def test_evaluate_turn_returns_tips_when_score_lt3(aims_mapping):
     clinician = "I get you're scared, but that's not true — the data shows it's safe."
