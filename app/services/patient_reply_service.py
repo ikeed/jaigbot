@@ -1,16 +1,13 @@
 from __future__ import annotations
 
 import json
-import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
 
 from app.json_schemas import REPLY_SCHEMA, validate_json
 from app.prompts.aims import build_patient_reply_prompt
-from app.services.coach_safety import detect_advice_patterns
 from app.services.security_guard import JailbreakGuard
 from app.telemetry.events import log_event as telemetry_log_event
-from app.telemetry.events import truncate_for_log as telemetry_truncate
 
 
 class PatientReplyService:
@@ -81,30 +78,6 @@ class PatientReplyService:
                 validate_json(cand, REPLY_SCHEMA)
 
                 text = cand.get("patient_reply", "").strip()
-
-                advice_hits = detect_advice_patterns(text)
-                if advice_hits:
-                    violation_id = str(uuid.uuid4())
-                    req_log = json.dumps({
-                        "message": clinician_message,
-                        "coach": True,
-                        "sessionId": session_id,
-                    })
-
-                    telemetry_log_event(
-                        self._logger,
-                        "aims_patient_reply_safety_violation",
-                        sessionId=session_id,
-                        violationId=violation_id,
-                        patterns=advice_hits,
-                        requestBody=telemetry_truncate(req_log, 16384),
-                        rawModelResponse=telemetry_truncate(str(raw), 16384),
-                        retryUsed=attempt > 1,
-                    )
-
-                    return {
-                        "patient_reply": f"Error: parent persona generated clinician-style advice (id={violation_id}). Logged for debugging. Please try again."
-                    }
 
                 if text.lower() == "ok":
                     text = "I'm not sure — I have some questions, but I'd like to hear more."

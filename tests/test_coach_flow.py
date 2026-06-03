@@ -141,7 +141,7 @@ def test_coach_path_jailbreak_intercept(monkeypatch):
     assert "parent" in data["reply"].lower()
 
 
-def test_coach_path_safety_violation(monkeypatch, caplog):
+def test_coach_path_medical_language_passes_through(monkeypatch, caplog):
     import logging
     caplog.set_level(logging.INFO)
     import app.main as m
@@ -172,10 +172,7 @@ def test_coach_path_safety_violation(monkeypatch, caplog):
     r = client.post("/chat", json={"message": "Can you summarize?", "coach": True, "sessionId": "s3"})
     assert r.status_code == 200
     data = r.json()
-    assert data["reply"].startswith("Error: parent persona generated clinician-style advice")
-    # Ensure a safety violation log was emitted
-    logs = "\n".join([rec.message for rec in caplog.records])
-    assert "aims_patient_reply_safety_violation" in logs
+    assert data["reply"] == "You should take 5 mg every 6 hours."
 
 
 def test_flag_off_hides_coaching(monkeypatch):

@@ -158,8 +158,8 @@ def test_classifier_post_processing_inquire_to_secure_and_tip_trim_and_score_nor
     assert len(data["coaching"]["tips"]) >= 1
 
 
-def test_patient_reply_safety_violation_triggers_error_reply(monkeypatch):
-    # Classifier returns something valid; reply contains advice-like content
+def test_patient_reply_medical_language_passes_through(monkeypatch):
+    # Classifier returns something valid; reply contains medical language.
     GWStub.classify_payload = {
         "step": "Announce",
         "score": 2,
@@ -178,8 +178,7 @@ def test_patient_reply_safety_violation_triggers_error_reply(monkeypatch):
     r = c.post("/chat", json=body)
     assert r.status_code == 200
     data = r.json()
-    # The model's advice triggers a safety rewrite to an error message
-    assert data["reply"].startswith("Error: parent persona generated clinician-style advice")
+    assert data["reply"] == "Take acetaminophen 5 mg every 8 hours"
 
 
 def test_patient_reply_prompt_includes_clinician_name_from_user_info(monkeypatch):
