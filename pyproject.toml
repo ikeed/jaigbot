@@ -21,15 +21,8 @@ dependencies = {file = ["requirements.txt"]}
 "run_app.py" = ["E402"]
 
 [tool.mypy]
-ignore_missing_imports = true
 implicit_optional = true
-disable_error_code = [
-    "arg-type",
-    "assignment",
-    "attr-defined",
-    "no-redef",
-    "override",
-    "return-value",
-    "str-bytes-safe",
-    "union-attr",
-]
+
+[[tool.mypy.overrides]]
+module = ["google.cloud", "google.cloud.*"]
+ignore_missing_imports = true

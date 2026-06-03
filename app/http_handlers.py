@@ -40,8 +40,10 @@ def install_http_handlers(app: FastAPI, *, settings: Any, logger: logging.Logger
             "method": request.method,
         }))
 
+        base: dict[str, Any]
         if isinstance(exc.detail, dict):
-            base = exc.detail.get("error", exc.detail).copy()
+            error_detail = exc.detail.get("error", exc.detail)
+            base = error_detail.copy() if isinstance(error_detail, dict) else {"message": str(error_detail)}
         elif isinstance(exc.detail, list):
             base = {"errors": exc.detail}
         else:

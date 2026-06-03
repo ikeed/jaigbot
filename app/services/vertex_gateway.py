@@ -33,6 +33,11 @@ class VertexGateway:
     def _models_to_try(self) -> List[str]:
         return [self.primary_model] + self.fallbacks
 
+    def _project(self) -> str:
+        if not self.project:
+            raise RuntimeError("PROJECT_ID is required for Vertex model calls")
+        return self.project
+
     @staticmethod
     def _normalize_result(result) -> str:
         # Preserve historical behavior: support tuple(result, usage) and plain strings
@@ -57,7 +62,7 @@ class VertexGateway:
     ) -> str:
         last_err = None
         for mid in self._models_to_try():
-            client = self.client_cls(project=self.project, region=self.region, model_id=mid)
+            client = self.client_cls(project=self._project(), region=self.region, model_id=mid)
             try:
                 try:
                     result = client.generate_text(
@@ -89,7 +94,7 @@ class VertexGateway:
     ) -> str:
         last_err = None
         for mid in self._models_to_try():
-            client = self.client_cls(project=self.project, region=self.region, model_id=mid)
+            client = self.client_cls(project=self._project(), region=self.region, model_id=mid)
             try:
                 try:
                     result = client.generate_text(
@@ -123,7 +128,7 @@ class VertexGateway:
         """Async variant of generate_text using VertexClient.generate_text_async()."""
         last_err = None
         for mid in self._models_to_try():
-            client = self.client_cls(project=self.project, region=self.region, model_id=mid)
+            client = self.client_cls(project=self._project(), region=self.region, model_id=mid)
             try:
                 result = await client.generate_text_async(
                     prompt=prompt,
@@ -151,7 +156,7 @@ class VertexGateway:
         """Async variant of generate_text_json using VertexClient.generate_text_async()."""
         last_err = None
         for mid in self._models_to_try():
-            client = self.client_cls(project=self.project, region=self.region, model_id=mid)
+            client = self.client_cls(project=self._project(), region=self.region, model_id=mid)
             try:
                 result = await client.generate_text_async(
                     prompt=prompt,

@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from chainlit.data.base import BaseDataLayer
+from chainlit.element import ElementDict
+from chainlit.step import StepDict
 from chainlit.types import Feedback, PageInfo, PaginatedResponse, Pagination, ThreadDict, ThreadFilter
 from chainlit.user import PersistedUser, User
 from chainlit.utils import utc_now
@@ -81,7 +83,7 @@ def _is_transient_disconnect_error_step(step: Dict[str, Any]) -> bool:
 
 def _canonical_session_id(thread: Dict[str, Any]) -> str:
     metadata = thread.get("metadata") or {}
-    return metadata.get("session_id") or thread.get("id")
+    return str(metadata.get("session_id") or thread.get("id") or "")
 
 
 class MemoryDataLayer(BaseDataLayer):
@@ -195,13 +197,13 @@ class MemoryDataLayer(BaseDataLayer):
         thread["elements"] = elements
         self._put(_thread_key(thread["id"]), thread)
 
-    async def get_element(self, thread_id: str, element_id: str) -> Optional[Dict[str, Any]]:
+    async def get_element(self, thread_id: str, element_id: str) -> Optional[ElementDict]:
         thread = self._get_thread(thread_id)
         if not thread:
             return None
         for element in thread.get("elements", []) or []:
             if element.get("id") == element_id:
-                return element
+                return cast(ElementDict, element)
         return None
 
     async def delete_element(self, element_id: str, thread_id: Optional[str] = None):
@@ -266,7 +268,7 @@ class MemoryDataLayer(BaseDataLayer):
             if session_id != thread_id and session_id in canonical_thread_ids:
                 continue
             value = dict(value)
-            threads.append(self._clean_thread_steps(value))
+            threads.append(cast(ThreadDict, cast(object, self._clean_thread_steps(value))))
 
         threads.sort(key=lambda t: t.get("createdAt") or "", reverse=True)
         first = pagination.first or len(threads)
@@ -287,7 +289,7 @@ class MemoryDataLayer(BaseDataLayer):
         thread.setdefault("steps", [])
         thread.setdefault("elements", [])
         thread.setdefault("metadata", {})
-        return self._clean_thread_steps(thread)
+        return cast(ThreadDict, cast(object, self._clean_thread_steps(thread)))
 
     async def update_thread(
         self,
@@ -316,12 +318,12 @@ class MemoryDataLayer(BaseDataLayer):
     async def close(self) -> None:
         return None
 
-    async def get_favorite_steps(self, user_id: str) -> List[Dict[str, Any]]:
-        favorites: List[Dict[str, Any]] = []
+    async def get_favorite_steps(self, user_id: str) -> List[StepDict]:
+        favorites: List[StepDict] = []
         for key, value in self.store.items():
             if not _is_thread_key(key) or value.get("userId") != user_id:
                 continue
             for step in value.get("steps", []) or []:
                 if (step.get("metadata") or {}).get("favorite"):
-                    favorites.append(step)
+                    favorites.append(cast(StepDict, step))
         return favorites

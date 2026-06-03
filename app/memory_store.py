@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +131,7 @@ class RedisStore:
         if url:
             self.r = redis.from_url(url, decode_responses=True)
         else:
-            self.r = redis.Redis(host=host, port=port, db=db, password=password, decode_responses=True)
+            self.r = redis.Redis(host=host or "localhost", port=port, db=db, password=password, decode_responses=True)
 
         # Verify connection early
         try:
@@ -187,16 +187,17 @@ class RedisStore:
                     for k, v in zip(keys, vals):
                         if not v:
                             continue
+                        redis_key = k.decode("utf-8") if isinstance(k, bytes) else str(k)
                         try:
                             data = json.loads(v)
                         except Exception as e:
-                            self.logger.debug(f"Failed to parse Redis value for key {k}: {e}")
+                            self.logger.debug(f"Failed to parse Redis value for key {redis_key}: {e}")
                             data = None
                         if data is not None:
-                            sid = k[len(prefix) :]
+                            sid = redis_key[len(prefix) :]
                             if sid not in seen:
                                 seen.add(sid)
-                                out.append((sid, data))
+                                out.append((sid, cast(Dict[str, Any], data)))
                 if cursor == 0:
                     break
         return out
