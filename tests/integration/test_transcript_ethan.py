@@ -29,7 +29,6 @@ analytically-minded patient through Tdap acceptance.
   Turn 11: Rapport — arranges nurse + prostate workup (no AIMS step)
 """
 import pytest
-from unittest.mock import patch
 
 import app.main as m
 from app.config import settings
@@ -39,7 +38,6 @@ from base import (
     ReplyOnlyGateway,
     LiveClassifyClient,
 )
-
 
 # ---------------------------------------------------------------------------
 # Transcript data (extracted from proper_transcript.txt)

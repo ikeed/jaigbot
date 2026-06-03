@@ -10,8 +10,10 @@ This test runs in the cloud on GitHub Actions and should verify:
 """
 
 import os
+from unittest.mock import MagicMock
+
 import pytest
-from unittest.mock import patch, MagicMock
+
 from app.config import Settings
 
 

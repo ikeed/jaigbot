@@ -51,6 +51,7 @@ DEFAULT_HOST = "localhost"
 DEFAULT_CHAT_TARGET = "chainlit_app.py"
 DEFAULT_REGION = "us-west4"
 DEFAULT_MODEL_ID = "gemini-2.5-pro"
+DEFAULT_MODEL_FLASH = "gemini-2.5-flash"
 DEFAULT_APP_ENV = "local"
 DEFAULT_PORT = 8080
 DEFAULT_MEMORY_TTL = 3600
@@ -79,6 +80,31 @@ KEY_THREAD_ID = "thread_id"
 KEY_UPDATED = "updated"
 PREFIX_CURRENT_THREAD = "current_thread"
 PREFIX_THREAD = "thread"
+
+# AIMS State Keys
+KEY_AIMS_STATE = "aims_state"
+KEY_AIMS_METRICS = "aims"
+KEY_FULL_HISTORY = "full_history"
+KEY_COACH_POST = "coach_post"
+KEY_GAME_OVER = "game_over"
+
+# AIMS Phases
+PHASE_PRE_ANNOUNCE = "PreAnnounce"
+PHASE_INQUIRE_MIRROR = "InquireMirror"
+PHASE_SECURE = "Secure"
+
+# AIMS Steps
+STEP_ANNOUNCE = "Announce"
+STEP_INQUIRE = "Inquire"
+STEP_MIRROR = "Mirror"
+STEP_SECURE = "Secure"
+
+# Compound AIMS Steps
+STEP_ANNOUNCE_INQUIRE = "Announce+Inquire"
+STEP_MIRROR_INQUIRE = "Mirror+Inquire"
+STEP_MIRROR_SECURE = "Mirror+Secure"
+STEP_SECURE_INQUIRE = "Secure+Inquire"
+STEP_MIRROR_SECURE_INQUIRE = "Mirror+Secure+Inquire"
 
 # Chainlit Session Keys
 SESSION_USER = "user"

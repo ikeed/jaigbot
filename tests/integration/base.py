@@ -29,13 +29,12 @@ import copy
 import json
 import time
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Optional
 
 from fastapi.testclient import TestClient
 
 import app.main as m
-from app.config import settings
-from app.vertex import VertexAIError, VertexClient
+from app.vertex import VertexClient
 
 
 # ---------------------------------------------------------------------------

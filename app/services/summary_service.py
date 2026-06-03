@@ -3,7 +3,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, ROLE_COACH, get_ui_attributes
+
+from app.chat_roles import ROLE_ASSISTANT, get_ui_attributes
 
 logger = logging.getLogger(__name__)
 import re

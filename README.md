@@ -17,8 +17,9 @@ with deterministic fallbacks and session-level metrics.
   - **GET  /healthz** → simple health check.
   - **GET  /config**, **/modelcheck**, **/diagnostics**, **/models** for configuration/diagnostics.
 - Backend code: `app/main.py`, `app/services/chat_orchestrator.py`, and `app/vertex.py`.
+- AIMS coaching architecture: `docs/aims/README.md`.
 - Run/setup docs: `docs/developer-setup.md` (step‑by‑step).
-- Architecture/map: `docs/plan.md`.
+- AIMS implementation map: `docs/aims/README.md`.
 - SSO Setup Guide: `docs/sso-setup.md` (step-by-step for Google, Facebook, Apple).
 - Note: `app/static/index.html` is deprecated and no longer served; the backend does not mount a static UI.
 
@@ -158,7 +159,7 @@ The backend supports session-keyed memory with optional persona/scene, using in-
 
 ## More docs
 - Developer setup (step‑by‑step): docs/developer-setup.md
-- Architecture/plan: docs/plan.md
+- AIMS implementation map: docs/aims/README.md
 - API reference: docs/api.md (and Swagger UI at GET /docs when running)
 - Terraform IaC: terraform/README.md
 - Chainlit UI details: docs/chainlit-ui.md

@@ -1,4 +1,3 @@
-import json
 from fastapi.testclient import TestClient
 
 import app.main as m
@@ -77,7 +76,6 @@ def test_summary_with_analysis_monkeypatched_llm(monkeypatch):
     }
 
     # Monkeypatch the helper used inside /summary to return deterministic bullets
-    from app import services
     from app.services import vertex_helpers as vh
 
     def fake_vertex_call_with_fallback_text(*args, **kwargs):

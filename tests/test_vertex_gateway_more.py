@@ -10,7 +10,7 @@ class TypeErrorClient:
     # Define generate_text that only supports positional args to trigger TypeError on kwargs
     def generate_text(self, prompt, temperature, max_tokens):
         # Return tuple to test normalization
-        return (f"ok-{self.model_id}", {"usage": 1})
+        return f"ok-{self.model_id}", {"usage": 1}
 
 
 def test_generate_text_typeerror_compatibility():

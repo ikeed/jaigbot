@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from typing import Any, Dict, List, Optional
 
 from app.aims_engine import evaluate_turn
@@ -193,7 +192,7 @@ class ClassifierService:
     ) -> Dict[str, Any]:
         """Call Gemini to detect if the session has reached a natural conclusion.
 
-        TODO: Wire this into AimsCoachingHandler._check_end_game() as an LLM-based
+        TODO: Wire this into AimsEndgameService.check() as an LLM-based
         complement/replacement to the heuristic EndGameDetector. Currently prep work only.
         """
         prompt = AimsPromptBuilder.build_endgame_detector_prompt(

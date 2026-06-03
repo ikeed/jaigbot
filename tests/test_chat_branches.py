@@ -1,4 +1,3 @@
-from app.config import settings
 import json
 from typing import Any
 
@@ -6,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.main as m
-from app.vertex import VertexAIError
+from app.config import settings
 
 
 class GWStub:
@@ -21,6 +20,7 @@ class GWStub:
     reply_json_payload: dict[str, Any] | None = None
     reply_json_raises: Exception | None = None
     reply_json_invalid_times: int = 0  # number of times to return invalid JSON for reply
+    reply_prompts: list[str] = []
 
     def __init__(self, *args, **kwargs):
         pass
@@ -52,6 +52,7 @@ class GWStub:
         props = (response_schema or {}).get("properties", {}) if isinstance(response_schema, dict) else {}
         is_reply = isinstance(props, dict) and ("patient_reply" in props)
         if is_reply:
+            GWStub.reply_prompts.append(prompt)
             if GWStub.reply_json_raises:
                 raise GWStub.reply_json_raises
             if GWStub.reply_json_invalid_times > 0:
@@ -99,6 +100,7 @@ def reset_gw(monkeypatch):
     GWStub.reply_json_payload = None
     GWStub.reply_json_raises = None
     GWStub.reply_json_invalid_times = 0
+    GWStub.reply_prompts = []
     yield
 
 
@@ -180,6 +182,38 @@ def test_patient_reply_safety_violation_triggers_error_reply(monkeypatch):
     assert data["reply"].startswith("Error: parent persona generated clinician-style advice")
 
 
+def test_patient_reply_prompt_includes_clinician_name_from_user_info(monkeypatch):
+    GWStub.classify_payload = {
+        "step": None,
+        "score": 0,
+        "reasons": [],
+        "tips": [],
+    }
+    GWStub.reply_json_payload = {"patient_reply": "Thanks, Dr. Burnett."}
+
+    def fake_eval(person_last, clinician, mapping):
+        return {"step": None, "score": 0, "reasons": [], "tips": []}
+
+    monkeypatch.setattr(m, "evaluate_turn", fake_eval, raising=False)
+
+    c = client()
+    body = {
+        "message": "How are you and Sophia doing today?",
+        "coach": True,
+        "sessionId": "clinician-name",
+        "userInfo": {
+            "identifier": "craig.burnett@gmail.com",
+            "metadata": {"provider": "google", "name": "Craig Burnett"},
+        },
+    }
+
+    r = c.post("/chat", json=body)
+
+    assert r.status_code == 200
+    assert any("The clinician's name is Dr. Burnett" in prompt for prompt in GWStub.reply_prompts)
+    assert all("[Clinician's last name]" not in prompt for prompt in GWStub.reply_prompts)
+
+
 def test_invalid_json_twice_falls_back_based_on_step(monkeypatch):
     # Make deterministic step Mirror via evaluate_turn to control fallback selection
     def fake_eval(person_last, clinician, mapping):
@@ -204,5 +238,3 @@ def test_invalid_json_twice_falls_back_based_on_step(monkeypatch):
         or ("thanks for letting me know" in low)
         or ("i appreciate" in low)
     )
-
-

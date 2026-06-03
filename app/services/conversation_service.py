@@ -9,7 +9,8 @@ They are currently not yet wired into app.main; wiring will be done
 incrementally to avoid large diffs while preserving behavior.
 """
 from __future__ import annotations
-from typing import Dict, Iterable, List, Optional, Set, Tuple
+
+from typing import Dict, Iterable, List, Optional, Set
 
 TopicalCues = Dict[str, Iterable[str]]
 Concern = Dict[str, object]

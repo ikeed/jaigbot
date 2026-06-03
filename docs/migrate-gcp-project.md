@@ -129,7 +129,6 @@ Terraform (project passed via variable):
 - terraform/README.md (examples show specific project IDs)
 
 Docs and scripts showing example defaults (replace with your project):
-- docs/plan.md (examples like `warm-actor-253703`)
 - docs/developer-setup.md (example commands include a project id)
 - docs/api.md (mentions PROJECT_ID in configuration notes)
 - scripts/dev_run.sh (fallback default PROJECT_ID shown for convenience)

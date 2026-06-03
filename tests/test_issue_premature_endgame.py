@@ -1,5 +1,3 @@
-
-import pytest
 from app.services.coach_post import EndGameDetector
 
 def test_premature_endgame_trigger_literature_home():

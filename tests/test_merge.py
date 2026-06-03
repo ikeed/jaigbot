@@ -2,7 +2,7 @@ from app.vertex import VertexClient
 
 
 def merge(base, add):
-    return VertexClient._merge_with_overlap(base, add)
+    return VertexClient.merge_with_overlap(base, add)
 
 
 def test_merge_inserts_space_between_words():

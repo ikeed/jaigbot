@@ -1,14 +1,12 @@
-from app.config import settings
 from fastapi.testclient import TestClient
 
+from app.config import settings
 from app.main import app
-from app.vertex import VertexAIError
 
 client = TestClient(app)
 
 
 def test_model_fallback_succeeds(monkeypatch):
-    import app.main as m
     from app.vertex import VertexAIError
     import app.services.legacy_chat_handler
     import app.services.vertex_helpers
@@ -88,7 +86,6 @@ def test_model_fallback_succeeds(monkeypatch):
 
 
 def test_upstream_error_maps_to_502_and_sets_cookie(monkeypatch):
-    import app.main as m
     from app.vertex import VertexAIError
     import app.services.legacy_chat_handler
     import app.services.vertex_helpers

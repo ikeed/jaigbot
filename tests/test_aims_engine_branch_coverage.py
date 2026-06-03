@@ -3,16 +3,17 @@ Additional tests for aims_engine.py to improve branch coverage to 85%+
 
 These tests target specific uncovered branches identified in the coverage report.
 """
-import pytest
+import json
 import os
 import tempfile
-import json
-from unittest.mock import patch, mock_open
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
 
 from app.aims_engine import (
     load_mapping, classify_step, score_step, evaluate_turn,
-    _stem_match, _starts_with_any, _is_small_talk, _introduces_new_info,
-    ClassificationResult, ScoreResult
+    _stem_match, _starts_with_any, _is_small_talk, _introduces_new_info
 )
 
 
@@ -37,27 +38,33 @@ class TestLoadMapping:
             assert result == mapping_data
         finally:
             os.unlink(temp_path)
+
+    def test_load_mapping_default_is_independent_of_cwd(self, monkeypatch, tmp_path):
+        """The bundled runtime mapping path is derived from the module location."""
+        load_mapping.cache_clear()
+        monkeypatch.chdir(tmp_path)
+
+        result = load_mapping()
+
+        assert isinstance(result, dict)
+        load_mapping.cache_clear()
     
     def test_load_mapping_file_not_found_with_path(self):
-        """Test load_mapping with nonexistent path falls back to default locations"""
-        # Since the function tries multiple paths, it will try default locations
-        # This test just verifies the function doesn't crash
-        try:
-            result = load_mapping("/nonexistent/path.json")
-            # If it succeeds, it found the default mapping file
-            assert isinstance(result, dict)
-        except FileNotFoundError:
-            # If it fails, all paths were exhausted
-            assert True
+        """An explicit override is authoritative."""
+        with pytest.raises(FileNotFoundError):
+            load_mapping("/nonexistent/path.json")
     
-    def test_load_mapping_no_candidates_found(self):
-        """Test load_mapping when no candidate files exist"""
-        with patch('os.path.join') as mock_join:
-            # Make all candidate paths non-existent
-            mock_join.return_value = "/nonexistent/path.json"
+    def test_load_mapping_default_file_not_found(self):
+        """Test load_mapping when the bundled mapping file does not exist."""
+        load_mapping.cache_clear()
+        with patch.dict(
+            load_mapping.__wrapped__.__globals__,
+            {"aims_mapping": Path("/nonexistent/path.json")},
+        ):
             with pytest.raises(FileNotFoundError) as exc_info:
                 load_mapping()
-            assert "Unable to load aims_mapping.json" in str(exc_info.value)
+            assert "nonexistent/path.json" in str(exc_info.value)
+        load_mapping.cache_clear()
 
 
 class TestStemMatch:
