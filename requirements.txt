@@ -1,7 +1,7 @@
 fastapi~=0.136.0
 uvicorn[standard]~=0.48.0
 google-genai>=2.7.0
-google-cloud-storage~=3.10.0
+google-cloud-storage~=3.10.1
 google-cloud-aiplatform
 protobuf
 pydantic-settings>=2.14.1
