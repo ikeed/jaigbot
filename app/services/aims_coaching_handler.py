@@ -17,7 +17,7 @@ import asyncio
 import os
 import time
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Protocol
 
 from fastapi import Request
 
@@ -46,7 +46,7 @@ from app.constants import (
     SESSION_SCENE,
     DEFAULT_MODEL_FLASH
 )
-from app.models import ChatRequest
+from app.models import ChatRequest, ClassifierResult
 from app.services.chat_context import ChatContext
 from app.services.chat_helpers import strip_appointment_headers
 from app.services.classifier_service import ClassifierService
@@ -75,6 +75,75 @@ from app.telemetry.events import (
     log_event as telemetry_log_event,
 )
 from app.vertex import VertexClient
+
+
+class ClassifierDependency(Protocol):
+    async def classify_turn(
+        self,
+        *,
+        clinician_message: str,
+        person_last: str,
+        history: List[Dict[str, str]],
+        prior_announced: bool,
+        prior_phase: str,
+        mapping: Dict[str, Any],
+        context_turns: int = 3,
+        max_concerns: int = 3,
+        inquired_concerns_list: List[str] | None = None,
+        mirrored_concerns_list: List[str] | None = None,
+    ) -> ClassifierResult:
+        ...
+
+    async def detect_endgame(
+        self,
+        *,
+        history_text: str,
+        announced: bool,
+        inquired_concerns: List[str],
+        mirrored_concerns: List[str],
+        secured_concerns: List[str],
+    ) -> Dict[str, Any]:
+        ...
+
+
+class PatientReplyDependency(Protocol):
+    async def generate(
+        self,
+        *,
+        clinician_message: str,
+        history_text: str,
+        session_id: str,
+        character: str | None = None,
+        scene: str | None = None,
+        clinician_name: str | None = None,
+    ) -> dict[str, Any]:
+        ...
+
+
+class AimsMetricsDependency(Protocol):
+    def persist(self, mem: dict[str, Any] | None, cls_payload: dict[str, Any]) -> None:
+        ...
+
+    def build_summary(self, mem: dict[str, Any] | None) -> dict[str, Any] | None:
+        ...
+
+
+class CoachFeedbackHistoryDependency(Protocol):
+    def append(
+        self,
+        *,
+        mem: dict[str, Any] | None,
+        memory_enabled: bool,
+        session_id: str | None,
+        cls_payload: dict[str, Any],
+        reply_payload: dict[str, Any],
+    ) -> None:
+        ...
+
+    def filter_user_facing_reasons(
+        self, reasons: list[str], step: str | None = None
+    ) -> list[str]:
+        ...
 
 
 class AimsCoachingHandler:
@@ -128,6 +197,10 @@ class AimsCoachingHandler:
         vertex_config: dict[str, Any],
         memory_config: dict[str, Any],
         logger: Any,
+        classifier_service: ClassifierDependency | None = None,
+        patient_reply_service: PatientReplyDependency | None = None,
+        metrics_service: AimsMetricsDependency | None = None,
+        coach_feedback_history_service: CoachFeedbackHistoryDependency | None = None,
     ):
         self.memory_store = memory_store
         self.vertex_config = vertex_config
@@ -156,7 +229,7 @@ class AimsCoachingHandler:
         self.memory_enabled = memory_config["enabled"]
         self.memory_max_turns = memory_config["max_turns"]
         
-        self.classifier_service = ClassifierService(
+        self.classifier_service = classifier_service or ClassifierService(
             project_id=self.project_id,
             location=self.vertex_location,
             model_id=self.model_id,
@@ -165,14 +238,17 @@ class AimsCoachingHandler:
             max_tokens=self.classify_max_tokens,
             client_cls=self.client_cls,
         )
-        self.patient_reply_service = PatientReplyService(
+        self.patient_reply_service = patient_reply_service or PatientReplyService(
             model_json_caller=self._call_vertex_json,
             logger=self.logger,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
         )
-        self.metrics_service = AimsMetricsService(logger=self.logger)
-        self.coach_feedback_history_service = CoachFeedbackHistoryService(logger=self.logger)
+        self.metrics_service = metrics_service or AimsMetricsService(logger=self.logger)
+        self.coach_feedback_history_service = (
+            coach_feedback_history_service
+            or CoachFeedbackHistoryService(logger=self.logger)
+        )
     
     async def handle(
         self, req: Request, body: ChatRequest, ctx: ChatContext
