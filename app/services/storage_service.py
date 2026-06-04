@@ -90,7 +90,8 @@ class StorageService:
             logger.error(f"Failed to upload session {session_id} to GCS: {e}", exc_info=True)
             return False
 
-    def _transform_to_logical_schema(self, session_id: str, user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    @staticmethod
+    def _transform_to_logical_schema(session_id: str, user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """Convert messy internal memory to structured logical schema."""
         started_at = data.get("session_started")
         ended_at = data.get("session_ended") or data.get("updated")

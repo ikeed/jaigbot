@@ -447,7 +447,8 @@ class ChatOrchestrator:
             self.logger.debug(f"Error retrieving request ID: {e}")
             return self._generate_uuid()
     
-    def _generate_uuid(self) -> str:
+    @staticmethod
+    def _generate_uuid() -> str:
         """Generate a UUID string."""
         import uuid
         return str(uuid.uuid4())

@@ -32,7 +32,8 @@ class FakeVertexAimsJSON:
     def __init__(self, project: str, region: str, model_id: str):
         self.calls = 0
 
-    async def generate_text_async(self, prompt: str, **kwargs) -> str:
+    @staticmethod
+    async def generate_text_async(prompt: str, **kwargs) -> str:
         prompt = prompt or ""
         if "unified" in (prompt or "").lower() or "classify" in (prompt or "").lower():
             # ClassifierService's unified prompt

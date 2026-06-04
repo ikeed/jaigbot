@@ -38,20 +38,9 @@ class ClassifierService:
         self.max_tokens = max_tokens
         self.client_cls = client_cls
 
-    async def classify_turn(
-        self,
-        *,
-        clinician_message: str,
-        person_last: str,
-        history: List[Dict[str, str]],
-        prior_announced: bool,
-        prior_phase: str,
-        mapping: Dict[str, Any],
-        context_turns: int = 3,
-        max_concerns: int = 3,
-        inquired_concerns_list: List[str] = None,
-        mirrored_concerns_list: List[str] = None,
-    ) -> ClassifierResult:
+    async def classify_turn(self, *, clinician_message: str, person_last: str, history: List[Dict[str, str]],
+                            prior_announced: bool, prior_phase: str, mapping: Dict[str, Any], context_turns: int = 3,
+                            inquired_concerns_list: List[str] = None, mirrored_concerns_list: List[str] = None) -> ClassifierResult:
         """Perform unified classification for a clinician turn."""
         
         # 1. Build the prompt (split: static system instruction + lean per-turn prompt)
@@ -233,9 +222,9 @@ class ClassifierService:
             thinking_budget=128,
         )
 
+    @staticmethod
     def _get_deterministic_fallback(
-        self,
-        clinician_message: str,
+            clinician_message: str,
         mapping: Dict[str, Any],
     ) -> ClassifierResult:
         """Invoke the original deterministic engine as a fallback."""

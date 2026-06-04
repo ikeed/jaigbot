@@ -25,7 +25,8 @@ class GWStub:
     def __init__(self, *args, **kwargs):
         pass
 
-    async def generate_text_async(self, prompt: str, **kwargs) -> str:
+    @staticmethod
+    async def generate_text_async(prompt: str, **kwargs) -> str:
         if "unified" in (prompt or "").lower() or "classify" in (prompt or "").lower():
             if GWStub.classify_raises:
                 raise GWStub.classify_raises
@@ -47,7 +48,8 @@ class GWStub:
         payload = GWStub.reply_json_payload or {"patient_reply": "ok"}
         return json.dumps(payload)
 
-    def generate_text_json(self, *, prompt: str, response_schema: dict, system_instruction=None, log_fallback=None) -> str:  # noqa: D401
+    @staticmethod
+    def generate_text_json(*, prompt: str, response_schema: dict, system_instruction=None, log_fallback=None) -> str:  # noqa: D401
         # Heuristic: detect reply schema vs classifier schema
         props = (response_schema or {}).get("properties", {}) if isinstance(response_schema, dict) else {}
         is_reply = isinstance(props, dict) and ("patient_reply" in props)
@@ -66,7 +68,8 @@ class GWStub:
             payload = GWStub.classify_payload or {"step": None, "score": 0, "reasons": [], "tips": []}
             return json.dumps(payload)
 
-    def generate_text(self, *, prompt: str, system_instruction=None, log_fallback=None) -> str:
+    @staticmethod
+    def generate_text(*, prompt: str, system_instruction=None, log_fallback=None) -> str:
         # Should not generally be used by current main.py for reply/classifier; keep as fallback
         payload = {"patient_reply": "ok"}
         return json.dumps(payload)

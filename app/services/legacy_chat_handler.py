@@ -117,7 +117,8 @@ class LegacyChatHandler:
             "latency_ms": latency_ms,
         }
     
-    def _build_full_prompt(self, ctx: ChatContext, current_message: str) -> str:
+    @staticmethod
+    def _build_full_prompt(ctx: ChatContext, current_message: str) -> str:
         """Build complete prompt from system + history + current message."""
         # Start with system instruction if available
         parts = []

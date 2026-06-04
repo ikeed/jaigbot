@@ -51,13 +51,15 @@ def vertex_client_mock(monkeypatch):
     """
     import json
 
+    # noinspection PyUnusedLocal
     class MockVertexClient:
         def __init__(self, *args, **kwargs):
             self.project = kwargs.get("project")
             self.region = kwargs.get("region")
             self.model_id = kwargs.get("model_id")
 
-        async def generate_text_async(self, prompt: str, **kwargs) -> str:
+        @staticmethod
+        async def generate_text_async(prompt: str, **kwargs) -> str:
             # Also check system_instruction for classification detection
             sys_instr = (kwargs.get("system_instruction") or "").lower()
             # 1. Classification path (unified prompt or system-instruction-based)
@@ -82,7 +84,8 @@ def vertex_client_mock(monkeypatch):
             # 3. Default/Legacy fallback
             return json.dumps({"patient_reply": "Mock reply from VertexClient."})
 
-        def generate_text(self, *args, **kwargs):
+        @staticmethod
+        def generate_text(*args, **kwargs):
             # If the first arg is prompt or prompt is in kwargs
             prompt = args[0] if args else kwargs.get("prompt", "")
             
@@ -93,7 +96,8 @@ def vertex_client_mock(monkeypatch):
             
             return "Mock text response", {}
 
-        def generate_text_json(self, *args, **kwargs):
+        @staticmethod
+        def generate_text_json(*args, **kwargs):
             return json.dumps({"patient_reply": "Mock JSON reply"})
 
     monkeypatch.setattr("app.vertex.VertexClient", MockVertexClient)

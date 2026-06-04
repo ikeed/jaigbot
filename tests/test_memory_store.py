@@ -1,4 +1,7 @@
 import json
+import logging
+import sys
+import types
 from types import SimpleNamespace
 
 import pytest
@@ -6,7 +9,7 @@ from chainlit.types import Pagination, ThreadFilter
 from chainlit.user import User
 
 from app.chainlit_memory_data_layer import MemoryDataLayer
-from app.memory_store import InMemoryStore
+from app.memory_store import InMemoryStore, RedisStore
 
 
 def test_in_memory_store_can_reload_from_persisted_file(tmp_path):
@@ -57,6 +60,87 @@ def test_in_memory_store_ignores_persist_failure(tmp_path):
     store["sid"] = {"history": []}
 
     assert store["sid"] == {"history": []}
+
+
+def test_redis_store_supports_primary_and_fallback_keys(monkeypatch):
+    class FakePipeline:
+        def __init__(self, client):
+            self.client = client
+            self.ops = []
+
+        def set(self, key, value):
+            self.ops.append(("set", key, value))
+            self.client.data[key] = value
+            return self
+
+        def expire(self, key, ttl):
+            self.ops.append(("expire", key, ttl))
+            self.client.expirations[key] = ttl
+            return self
+
+        @staticmethod
+        def execute():
+            return None
+
+    class FakeRedisClient:
+        def __init__(self):
+            self.data = {
+                "aims:session:primary": json.dumps({"value": 1}),
+                "legacy:primary": json.dumps({"value": 2}),
+                "aims:session:bad": "{",
+            }
+            self.expirations = {}
+
+        @staticmethod
+        def ping():
+            return True
+
+        def get(self, key):
+            return self.data.get(key)
+
+        def pipeline(self):
+            return FakePipeline(self)
+
+        def scan(self, cursor=0, match=None, count=200):
+            keys = [k for k in self.data if match is None or k.startswith(match[:-1])]
+            return 0, keys
+
+        def mget(self, keys):
+            return [self.data.get(key) for key in keys]
+
+        def delete(self, *keys):
+            for key in keys:
+                self.data.pop(key, None)
+
+    fake_client = FakeRedisClient()
+    fake_module = types.SimpleNamespace(
+        from_url=lambda url, decode_responses=True: fake_client,
+        Redis=lambda **kwargs: fake_client,
+    )
+    monkeypatch.setitem(sys.modules, "redis", fake_module)
+
+    store = RedisStore(
+        url="redis://example.invalid/0",
+        prefix="aims:session:",
+        fallback_prefixes=["legacy:"],
+        ttl=120,
+        logger=logging.getLogger("test"),
+    )
+
+    assert store.get("primary") == {"value": 1}
+
+    store.set("new", {"hello": "world"})
+    assert fake_client.data["aims:session:new"] == json.dumps({"hello": "world"})
+    assert fake_client.expirations["aims:session:new"] == 120
+
+    items = dict(store.items())
+    assert items["primary"] == {"value": 1}
+    assert "bad" not in items
+    assert len(store) == 3
+
+    assert store.pop("primary") == {"value": 1}
+    assert "aims:session:primary" not in fake_client.data
+    assert "legacy:primary" not in fake_client.data
 
 
 @pytest.mark.asyncio

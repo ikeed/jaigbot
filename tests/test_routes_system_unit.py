@@ -2,7 +2,6 @@ import logging
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -146,7 +145,8 @@ def test_models_success_uses_global_vertex_host(monkeypatch):
     class FakeResponse:
         status_code = 200
 
-        def json(self):
+        @staticmethod
+        def json():
             return {
                 "models": [
                     {

@@ -27,7 +27,8 @@ class FakeVertexAdviceJSON:
     def __init__(self, project: str, region: str, model_id: str):
         pass
 
-    def generate_text(self, *args, **kwargs):
+    @staticmethod
+    def generate_text(*args, **kwargs):
         # Valid JSON envelope but with advice-like content
         return json.dumps({"patient_reply": "You should take 5 mg every 6 hours."})
 
@@ -66,7 +67,8 @@ def test_coach_path_with_fallback(monkeypatch, caplog):
         def __init__(self, *args, **kwargs):
             pass
         
-        async def generate_text_async(self, prompt: str, **kwargs) -> str:
+        @staticmethod
+        async def generate_text_async(prompt: str, **kwargs) -> str:
             if "unified" in (prompt or "").lower() or "classify" in (prompt or "").lower():
                 # ClassifierService's unified prompt
                 payload = {
@@ -79,10 +81,12 @@ def test_coach_path_with_fallback(monkeypatch, caplog):
                 return json.dumps(payload)
             return "not-json"
 
-        def generate_text(self, *args, **kwargs):
+        @staticmethod
+        def generate_text(*args, **kwargs):
             return "not-json"
         
-        def generate_text_json(self, *args, **kwargs):
+        @staticmethod
+        def generate_text_json(*args, **kwargs):
             return "not-json"
     
     monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", FakeGatewayInvalidJSON)
@@ -111,7 +115,8 @@ def test_coach_path_jailbreak_intercept(monkeypatch):
         def __init__(self, *args, **kwargs):
             pass
         
-        async def generate_text_async(self, prompt: str, **kwargs) -> str:
+        @staticmethod
+        async def generate_text_async(prompt: str, **kwargs) -> str:
             if "unified" in (prompt or "").lower() or "classify" in (prompt or "").lower():
                 # ClassifierService's unified prompt
                 payload = {
@@ -124,10 +129,12 @@ def test_coach_path_jailbreak_intercept(monkeypatch):
                 return json.dumps(payload)
             return "not-json"
 
-        def generate_text(self, *args, **kwargs):
+        @staticmethod
+        def generate_text(*args, **kwargs):
             return "not-json"
         
-        def generate_text_json(self, *args, **kwargs):
+        @staticmethod
+        def generate_text_json(*args, **kwargs):
             return "not-json"
     
     monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", FakeGatewayInvalidJSON)
@@ -151,13 +158,16 @@ def test_coach_path_medical_language_passes_through(monkeypatch, caplog):
         def __init__(self, *args, **kwargs):
             pass
         
-        async def generate_text_async(self, prompt: str, **kwargs) -> str:
+        @staticmethod
+        async def generate_text_async(prompt: str, **kwargs) -> str:
             return json.dumps({"patient_reply": "You should take 5 mg every 6 hours."})
         
-        def generate_text(self, *args, **kwargs):
+        @staticmethod
+        def generate_text(*args, **kwargs):
             return json.dumps({"patient_reply": "You should take 5 mg every 6 hours."})
         
-        def generate_text_json(self, *args, **kwargs):
+        @staticmethod
+        def generate_text_json(*args, **kwargs):
             return json.dumps({"patient_reply": "You should take 5 mg every 6 hours."})
 
         async def agenerate_text_json(self, **kwargs) -> str:
@@ -203,7 +213,8 @@ def test_summary_endpoint(monkeypatch):
         def __init__(self, *args, **kwargs):
             pass
         
-        async def generate_text_async(self, prompt: str, **kwargs) -> str:
+        @staticmethod
+        async def generate_text_async(prompt: str, **kwargs) -> str:
             if "unified" in (prompt or "").lower() or "classify" in (prompt or "").lower():
                 # ClassifierService's unified prompt
                 payload = {
@@ -216,10 +227,12 @@ def test_summary_endpoint(monkeypatch):
                 return json.dumps(payload)
             return "not-json"
 
-        def generate_text(self, *args, **kwargs):
+        @staticmethod
+        def generate_text(*args, **kwargs):
             return "not-json"
         
-        def generate_text_json(self, *args, **kwargs):
+        @staticmethod
+        def generate_text_json(*args, **kwargs):
             return "not-json"
     
     monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", FakeGatewayInvalidJSON)

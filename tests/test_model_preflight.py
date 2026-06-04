@@ -11,7 +11,8 @@ def test_check_models_list_treats_malformed_json_as_no_match():
             raise ValueError("bad json")
 
     class Session:
-        def get(self, url):
+        @staticmethod
+        def get(url):
             return Response()
 
     application = SimpleNamespace(state=SimpleNamespace(model_check={}))

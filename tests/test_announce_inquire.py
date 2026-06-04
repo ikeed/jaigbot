@@ -73,13 +73,8 @@ class TestAnnounceInquireNormalization:
         svc.client_cls = lambda **kwargs: client
 
         result = await svc.classify_turn(
-            clinician_message="It's time for Emily's MMR today. What are your thoughts about vaccines?",
-            person_last="",
-            history=[],
-            prior_announced=False,
-            prior_phase="PreAnnounce",
-            mapping={}
-        )
+            clinician_message="It's time for Emily's MMR today. What are your thoughts about vaccines?", person_last="",
+            history=[], prior_announced=False, prior_phase="PreAnnounce", mapping={})
         assert result.aims.step == "Announce+Inquire"
 
     @pytest.mark.asyncio
@@ -101,14 +96,8 @@ class TestAnnounceInquireNormalization:
         }))
         svc.client_cls = lambda **kwargs: client
 
-        result = await svc.classify_turn(
-            clinician_message="It's time for Emily's MMR today.",
-            person_last="",
-            history=[],
-            prior_announced=False,
-            prior_phase="PreAnnounce",
-            mapping={}
-        )
+        result = await svc.classify_turn(clinician_message="It's time for Emily's MMR today.", person_last="",
+                                         history=[], prior_announced=False, prior_phase="PreAnnounce", mapping={})
         assert result.aims.step == "Announce"
 
 
