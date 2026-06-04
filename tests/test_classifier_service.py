@@ -227,9 +227,14 @@ async def test_classify_turn_strips_json_fences(classifier_service, mock_vertex_
 {"is_small_talk": false, "is_vaccine_relevant": true, "aims": {"step": "Inquire", "score": 2, "reasons": ["Asked about concerns"], "tips": ["Keep it open"]}, "safety_flags": [], "reasoning": "Open question."}
 ```"""
 
-    result = await classifier_service.classify_turn(clinician_message="What questions do you have about vaccines?",
-                                                    person_last="I'm worried about side effects.", history=[],
-                                                    prior_announced=True, prior_phase="InquireMirror", mapping={})
+    result = await classifier_service.classify_turn(
+        clinician_message="What questions do you have about vaccines?",
+        person_last="I'm worried about side effects.",
+        history=[],
+        prior_announced=True,
+        prior_phase="InquireMirror",
+        mapping={},
+    )
 
     assert result.aims.step == "Inquire"
     assert result.aims.reasons == ["Asked about concerns"]
@@ -246,8 +251,14 @@ async def test_classify_turn_reraises_actionable_vertex_status_errors(
     mock_vertex_client.generate_text_async.side_effect = err
 
     with pytest.raises(VertexStatusError):
-        await classifier_service.classify_turn(clinician_message="I recommend the MMR today.", person_last="Okay.",
-                                               history=[], prior_announced=False, prior_phase="PreAnnounce", mapping={})
+        await classifier_service.classify_turn(
+            clinician_message="I recommend the MMR today.",
+            person_last="Okay.",
+            history=[],
+            prior_announced=False,
+            prior_phase="PreAnnounce",
+            mapping={},
+        )
 
 
 @pytest.mark.asyncio
@@ -284,4 +295,3 @@ async def test_detect_endgame_returns_false_on_error(classifier_service, mock_ve
     )
 
     assert result == {"is_endgame": False, "reason": "detection_error"}
-
