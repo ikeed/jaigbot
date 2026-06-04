@@ -51,6 +51,7 @@ def vertex_client_mock(monkeypatch):
     """
     import json
 
+    # noinspection PyUnusedLocal
     class MockVertexClient:
         def __init__(self, *args, **kwargs):
             self.project = kwargs.get("project")

@@ -75,6 +75,7 @@ class InMemoryStore:
         self._store[key] = value
         self._persist()
 
+    # noinspection PyUnusedLocal
     def set(self, key: str, value: Dict[str, Any], ttl: Optional[int] = None) -> None:
         self.__setitem__(key, value)
 

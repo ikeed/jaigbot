@@ -41,6 +41,7 @@ from app.vertex import VertexClient
 # Stubs
 # ---------------------------------------------------------------------------
 
+# noinspection PyUnusedLocal
 class ReplyOnlyGateway:
     """Drop-in replacement for VertexGateway that scripts patient replies.
 

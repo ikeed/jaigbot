@@ -39,14 +39,9 @@ async def test_classify_turn_success(classifier_service, mock_vertex_client):
     }
     mock_vertex_client.generate_text_async.return_value = json.dumps(mock_response)
 
-    result = await classifier_service.classify_turn(
-        clinician_message="I hear you're worried about side effects.",
-        person_last="I'm scared of the shots.",
-        history=[],
-        prior_announced=False,
-        prior_phase="PreAnnounce",
-        mapping={}
-    )
+    result = await classifier_service.classify_turn(clinician_message="I hear you're worried about side effects.",
+                                                    person_last="I'm scared of the shots.", history=[],
+                                                    prior_announced=False, prior_phase="PreAnnounce", mapping={})
 
     assert isinstance(result, ClassifierResult)
     assert result.is_small_talk is False
@@ -72,14 +67,9 @@ async def test_classify_turn_with_person_topic(classifier_service, mock_vertex_c
     }
     mock_vertex_client.generate_text_async.return_value = json.dumps(mock_response)
 
-    result = await classifier_service.classify_turn(
-        clinician_message="I hear you're worried about side effects.",
-        person_last="I'm scared of the shots causing a fever.",
-        history=[],
-        prior_announced=False,
-        prior_phase="PreAnnounce",
-        mapping={}
-    )
+    result = await classifier_service.classify_turn(clinician_message="I hear you're worried about side effects.",
+                                                    person_last="I'm scared of the shots causing a fever.", history=[],
+                                                    prior_announced=False, prior_phase="PreAnnounce", mapping={})
 
     assert result.person_topic == "side_effects"
 
@@ -88,14 +78,9 @@ async def test_classify_turn_fallback_on_error(classifier_service, mock_vertex_c
     # Mock error from Gemini
     mock_vertex_client.generate_text_async.side_effect = Exception("Gemini down")
 
-    result = await classifier_service.classify_turn(
-        clinician_message="I recommend the MMR today.",
-        person_last="Okay.",
-        history=[],
-        prior_announced=False,
-        prior_phase="PreAnnounce",
-        mapping={} # Empty mapping might affect deterministic fallback but evaluate_turn handles it
-    )
+    result = await classifier_service.classify_turn(clinician_message="I recommend the MMR today.", person_last="Okay.",
+                                                    history=[], prior_announced=False, prior_phase="PreAnnounce",
+                                                    mapping={})
 
     assert isinstance(result, ClassifierResult)
     # Check that it fell back to deterministic (evaluate_turn)
@@ -123,12 +108,8 @@ async def test_triple_move_detection(classifier_service, mock_vertex_client):
 
     result = await classifier_service.classify_turn(
         clinician_message="I hear you're worried about side effects, and actually the data shows they are quite rare. What else is on your mind?",
-        person_last="I'm scared of side effects.",
-        history=[],
-        prior_announced=True,
-        prior_phase="InquireMirror",
-        mapping={}
-    )
+        person_last="I'm scared of side effects.", history=[], prior_announced=True, prior_phase="InquireMirror",
+        mapping={})
 
     assert result.aims.step == "Mirror+Secure+Inquire"
     assert "Inquire" in result.aims.steps
@@ -142,14 +123,9 @@ async def test_classify_turn_strips_json_fences(classifier_service, mock_vertex_
 {"is_small_talk": false, "is_vaccine_relevant": true, "aims": {"step": "Inquire", "score": 2, "reasons": ["Asked about concerns"], "tips": ["Keep it open"]}, "safety_flags": [], "reasoning": "Open question."}
 ```"""
 
-    result = await classifier_service.classify_turn(
-        clinician_message="What questions do you have about vaccines?",
-        person_last="I'm worried about side effects.",
-        history=[],
-        prior_announced=True,
-        prior_phase="InquireMirror",
-        mapping={},
-    )
+    result = await classifier_service.classify_turn(clinician_message="What questions do you have about vaccines?",
+                                                    person_last="I'm worried about side effects.", history=[],
+                                                    prior_announced=True, prior_phase="InquireMirror", mapping={})
 
     assert result.aims.step == "Inquire"
     assert result.aims.reasons == ["Asked about concerns"]
@@ -166,14 +142,8 @@ async def test_classify_turn_reraises_actionable_vertex_status_errors(
     mock_vertex_client.generate_text_async.side_effect = err
 
     with pytest.raises(VertexStatusError):
-        await classifier_service.classify_turn(
-            clinician_message="I recommend the MMR today.",
-            person_last="Okay.",
-            history=[],
-            prior_announced=False,
-            prior_phase="PreAnnounce",
-            mapping={},
-        )
+        await classifier_service.classify_turn(clinician_message="I recommend the MMR today.", person_last="Okay.",
+                                               history=[], prior_announced=False, prior_phase="PreAnnounce", mapping={})
 
 
 @pytest.mark.asyncio
@@ -257,14 +227,9 @@ async def test_classify_turn_strips_json_fences(classifier_service, mock_vertex_
 {"is_small_talk": false, "is_vaccine_relevant": true, "aims": {"step": "Inquire", "score": 2, "reasons": ["Asked about concerns"], "tips": ["Keep it open"]}, "safety_flags": [], "reasoning": "Open question."}
 ```"""
 
-    result = await classifier_service.classify_turn(
-        clinician_message="What questions do you have about vaccines?",
-        person_last="I'm worried about side effects.",
-        history=[],
-        prior_announced=True,
-        prior_phase="InquireMirror",
-        mapping={},
-    )
+    result = await classifier_service.classify_turn(clinician_message="What questions do you have about vaccines?",
+                                                    person_last="I'm worried about side effects.", history=[],
+                                                    prior_announced=True, prior_phase="InquireMirror", mapping={})
 
     assert result.aims.step == "Inquire"
     assert result.aims.reasons == ["Asked about concerns"]
@@ -281,14 +246,8 @@ async def test_classify_turn_reraises_actionable_vertex_status_errors(
     mock_vertex_client.generate_text_async.side_effect = err
 
     with pytest.raises(VertexStatusError):
-        await classifier_service.classify_turn(
-            clinician_message="I recommend the MMR today.",
-            person_last="Okay.",
-            history=[],
-            prior_announced=False,
-            prior_phase="PreAnnounce",
-            mapping={},
-        )
+        await classifier_service.classify_turn(clinician_message="I recommend the MMR today.", person_last="Okay.",
+                                               history=[], prior_announced=False, prior_phase="PreAnnounce", mapping={})
 
 
 @pytest.mark.asyncio
