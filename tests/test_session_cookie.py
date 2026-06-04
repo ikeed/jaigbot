@@ -23,18 +23,6 @@ def test_cookie_issued_and_memory_persists(monkeypatch):
 
     prompts = []
 
-    class RecordingVertex:
-        def __init__(self, project: str, region: str, model_id: str):
-            self.project = project
-            self.region = region
-            self.model_id = model_id
-
-        @staticmethod
-        def generate_text(prompt: str, temperature: float, max_tokens: int):
-            prompts.append(prompt)
-            # Return a small reply to ensure it's stored in memory too
-            return "ack"
-
     # Mock at the VertexGateway level since this uses legacy chat path
     class RecordingGateway:
         def __init__(self, *args, **kwargs):

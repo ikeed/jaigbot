@@ -174,7 +174,6 @@ class RedisStore:
         self.set(key, value)
 
     def items(self) -> List[Tuple[str, Dict[str, Any]]]:
-        cursor = 0
         out: List[Tuple[str, Dict[str, Any]]] = []
         seen = set()
         for prefix in [self._prefix, *self._fallback_prefixes]:
