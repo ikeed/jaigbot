@@ -45,7 +45,6 @@ def _get_usage_count(usage: Any, *names: str) -> Optional[int]:
             return None
     return None
 
-
 class VertexClient:
     def __init__(self, project: str, region: str, model_id: str):
         self.logger = logging.getLogger("app.vertex")
@@ -60,14 +59,12 @@ class VertexClient:
         The client is created on first call and reused for subsequent
         requests, avoiding redundant HTTP session and auth setup.
         """
-        if self._client is None:
-            self._client = genai.Client(
+        return self._client or genai.Client(
                 vertexai=True,
                 project=self.project,
                 location=self.region,
                 http_options=types.HttpOptions(api_version="v1"),
             )
-        return self._client
 
     @staticmethod
     def _sanitize_response_schema(schema: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
