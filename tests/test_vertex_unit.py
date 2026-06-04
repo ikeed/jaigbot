@@ -1,20 +1,20 @@
 from types import SimpleNamespace
 
-from app.vertex import VertexClient, _extract_status_code, _get_usage_count
+from app.vertex import VertexClient, extract_status_code, get_usage_count
 
 
 def test_extract_status_code_handles_multiple_attr_names():
-    assert _extract_status_code(SimpleNamespace(code="404")) == 404
-    assert _extract_status_code(SimpleNamespace(status_code=429)) == 429
-    assert _extract_status_code(SimpleNamespace(status="500")) == 500
-    assert _extract_status_code(SimpleNamespace(code="not-a-number")) is None
+    assert extract_status_code(SimpleNamespace(code="404")) == 404
+    assert extract_status_code(SimpleNamespace(status_code=429)) == 429
+    assert extract_status_code(SimpleNamespace(status="500")) == 500
+    assert extract_status_code(SimpleNamespace(code="not-a-number")) is None
 
 
 def test_get_usage_count_prefers_first_numeric_value():
     usage = SimpleNamespace(prompt_token_count="12", cached_content_token_count="7")
-    assert _get_usage_count(usage, "cached_content_token_count", "prompt_token_count") == 7
-    assert _get_usage_count(usage, "missing", "prompt_token_count") == 12
-    assert _get_usage_count(SimpleNamespace(prompt_token_count="bad"), "prompt_token_count") is None
+    assert get_usage_count(usage, "cached_content_token_count", "prompt_token_count") == 7
+    assert get_usage_count(usage, "missing", "prompt_token_count") == 12
+    assert get_usage_count(SimpleNamespace(prompt_token_count="bad"), "prompt_token_count") is None
 
 
 def test_sanitize_response_schema_removes_meta_keys_recursively():

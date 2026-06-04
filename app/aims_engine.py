@@ -70,7 +70,7 @@ def load_mapping(path: Optional[str] = None) -> Dict[str, Any]:
         return json.load(f)
 
 
-def _stem_match(text: str, stems: List[str]) -> bool:
+def stem_match(text: str, stems: List[str]) -> bool:
     t = text.strip().lower()
     for s in stems:
         s_norm = s.strip().lower()
@@ -81,12 +81,12 @@ def _stem_match(text: str, stems: List[str]) -> bool:
     return False
 
 
-def _starts_with_any(text: str, starters: List[str]) -> bool:
+def starts_with_any(text: str, starters: List[str]) -> bool:
     t = text.strip().lower()
     return any(t.startswith(s.strip().lower()) for s in starters if s.strip())
 
 
-def _is_small_talk(text: str) -> bool:
+def is_small_talk(text: str) -> bool:
     """Detect pleasantries/rapport/openers that are not an AIMS step.
 
     Heuristics: greetings, compliments, social niceties (no clinical content),
@@ -144,7 +144,7 @@ def classify_step(clinician_last: str, mapping: Dict[str, Any]) -> Classificatio
     ]
 
     # Heuristic checks per step (stages take precedence; small-talk is fallback only)
-    inquire_match = lt.endswith("?") or _starts_with_any(lt, ["what ", "how "]) or _stem_match(
+    inquire_match = lt.endswith("?") or starts_with_any(lt, ["what ", "how "]) or stem_match(
         lt, (markers.get("Inquire", {}).get("linguistic", []))
     )
     # Only suppress Inquire for non-clinical wellbeing questions (e.g. "How's he been sleeping?")
@@ -156,10 +156,10 @@ def classify_step(clinician_last: str, mapping: Dict[str, Any]) -> Classificatio
 
     # Mirror match should EXCLUDE things that are clearly just Inquire markers
     inquire_stems_from_mapping = markers.get("Inquire", {}).get("linguistic", [])
-    mirror_match = (_starts_with_any(lt, mirror_stems) or _stem_match(lt, (markers.get("Mirror", {}).get("linguistic", []))))
-    if mirror_match and not _starts_with_any(lt, mirror_stems):
+    mirror_match = (starts_with_any(lt, mirror_stems) or stem_match(lt, (markers.get("Mirror", {}).get("linguistic", []))))
+    if mirror_match and not starts_with_any(lt, mirror_stems):
         # if it only matched via linguistic markers, check if it's actually an Inquire marker
-        if _stem_match(lt, inquire_stems_from_mapping):
+        if stem_match(lt, inquire_stems_from_mapping):
              mirror_match = False
 
     # Strengthened Secure detection: autonomy + (option or safety) OR option + safety
@@ -198,17 +198,17 @@ def classify_step(clinician_last: str, mapping: Dict[str, Any]) -> Classificatio
         r"|call\b[^\n\r.]*(\bif\b)"
     )
 
-    has_autonomy = _stem_match(lt, autonomy_cues)
+    has_autonomy = stem_match(lt, autonomy_cues)
     # Guard against bare "we can" without a concrete option/action
     has_option = bool(option_re.search(lt))
     has_safety = bool(safety_re.search(lt))
 
     secure_match = (has_autonomy and (has_option or has_safety)) or (has_option and has_safety)
 
-    announce_match = _stem_match(lt, (markers.get("Announce", {}).get("linguistic", [])))
+    announce_match = stem_match(lt, (markers.get("Announce", {}).get("linguistic", [])))
     # Also check broader fallback markers for soft Announce phrasing
     if not announce_match:
-        announce_match = _stem_match(lt, _ANNOUNCE_FALLBACK_MARKERS)
+        announce_match = stem_match(lt, _ANNOUNCE_FALLBACK_MARKERS)
 
     # Didactic education detector (no question + factual/educational tokens)
     didactic_re = re.compile(r"\b(study|studies|evidence|data|statistics?|percent|%|risk|safe|side effects?|protect|immunit|schedule|dose|herd immunity)\b")
@@ -217,7 +217,7 @@ def classify_step(clinician_last: str, mapping: Dict[str, Any]) -> Classificatio
     # Primary classification with tie-breakers
     # Compound: Mirror + Inquire
     # Use strong mirror stems for the compound to avoid accidental overlaps
-    strong_mirror_match = _starts_with_any(lt, mirror_stems)
+    strong_mirror_match = starts_with_any(lt, mirror_stems)
     if strong_mirror_match and inquire_match:
         # If it's just a reflection check (e.g. "Did I get that right?"), it's still just Mirror
         _REFLECTION_CHECK_RE = re.compile(r"\b(did i get that right|do i have that right|did i capture (that|what you said)|is that right)\b")
@@ -231,11 +231,11 @@ def classify_step(clinician_last: str, mapping: Dict[str, Any]) -> Classificatio
     # Priority order if not compound: Mirror > Secure > Announce > Inquire (unless tie-breakers apply)
     elif mirror_match:
         # Check if mirror is really primary or just a fragment in a larger turn
-        is_primary_mirror = _starts_with_any(lt, mirror_stems)
+        is_primary_mirror = starts_with_any(lt, mirror_stems)
         step = "Mirror"
         if not is_primary_mirror:
             reasons.append("Detected mirror-like stem from markers")
-        elif _introduces_new_info(lt):
+        elif introduces_new_info(lt):
             reasons.append("Reflective stem detected but includes rebuttal/new info")
         else:
             reasons.append("Detected reflective stem; no new information added")
@@ -291,7 +291,7 @@ def classify_step(clinician_last: str, mapping: Dict[str, Any]) -> Classificatio
     return ClassificationResult(step=step, reasons=reasons)
 
 
-def _introduces_new_info(lt: str) -> bool:
+def introduces_new_info(lt: str) -> bool:
     """Detect if clinician text introduces new factual info or rebuttal after a reflection.
     Very simple heuristic: presence of 'but', statistics-like tokens, or phrases like 'the data shows'.
     """
@@ -336,7 +336,7 @@ def score_step(step: str, clinician_last: str, mapping: Dict[str, Any]) -> Score
             score = min(3, score + 1)
             reasons.append("Included check for accuracy")
         # If no reflective stems, score low
-        if not (_starts_with_any(lt, [
+        if not (starts_with_any(lt, [
             "it sounds like", "you're", "you are", "i'm hearing", "you feel", "you want",
             "what i'm hearing", "what i hear",
         ])):
@@ -345,7 +345,7 @@ def score_step(step: str, clinician_last: str, mapping: Dict[str, Any]) -> Score
 
     elif step == "Inquire":
         # Inquire can start with generic prompts or open questions
-        open_q = lt.endswith("?") or _starts_with_any(lt, ["what ", "how ", "where ", "as you hear that"])
+        open_q = lt.endswith("?") or starts_with_any(lt, ["what ", "how ", "where ", "as you hear that"])
         leading = bool(re.search(r"\b(don't|isn't it|right\?)\b", lt)) or "myth" in lt
         if not (open_q or "feeling about" in lt or "leaning right" in lt):
             score = 1
@@ -359,7 +359,7 @@ def score_step(step: str, clinician_last: str, mapping: Dict[str, Any]) -> Score
 
     elif step == "Announce":
         # Expect recommendation + brief rationale; brevity rewarded
-        has_reco = _stem_match(lt, [
+        has_reco = stem_match(lt, [
             "i recommend", "it's time for", "due for", "today we will", 
             "my recommendation is", "today we usually", "at this visit",
             "Sophia is due", "Sophia is due for", "routine vaccines"
@@ -377,7 +377,7 @@ def score_step(step: str, clinician_last: str, mapping: Dict[str, Any]) -> Score
             reasons.append("Invited dialogue")
 
     elif step == "Secure":
-        autonomy = _stem_match(lt, [
+        autonomy = stem_match(lt, [
             "it's your decision", "i'm here to support", "it's your call", "up to you", 
             "your choice", "informed and supported", "not rushed", "not pushed",
             "continue talking", "revisit any concerns"
@@ -467,12 +467,12 @@ def evaluate_turn(clinician_last: str, mapping: Dict[str, Any]) -> Dict[str, Any
             else:
                 tips.append("Excellent use of Mirror+Inquire to build trust before exploring.")
         elif cls.step == "Mirror":
-            if _introduces_new_info(lt):
+            if introduces_new_info(lt):
                 tips.append("Reflect without adding new information or rebuttal; keep it brief and nonjudgmental.")
             elif not re.search(r"did i get that right|is that right|did i capture", lt):
                 tips.append("End with a quick check for accuracy: 'Did I get that right?'")
         elif cls.step == "Announce":
-            has_reco = _stem_match(lt, ["i recommend", "it's time for", "due for", "today we will", "my recommendation is"])
+            has_reco = stem_match(lt, ["i recommend", "it's time for", "due for", "today we will", "my recommendation is"])
             invite = bool(re.search(r"how does that sound|what do you think|questions\??", lt))
             rationale = bool(re.search(r"protect|outbreak|safety|safe|helps prevent|risk", lt))
             if not has_reco:
@@ -482,7 +482,7 @@ def evaluate_turn(clinician_last: str, mapping: Dict[str, Any]) -> Dict[str, Any
             elif not invite:
                 tips.append("Invite dialogue with a brief opener, e.g., 'How does that sound?'")
         elif cls.step == "Secure":
-            autonomy = _stem_match(lt, ["it's your decision", "i'm here to support"])
+            autonomy = stem_match(lt, ["it's your decision", "i'm here to support"])
             options = bool(re.search(r"\b(we can|options include|prefer|today|later|handout|follow-?up)\b", lt))
             safety = bool(re.search(r"what to expect|watch for|reach me|call if|how to reach", lt))
             if not autonomy:
