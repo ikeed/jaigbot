@@ -5,7 +5,8 @@ from app.prompts.aims import build_classify_turn_prompt, get_classify_system_ins
 # ---------------------------------------------------------------------------
 
 class TestPromptContent:
-    def _active_classifier_prompt(self, **kwargs):
+    @staticmethod
+    def _active_classifier_prompt(**kwargs):
         return (
             get_classify_system_instruction()
             + "\n\n"

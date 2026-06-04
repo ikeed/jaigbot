@@ -33,7 +33,8 @@ def test_whole_conversation_multi_turns(monkeypatch):
             self.region = region
             self.model_id = model_id
 
-        def generate_text(self, prompt: str, temperature: float, max_tokens: int):
+        @staticmethod
+        def generate_text(prompt: str, temperature: float, max_tokens: int):
             prompts.append(prompt)
             counter["n"] += 1
             reply = f"reply{counter['n']}"
@@ -45,7 +46,8 @@ def test_whole_conversation_multi_turns(monkeypatch):
         def __init__(self, *args, **kwargs):
             pass
         
-        async def agenerate_text(self, prompt: str, *args, **kwargs):
+        @staticmethod
+        async def agenerate_text(prompt: str, *args, **kwargs):
             prompts.append(prompt)
             counter["n"] += 1
             reply = f"reply{counter['n']}"
@@ -55,7 +57,8 @@ def test_whole_conversation_multi_turns(monkeypatch):
         async def agenerate_text_json(self, prompt: str, *args, **kwargs):
             return await self.agenerate_text(prompt, *args, **kwargs)
 
-        def generate_text(self, prompt: str, *args, **kwargs):
+        @staticmethod
+        def generate_text(prompt: str, *args, **kwargs):
             # Fallback for sync calls if any
             import asyncio
             try:

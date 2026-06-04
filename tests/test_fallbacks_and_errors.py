@@ -68,10 +68,12 @@ def test_model_fallback_succeeds(monkeypatch):
         async def agenerate_text_json(self, *args, **kwargs):
             return await self.agenerate_text(*args, **kwargs)
 
-        def generate_text(self, *args, **kwargs):
+        @staticmethod
+        def generate_text(*args, **kwargs):
             return "sync-not-used"
 
-        def generate_text_json(self, *args, **kwargs):
+        @staticmethod
+        def generate_text_json(*args, **kwargs):
             return "sync-not-used"
     
     monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", SwitchGateway)
@@ -113,7 +115,8 @@ def test_upstream_error_maps_to_502_and_sets_cookie(monkeypatch):
         def __init__(self, *args, **kwargs):
             pass
         
-        async def agenerate_text(self, *args, **kwargs):
+        @staticmethod
+        async def agenerate_text(*args, **kwargs):
             from app.vertex import VertexAIError
             # Non-404 error should map to 502
             raise VertexAIError("upstream boom", status_code=503)
@@ -121,7 +124,8 @@ def test_upstream_error_maps_to_502_and_sets_cookie(monkeypatch):
         async def agenerate_text_json(self, *args, **kwargs):
             return await self.agenerate_text(*args, **kwargs)
 
-        def generate_text(self, *args, **kwargs):
+        @staticmethod
+        def generate_text(*args, **kwargs):
             from app.vertex import VertexAIError
             raise VertexAIError("upstream boom", status_code=503)
 

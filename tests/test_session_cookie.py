@@ -29,7 +29,8 @@ def test_cookie_issued_and_memory_persists(monkeypatch):
             self.region = region
             self.model_id = model_id
 
-        def generate_text(self, prompt: str, temperature: float, max_tokens: int):
+        @staticmethod
+        def generate_text(prompt: str, temperature: float, max_tokens: int):
             prompts.append(prompt)
             # Return a small reply to ensure it's stored in memory too
             return "ack"
@@ -39,7 +40,8 @@ def test_cookie_issued_and_memory_persists(monkeypatch):
         def __init__(self, *args, **kwargs):
             pass
         
-        async def agenerate_text(self, prompt: str, *args, **kwargs):
+        @staticmethod
+        async def agenerate_text(prompt: str, *args, **kwargs):
             prompts.append(prompt)
             # Return a small reply to ensure it's stored in memory too
             return "ack"
@@ -47,7 +49,8 @@ def test_cookie_issued_and_memory_persists(monkeypatch):
         async def agenerate_text_json(self, prompt: str, *args, **kwargs):
             return await self.agenerate_text(prompt, *args, **kwargs)
 
-        def generate_text(self, prompt: str, *args, **kwargs):
+        @staticmethod
+        def generate_text(prompt: str, *args, **kwargs):
             import asyncio
             try:
                 loop = asyncio.get_event_loop()

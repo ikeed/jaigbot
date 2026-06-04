@@ -53,7 +53,8 @@ class UIHandler:
             content_clean = self._strip_export_artifacts(content)
             await cl.Message(content=content_clean, author=author, type=msg_type).send()
 
-    def format_coach_message(self, text: str) -> str:
+    @staticmethod
+    def format_coach_message(text: str) -> str:
         txt = (text or "").strip()
         if not txt:
             return ""
@@ -72,7 +73,8 @@ class UIHandler:
         bullets = "\n".join(f"- {p}" for p in clean_parts)
         return f"**{title}**\n\n{bullets}" if bullets else f"**{title}**"
 
-    def render_scenario_card_html(self, card_text: str) -> str:
+    @staticmethod
+    def render_scenario_card_html(card_text: str) -> str:
         """Render a scenario briefing with consistent HTML styling."""
         lines: list[str] = [
             '<div class="aims-scenario-briefing">',
@@ -100,19 +102,23 @@ class UIHandler:
             **get_ui_attributes(ROLE_SYSTEM)
         ).send()
 
-    async def show_error(self, message: str):
+    @staticmethod
+    async def show_error(message: str):
         await cl.Message(message, **get_ui_attributes(ROLE_SYSTEM)).send()
 
-    async def send_window_message(self, payload: Dict[str, Any]):
+    @staticmethod
+    async def send_window_message(payload: Dict[str, Any]):
         await cl.send_window_message(payload)
 
-    async def send_user_message_update(self, message: cl.Message):
+    @staticmethod
+    async def send_user_message_update(message: cl.Message):
         attrs = get_ui_attributes(ROLE_USER)
         message.author = attrs["author"]
         message.type = attrs["type"]
         await message.update()
 
-    async def send_assistant_reply(self, content: str):
+    @staticmethod
+    async def send_assistant_reply(content: str):
         await cl.Message(content, **get_ui_attributes(ROLE_ASSISTANT)).send()
 
     async def send_coach_message(self, content: str):
@@ -121,7 +127,8 @@ class UIHandler:
             **get_ui_attributes(ROLE_COACH)
         ).send()
 
-    def _strip_export_artifacts(self, text: str) -> str:
+    @staticmethod
+    def _strip_export_artifacts(text: str) -> str:
         try:
             lines = [ln for ln in (text or "").splitlines() if ln.strip() and not ln.strip().lower().startswith("avatar for ")]
             return "\n".join(lines)

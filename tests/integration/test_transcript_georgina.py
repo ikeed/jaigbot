@@ -242,7 +242,8 @@ class TranscriptStub:
     def __init__(self, *args, **kwargs):
         pass
 
-    async def generate_text_async(self, prompt, **kwargs):
+    @staticmethod
+    async def generate_text_async(prompt, **kwargs):
         prompt_lower = (prompt or "").lower()
         if "classify" in prompt_lower or "unified" in prompt_lower:
             idx = min(TranscriptStub._classify_idx, len(TranscriptStub._turns) - 1)
@@ -253,13 +254,15 @@ class TranscriptStub:
             return json.dumps({"is_endgame": False, "resolution_type": "not_resolved", "summary": ""})
         return json.dumps({"patient_reply": "fallback"})
 
-    def generate_text_json(self, *, prompt, response_schema, **kwargs):
+    @staticmethod
+    def generate_text_json(*, prompt, response_schema, **kwargs):
         idx = min(TranscriptStub._reply_idx, len(TranscriptStub._turns) - 1)
         TranscriptStub._reply_idx += 1
         reply_text = TranscriptStub._turns[idx].get("reply", "ok")
         return json.dumps({"patient_reply": reply_text})
 
-    def generate_text(self, *args, **kwargs):
+    @staticmethod
+    def generate_text(*args, **kwargs):
         return json.dumps({"patient_reply": "fallback"})
 
 

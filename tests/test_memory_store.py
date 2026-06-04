@@ -78,7 +78,8 @@ def test_redis_store_supports_primary_and_fallback_keys(monkeypatch):
             self.client.expirations[key] = ttl
             return self
 
-        def execute(self):
+        @staticmethod
+        def execute():
             return None
 
     class FakeRedisClient:
@@ -90,7 +91,8 @@ def test_redis_store_supports_primary_and_fallback_keys(monkeypatch):
             }
             self.expirations = {}
 
-        def ping(self):
+        @staticmethod
+        def ping():
             return True
 
         def get(self, key):

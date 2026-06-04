@@ -65,7 +65,8 @@ SOFT_ANNOUNCE_WITH_STATUS_Q = (
 
 class TestDeterministicSoftAnnounce:
 
-    def _mapping(self):
+    @staticmethod
+    def _mapping():
         return {
             "meta": {
                 "per_step_classification_markers": {

@@ -298,7 +298,8 @@ class ChainlitOrchestrator:
             return None
         return {"identifier": user.identifier, "metadata": user.metadata}
 
-    def _get_thread_id(self) -> Optional[str]:
+    @staticmethod
+    def _get_thread_id() -> Optional[str]:
         return getattr(getattr(cl_context, "session", None), "thread_id", None)
 
     async def _bind_thread(self, session_id: str):
@@ -321,7 +322,8 @@ class ChainlitOrchestrator:
             logger.debug(f"Failed to bind thread (non-fatal): {e}")
             pass
 
-    def _recover_persona_from_history(self, history: List[Dict[str, Any]]) -> Optional[str]:
+    @staticmethod
+    def _recover_persona_from_history(history: List[Dict[str, Any]]) -> Optional[str]:
         for msg in history:
             content = msg.get("content", "")
             if (msg.get("role") or ROLE_ASSISTANT).lower().strip() in {ROLE_SYSTEM, ROLE_ASSISTANT} and is_scenario_card(content):
@@ -331,7 +333,8 @@ class ChainlitOrchestrator:
                             return line.replace(prefix, "").strip()
         return None
 
-    def _recover_scenario_card(self, history: List[Dict[str, Any]]) -> Optional[str]:
+    @staticmethod
+    def _recover_scenario_card(history: List[Dict[str, Any]]) -> Optional[str]:
         for msg in history:
             content = msg.get("content", "")
             if (msg.get("role") or ROLE_ASSISTANT).lower().strip() in {ROLE_SYSTEM, ROLE_ASSISTANT} and is_scenario_card(content):

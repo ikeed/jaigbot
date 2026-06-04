@@ -233,9 +233,9 @@ class ClassifierService:
             thinking_budget=128,
         )
 
+    @staticmethod
     def _get_deterministic_fallback(
-        self,
-        clinician_message: str,
+            clinician_message: str,
         mapping: Dict[str, Any],
     ) -> ClassifierResult:
         """Invoke the original deterministic engine as a fallback."""

@@ -41,7 +41,8 @@ class FakeVertexEcho:
         self.model_id = model_id
 
     # Legacy signature used by earlier tests in this repo
-    def generate_text(self, prompt: str, temperature: float, max_tokens: int):
+    @staticmethod
+    def generate_text(prompt: str, temperature: float, max_tokens: int):
         return f"echo: {prompt}"
 
 

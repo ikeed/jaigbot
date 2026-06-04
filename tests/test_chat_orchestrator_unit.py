@@ -92,7 +92,8 @@ async def test_handle_chat_routes_to_coaching_when_enabled(monkeypatch):
         def __init__(self, **kwargs):
             self.kwargs = kwargs
 
-        async def handle(self, req, body, ctx):
+        @staticmethod
+        async def handle(req, body, ctx):
             return {
                 "reply": "patient",
                 "model": "model",
@@ -130,7 +131,8 @@ async def test_handle_chat_routes_to_legacy_and_includes_optional_fields(monkeyp
         def __init__(self, **kwargs):
             pass
 
-        async def handle(self, req, body, ctx):
+        @staticmethod
+        async def handle(req, body, ctx):
             return {
                 "reply": "legacy",
                 "model": "model",
