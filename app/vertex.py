@@ -59,12 +59,14 @@ class VertexClient:
         The client is created on first call and reused for subsequent
         requests, avoiding redundant HTTP session and auth setup.
         """
-        return self._client or genai.Client(
+        if self._client is None:
+            self._client = genai.Client(
                 vertexai=True,
                 project=self.project,
                 location=self.region,
                 http_options=types.HttpOptions(api_version="v1"),
             )
+        return self._client
 
     @staticmethod
     def _sanitize_response_schema(schema: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
