@@ -77,7 +77,8 @@ class _PubSub:
         for channel in channels:
             self._channels.add(channel)
 
-    def listen(self):
+    @staticmethod
+    def listen():
         # Socket.IO expects an iterable here and uses `yield from` on it.
         # Returning an empty iterator keeps the stub non-blocking.
         return iter(())
@@ -95,7 +96,8 @@ class _Sentinel:
         self.args = args
         self.kwargs = kwargs
 
-    def master_for(self, service_name: str) -> "Redis":
+    @staticmethod
+    def master_for(service_name: str) -> "Redis":
         return Redis()
 
 
@@ -130,7 +132,8 @@ class Redis:
         password = parsed.password or kwargs.pop("password", None)
         return cls(host=host, port=port, db=db, password=password, **kwargs)
 
-    def ping(self) -> bool:
+    @staticmethod
+    def ping() -> bool:
         return True
 
     def get(self, key: str) -> str | None:
@@ -172,7 +175,8 @@ class Redis:
     def pubsub(self, ignore_subscribe_messages: bool = True) -> _PubSub:
         return _PubSub(self, ignore_subscribe_messages=ignore_subscribe_messages)
 
-    def publish(self, channel: str, data: str) -> int:
+    @staticmethod
+    def publish(channel: str, data: str) -> int:
         return 0
 
     sentinel = _SentinelModule()
