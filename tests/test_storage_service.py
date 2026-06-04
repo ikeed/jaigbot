@@ -114,6 +114,42 @@ def test_storage_service_structured_archive(mock_storage_client):
     assert payload["metadata"]["outcome"]["exitContext"] == "completion"
     assert payload["config"]["persona"]["id"] == 99
     assert payload["config"]["persona"]["name"] == "Test Persona"
+def test_storage_service_duration_calculation_edge_cases():
+    """Test that _transform_to_logical_schema handles duration calculation edge cases."""
+    service = StorageService(bucket_name="test-bucket")
+    
+    # Case 1: Started at 0 (should be treated as a valid number, not falsy)
+    data_zero = {
+        "session_started": 0,
+        "session_ended": 60,
+        "full_history": []
+    }
+    result = service._transform_to_logical_schema("sid", "uid", data_zero)
+    assert result["metadata"]["timestamps"]["durationSeconds"] == 60.0
+    # Case 2: One value is None
+    data_none = {
+        "session_started": 100,
+        "session_ended": None,
+        "full_history": []
+    }
+    result = service._transform_to_logical_schema("sid", "uid", data_none)
+    assert result["metadata"]["timestamps"]["durationSeconds"] is None
+    # Case 3: Values are non-numeric strings (should be handled by try-except)
+    data_strings = {
+        "session_started": "not-a-number",
+        "session_ended": "100",
+        "full_history": []
+    }
+    result = service._transform_to_logical_schema("sid", "uid", data_strings)
+    assert result["metadata"]["timestamps"]["durationSeconds"] is None
+    # Case 4: Values are numeric strings
+    data_numeric_strings = {
+        "session_started": "100.5",
+        "session_ended": "200.5",
+        "full_history": []
+    }
+    result = service._transform_to_logical_schema("sid", "uid", data_numeric_strings)
+    assert result["metadata"]["timestamps"]["durationSeconds"] == 100.0
 def test_storage_service_error_handling(mock_storage_client):
     service = StorageService(bucket_name="test-bucket")
     

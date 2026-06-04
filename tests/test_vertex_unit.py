@@ -144,7 +144,8 @@ def test_generate_text_async_raises_vertex_error_when_empty(monkeypatch):
         usage_metadata = None
 
     class FakeModels:
-        async def generate_content(self, **kwargs):
+        @staticmethod
+        async def generate_content(**kwargs):
             return FakeResponse()
 
     class FakeAio:
@@ -199,7 +200,8 @@ def test_generate_text_autocontinues_and_merges(monkeypatch):
             return FakeResponse(" world", finish_reason="STOP")
 
     class FakeChats:
-        def create(self, model, config):
+        @staticmethod
+        def create(model, config):
             return FakeChat()
 
     class FakeClient:
@@ -250,7 +252,8 @@ def test_generate_text_autocontinues_and_marks_no_progress_break(monkeypatch):
             return FakeResponse("B", finish_reason="STOP")
 
     class FakeChats:
-        def create(self, model, config):
+        @staticmethod
+        def create(model, config):
             return FakeChat()
 
     class FakeClient:
@@ -293,11 +296,13 @@ def test_generate_text_wraps_empty_response_and_api_error(monkeypatch):
         usage_metadata = None
 
     class FakeChat:
-        def send_message(self, prompt):
+        @staticmethod
+        def send_message(prompt):
             return EmptyResponse()
 
     class FakeChats:
-        def create(self, model, config):
+        @staticmethod
+        def create(model, config):
             return FakeChat()
 
     class FakeClient:
