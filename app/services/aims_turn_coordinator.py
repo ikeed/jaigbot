@@ -53,18 +53,12 @@ class AimsTurnCoordinator:
         clinician_name: str | None,
     ) -> AimsTurnResult:
         task_cls = asyncio.create_task(
-            self._classifier_service.classify_turn(
-                clinician_message=clinician_message,
-                person_last=person_last,
-                history=history,
-                prior_announced=prior_announced,
-                prior_phase=prior_phase,
-                mapping=mapping,
-                context_turns=context_turns,
-                max_concerns=max_concerns,
-                inquired_concerns_list=inquired_concerns_list,
-                mirrored_concerns_list=mirrored_concerns_list,
-            )
+            self._classifier_service.classify_turn(clinician_message=clinician_message, person_last=person_last,
+                                                   history=history, prior_announced=prior_announced,
+                                                   prior_phase=prior_phase, mapping=mapping,
+                                                   context_turns=context_turns,
+                                                   inquired_concerns_list=inquired_concerns_list,
+                                                   mirrored_concerns_list=mirrored_concerns_list)
         )
         task_reply = asyncio.create_task(
             self._patient_reply_service.generate(

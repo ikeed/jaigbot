@@ -22,7 +22,7 @@ class VertexAIError(Exception):
         self.status_code = status_code
 
 
-def _extract_status_code(e: APIError) -> Optional[int]:
+def extract_status_code(e: APIError) -> Optional[int]:
     """Pull an integer HTTP status code from a google.genai.errors.APIError."""
     for attr in ("code", "status_code", "status"):
         raw = getattr(e, attr, None)
@@ -34,7 +34,7 @@ def _extract_status_code(e: APIError) -> Optional[int]:
     return None
 
 
-def _get_usage_count(usage: Any, *names: str) -> Optional[int]:
+def get_usage_count(usage: Any, *names: str) -> Optional[int]:
     for name in names:
         value = getattr(usage, name, None) if usage else None
         if value is None:
@@ -44,7 +44,6 @@ def _get_usage_count(usage: Any, *names: str) -> Optional[int]:
         except (TypeError, ValueError):
             return None
     return None
-
 
 class VertexClient:
     def __init__(self, project: str, region: str, model_id: str):
@@ -245,7 +244,7 @@ class VertexClient:
             "candidatesTokens": getattr(usage, "candidates_token_count", None) if usage else None,
             "totalTokens": getattr(usage, "total_token_count", None) if usage else None,
             "thoughtsTokens": getattr(usage, "thoughts_token_count", None) if usage else None,
-            "cachedContentTokens": _get_usage_count(
+            "cachedContentTokens": get_usage_count(
                 usage,
                 "cached_content_token_count",
                 "cachedContentTokenCount",
@@ -310,7 +309,7 @@ class VertexClient:
             self.logger.exception("Gemini API error (async)")
             raise VertexAIError(
                 f"Gemini API error: {e}",
-                status_code=_extract_status_code(e),
+                status_code=extract_status_code(e),
             ) from e
         except Exception as e:
             self.logger.exception("Gen AI async unexpected error")
@@ -447,7 +446,7 @@ class VertexClient:
             self.logger.exception("Gemini API error")
             raise VertexAIError(
                 f"Gemini API error: {e}",
-                status_code=_extract_status_code(e),
+                status_code=extract_status_code(e),
             ) from e
         except Exception as e:
             self.logger.exception("Gen AI client unexpected error")

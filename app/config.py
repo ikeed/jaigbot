@@ -176,6 +176,7 @@ class Settings(BaseSettings):
             v = os.getenv("GOOGLE_CLOUD_REGION") or os.getenv("GCP_REGION") or os.getenv("REGION")
         return v or "us-central1"
 
+    # noinspection PyUnusedLocal
     @field_validator("VERTEX_LOCATION", mode="before")
     @classmethod
     def validate_vertex_location(cls, v, info):

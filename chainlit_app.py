@@ -87,6 +87,7 @@ async def on_chat_end():
 
 @cl.action_callback("report_issue")
 async def on_report_issue(action: cl.Action):
+    logger.debug(f"Report issue action: {action.to_dict()}")
     res = await cl.AskUserMessage(
         content="Please describe the issue you encountered. This will end the session and log a report.",
         timeout=120,
@@ -161,6 +162,7 @@ if is_oauth_enabled or is_valid_env_val(settings.CHAINLIT_AUTH_SECRET) or settin
 
     @cl.on_logout
     async def on_logout(request: Request, response: Response):
+        logger.debug(f"Logout request: {request.url}")
         user_id = session_manager.get_user_identifier()
         if user_id:
             clear_persistent_session_id(user_id)

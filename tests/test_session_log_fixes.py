@@ -65,7 +65,8 @@ def _make_handler(memory_store, classifier_service=None):
 
 class TestTopicalCuesFalsePositive:
 
-    def _topical_cues(self):
+    @staticmethod
+    def _topical_cues():
         """Return the current _TOPICAL_CUES from AimsCoachingHandler."""
         return AimsCoachingHandler._TOPICAL_CUES
 

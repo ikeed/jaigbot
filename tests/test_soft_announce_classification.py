@@ -65,7 +65,8 @@ SOFT_ANNOUNCE_WITH_STATUS_Q = (
 
 class TestDeterministicSoftAnnounce:
 
-    def _mapping(self):
+    @staticmethod
+    def _mapping():
         return {
             "meta": {
                 "per_step_classification_markers": {
@@ -165,14 +166,8 @@ class TestAnnounceInquireNormalization:
                 svc, "_call_gemini_json",
                 return_value=__import__('json').dumps(mock_response)
             ):
-                return await svc.classify_turn(
-                    clinician_message=msg,
-                    person_last="",
-                    history=[],
-                    prior_announced=False,
-                    prior_phase="PreAnnounce",
-                    mapping={},
-                )
+                return await svc.classify_turn(clinician_message=msg, person_last="", history=[], prior_announced=False,
+                                               prior_phase="PreAnnounce", mapping={})
 
         result = asyncio.run(_run())
         assert result.aims.step == "Announce+Inquire", (

@@ -28,7 +28,8 @@ class FakeVertexInvalidJSON:
     def __init__(self, project: str, region: str, model_id: str):
         pass
 
-    def generate_text(self, *args, **kwargs):
+    @staticmethod
+    def generate_text(*args, **kwargs):
         # Force invalid JSON to trigger retry -> fallback
         return "not-json"
 
@@ -52,15 +53,18 @@ def enable_coaching(monkeypatch):
         def __init__(self, *args, **kwargs):
             pass
         
-        async def generate_text_async(self, prompt: str, **kwargs) -> str:
+        @staticmethod
+        async def generate_text_async(prompt: str, **kwargs) -> str:
             # Force invalid JSON to trigger retry -> fallback
             return "not-json"
         
-        def generate_text(self, *args, **kwargs):
+        @staticmethod
+        def generate_text(*args, **kwargs):
             # Force invalid JSON to trigger retry -> fallback
             return "not-json"
         
-        def generate_text_json(self, *args, **kwargs):
+        @staticmethod
+        def generate_text_json(*args, **kwargs):
             return "not-json"
     
     monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", FakeGatewayInvalidJSON)

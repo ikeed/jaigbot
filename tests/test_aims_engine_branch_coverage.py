@@ -13,7 +13,7 @@ import pytest
 
 from app.aims_engine import (
     load_mapping, classify_step, score_step, evaluate_turn,
-    _stem_match, _starts_with_any, _is_small_talk, _introduces_new_info
+    stem_match, starts_with_any, is_small_talk, introduces_new_info
 )
 
 
@@ -72,17 +72,17 @@ class TestStemMatch:
     
     def test_stem_match_empty_stem(self):
         """Test _stem_match with empty stem in list"""
-        result = _stem_match("hello world", ["", "hello"])
+        result = stem_match("hello world", ["", "hello"])
         assert result is True
         
     def test_stem_match_whitespace_only_stem(self):
         """Test _stem_match with whitespace-only stem"""
-        result = _stem_match("hello world", ["   ", "hello"])
+        result = stem_match("hello world", ["   ", "hello"])
         assert result is True
         
     def test_stem_match_no_match(self):
         """Test _stem_match returns False when no stems match"""
-        result = _stem_match("hello world", ["goodbye", "farewell"])
+        result = stem_match("hello world", ["goodbye", "farewell"])
         assert result is False
 
 
@@ -91,12 +91,12 @@ class TestStartsWithAny:
     
     def test_starts_with_any_empty_starter(self):
         """Test _starts_with_any with empty starter in list"""
-        result = _starts_with_any("hello world", ["", "goodbye"])
+        result = starts_with_any("hello world", ["", "goodbye"])
         assert result is False  # Empty string gets stripped and becomes empty
         
     def test_starts_with_any_whitespace_starter(self):
         """Test _starts_with_any with whitespace starter"""
-        result = _starts_with_any("hello world", ["  ", "goodbye"])
+        result = starts_with_any("hello world", ["  ", "goodbye"])
         assert result is False  # Whitespace gets stripped
 
 
@@ -105,31 +105,31 @@ class TestIsSmallTalk:
     
     def test_is_small_talk_empty_text(self):
         """Test _is_small_talk with empty text"""
-        assert _is_small_talk("") is False
-        assert _is_small_talk(None) is False
+        assert is_small_talk("") is False
+        assert is_small_talk(None) is False
     
     def test_is_small_talk_exclamatory_without_clinical(self):
         """Test _is_small_talk with exclamatory text without clinical tokens"""
-        assert _is_small_talk("Wow, he's gotten so big!") is True
+        assert is_small_talk("Wow, he's gotten so big!") is True
         
     def test_is_small_talk_exclamatory_with_clinical(self):
         """Test _is_small_talk with exclamatory text with clinical tokens"""
-        assert _is_small_talk("Great! Time for his vaccine!") is False
+        assert is_small_talk("Great! Time for his vaccine!") is False
         
     def test_is_small_talk_question_without_clinical_no_regex_match(self):
         """Test _is_small_talk with question but no regex match"""
-        assert _is_small_talk("Do you like the weather?") is False
+        assert is_small_talk("Do you like the weather?") is False
         
     def test_is_small_talk_question_with_clinical_tokens(self):
         """Test _is_small_talk with question containing clinical tokens"""
-        assert _is_small_talk("How has he been sleeping since his vaccine?") is False
+        assert is_small_talk("How has he been sleeping since his vaccine?") is False
         
     def test_is_small_talk_wellbeing_question_match(self):
         """Test _is_small_talk with generic wellbeing question that matches regex"""
-        assert _is_small_talk("How's he been sleeping?") is True
-        assert _is_small_talk("Has she been eating well?") is True
+        assert is_small_talk("How's he been sleeping?") is True
+        assert is_small_talk("Has she been eating well?") is True
         # Test with correct regex pattern format
-        assert _is_small_talk("Is he teething?") is True
+        assert is_small_talk("Is he teething?") is True
 
 
 class TestIntroducesNewInfo:
@@ -137,24 +137,24 @@ class TestIntroducesNewInfo:
     
     def test_introduces_new_info_but_clause(self):
         """Test _introduces_new_info detects 'but' clauses"""
-        assert _introduces_new_info("I hear you're worried, but the data shows it's safe") is True
+        assert introduces_new_info("I hear you're worried, but the data shows it's safe") is True
         
     def test_introduces_new_info_statistics(self):
         """Test _introduces_new_info detects statistical terms"""
-        assert _introduces_new_info("The study indicates safety") is True
-        assert _introduces_new_info("The evidence suggests efficacy") is True
-        assert _introduces_new_info("5 percent of people have reactions") is True  # Use valid percent phrase
-        assert _introduces_new_info("The risk is minimal") is True
+        assert introduces_new_info("The study indicates safety") is True
+        assert introduces_new_info("The evidence suggests efficacy") is True
+        assert introduces_new_info("5 percent of people have reactions") is True  # Use valid percent phrase
+        assert introduces_new_info("The risk is minimal") is True
         
     def test_introduces_new_info_specific_phrases(self):
         """Test _introduces_new_info detects specific phrases"""
-        assert _introduces_new_info("The data shows safety") is True
+        assert introduces_new_info("The data shows safety") is True
         # Test exact phrase from the function
-        assert _introduces_new_info("that's not true") is True
+        assert introduces_new_info("that's not true") is True
         
     def test_introduces_new_info_clean_reflection(self):
         """Test _introduces_new_info returns False for clean reflections"""
-        assert _introduces_new_info("It sounds like you're worried about safety") is False
+        assert introduces_new_info("It sounds like you're worried about safety") is False
 
 
 class TestClassifyStepBranches:

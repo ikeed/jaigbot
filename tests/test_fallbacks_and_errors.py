@@ -26,15 +26,6 @@ def test_model_fallback_succeeds(monkeypatch):
     monkeypatch.setattr(settings, "MODEL_FALLBACKS", [fallback])
     monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", False)
 
-    class SwitchVertex:
-        def __init__(self, project: str, region: str, model_id: str):
-            self.model_id = model_id
-
-        def generate_text(self, prompt: str, temperature: float, max_tokens: int):
-            if self.model_id == primary:
-                raise VertexAIError("not found", status_code=404)
-            return "ok-from-fallback"
-
     # Mock at the VertexGateway level since this uses legacy chat path
     class SwitchGateway:
         def __init__(self, *args, primary_model=None, **kwargs):
@@ -68,10 +59,12 @@ def test_model_fallback_succeeds(monkeypatch):
         async def agenerate_text_json(self, *args, **kwargs):
             return await self.agenerate_text(*args, **kwargs)
 
-        def generate_text(self, *args, **kwargs):
+        @staticmethod
+        def generate_text(*args, **kwargs):
             return "sync-not-used"
 
-        def generate_text_json(self, *args, **kwargs):
+        @staticmethod
+        def generate_text_json(*args, **kwargs):
             return "sync-not-used"
     
     monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", SwitchGateway)
@@ -100,20 +93,13 @@ def test_upstream_error_maps_to_502_and_sets_cookie(monkeypatch):
     monkeypatch.setattr(settings, "MODEL_ID", "some-model")
     monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", False)
 
-    class ErrorVertex:
-        def __init__(self, project: str, region: str, model_id: str):
-            pass
-
-        def generate_text(self, prompt: str, temperature: float, max_tokens: int):
-            # Non-404 error should map to 502
-            raise VertexAIError("upstream boom", status_code=503)
-
     # Mock at the VertexGateway level since this uses legacy chat path
     class ErrorGateway:
         def __init__(self, *args, **kwargs):
             pass
         
-        async def agenerate_text(self, *args, **kwargs):
+        @staticmethod
+        async def agenerate_text(*args, **kwargs):
             from app.vertex import VertexAIError
             # Non-404 error should map to 502
             raise VertexAIError("upstream boom", status_code=503)
@@ -121,7 +107,8 @@ def test_upstream_error_maps_to_502_and_sets_cookie(monkeypatch):
         async def agenerate_text_json(self, *args, **kwargs):
             return await self.agenerate_text(*args, **kwargs)
 
-        def generate_text(self, *args, **kwargs):
+        @staticmethod
+        def generate_text(*args, **kwargs):
             from app.vertex import VertexAIError
             raise VertexAIError("upstream boom", status_code=503)
 

@@ -61,7 +61,6 @@ class ChatContextBuilder:
         # resolve session
         session_id, generated_session = self.sess.ensure_session(req, body_session_id, user_info)
 
-        mem: dict = {}
         if self.memory_enabled and session_id:
             # update persona/scene first (like main.py), then fetch mem
             mem = self.sess.update_persona_scene(session_id, character, scene) or self.sess.get_mem(session_id)

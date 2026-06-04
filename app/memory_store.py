@@ -75,6 +75,7 @@ class InMemoryStore:
         self._store[key] = value
         self._persist()
 
+    # noinspection PyUnusedLocal
     def set(self, key: str, value: Dict[str, Any], ttl: Optional[int] = None) -> None:
         self.__setitem__(key, value)
 
@@ -174,7 +175,6 @@ class RedisStore:
         self.set(key, value)
 
     def items(self) -> List[Tuple[str, Dict[str, Any]]]:
-        cursor = 0
         out: List[Tuple[str, Dict[str, Any]]] = []
         seen = set()
         for prefix in [self._prefix, *self._fallback_prefixes]:

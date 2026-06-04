@@ -24,7 +24,8 @@ class BackendClient:
         self.base_url = base_url or self._resolve_base_url()
         self.timeout = timeout or settings.CHAINLIT_HTTP_TIMEOUT
 
-    def _resolve_base_url(self) -> str:
+    @staticmethod
+    def _resolve_base_url() -> str:
         url = settings.BACKEND_URL
         if not url:
             import os
