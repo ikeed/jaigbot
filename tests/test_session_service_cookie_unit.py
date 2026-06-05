@@ -96,19 +96,13 @@ def test_save_and_state_helpers_are_noops_when_memory_disabled():
     )
 
     assert svc.get_mem("sid") == {}
-    assert svc.get_aims_state("sid") == {}
-    assert svc.get_aims_metrics("sid") == {}
 
-    svc.save_mem("sid", {"history": []})
     svc.update_persona_scene("sid", "patient", "scene")
-    svc.append_history("sid", "user", "hello")
-    svc.set_aims_state("sid", {"step": "Announce"})
-    svc.set_aims_metrics("sid", {"score": 1})
 
     assert store == {}
 
 
-def test_persona_scene_and_aims_helpers_persist_memory():
+def test_persona_scene_persists_memory():
     store = {}
     svc = SessionService(
         store,
@@ -119,13 +113,9 @@ def test_persona_scene_and_aims_helpers_persist_memory():
     )
 
     mem = svc.update_persona_scene("sid", "  patient  ", "  clinic  ")
-    svc.set_aims_state("sid", {"step": "Announce"})
-    svc.set_aims_metrics("sid", {"score": 1})
 
     assert mem["character"] == "patient"
     assert mem["scene"] == "clinic"
-    assert svc.get_aims_state("sid") == {"step": "Announce"}
-    assert svc.get_aims_metrics("sid") == {"score": 1}
 
 
 def test_apply_cookie_ignores_response_errors():

@@ -63,7 +63,6 @@ from app.services.coach_post import (
 )
 from app.services.patient_reply_service import PatientReplyService
 from app.services.vertex_helpers import (
-    avertex_call_with_fallback_text,
     avertex_call_with_fallback_json,
     get_last_model_used
 )
@@ -437,13 +436,6 @@ class AimsCoachingHandler:
         mem.setdefault(KEY_FULL_HISTORY, [])
         return mem
 
-    def _append_history(
-        self, mem: Optional[Dict[str, Any]], user_message: str, assistant_reply: str
-    ) -> None:
-        """Append user+assistant turn to history. Mutates mem in place."""
-        self._append_user_history(mem, user_message)
-        self._append_assistant_history(mem, assistant_reply)
-
     def _append_user_history(self, mem: Optional[Dict[str, Any]], user_message: str) -> None:
         """Append a user message to history. Mutates mem in place."""
         if mem is None:
@@ -476,22 +468,6 @@ class AimsCoachingHandler:
 
         except Exception as e:
             self.logger.debug(f"Assistant history append failed: {e}")
-    
-    async def _call_vertex_text(self, prompt: str) -> str:
-        """Call Vertex for text generation with fallbacks (native async)."""
-        return await avertex_call_with_fallback_text(
-            project=self.project_id,
-            region=self.vertex_location,
-            primary_model=self.model_id,
-            fallbacks=self.model_fallbacks,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-            prompt=prompt,
-            system_instruction=None,
-            log_path="coach_reply",
-            logger=self.logger,
-            client_cls=self.client_cls,
-        )
     
     def _primary_for_json(self, log_path: str) -> tuple[str, list[str]]:
         """Select primary and fallback models for JSON tasks based on call path.
