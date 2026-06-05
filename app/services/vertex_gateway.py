@@ -22,7 +22,7 @@ class VertexGateway:
         max_tokens: int = 2048,
         client_cls=None,
     ) -> None:
-        self.last_model_used = None
+        self.last_model_used: Optional[str] = None
         self.project = project
         self.region = region
         self.primary_model = primary_model

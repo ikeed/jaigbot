@@ -41,7 +41,7 @@ class ChatOrchestrator:
         debug_config: dict[str, Any],
         logger: Any,
     ):
-        self.background_tasks = None
+        self.background_tasks: Optional[BackgroundTasks] = None
         self.memory_store = memory_store
         self.logger = logger
         
