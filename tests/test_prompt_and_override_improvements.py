@@ -1,4 +1,8 @@
-from app.prompts.aims import build_classify_turn_prompt, get_classify_system_instruction
+from app.prompts.aims import (
+    build_classify_turn_prompt,
+    build_fallback_feedback_prompt,
+    get_classify_system_instruction,
+)
 
 # ---------------------------------------------------------------------------
 # Test that the prompts contain the "best of both worlds" clinical logic
@@ -118,3 +122,23 @@ class TestPromptContent:
         assert "status question" in sys.lower()
         assert "not inquire" in active.lower()
         assert "not inquire" in sys.lower()
+
+    def test_fallback_feedback_prompt_requires_specificity(self):
+        """Fallback feedback prompt should ask the model to de-formulaize coaching."""
+        prompt = build_fallback_feedback_prompt(
+            context={
+                "clinician_message": "I understand your concerns.",
+                "person_last": "But is it required?",
+                "fallback_coaching": {
+                    "step": "Secure",
+                    "score": 1,
+                    "reasons": ["Secure before mirroring."],
+                    "tips": ["Affirm autonomy explicitly."],
+                },
+            }
+        )
+        lower = prompt.lower()
+        assert "refine the coaching for a fallback aims turn" in lower
+        assert "avoid stock phrases" in lower
+        assert "preserve the detected step and the score" in lower
+        assert "step_feedback" in lower

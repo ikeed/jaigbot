@@ -23,6 +23,8 @@ Runtime ownership is split across injectable services:
 - `AimsCoachingHandler` assembles the turn response and coordinates injected collaborators.
 - `AimsTurnCoordinator` runs classification and patient-reply generation in parallel and applies
   deterministic classification fallback on timeout/failure.
+- `AimsFeedbackService` may rewrite only the fallback coaching text for fallback turns; scoring
+  and step detection remain deterministic.
 - `AimsStateService` owns phase transitions, concern state, and stateful coaching guidance.
 - `AimsMetricsService` owns per-session metrics.
 - `CoachFeedbackHistoryService` owns compact coach-note history entries and public reason filtering.

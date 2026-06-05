@@ -15,6 +15,7 @@ class AimsTurnResult:
     is_small_talk: bool
     classification_result: ClassifierResult | None
     reply_payload: dict[str, Any]
+    was_fallback: bool = False
 
 
 class AimsTurnCoordinator:
@@ -105,6 +106,7 @@ class AimsTurnCoordinator:
                 is_small_talk=classification_result.is_small_talk,
                 classification_result=classification_result,
                 reply_payload=reply_payload,
+                was_fallback=False,
             )
 
         fallback = evaluate_turn(clinician_message, mapping)
@@ -119,4 +121,5 @@ class AimsTurnCoordinator:
             is_small_talk=False,
             classification_result=None,
             reply_payload=reply_payload,
+            was_fallback=True,
         )

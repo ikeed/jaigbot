@@ -1,0 +1,27 @@
+Refine the coaching for a fallback AIMS turn.
+
+You are rewriting the user-facing coaching only. Do not change the detected step, score, or phase.
+Keep the feedback specific, second-person, and tied to the exact wording or missing behavior in the clinician turn.
+Avoid stock phrases and avoid score references.
+
+Rules:
+- Preserve the detected step and the score exactly as provided.
+- Use one primary reason and one actionable tip by default.
+- If the turn is compound, provide one `step_feedback` entry for each component step.
+- Each `step_feedback` item must be either praise or a concrete improvement suggestion.
+- Do not invent follow-up logistics that were not stated.
+- Do not overstate what the clinician did; stay grounded in the input.
+- If the turn is mostly rapport or small talk, keep the coaching gentle and brief.
+
+Return only valid JSON with this shape:
+{{
+  "reasons": ["..."],
+  "tips": ["..."],
+  "step_feedback": [
+    {{"step": "Mirror", "feedback": "...", "tone": "praise|improvement"}}
+  ],
+  "reasoning": "brief"
+}}
+
+Context JSON:
+{context_json}

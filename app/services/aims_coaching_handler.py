@@ -42,6 +42,7 @@ from app.services.classifier_service import ClassifierService
 from app.services.clinician_identity import clinician_display_name_from_user_info
 from app.services.aims_dependencies import (
     AimsEndgameDependency,
+    AimsFeedbackDependency,
     AimsMetricsDependency,
     AimsStateDependency,
     AimsTelemetryDependency,
@@ -51,6 +52,7 @@ from app.services.aims_dependencies import (
     PatientReplyDependency,
 )
 from app.services.aims_endgame_service import AimsEndgameService
+from app.services.aims_feedback_service import AimsFeedbackService
 from app.services.aims_handler_config import AimsMemoryConfig, AimsVertexConfig
 from app.services.aims_metrics_service import AimsMetricsService
 from app.services.aims_state_service import AimsStateService
@@ -84,6 +86,7 @@ class AimsCoachingHandler:
         classifier_service: ClassifierDependency | None = None,
         patient_reply_service: PatientReplyDependency | None = None,
         state_service: AimsStateDependency | None = None,
+        feedback_service: AimsFeedbackDependency | None = None,
         metrics_service: AimsMetricsDependency | None = None,
         coach_feedback_history_service: CoachFeedbackHistoryDependency | None = None,
         endgame_service: AimsEndgameDependency | None = None,
@@ -134,6 +137,16 @@ class AimsCoachingHandler:
         )
         self.metrics_service = metrics_service or AimsMetricsService(logger=self.logger)
         self.state_service = state_service or AimsStateService(logger=self.logger)
+        self.feedback_service = feedback_service or AimsFeedbackService(
+            project_id=self.project_id,
+            region=self.vertex_location,
+            model_id=self.model_id,
+            model_fallbacks=self.model_fallbacks,
+            temperature=min(self.temperature, 0.2),
+            max_tokens=min(self.max_tokens, 384),
+            client_cls=self.client_cls,
+            logger=self.logger,
+        )
         self.coach_feedback_history_service = (
             coach_feedback_history_service
             or CoachFeedbackHistoryService(logger=self.logger)
@@ -281,6 +294,20 @@ class AimsCoachingHandler:
             ctx.person_last,
             llm_topic,
         )
+
+        if turn.was_fallback:
+            try:
+                cls_payload = await self.feedback_service.refine_fallback_feedback(
+                    cls_payload=cls_payload,
+                    clinician_message=body.message,
+                    person_last=ctx.person_last,
+                    history_text=ctx.history_text,
+                    state=mem.get(KEY_AIMS_STATE) if mem else None,
+                    character=ctx.effective_character,
+                    person_topic=classification_result.person_topic if classification_result else None,
+                )
+            except Exception as e:
+                self.logger.debug("AIMS feedback refinement failed: %s", e)
 
         # Step 4: Persist AIMS metrics (after state update)
         try:

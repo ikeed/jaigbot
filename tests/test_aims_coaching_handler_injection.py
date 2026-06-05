@@ -89,6 +89,7 @@ def _turn(
     tips=None,
     is_small_talk=False,
     patient_reply="Thanks, Doctor.",
+    was_fallback=False,
 ):
     classification_result = ClassifierResult(
         is_small_talk=is_small_talk,
@@ -110,6 +111,7 @@ def _turn(
         is_small_talk=is_small_talk,
         classification_result=classification_result,
         reply_payload={"patient_reply": patient_reply},
+        was_fallback=was_fallback,
     )
 
 
@@ -203,6 +205,67 @@ async def test_handle_uses_injected_services(monkeypatch):
     assert feedback_call["reply_payload"] == {"patient_reply": "Thanks, Doctor."}
 
     endgame.check.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_handle_refines_fallback_coaching_when_available(monkeypatch):
+    classifier = Mock()
+    patient_reply = Mock()
+    patient_reply.generate = AsyncMock(return_value={"patient_reply": "Thanks, Doctor."})
+    metrics = _metrics()
+    feedback = _feedback()
+    endgame = _endgame()
+    handler = _handler(
+        classifier=classifier,
+        patient_reply=patient_reply,
+        metrics=metrics,
+        feedback=feedback,
+        endgame=endgame,
+        turn_coordinator=Mock(),
+    )
+
+    fallback_turn = _turn(
+        step="Secure",
+        score=1,
+        reasons=["Secure before mirroring."],
+        tips=["Affirm autonomy explicitly."],
+        was_fallback=True,
+    )
+    handler.turn_coordinator.run = AsyncMock(return_value=fallback_turn)
+    handler.feedback_service = Mock()
+    handler.feedback_service.refine_fallback_feedback = AsyncMock(
+        return_value={
+            "step": "Secure",
+            "steps": ["Secure"],
+            "score": 1,
+            "reasons": ["You gave reassurance before naming her choice."],
+            "tips": ["Name that it is her decision before offering the fact."],
+            "step_feedback": [
+                {
+                    "step": "Secure",
+                    "feedback": "You gave reassurance before naming her choice.",
+                    "tone": "improvement",
+                }
+            ],
+            "phase": "Secure",
+        }
+    )
+
+    async def fake_mapping():
+        return {}
+
+    monkeypatch.setattr(handler, "_load_aims_mapping", fake_mapping)
+
+    ctx = _basic_context()
+    result = await handler.handle(
+        req=None,
+        body=ChatRequest(message="We can do it today.", sessionId="sid", coach=True),
+        ctx=ctx,
+    )
+
+    handler.feedback_service.refine_fallback_feedback.assert_awaited_once()
+    assert result["coaching"]["tips"] == ["Name that it is her decision before offering the fact."]
+    assert result["coaching"]["step_feedback"][0]["feedback"] == "You gave reassurance before naming her choice."
 
 
 @pytest.mark.asyncio
