@@ -106,24 +106,6 @@ def extract_recent_concerns(turns: list[dict], max_items: int = 3) -> list[str]:
     return list(reversed(items))
 
 
-def format_markers(md: dict) -> str:
-    """Format classification markers mapping into a compact string.
-
-    Mirrors inline helper logic in main.py exactly to avoid behavior changes.
-    """
-    try:
-        lines: List[str] = []
-        for step_name in ("Announce", "Inquire", "Mirror", "Secure"):
-            lst = (md.get(step_name, {}).get("linguistic", []) or [])
-            if lst:
-                excerpt = ", ".join(lst[:12])
-                lines.append(f"{step_name}.linguistic: [{excerpt}]")
-        return "\n".join(lines)
-    except Exception:
-        # Avoid circular import, use basic logging if needed, or just return empty
-        return ""
-
-
 def strip_appointment_headers(text: str) -> str:
     """Remove scenario header lines like 'Person:', 'Parent:', 'Patient:', 'Purpose:', 'Notes:' from text.
 

@@ -37,11 +37,3 @@ def is_jailbreak_or_meta(text: Optional[str]) -> bool:
         "developer instructions",
     ]
     return any(cue in lt for cue in jailbreak_cues)
-
-
-def is_jailbreak_legacy(text: Optional[str]) -> bool:
-    """Legacy/backwards-compatible check if needed by older paths.
-
-    Placeholder until we migrate the exact logic.
-    """
-    return is_jailbreak_or_meta(text)

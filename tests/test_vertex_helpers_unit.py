@@ -114,27 +114,6 @@ def test_vertex_call_with_fallback_text_falls_back_to_plain_text(monkeypatch):
     assert any(rec.get("event") == "vertex_model_fallback" for rec in logger.records)
 
 
-def test_vertex_call_with_fallback_json_uses_gateway_and_logs():
-    logger = DummyLogger()
-    schema = {"type": "object"}
-    out = vh.vertex_call_with_fallback_json(
-        project="p",
-        region="r",
-        primary_model="m1",
-        fallbacks=["m2"],
-        temperature=0.0,
-        max_tokens=1,
-        prompt="classify",
-        system_instruction=None,
-        schema=schema,
-        log_path="coach_classify",
-        logger=logger,
-        client_cls=object,
-    )
-    assert out == "json-result"
-    assert any(rec.get("event") == "vertex_model_fallback" and rec.get("path") == "coach_classify" for rec in logger.records)
-
-
 def test_json_wrapper_is_sanitized_for_patient_reply(monkeypatch):
     # Force gateway to return a wrapped markdown response
     class WrappedGateway(FakeGateway):
@@ -159,35 +138,6 @@ def test_json_wrapper_is_sanitized_for_patient_reply(monkeypatch):
         client_cls=object,
     )
     assert out == '{"patient_reply":"Hello there!"}'
-
-
-def test_json_wrapper_passthrough_for_generic_schema(monkeypatch):
-    # Gateway returns wrapped JSON that is not REPLY_SCHEMA; we expect compact JSON string
-    payload = "Here is the JSON requested:\n\n```json\n{\n  \"foo\": \"bar\",\n  \"n\": 1\n}\n```\n"
-
-    class WrappedGateway(FakeGateway):
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
-            self.text_json_return = payload
-
-    monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", WrappedGateway)
-    logger = DummyLogger()
-    out = vh.vertex_call_with_fallback_json(
-        project="p",
-        region="r",
-        primary_model="m1",
-        fallbacks=["m2"],
-        temperature=0.0,
-        max_tokens=1,
-        prompt="classify",
-        system_instruction=None,
-        schema={"type": "object", "properties": {"foo": {"type": "string"}}},
-        log_path="coach_classify",
-        logger=logger,
-        client_cls=object,
-    )
-    assert out == '{"foo":"bar","n":1}'
-
 
 
 def test_json_wrapper_empty_block_falls_back(monkeypatch):

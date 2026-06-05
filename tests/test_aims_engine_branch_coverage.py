@@ -13,7 +13,7 @@ import pytest
 
 from app.aims_engine import (
     load_mapping, classify_step, score_step, evaluate_turn,
-    stem_match, starts_with_any, is_small_talk, introduces_new_info
+    stem_match, starts_with_any, introduces_new_info
 )
 
 
@@ -98,38 +98,6 @@ class TestStartsWithAny:
         """Test _starts_with_any with whitespace starter"""
         result = starts_with_any("hello world", ["  ", "goodbye"])
         assert result is False  # Whitespace gets stripped
-
-
-class TestIsSmallTalk:
-    """Test _is_small_talk function branches"""
-    
-    def test_is_small_talk_empty_text(self):
-        """Test _is_small_talk with empty text"""
-        assert is_small_talk("") is False
-        assert is_small_talk(None) is False
-    
-    def test_is_small_talk_exclamatory_without_clinical(self):
-        """Test _is_small_talk with exclamatory text without clinical tokens"""
-        assert is_small_talk("Wow, he's gotten so big!") is True
-        
-    def test_is_small_talk_exclamatory_with_clinical(self):
-        """Test _is_small_talk with exclamatory text with clinical tokens"""
-        assert is_small_talk("Great! Time for his vaccine!") is False
-        
-    def test_is_small_talk_question_without_clinical_no_regex_match(self):
-        """Test _is_small_talk with question but no regex match"""
-        assert is_small_talk("Do you like the weather?") is False
-        
-    def test_is_small_talk_question_with_clinical_tokens(self):
-        """Test _is_small_talk with question containing clinical tokens"""
-        assert is_small_talk("How has he been sleeping since his vaccine?") is False
-        
-    def test_is_small_talk_wellbeing_question_match(self):
-        """Test _is_small_talk with generic wellbeing question that matches regex"""
-        assert is_small_talk("How's he been sleeping?") is True
-        assert is_small_talk("Has she been eating well?") is True
-        # Test with correct regex pattern format
-        assert is_small_talk("Is he teething?") is True
 
 
 class TestIntroducesNewInfo:

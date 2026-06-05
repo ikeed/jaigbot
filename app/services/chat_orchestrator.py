@@ -41,6 +41,7 @@ class ChatOrchestrator:
         debug_config: dict[str, Any],
         logger: Any,
     ):
+        self.background_tasks: Optional[BackgroundTasks] = None
         self.memory_store = memory_store
         self.logger = logger
         
@@ -60,7 +61,6 @@ class ChatOrchestrator:
         self.temperature = vertex_config.get("temperature", 0.0)
         self.max_tokens = vertex_config.get("max_tokens", 1024)
         self.client_cls = vertex_config.get("client_cls")
-        
         self.expose_upstream_error = debug_config.get("expose_upstream_error", False)
         self.log_response_preview_max = debug_config.get("log_response_preview_max", 100)
         

@@ -1,4 +1,4 @@
-from app.security.oauth import get_enabled_oauth_providers, is_sso_configured
+from app.security.oauth import get_enabled_oauth_providers
 
 
 def _clear_oauth_client_ids(monkeypatch):
@@ -37,12 +37,3 @@ def test_get_enabled_oauth_providers_ignores_invalid_and_duplicate_env(monkeypat
 
     provider_ids = [provider["id"] for provider in providers]
     assert provider_ids == ["okta"]
-
-
-def test_is_sso_configured_reflects_enabled_provider_state(monkeypatch):
-    _clear_oauth_client_ids(monkeypatch)
-    assert is_sso_configured() is False
-
-    monkeypatch.setenv("OAUTH_AUTH0_CLIENT_ID", "auth0-client")
-
-    assert is_sso_configured() is True

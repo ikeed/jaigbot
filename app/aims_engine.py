@@ -86,45 +86,6 @@ def starts_with_any(text: str, starters: List[str]) -> bool:
     return any(t.startswith(s.strip().lower()) for s in starters if s.strip())
 
 
-def is_small_talk(text: str) -> bool:
-    """Detect pleasantries/rapport/openers that are not an AIMS step.
-
-    Heuristics: greetings, compliments, social niceties (no clinical content),
-    and generic well-being check-ins. Works for single- or multi-sentence turns
-    (e.g., rapport sentence followed by "Has he been sleeping ok?").
-    We keep this conservative: only return True when such phrases are present;
-    caller should also ensure no AIMS markers matched.
-    """
-    lt = (text or "").strip().lower()
-    if not lt:
-        return False
-    cues = [
-        "hello", "hi ", "hi,", "hey", "good to see", "nice to see", "so good to see",
-        "great to see", "welcome", "how are you", "how’s it going", "how's it going",
-        "wow", "getting so big", "so big", "big boy", "big girl", "eating all of",
-        "vegetable", "thanks for coming", "good to see both of you", "so good to see both",
-        # Added rapport/compliment/growth phrases
-        "how he's grown", "how she’s grown", "how she's grown", "grown so much", "so grown up",
-        "look how big", "so cute", "adorable", "handsome little", "big guy", "big man",
-        "buddy", "champ", "big and strong", "looks big", "looks so big", "he looks big", "she looks big"
-    ]
-    # Basic cue check
-    if any(c in lt for c in cues):
-        return True
-    # Exclamatory rapport without clinical tokens → treat as small talk
-    if lt.endswith("!") and not re.search(r"\b(vaccine|shot|mmr|booster|immuniz|due)\b", lt):
-        return True
-    # Question-form generic well-being rapport (sleep/eat/teething/daycare/etc.)
-    # Support multi-sentence: extract the trailing question sentence and test it.
-    if "?" in lt and not _CLINICAL_TOKENS.search(lt):
-        m = re.search(r"([^.?!]*\?)\s*$", lt)
-        if m:
-            last_q = m.group(1).strip()
-            if _GENERIC_WELLBEING_Q.match(last_q):
-                return True
-    return False
-
-
 def classify_step(clinician_last: str, mapping: Dict[str, Any]) -> ClassificationResult:
     """Classify the clinician's last message into one AIMS step.
 
