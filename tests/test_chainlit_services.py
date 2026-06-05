@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from app.chat_roles import ROLE_ASSISTANT, ROLE_COACH, ROLE_USER
 from app.constants import (
     SESSION_CHARACTER,
     SESSION_CONNECTION_ID,
@@ -91,22 +90,6 @@ async def test_backend_client_fetch_history(respx_mock):
     assert len(history) == 1
     assert history[0]["content"] == "hi"
 
-@pytest.mark.asyncio
-async def test_ui_handler_replay_history():
-    ui = UIHandler()
-    history = [{"role": ROLE_USER, "content": "hello"}]
-    
-    with patch("chainlit.Message") as mock_msg_cls:
-        mock_msg_instance = mock_msg_cls.return_value
-        mock_msg_instance.send = AsyncMock()
-        
-        await ui.replay_history(history)
-        
-        mock_msg_cls.assert_called()
-        # Verify content was passed
-        assert mock_msg_cls.call_args[1]["content"] == "hello"
-        mock_msg_instance.send.assert_called_once()
-
 def test_ui_handler_format_coach_message():
     ui = UIHandler()
     # Pipe delimited
@@ -150,46 +133,6 @@ def test_ui_handler_render_scenario_card_html_labels_and_notes():
 
 
 @pytest.mark.asyncio
-async def test_ui_handler_replay_history_renders_legacy_assistant_scenario_as_system_card():
-    ui = UIHandler()
-    history = [
-        {"role": ROLE_ASSISTANT, "content": "Person: Zia\nReason for visit: Ear pain"},
-        {"role": ROLE_COACH, "content": "Conversation phase: X | Detected step: Announce"},
-    ]
-
-    with patch("chainlit.Message") as mock_msg_cls:
-        mock_msg_instance = mock_msg_cls.return_value
-        mock_msg_instance.send = AsyncMock()
-
-        await ui.replay_history(history)
-
-    scenario_call = mock_msg_cls.call_args_list[0]
-    assert scenario_call.kwargs["author"] == "System"
-    assert "aims-scenario-briefing" in scenario_call.kwargs["content"]
-
-    coach_call = mock_msg_cls.call_args_list[1]
-    assert coach_call.kwargs["author"] == "Coach"
-    assert "Conversation phase" not in coach_call.kwargs["content"]
-    assert "- Detected step: Announce" in coach_call.kwargs["content"]
-
-
-@pytest.mark.asyncio
-async def test_ui_handler_replay_history_falls_back_when_coach_formatting_fails():
-    ui = UIHandler()
-    history = [{"role": ROLE_COACH, "content": "Avatar for Coach\nraw coach text"}]
-
-    with patch.object(ui, "format_coach_message", side_effect=RuntimeError("bad format")):
-        with patch("chainlit.Message") as mock_msg_cls:
-            mock_msg_instance = mock_msg_cls.return_value
-            mock_msg_instance.send = AsyncMock()
-
-            await ui.replay_history(history)
-
-    assert mock_msg_cls.call_args.kwargs["content"] == "raw coach text"
-    mock_msg_instance.send.assert_awaited_once()
-
-
-@pytest.mark.asyncio
 async def test_ui_handler_send_helpers_use_expected_chainlit_calls():
     ui = UIHandler()
 
@@ -224,16 +167,6 @@ async def test_ui_handler_send_user_message_update_sets_role_attributes():
     assert message.author == "Doctor"
     assert message.type == "user_message"
     message.update.assert_awaited_once()
-
-
-def test_ui_handler_strip_export_artifacts_handles_bad_input():
-    ui = UIHandler()
-
-    assert ui._strip_export_artifacts("Avatar for Doctor\nHello\n\nAvatar for Assistant") == "Hello"
-
-    bad_text = MagicMock()
-    bad_text.splitlines.side_effect = RuntimeError("bad text")
-    assert ui._strip_export_artifacts(bad_text) is bad_text
 
 
 @pytest.mark.asyncio

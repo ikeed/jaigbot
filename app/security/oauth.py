@@ -44,7 +44,3 @@ def get_enabled_oauth_providers() -> List[Dict[str, Any]]:
                     })
 
     return providers
-
-def is_sso_configured() -> bool:
-    """Return True if at least one OAuth provider is configured."""
-    return len(get_enabled_oauth_providers()) > 0

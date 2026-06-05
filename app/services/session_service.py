@@ -90,12 +90,6 @@ class SessionService:
             return {}
         return self._store.get(session_id) or {}
 
-    def save_mem(self, session_id: str, mem: dict) -> None:
-        if not (self.memory_enabled and session_id):
-            return
-        mem["updated"] = time.time()
-        self._store[session_id] = mem
-
     def update_persona_scene(self, session_id: str, character: Optional[str], scene: Optional[str]) -> dict:
         if not (self.memory_enabled and session_id):
             return {}
@@ -136,42 +130,6 @@ class SessionService:
             kept.append(entry)
         kept.reverse()
         return kept
-
-    def append_history(self, session_id: str, role: str, content: str) -> None:
-        if not (self.memory_enabled and session_id):
-            return
-        now = time.time()
-        mem = self._store.get(session_id) or {"history": [], "full_history": [], "character": None, "scene": None, "updated": now}
-        entry = {"role": role, "content": content}
-        mem.setdefault("history", []).append(entry)
-        mem.setdefault("full_history", []).append({**entry, "time": now})
-        # Trim working history (coach-aware)
-        mem["history"] = self.trim_history(mem["history"], self.memory_max_turns)
-        mem["updated"] = now
-        self._store[session_id] = mem
-
-    # Optional helpers for metrics/state (thin wrappers around mem dict)
-    def get_aims_state(self, session_id: str) -> dict:
-        mem = self.get_mem(session_id)
-        return mem.get("aims_state") or {}
-
-    def set_aims_state(self, session_id: str, state: dict) -> None:
-        if not (self.memory_enabled and session_id):
-            return
-        mem = self.get_mem(session_id)
-        mem["aims_state"] = state
-        self.save_mem(session_id, mem)
-
-    def get_aims_metrics(self, session_id: str) -> dict:
-        mem = self.get_mem(session_id)
-        return mem.get("aims") or {}
-
-    def set_aims_metrics(self, session_id: str, aims: dict) -> None:
-        if not (self.memory_enabled and session_id):
-            return
-        mem = self.get_mem(session_id)
-        mem["aims"] = aims
-        self.save_mem(session_id, mem)
 
     # TTL prune (invoked occasionally by API layer)
     def prune_expired(self) -> None:

@@ -97,13 +97,21 @@ class StorageService:
         ended_at = data.get("session_ended") or data.get("updated")
 
         duration = None
-        if started_at and ended_at:
-            duration = round(ended_at - started_at, 2)
+        if started_at is not None and ended_at is not None:
+            try:
+                duration = round(float(ended_at) - float(started_at), 2)
+            except (TypeError, ValueError):
+                logger.warning("Could not calculate duration: started_at=%s, ended_at=%s", started_at, ended_at)
+                duration = None
 
         def iso(ts):
-            if not ts:
+            if ts is None:
                 return None
-            return datetime.datetime.fromtimestamp(ts, datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+            try:
+                return datetime.datetime.fromtimestamp(float(ts), datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+            except (TypeError, ValueError):
+                logger.warning("Could not format ISO timestamp: %s", ts)
+                return None
 
         # Re-group transcript into turns
         transcript = []

@@ -265,23 +265,6 @@ def mark_mirrored_multi(
                 break
 
 
-def mark_best_match_mirrored(state: dict, person_text: str, topical_cues: TopicalCues) -> None:
-    """Backwards-compatible single-topic mirror using only person's last text."""
-    concerns: List[Concern] = state.get("parent_concerns") or []
-    if not concerns:
-        return
-    topic = concern_topic(person_text, topical_cues)
-    if topic:
-        for c in concerns:
-            if (c.get("topic") == topic) and not c.get("is_mirrored"):
-                c["is_mirrored"] = True
-                return
-    for c in concerns:
-        if not c.get("is_mirrored"):
-            c["is_mirrored"] = True
-            return
-
-
 def mark_secured_by_topic(
     state: dict, 
     clinician_text: str, 
@@ -331,6 +314,5 @@ __all__ = [
     "is_duplicate_concern",
     "maybe_add_person_concern",
     "mark_mirrored_multi",
-    "mark_best_match_mirrored",
     "mark_secured_by_topic",
 ]

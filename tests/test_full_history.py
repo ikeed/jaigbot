@@ -105,49 +105,6 @@ class TestTrimHistory:
 
 class TestFullHistory:
 
-    def test_append_history_populates_full_history(self):
-        store = {}
-        svc = _svc(store, max_turns=2)
-        sid, _ = svc.ensure_session(_FakeRequest(), None)
-
-        svc.append_history(sid, "user", "hello")
-        svc.append_history(sid, "assistant", "hi")
-        svc.append_history(sid, "user", "q1")
-        svc.append_history(sid, "assistant", "a1")
-        svc.append_history(sid, "user", "q2")
-        svc.append_history(sid, "assistant", "a2")
-
-        mem = store[sid]
-        # full_history has all 6 entries
-        assert len(mem["full_history"]) == 6
-        # history is trimmed to max_turns=2 → 4 dialogue entries
-        dialogue = [m for m in mem["history"] if m["role"] in ("user", "assistant")]
-        assert len(dialogue) == 4
-
-    def test_full_history_entries_have_time(self):
-        store = {}
-        svc = _svc(store, max_turns=10)
-        sid, _ = svc.ensure_session(_FakeRequest(), None)
-
-        before = time.time()
-        svc.append_history(sid, "user", "msg")
-        after = time.time()
-
-        fh = store[sid]["full_history"]
-        assert len(fh) == 1
-        assert "time" in fh[0]
-        assert before <= fh[0]["time"] <= after
-
-    def test_history_entries_do_not_have_time(self):
-        """Trimmed history must stay clean {role, content} — no time field."""
-        store = {}
-        svc = _svc(store, max_turns=10)
-        sid, _ = svc.ensure_session(_FakeRequest(), None)
-        svc.append_history(sid, "user", "msg")
-
-        for entry in store[sid]["history"]:
-            assert "time" not in entry
-
     def test_coaching_handler_appends_visible_order(self):
         handler = AimsCoachingHandler.__new__(AimsCoachingHandler)
         handler.memory_max_turns = 8

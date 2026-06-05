@@ -1,4 +1,4 @@
-from app.prompts.aims import build_endgame_summary_prompt, build_endgame_detector_prompt
+from app.prompts.aims import build_endgame_detector_prompt
 from app.prompts.aims import build_patient_reply_prompt
 
 
@@ -43,14 +43,3 @@ def test_patient_reply_prompt_includes_clinician_name_and_bans_placeholders():
     assert "do not address them by name in every reply" in prompt
     assert "Never output bracketed placeholder text" in prompt
     assert "[Clinician's last name]" not in prompt
-
-
-def test_build_endgame_summary_prompt_renders_placeholders():
-    metrics = {"totalTurns": 3, "perStepCounts": {"Announce": 1, "Inquire": 1, "Mirror": 1, "Secure": 0}}
-    transcript = "Doctor: Hi\nPatient: Hello"
-    prompt = build_endgame_summary_prompt(metrics_blob="{}".format(metrics), transcript=transcript)
-    # Ensure key sections are present
-    assert "Session metrics (JSON):" in prompt
-    assert str(metrics) in prompt
-    assert "Transcript:" in prompt
-    assert transcript in prompt

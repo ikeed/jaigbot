@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 import chainlit as cl
 
@@ -9,49 +9,12 @@ from app.chat_roles import (
     ROLE_SYSTEM,
     ROLE_USER,
     get_ui_attributes,
-    is_scenario_card,
 )
 
 logger = logging.getLogger(__name__)
 
 class UIHandler:
     """Handles all formatting and sending of messages to the Chainlit frontend."""
-
-    async def replay_history(self, history: List[Dict[str, Any]]):
-        """Replay all prior messages to the UI."""
-        for item in history or []:
-            role = (item.get("role") or ROLE_ASSISTANT).lower().strip()
-            content = item.get("content", "")
-
-            # Legacy sessions stored scenario cards as assistant messages.
-            if role == ROLE_ASSISTANT and is_scenario_card(content):
-                role = ROLE_SYSTEM
-
-            attrs = get_ui_attributes(role)
-            author = attrs["author"]
-            msg_type = attrs["type"]
-
-            if role == ROLE_SYSTEM and is_scenario_card(content):
-                await cl.Message(
-                    content=self.render_scenario_card_html(content), 
-                    author=author, 
-                    type=msg_type
-                ).send()
-                continue
-
-            if role == ROLE_COACH:
-                try:
-                    coach_text = self.format_coach_message(content)
-                    if coach_text:
-                        await cl.Message(content=coach_text, author=author, type=msg_type).send()
-                        continue
-                except Exception as e:
-                    logger.debug(f"Failed to format coach message during replay (non-fatal): {e}")
-                    pass
-
-            # Non-coach or fallback
-            content_clean = self._strip_export_artifacts(content)
-            await cl.Message(content=content_clean, author=author, type=msg_type).send()
 
     @staticmethod
     def format_coach_message(text: str) -> str:
@@ -126,12 +89,3 @@ class UIHandler:
             content=self.format_coach_message(content), 
             **get_ui_attributes(ROLE_COACH)
         ).send()
-
-    @staticmethod
-    def _strip_export_artifacts(text: str) -> str:
-        try:
-            lines = [ln for ln in (text or "").splitlines() if ln.strip() and not ln.strip().lower().startswith("avatar for ")]
-            return "\n".join(lines)
-        except Exception as e:
-            logger.debug(f"Error stripping artifacts from text: {e}")
-            return text

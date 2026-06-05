@@ -1,4 +1,4 @@
-from app.services.chat_helpers import format_markers, recent_context, extract_recent_concerns
+from app.services.chat_helpers import recent_context, extract_recent_concerns
 from app.prompts.aims import (
     build_endgame_detector_prompt as _build_endgame,
     get_classify_system_instruction as _get_classify_sysinstruction,
@@ -12,10 +12,6 @@ class AimsPromptBuilder:
     This class composes existing pure helpers to avoid behavior drift while
     grouping responsibilities for easier unit testing.
     """
-
-    @staticmethod
-    def markers_text(markers: dict) -> str:
-        return format_markers(markers)
 
     @staticmethod
     def recent_context(history: list[dict], n_turns: int) -> str:
