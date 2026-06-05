@@ -42,7 +42,6 @@ class ChatOrchestrator:
         logger: Any,
     ):
         self.background_tasks = None
-        self.background_tasks = None
         self.memory_store = memory_store
         self.logger = logger
         
