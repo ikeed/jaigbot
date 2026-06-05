@@ -17,10 +17,6 @@ from .constants import APP_TITLE, APP_VERSION
 
 _VERTEX_CLIENT_CACHE = VertexClientCache()
 
-
-def _get_vertex_client(project: str, region: str, model_id: str):
-    return _VERTEX_CLIENT_CACHE.get(project, region, model_id, VertexClient)
-
 logging.basicConfig(**get_logging_config(settings))
 logger = logging.getLogger("app")
 

@@ -97,17 +97,6 @@ def build_endgame_detector_prompt(
     )
 
 
-def build_endgame_summary_prompt(*, metrics_blob: str, transcript: str) -> str:
-    """Render the end-of-game coaching summary prompt from the template file.
-
-    Uses the generic prompt loader to keep strings out of code and enable
-    prompt-only tuning without code changes.
-    """
-    return load_and_render(
-        "app.prompts", "endgame_summary.txt", metrics_blob=metrics_blob, transcript=transcript
-    )
-
-
 def build_summary_analysis_prompt(*, metrics_blob: str, mapping_blob: str, transcript: str) -> str:
     """Render the /summary analysis prompt using metrics, aims mapping, and transcript."""
     return load_and_render(

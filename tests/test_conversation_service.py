@@ -4,7 +4,6 @@ from app.services.conversation_service import (
     is_duplicate_concern,
     maybe_add_person_concern,
     mark_mirrored_multi,
-    mark_best_match_mirrored,
     mark_secured_by_topic,
 )
 
@@ -164,32 +163,7 @@ def test_mark_mirrored_multi_uses_person_topic_then_llm_topic():
 def test_mark_mirrored_helpers_noop_without_concerns_or_unmirrored_items():
     empty = {}
     mark_mirrored_multi(empty, clinician_text="sleep", person_text="sleep", topical_cues=TOPICAL_CUES)
-    mark_best_match_mirrored(empty, person_text="sleep", topical_cues=TOPICAL_CUES)
     assert empty == {}
-
-    mirrored = {"parent_concerns": [
-        {"desc": "late bedtime", "topic": "sleep", "is_mirrored": True, "is_secured": False},
-    ]}
-    mark_best_match_mirrored(mirrored, person_text="no topic", topical_cues=TOPICAL_CUES)
-    assert mirrored["parent_concerns"][0]["is_mirrored"] is True
-
-
-def test_mark_best_match_mirrored_uses_person_text():
-    st = {"parent_concerns": [
-        {"desc": "late bedtime", "topic": "sleep", "is_mirrored": False, "is_secured": False},
-        {"desc": "too much screen", "topic": "screen_time", "is_mirrored": False, "is_secured": False},
-    ]}
-    mark_best_match_mirrored(st, person_text="The tablet is on too long", topical_cues=TOPICAL_CUES)
-    mirrored = [c for c in st["parent_concerns"] if c["is_mirrored"]]
-    assert {c["topic"] for c in mirrored} == {"screen_time"}
-
-
-def test_mark_best_match_mirrored_fallback_when_no_person_topic():
-    st = {"parent_concerns": [
-        {"desc": "late bedtime", "topic": "sleep", "is_mirrored": False, "is_secured": False},
-    ]}
-    mark_best_match_mirrored(st, person_text="no topic here", topical_cues=TOPICAL_CUES)
-    assert st["parent_concerns"][0]["is_mirrored"] is True
 
 
 def test_mark_secured_by_topic_prefers_clinician_topic():
