@@ -49,6 +49,42 @@ _ANNOUNCE_FALLBACK_MARKERS = [
     "first set of", "next set of", "routine shots", "routine immunizations",
 ]
 
+_CLOSING_LITERATURE_CUES = [
+    "information",
+    "take home",
+    "review",
+    "look over",
+    "materials",
+    "handout",
+    "written info",
+    "written information",
+    "read over",
+    "send you home with",
+]
+
+_CLOSING_FOLLOWUP_CUES = [
+    "follow-up",
+    "follow up",
+    "book a",
+    "come back",
+    "next visit",
+    "schedule a",
+    "schedule",
+    "appointment",
+]
+
+_SECURE_AUTONOMY_CUES = [
+    "it's your decision",
+    "it’s your decision",
+    "up to you",
+    "your choice",
+    "no pressure",
+    "take some time",
+    "take your time",
+    "on your own time",
+    "without any pressure",
+]
+
 
 @dataclass
 class ClassificationResult:
@@ -268,6 +304,17 @@ def introduces_new_info(lt: str) -> bool:
     return False
 
 
+def _closing_turn_signal_count(lt: str) -> int:
+    categories = 0
+    if any(cue in lt for cue in _CLOSING_LITERATURE_CUES):
+        categories += 1
+    if any(cue in lt for cue in _CLOSING_FOLLOWUP_CUES):
+        categories += 1
+    if any(cue in lt for cue in _SECURE_AUTONOMY_CUES):
+        categories += 1
+    return categories
+
+
 def score_step(step: str, clinician_last: str, mapping: Dict[str, Any]) -> ScoreResult:
     """Score 0–3 based on mapping heuristics per step.
 
@@ -305,6 +352,10 @@ def score_step(step: str, clinician_last: str, mapping: Dict[str, Any]) -> Score
             reasons.append("Weak/absent reflective stem")
 
     elif step == "Inquire":
+        if re.search(r"\bdo you have any questions\b", lt):
+            score = 1
+            reasons.append("Closed general check-in rather than a concern-surfacing question")
+            return ScoreResult(score=score, reasons=reasons)
         # Inquire can start with generic prompts or open questions
         open_q = lt.endswith("?") or starts_with_any(lt, ["what ", "how ", "where ", "as you hear that"])
         leading = bool(re.search(r"\b(don't|isn't it|right\?)\b", lt)) or "myth" in lt
@@ -387,6 +438,13 @@ def score_step(step: str, clinician_last: str, mapping: Dict[str, Any]) -> Score
 
 def evaluate_turn(clinician_last: str, mapping: Dict[str, Any]) -> Dict[str, Any]:
     cls = classify_step(clinician_last, mapping)
+    lt = (clinician_last or "").strip().lower()
+
+    if cls.step == "Inquire" and _closing_turn_signal_count(lt) >= 2:
+        cls = ClassificationResult(
+            step="Secure",
+            reasons=["Closing-turn offer with literature/follow-up/autonomy cues -> Secure"],
+        )
 
     # Handle rapport/pleasantries (no AIMS step attempted)
     if cls.step not in AIMS_STEPS:
@@ -407,7 +465,6 @@ def evaluate_turn(clinician_last: str, mapping: Dict[str, Any]) -> Dict[str, Any
 
     # Context-sensitive coaching tips: only include when an actionable improvement is evident.
     tips = []
-    lt = (clinician_last or "").strip().lower()
     if scr.score < 3:
         if cls.step == "Inquire":
             # Determine openness/why/leading to select a relevant tip

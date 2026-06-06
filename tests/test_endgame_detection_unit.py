@@ -12,6 +12,7 @@ Covers:
 import asyncio
 import logging
 
+from app.services.coach_post import EndGameDetector
 from app.services.aims_endgame_service import AimsEndgameService
 from app.services.aims_state_service import AimsStateService
 
@@ -62,6 +63,28 @@ class _MockClassifierService:
     async def detect_endgame(self, *, history_text: str, **kwargs) -> dict:
         self.last_history_text = history_text
         return self._result
+
+
+# ---------------------------------------------------------------------------
+# Tests - direct heuristic detection
+# ---------------------------------------------------------------------------
+
+def test_endgame_detector_accepts_same_message_literature_followup():
+    reply = (
+        "Yes, some written information would be helpful and a planned follow-up "
+        "appointment in a few weeks sounds good."
+    )
+    assert EndGameDetector.detect(reply) == {"reason": "followup_literature"}
+
+
+def test_endgame_detector_rejects_negative_literature_followup():
+    reply = "I'm not going to read that information and I don't want a follow-up appointment."
+    assert EndGameDetector.detect(reply) is None
+
+
+def test_endgame_detector_rejects_unhelpful_followup_information():
+    reply = "I don't think a follow-up appointment or more information would help."
+    assert EndGameDetector.detect(reply) is None
 
 
 # ---------------------------------------------------------------------------
@@ -210,6 +233,53 @@ def test_heuristic_fallback_silent_on_no_endgame_match():
     service = _make_endgame_service(mock_svc)
     result = _run(service.check(store["s7"], {}, None, "s7"))
     assert result is None
+
+
+def test_heuristic_fallback_requires_patient_acceptance_not_clinician_offer():
+    """Clinician offer alone should not trigger literature/follow-up closure."""
+    mock_svc = _MockClassifierService(
+        {"is_endgame": False, "resolution_type": "not_resolved", "summary": "", "reason": "detection_error"}
+    )
+    store = {
+        "s7b": {
+            "history": [
+                {
+                    "role": "user",
+                    "content": (
+                        "I can send you home with written information and we can schedule "
+                        "a follow-up appointment."
+                    ),
+                },
+                {"role": "assistant", "content": "Okay."},
+            ],
+            "aims_state": _announced_state(),
+        }
+    }
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s7b"], {}, None, "s7b"))
+    assert result is None
+
+
+def test_separate_patient_messages_can_complete_literature_followup_endgame():
+    """Literature and follow-up acceptance can be expressed across two person replies."""
+    mock_svc = _MockClassifierService(
+        {"is_endgame": False, "resolution_type": "not_resolved", "summary": "", "reason": "detection_error"}
+    )
+    store = {
+        "s7c": {
+            "history": [
+                {"role": "user", "content": "Would some written information help?"},
+                {"role": "assistant", "content": "Yes, some written information would be helpful for me to review at home."},
+                {"role": "user", "content": "Would a follow-up in a few weeks also be useful?"},
+                {"role": "assistant", "content": "A follow-up appointment in a few weeks sounds good."},
+            ],
+            "aims_state": _announced_state(phase="Secure", announced=True),
+        }
+    }
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s7c"], {}, None, "s7c"))
+    assert result is not None
+    assert "Great job" in result.get("title", "") or "Excellent job" in result.get("title", "")
 
 
 # ---------------------------------------------------------------------------
