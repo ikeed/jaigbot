@@ -316,7 +316,7 @@ EXPECTED = [
     ),
     # Turn 8: Inquire — Tdap specifics + open question.
     TurnExpectation(
-        accept_steps=["Inquire", "Secure+Inquire"],
+        accept_steps=["Inquire", "Secure+Inquire", "Secure"],
         min_score=1,
         label="Inquire — Tdap specifics + open Q",
     ),

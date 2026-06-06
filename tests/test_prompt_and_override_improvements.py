@@ -1,6 +1,7 @@
 from app.prompts.aims import (
     build_classify_turn_prompt,
     build_fallback_feedback_prompt,
+    build_summary_analysis_prompt,
     get_classify_system_instruction,
 )
 
@@ -142,3 +143,48 @@ class TestPromptContent:
         assert "avoid stock phrases" in lower
         assert "preserve the detected step and the score" in lower
         assert "step_feedback" in lower
+
+    def test_classify_turn_prompt_renders_context_and_concern_lists(self):
+        prompt = build_classify_turn_prompt(
+            person_last="I thought measles was basically gone.",
+            clinician_last="What worries you most about the MMR vaccine?",
+            prior_announced=True,
+            prior_phase="InquireMirror",
+            recent_context="Doctor: We recommend the MMR today.\nAssistant: I thought measles was gone.",
+            inquired_concerns_list=["disease_risk", "trust"],
+            mirrored_concerns_list=["trust"],
+        )
+        assert "Doctor: We recommend the MMR today." in prompt
+        assert "I thought measles was gone." in prompt
+        assert "Inquired Concerns: disease_risk, trust" in prompt
+        assert "Mirrored Concerns: trust" in prompt
+        assert "Announced: true" in prompt
+        assert "Phase: InquireMirror" in prompt
+
+    def test_classify_turn_prompt_contains_person_topic_guardrails(self):
+        prompt = build_classify_turn_prompt(
+            person_last="That sounds good. I'll read it over and we can talk at the next appointment.",
+            clinician_last="I'll send you home with some information and we can follow up.",
+            prior_announced=True,
+            prior_phase="Secure",
+        )
+        lower = prompt.lower()
+        assert "set `person_topic` only for an active vaccine concern in person_last" in lower
+        assert "use `null` for acceptance/closure language" in lower
+        assert "schedule/attend a follow-up" in lower
+        assert "disease_risk" in lower
+        assert "do not force this into `effectiveness`" in lower
+
+    def test_summary_analysis_prompt_contains_groundedness_rules(self):
+        prompt = build_summary_analysis_prompt(
+            metrics_blob='{"stepCoverage":{"Mirror":1},"runningAverage":{"Mirror":2.0}}',
+            mapping_blob='{"meta":{}}',
+            transcript="Doctor: hello\nAssistant: hi",
+        )
+        lower = prompt.lower()
+        assert "metrics_blob" in lower
+        assert "authoritative ground truth" in lower
+        assert "never claim a step was" in lower
+        assert "stepcoverage[step] > 0" in lower
+        assert "do not invent concerns" in lower
+        assert "6–8 plain" in prompt or "6-8 plain" in lower

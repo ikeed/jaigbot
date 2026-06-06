@@ -87,6 +87,26 @@ def test_endgame_detector_rejects_unhelpful_followup_information():
     assert EndGameDetector.detect(reply) is None
 
 
+def test_endgame_detector_rejects_materials_acceptance_without_followup():
+    reply = "Yes, I would like some written information to read at home."
+    assert EndGameDetector.detect(reply) is None
+
+
+def test_endgame_detector_rejects_followup_acceptance_without_literature():
+    reply = "Yes, a follow-up appointment in a few weeks sounds good."
+    assert EndGameDetector.detect(reply) is None
+
+
+def test_endgame_detector_rejects_conditional_followup_question():
+    reply = "If I read the material, could we follow up at the next appointment?"
+    assert EndGameDetector.detect(reply) is None
+
+
+def test_endgame_detector_rejects_positive_then_explicit_followup_refusal():
+    reply = "I'll read the handout, but I don't want a follow-up appointment."
+    assert EndGameDetector.detect(reply) is None
+
+
 # ---------------------------------------------------------------------------
 # Tests — history_text content
 # ---------------------------------------------------------------------------
@@ -280,6 +300,48 @@ def test_separate_patient_messages_can_complete_literature_followup_endgame():
     result = _run(service.check(store["s7c"], {}, None, "s7c"))
     assert result is not None
     assert "Great job" in result.get("title", "") or "Excellent job" in result.get("title", "")
+
+
+def test_separate_patient_messages_can_complete_followup_then_literature_endgame():
+    """The acceptance order should not matter across recent patient replies."""
+    mock_svc = _MockClassifierService(
+        {"is_endgame": False, "resolution_type": "not_resolved", "summary": "", "reason": "detection_error"}
+    )
+    store = {
+        "s7d": {
+            "history": [
+                {"role": "user", "content": "Would a follow-up in a few weeks be useful?"},
+                {"role": "assistant", "content": "A follow-up appointment in a few weeks sounds good."},
+                {"role": "user", "content": "Would written information also help?"},
+                {"role": "assistant", "content": "Yes, I would like some written information to review at home."},
+            ],
+            "aims_state": _announced_state(phase="Secure", announced=True),
+        }
+    }
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s7d"], {}, None, "s7d"))
+    assert result is not None
+
+
+def test_separate_patient_messages_do_not_end_when_followup_is_rejected():
+    """Combined recent patient replies should still honor explicit rejection."""
+    mock_svc = _MockClassifierService(
+        {"is_endgame": False, "resolution_type": "not_resolved", "summary": "", "reason": "detection_error"}
+    )
+    store = {
+        "s7e": {
+            "history": [
+                {"role": "user", "content": "Would written information help?"},
+                {"role": "assistant", "content": "Yes, some written information would be helpful for me to review at home."},
+                {"role": "user", "content": "Would a follow-up in a few weeks also be useful?"},
+                {"role": "assistant", "content": "I'd rather not schedule a follow-up appointment."},
+            ],
+            "aims_state": _announced_state(phase="Secure", announced=True),
+        }
+    }
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s7e"], {}, None, "s7e"))
+    assert result is None
 
 
 # ---------------------------------------------------------------------------
@@ -608,6 +670,86 @@ def test_llm_accepted_literature_trusted_without_keyword_match():
     service = _make_endgame_service(mock_svc)
     result = _run(service.check(store["s15"], {}, None, "s15"))
     assert result is not None, "LLM accepted_literature should fire without requiring keyword match"
+    assert result["title"] == "\U0001f389 Great job!"
+
+
+def test_mixed_resolution_vaccine_today_and_literature_for_others_is_endgame():
+    """Persona-style mixed acceptance should resolve as accepted_vaccine."""
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_vaccine",
+            "summary": "Person agreed to one vaccine today and literature for the others.",
+            "reason": "",
+        }
+    )
+    store = {
+        "s15b": {
+            "history": [
+                {"role": "user", "content": "We could do the Tdap today and send you home with information on the others."},
+                {
+                    "role": "assistant",
+                    "content": (
+                        "That sounds like a reasonable plan. I'm comfortable proceeding with the Tdap today, "
+                        "and I'd appreciate reading material for the others."
+                    ),
+                },
+            ],
+            "aims_state": _announced_state(phase="Secure", announced=True),
+        }
+    }
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s15b"], {}, None, "s15b"))
+    assert result is not None
+    assert result["title"] == "\U0001f389 Great job!"
+
+
+def test_analytical_persona_literature_followup_closure_with_residual_uncertainty_can_end():
+    """Analytical phrasing with residual uncertainty can still resolve with a review plan."""
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_literature",
+            "summary": "Person agreed to review information and revisit the decision at follow-up.",
+            "reason": "",
+        }
+    )
+    store = {
+        "s15c": {
+            "history": [
+                {
+                    "role": "user",
+                    "content": (
+                        "I can send you home with the evidence summary and we can revisit this in two weeks."
+                    ),
+                },
+                {
+                    "role": "assistant",
+                    "content": (
+                        "I'm still weighing the numbers, but I have enough to review at home, and we can talk "
+                        "about it again at the next appointment."
+                    ),
+                },
+            ],
+            "aims_state": {
+                "phase": "Secure",
+                "announced": True,
+                "parent_concerns": [
+                    {
+                        "id": "trust",
+                        "topic": "trust",
+                        "desc": "wants evidence, uncertainty, and trust addressed",
+                        "is_mirrored": True,
+                        "is_secured": True,
+                        "status": "resolved",
+                    }
+                ],
+            },
+        }
+    }
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s15c"], {}, None, "s15c"))
+    assert result is not None
     assert result["title"] == "\U0001f389 Great job!"
 
 

@@ -32,3 +32,32 @@ def test_clear_open_concern_question_remains_inquire():
     result = evaluate_turn("What concerns do you have about the vaccine?", {})
     assert result["step"] == "Inquire"
     assert result["score"] >= 2
+
+
+def test_generic_validation_is_not_strong_mirror():
+    result = evaluate_turn("I understand your concerns.", {})
+    assert result["step"] == "Mirror"
+    assert result["score"] <= 1
+
+
+def test_closed_leading_question_stays_weak_inquire():
+    result = evaluate_turn("Are you worried about side effects?", {})
+    assert result["step"] == "Inquire"
+    assert result["score"] == 1
+
+
+def test_secure_with_autonomy_fact_and_safety_net_scores_higher():
+    clinician = (
+        "It's your decision, and I want to support you. Serious side effects are rare, "
+        "and if anything worries you afterward you can call us right away."
+    )
+    result = evaluate_turn(clinician, {})
+    assert result["step"] == "Secure"
+    assert result["score"] >= 2
+
+
+def test_authority_reassurance_without_autonomy_is_weak_secure():
+    clinician = "I gave these vaccines to my own kids, so I really think you should do it."
+    result = evaluate_turn(clinician, {})
+    assert result["step"] == "Secure"
+    assert result["score"] == 1

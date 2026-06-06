@@ -209,7 +209,12 @@ def classify_step(clinician_last: str, mapping: Dict[str, Any]) -> Classificatio
 
     # Didactic education detector (no question + factual/educational tokens)
     didactic_re = re.compile(r"\b(study|studies|evidence|data|statistics?|percent|%|risk|safe|side effects?|protect|immunit|schedule|dose|herd immunity)\b")
-    didactic_secure = (not inquire_match) and bool(didactic_re.search(lt))
+    authority_reassurance_re = re.compile(
+        r"\b(i gave (these|this) vaccines? to my own kids|i gave (them|it) to my own kids|my own kids got (these|this) vaccines?|i vaccinated my own kids)\b"
+    )
+    didactic_secure = (not inquire_match) and (
+        bool(didactic_re.search(lt)) or bool(authority_reassurance_re.search(lt))
+    )
 
     # Primary classification with tie-breakers
     # Compound: Mirror + Inquire
@@ -358,14 +363,21 @@ def score_step(step: str, clinician_last: str, mapping: Dict[str, Any]) -> Score
             return ScoreResult(score=score, reasons=reasons)
         # Inquire can start with generic prompts or open questions
         open_q = lt.endswith("?") or starts_with_any(lt, ["what ", "how ", "where ", "as you hear that"])
+        closed_q = lt.endswith("?") and starts_with_any(
+            lt,
+            ["are ", "is ", "do ", "did ", "does ", "can ", "could ", "would ", "will ", "have ", "has "],
+        )
         leading = bool(re.search(r"\b(don't|isn't it|right\?)\b", lt)) or "myth" in lt
+        if closed_q:
+            score = 1
+            reasons.append("Closed question rather than open concern-surfacing inquiry")
         if not (open_q or "feeling about" in lt or "leaning right" in lt):
             score = 1
             reasons.append("Not clearly open-ended")
         if leading:
             score = min(score, 1)
             reasons.append("Leading/judgmental phrasing")
-        if (open_q or "feeling about" in lt) and not leading:
+        if (open_q or "feeling about" in lt) and not leading and not closed_q:
             score = max(score, 2)
             reasons.append("Clear open question with decent tone")
 

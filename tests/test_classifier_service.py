@@ -49,6 +49,45 @@ async def test_classify_turn_success(classifier_service, mock_vertex_client):
     assert result.aims.score == 3
     assert "Reflected concern well" in result.aims.reasons
 
+
+@pytest.mark.asyncio
+async def test_classify_turn_prompt_includes_recent_context_and_concern_lists(
+    classifier_service, mock_vertex_client
+):
+    mock_vertex_client.generate_text_async.return_value = json.dumps(
+        {
+            "is_small_talk": False,
+            "is_vaccine_relevant": True,
+            "aims": {"step": "Inquire", "score": 2, "reasons": [], "tips": []},
+            "safety_flags": [],
+            "reasoning": "ok",
+        }
+    )
+
+    history = [
+        {"role": "user", "content": "We recommend the MMR vaccine today."},
+        {"role": "assistant", "content": "I thought measles was basically gone."},
+    ]
+    await classifier_service.classify_turn(
+        clinician_message="What concerns do you have about the MMR vaccine?",
+        person_last="I thought measles was basically gone.",
+        history=history,
+        prior_announced=True,
+        prior_phase="InquireMirror",
+        mapping={},
+        inquired_concerns_list=["disease_risk", "trust"],
+        mirrored_concerns_list=["trust"],
+    )
+
+    prompt = mock_vertex_client.generate_text_async.await_args.args[0]
+    system_instruction = mock_vertex_client.generate_text_async.await_args.kwargs["system_instruction"]
+    assert "Doctor: We recommend the MMR vaccine today." in prompt
+    assert "Assistant: I thought measles was basically gone." in prompt
+    assert "Inquired Concerns: disease_risk, trust" in prompt
+    assert "Mirrored Concerns: trust" in prompt
+    assert "Phase: InquireMirror" in prompt
+    assert "Triple-Move" in system_instruction
+
 @pytest.mark.asyncio
 async def test_classify_turn_with_person_topic(classifier_service, mock_vertex_client):
     # Mock successful JSON response with person_topic
@@ -215,6 +254,42 @@ async def test_detect_endgame_returns_parsed_fenced_json(classifier_service, moc
         "reason": "accepted_now",
         "confidence": 0.9,
     }
+
+    prompt = mock_vertex_client.generate_text_async.await_args.args[0]
+    assert "Inquired Concerns" in prompt
+    assert "Mirrored Concerns" in prompt
+    assert "Secured Concerns" in prompt
+    assert "Announced" in prompt and "true" in prompt
+
+
+@pytest.mark.asyncio
+async def test_detect_endgame_prompt_includes_transcript_and_concern_lists(
+    classifier_service, mock_vertex_client
+):
+    mock_vertex_client.generate_text_async.return_value = json.dumps(
+        {
+            "is_endgame": False,
+            "reason": "not_resolved",
+            "resolution_type": "not_resolved",
+            "summary": "",
+        }
+    )
+
+    await classifier_service.detect_endgame(
+        history_text="Doctor: We can send you home with information.\nAssistant: I'd like to read it at home.",
+        announced=True,
+        inquired_concerns=["trust", "side_effects"],
+        mirrored_concerns=["trust"],
+        secured_concerns=["trust"],
+    )
+
+    prompt = mock_vertex_client.generate_text_async.await_args.args[0]
+    assert "Doctor: We can send you home with information." in prompt
+    assert "Assistant: I'd like to read it at home." in prompt
+    assert "Inquired Concerns" in prompt and "trust, side_effects" in prompt
+    assert "Mirrored Concerns" in prompt and "trust" in prompt
+    assert "Secured Concerns" in prompt and "trust" in prompt
+    assert "Both elements must be present".lower() in prompt.lower()
 
 
 @pytest.mark.asyncio

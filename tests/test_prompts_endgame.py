@@ -1,5 +1,10 @@
-from app.prompts.aims import build_endgame_detector_prompt
-from app.prompts.aims import build_patient_reply_prompt
+from unittest.mock import patch
+
+from app.prompts.aims import (
+    build_endgame_detector_prompt,
+    build_patient_reply_prompt,
+    build_summary_analysis_prompt,
+)
 
 
 def test_endgame_detector_prompt_uses_person_not_parent():
@@ -43,3 +48,59 @@ def test_patient_reply_prompt_includes_clinician_name_and_bans_placeholders():
     assert "do not address them by name in every reply" in prompt
     assert "Never output bracketed placeholder text" in prompt
     assert "[Clinician's last name]" not in prompt
+
+
+def test_endgame_detector_prompt_requires_both_literature_and_followup():
+    prompt = build_endgame_detector_prompt(
+        history_text="Doctor: We can keep talking.\nAssistant: I'd like something to read.",
+        announced=True,
+        inquired_concerns=["trust"],
+        mirrored_concerns=["trust"],
+        secured_concerns=["trust"],
+    )
+    lower = prompt.lower()
+    assert "accepted_literature" in lower
+    assert "both elements must be present" in lower
+    assert "mere interest in literature" in lower
+    assert "without intent to return is not an endgame" in lower
+
+
+def test_endgame_detector_prompt_rejects_deferred_as_endgame():
+    prompt = build_endgame_detector_prompt(
+        history_text="Doctor: We can revisit this later.\nAssistant: Maybe next time.",
+        announced=True,
+        inquired_concerns=[],
+        mirrored_concerns=[],
+        secured_concerns=[],
+    )
+    lower = prompt.lower()
+    assert "`deferred` and `not_resolved` always set `is_endgame: false`".lower() in lower
+    assert "this is not an endgame" in lower
+    assert "mid-conversation hesitation" in lower
+
+
+def test_endgame_detector_prompt_warns_that_concern_lists_are_incomplete():
+    prompt = build_endgame_detector_prompt(
+        history_text="Doctor: What worries you?\nAssistant: Side effects.",
+        announced=True,
+        inquired_concerns=[],
+        mirrored_concerns=[],
+        secured_concerns=[],
+    )
+    lower = prompt.lower()
+    assert "concern lists may be incomplete" in lower
+    assert "full transcript" in lower
+    assert "do not rely on empty lists" in lower
+
+
+def test_summary_analysis_builder_uses_live_template_not_endgame_summary():
+    with patch("app.prompts.aims.load_and_render") as load_and_render:
+        load_and_render.return_value = "ok"
+        build_summary_analysis_prompt(
+            metrics_blob="{}",
+            mapping_blob="{}",
+            transcript="Doctor: hi",
+        )
+
+    load_and_render.assert_called_once()
+    assert load_and_render.call_args.args[1] == "summary_analysis.txt"
