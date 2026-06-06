@@ -171,4 +171,4 @@ To locate references yourself, search terms used:
 ---
 
 ## Appendix: How the backend uses PROJECT_ID
-- The FastAPI backend uses `PROJECT_ID` to construct Vertex API endpoints (REST) at runtime. If `PROJECT_ID` is missing, the `/chat` route returns a structured 500 error explaining the misconfiguration (see tests/test_chat.py). It does not store or hardcode any project ids in code.
+- The FastAPI backend uses `PROJECT_ID` to construct Vertex API endpoints (REST) at runtime. If `PROJECT_ID` is missing, the `/chat` route returns a structured 500 error explaining the misconfiguration (see tests/unit/routes/test_chat.py). It does not store or hardcode any project ids in code.

@@ -175,6 +175,27 @@ class EndGameDetector:
         "look over", "at home", "read over", "information",
     ]
 
+    PLAN_ACCEPTANCE_CUES = [
+        "sounds good", "sounds like a plan", "that would help", "would be helpful",
+        "would be very helpful", "that would be helpful", "excellent approach",
+        "reasonable plan", "helpful for me", "i'd like that", "i would like that",
+        "yes,", "yes ", "helpful", "sounds reasonable", "works for me",
+        "i'll take", "i will take", "talk about it at the next appointment",
+        "talk about it at the next visit", "we can talk about it",
+    ]
+
+    PLAN_NEGATIVE_CUES = [
+        "don't want", "do not want", "not going to read", "would not help",
+        "wouldn't help", "not helpful", "no point", "don't think", "do not think",
+        "not interested", "rather not", "won't read", "will not read",
+    ]
+
+    PLAN_ACTIVE_CONCERN_CUES = [
+        "still worried", "still worry", "still concerned", "still nervous",
+        "still scared", "not convinced", "not sure", "do not trust",
+        "don't trust", "safety risk", "unsafe", "still a risk",
+    ]
+
     @staticmethod
     def detect(patient_reply: str) -> dict | None:
         lt = (patient_reply or "").strip().lower()
@@ -186,7 +207,7 @@ class EndGameDetector:
         # Normalize whitespace
         lt_norm = re.sub(r"\s+", " ", lt)
         # Split into sentences; keep punctuation to check questions
-        parts = re.split(r"(?<=[\.\!\?])\s+", lt_norm) if lt_norm else []
+        parts = re.split(r"(?<=[.!?])\s+", lt_norm) if lt_norm else []
         if not parts:
             parts = [lt_norm]
 
@@ -229,11 +250,20 @@ class EndGameDetector:
             if any(cue in lt for cue in EndGameDetector.ACCEPT_NOW_CUES):
                 return {"reason": "accepted_now"}
 
-        # Follow-up AND literature (require explicit follow-up appointment intent)
+        # Follow-up AND literature require explicit positive acceptance and no negation.
         has_followup = any(c in lt for c in EndGameDetector.FOLLOWUP_CUES)
         has_literature = any(c in lt for c in EndGameDetector.LITERATURE_CUES)
+        has_positive_acceptance = any(c in lt for c in EndGameDetector.PLAN_ACCEPTANCE_CUES)
+        has_negative_acceptance = any(c in lt for c in EndGameDetector.PLAN_NEGATIVE_CUES)
+        has_active_concern = any(c in lt for c in EndGameDetector.PLAN_ACTIVE_CONCERN_CUES)
 
-        if has_followup and has_literature:
+        if (
+            has_followup
+            and has_literature
+            and has_positive_acceptance
+            and not has_negative_acceptance
+            and not has_active_concern
+        ):
             return {"reason": "followup_literature"}
 
         return None

@@ -90,7 +90,7 @@ Fast checks:
 ```bash
 git diff --check
 .venv/bin/python -m compileall -q app chainlit_app.py scripts tests
-.venv/bin/python -m pytest -q tests/test_relevant_file.py
+.venv/bin/python -m pytest -q tests/unit/test_relevant_file.py
 ```
 
 CI-equivalent non-live suite:

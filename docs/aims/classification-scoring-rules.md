@@ -23,6 +23,8 @@ Runtime ownership is split across injectable services:
 - `AimsCoachingHandler` assembles the turn response and coordinates injected collaborators.
 - `AimsTurnCoordinator` runs classification and patient-reply generation in parallel and applies
   deterministic classification fallback on timeout/failure.
+- `AimsFeedbackService` may rewrite only the fallback coaching text for fallback turns; scoring
+  and step detection remain deterministic.
 - `AimsStateService` owns phase transitions, concern state, and stateful coaching guidance.
 - `AimsMetricsService` owns per-session metrics.
 - `CoachFeedbackHistoryService` owns compact coach-note history entries and public reason filtering.
@@ -329,6 +331,12 @@ to support"*, *"not rushed"*, *"you can decide"*, *"entirely up to you"*, etc.
 
 ## 5. Phase State Machine
 
+Tracked concerns are canonical concern objects, not raw transcript snippets. `desc` is retained
+as a short display summary for compatibility, while `id`, `canonical_label`, `summary`,
+`evidence`, `status`, `mirror_count`, and `secure_count` carry the state model. New person
+messages with the same canonical topic/meaning update the existing concern evidence instead of
+appending a fresh unresolved concern.
+
 | Phase | Meaning | Transition in |
 |-------|---------|---------------|
 | `PreAnnounce` | Vaccines not yet introduced | Initial state |
@@ -382,7 +390,9 @@ Vaccine relevance is True if any of the following apply:
 ### 8.1 Hard guards (no LLM call)
 - Phase is `PreAnnounce` → no endgame
 - Not announced and ≤ 1 assistant turn → no endgame
-- Any concerns tracked with `is_mirrored == False` → no endgame
+- Any concerns tracked with `is_mirrored == False` → no endgame, except when the person's latest
+  replies clearly accept literature/materials plus follow-up. That closure is allowed because
+  residual uncertainty plus a follow-up plan is a valid AIMS outcome.
 
 ### 8.2 LLM detector (`endgame_detector.txt` prompt)
 Called when hard guards pass.  Returns:

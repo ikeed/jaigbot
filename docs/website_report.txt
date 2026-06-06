@@ -1,0 +1,17 @@
+Technical Design Lessons from Building AIMSBot
+
+Building AIMSBot involved much more than connecting a chatbot to a language model. The goal was not simply to create realistic conversations, but to create a training environment that could help healthcare professionals practice difficult vaccine-related discussions using the AIMS communication framework.
+
+One of the earliest design decisions was to treat AIMSBot as a learning system rather than a conversational assistant. This distinction influenced nearly every aspect of development. The system needed to do more than respond to user input; it needed to recognize communication patterns, provide coaching, evaluate progress, and encourage repeated practice.
+
+To achieve this, AIMSBot was designed using a hybrid approach that combines generative AI with traditional software engineering techniques. The language model provides natural conversation and realistic patient responses, while deterministic software components manage assessment, coaching, scoring, and conversation flow. This approach allows the system to remain flexible and engaging while ensuring that learners receive consistent guidance.
+
+Another important design consideration was maintaining conversational context. Effective communication depends on understanding what has already been discussed, which concerns have been addressed, and which issues remain unresolved. The system therefore tracks the evolving state of each conversation so that coaching can be tailored to the learner's actual performance rather than individual messages viewed in isolation.
+
+Throughout development, the project team encountered a recurring challenge: balancing realism with educational structure. Real patients are unpredictable, but learners also benefit from clear opportunities to practice specific communication skills. The resulting design seeks to provide realistic interactions while keeping conversations aligned with the educational objectives of the AIMS framework.
+
+The development process reinforced the importance of restraint in educational AI systems. Many features were considered during development, including additional gamification elements, expanded personalization, and more sophisticated conversation mechanics. However, the project team chose to prioritize reliability, clarity, and ease of use during the initial development phase. This allowed the core learning experience to remain stable and understandable for users.
+
+Perhaps the most important lesson from the project is that successful educational AI systems require more than strong language generation. They also require careful attention to instructional design, assessment, user experience, and reliability. In AIMSBot, these considerations were as important as the AI itself.
+
+The result is a system designed to help healthcare professionals practice communication skills in a realistic but structured environment, providing opportunities for reflection, feedback, and repeated improvement. The lessons learned during the development of AIMSBot may be valuable for others seeking to build AI-supported training tools in healthcare and other educational settings.

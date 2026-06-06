@@ -51,8 +51,20 @@ class AimsEndgameService:
             if not announced and assistant_count <= 1:
                 return None
 
+            combined_reply_text = " ".join(
+                item.get("content", "")
+                for item in reversed(history[-6:])
+                if item.get("role") == ROLE_ASSISTANT and (item.get("content") or "").strip()
+            )[:500]
+            heuristic = EndGameDetector.detect(combined_reply_text)
+
             concerns = aims_state.get("parent_concerns") or []
-            if concerns and any(not concern.get("is_mirrored") for concern in concerns):
+            has_unmirrored = any(not concern.get("is_mirrored") for concern in concerns)
+            literature_followup_closure = (
+                heuristic is not None
+                and heuristic.get("reason") == "followup_literature"
+            )
+            if concerns and has_unmirrored and not literature_followup_closure:
                 return None
 
             history_text = "\n".join(
@@ -60,12 +72,6 @@ class AimsEndgameService:
                 for item in history[-10:]
                 if item.get("role") in (ROLE_USER, ROLE_ASSISTANT)
             )
-
-            combined_reply_text = " ".join(
-                item.get("content", "")
-                for item in reversed(history[-6:])
-                if item.get("role") == ROLE_ASSISTANT and (item.get("content") or "").strip()
-            )[:500]
 
             inquired = [concern["topic"] for concern in concerns]
             mirrored = [concern["topic"] for concern in concerns if concern.get("is_mirrored")]
@@ -85,21 +91,24 @@ class AimsEndgameService:
             outcome = result.get("resolution_type", "not_resolved")
             summary = result.get("summary", "")
 
-            if not is_endgame:
-                heuristic = EndGameDetector.detect(combined_reply_text)
-                if heuristic:
-                    is_endgame = True
-                    heuristic_reason = heuristic.get("reason", "")
-                    outcome = (
-                        "accepted_vaccine"
-                        if heuristic_reason == "accepted_now"
-                        else "accepted_literature"
-                    )
-                    summary = ""
+            if not is_endgame and heuristic:
+                is_endgame = True
+                heuristic_reason = heuristic.get("reason", "")
+                outcome = (
+                    "accepted_vaccine"
+                    if heuristic_reason == "accepted_now"
+                    else "accepted_literature"
+                )
+                summary = ""
 
             if is_endgame and outcome == "accepted_vaccine":
                 heuristic = EndGameDetector.detect(combined_reply_text)
                 if not heuristic or heuristic.get("reason") != "accepted_now":
+                    is_endgame = False
+
+            if is_endgame and outcome == "accepted_literature":
+                combined_lower = combined_reply_text.lower()
+                if any(cue in combined_lower for cue in EndGameDetector.PLAN_NEGATIVE_CUES):
                     is_endgame = False
 
             if outcome == "deferred":

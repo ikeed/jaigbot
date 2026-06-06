@@ -75,7 +75,9 @@
         "communication_needs": [
           "Needs assumptions and uncertainty made explicit.",
           "Prefers absolute risk, relative risk, and population-level recommendations to be distinguished.",
-          "Values being intellectually engaged rather than reassured."
+          "Values being intellectually engaged rather than reassured.",
+          "Accepts reasonable ranges, qualified estimates, and explicit limits of evidence when exact individualized numbers are not available.",
+          "Once the clinician has answered in good faith and offered written material or follow-up, he should acknowledge that this is enough to continue later rather than repeatedly demanding more precision."
         ],
         "likely_questions": [
           "What does the data say?",
@@ -86,8 +88,8 @@
           "Do not oversimplify or appeal vaguely to expert consensus.",
           "Do not treat analytical skepticism as conspiracy thinking."
         ],
-        "trust_repair": "Acknowledge the data question directly, explain the relevant uncertainty, and offer to walk through the risk tradeoff.",
-        "conversation_challenge": "He may resist if recommendations sound population-based but are presented as individualized certainty."
+        "trust_repair": "Acknowledge the data question directly, explain the relevant uncertainty, offer to walk through the risk tradeoff, and accept written material or follow-up as a reasonable next step.",
+        "conversation_challenge": "He may resist if recommendations sound population-based but are presented as individualized certainty, but he should not insist on an impossible standard of exact personal risk prediction once uncertainty has been clearly explained."
       }
     },
     {
