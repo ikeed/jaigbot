@@ -572,6 +572,97 @@ def test_unmirrored_concern_does_not_block_literature_followup_closure():
     assert mock_svc.last_history_text != ""
 
 
+def test_unmirrored_concern_allows_natural_language_review_and_followup_closure():
+    """Natural review-plan wording should reach the LLM even when the strict heuristic misses it."""
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_literature",
+            "summary": "Person agreed to review information and revisit it next appointment.",
+            "reason": "",
+        }
+    )
+    store = {
+        "s12b2": {
+            "history": [
+                {
+                    "role": "user",
+                    "content": "I can send you the information home and we can revisit it at the next appointment.",
+                },
+                {
+                    "role": "assistant",
+                    "content": "I'll go through the information at home and revisit it at the next appointment.",
+                },
+            ],
+            "aims_state": {
+                "phase": "Secure",
+                "announced": True,
+                "parent_concerns": [
+                    {
+                        "id": "trust",
+                        "desc": "wants evidence, uncertainty, and trust addressed",
+                        "topic": "trust",
+                        "is_mirrored": False,
+                        "is_secured": False,
+                        "status": "open",
+                    },
+                ],
+            },
+        }
+    }
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s12b2"], {}, None, "s12b2"))
+    assert result is not None
+    assert mock_svc.last_history_text != ""
+
+
+def test_unmirrored_concern_with_natural_review_plan_and_active_concern_still_blocks():
+    """Broader review-plan wording cannot bypass the guard when the person is still unconvinced."""
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_literature",
+            "summary": "Person agreed to review information and revisit it next appointment.",
+            "reason": "",
+        }
+    )
+    store = {
+        "s12b3": {
+            "history": [
+                {
+                    "role": "user",
+                    "content": "I can send you the information home and we can revisit it at the next appointment.",
+                },
+                {
+                    "role": "assistant",
+                    "content": (
+                        "I'll go through the information at home and revisit it at the next appointment, "
+                        "but I'm still not convinced."
+                    ),
+                },
+            ],
+            "aims_state": {
+                "phase": "Secure",
+                "announced": True,
+                "parent_concerns": [
+                    {
+                        "id": "trust",
+                        "desc": "wants evidence, uncertainty, and trust addressed",
+                        "topic": "trust",
+                        "is_mirrored": False,
+                        "is_secured": False,
+                        "status": "open",
+                    },
+                ],
+            },
+        }
+    }
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s12b3"], {}, None, "s12b3"))
+    assert result is None
+    assert mock_svc.last_history_text == ""
+
+
 def test_unmirrored_concern_with_literature_only_blocks_before_llm():
     """Take-home material without a return plan should not bypass unmirrored concerns."""
     mock_svc = _MockClassifierService(
