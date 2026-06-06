@@ -21,6 +21,17 @@ class AimsEndgameService:
         self._logger = logger
         self._classifier_service_getter = classifier_service_getter
 
+    @staticmethod
+    def _could_be_literature_followup_closure(reply_text: str) -> bool:
+        text = (reply_text or "").lower()
+        if not text:
+            return False
+        has_followup = any(cue in text for cue in EndGameDetector.FOLLOWUP_CUES)
+        has_literature = any(cue in text for cue in EndGameDetector.LITERATURE_CUES)
+        has_negative = any(cue in text for cue in EndGameDetector.PLAN_NEGATIVE_CUES)
+        has_active_concern = any(cue in text for cue in EndGameDetector.PLAN_ACTIVE_CONCERN_CUES)
+        return has_followup and has_literature and not has_negative and not has_active_concern
+
     async def check(
         self,
         mem: dict[str, Any] | None,
@@ -64,7 +75,15 @@ class AimsEndgameService:
                 heuristic is not None
                 and heuristic.get("reason") == "followup_literature"
             )
-            if concerns and has_unmirrored and not literature_followup_closure:
+            possible_literature_followup_closure = self._could_be_literature_followup_closure(
+                combined_reply_text
+            )
+            if (
+                concerns
+                and has_unmirrored
+                and not literature_followup_closure
+                and not possible_literature_followup_closure
+            ):
                 return None
 
             history_text = "\n".join(

@@ -196,6 +196,90 @@ def _string_list(value: object) -> list[str]:
     return []
 
 
+_SEMANTIC_STOPWORDS = {
+    "a", "an", "and", "are", "as", "at", "about", "be", "been", "but", "by",
+    "do", "for", "from", "get", "got", "had", "has", "have", "how", "i",
+    "if", "in", "into", "is", "it", "its", "itself", "just", "like", "me",
+    "my", "of", "on", "or", "our", "really", "so", "that", "the", "their",
+    "them", "there", "they", "this", "to", "understand", "very", "want",
+    "what", "when", "why", "with", "you", "your",
+}
+
+
+def _semantic_tokens(text: str) -> set[str]:
+    words = re.findall(r"[a-z0-9]+", (text or "").lower())
+    return {
+        word
+        for word in words
+        if len(word) >= 4 and word not in _SEMANTIC_STOPWORDS
+    }
+
+
+def _evidence_key(text: str) -> str:
+    tokens = [token for token in re.findall(r"[a-z0-9]+", (text or "").lower()) if token not in {"still"}]
+    return " ".join(tokens)
+
+
+def _is_redundant_evidence(existing_items: list[str], new_item: str) -> bool:
+    new_key = _evidence_key(new_item)
+    if not new_key:
+        return True
+    for existing in existing_items:
+        existing_key = _evidence_key(existing)
+        if not existing_key:
+            continue
+        if new_key == existing_key or new_key in existing_key or existing_key in new_key:
+            return True
+    return False
+
+
+def _concern_match_score(concern: Concern, text: str) -> int:
+    text_tokens = _semantic_tokens(text)
+    if not text_tokens:
+        return 0
+
+    concern_tokens = set()
+    concern_tokens |= _semantic_tokens(str(concern.get("summary") or ""))
+    concern_tokens |= _semantic_tokens(str(concern.get("canonical_label") or ""))
+    concern_tokens |= _semantic_tokens(str(concern.get("desc") or ""))
+    for evidence in _string_list(concern.get("evidence"))[-3:]:
+        concern_tokens |= _semantic_tokens(evidence)
+
+    overlap = text_tokens & concern_tokens
+    return len(overlap)
+
+
+def _best_matching_concern(
+    concerns: list[Concern],
+    text: str,
+    *,
+    require_mirrored: bool | None = None,
+    require_unsecured: bool = False,
+) -> Concern | None:
+    candidates: list[tuple[int, Concern]] = []
+    for concern in concerns or []:
+        _normalize_existing_concern(concern)
+        if require_mirrored is not None and bool(concern.get("is_mirrored")) is not require_mirrored:
+            continue
+        if require_unsecured and concern.get("is_secured"):
+            continue
+        score = _concern_match_score(concern, text)
+        if score > 0:
+            candidates.append((score, concern))
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    top_score = candidates[0][0]
+    top = [concern for score, concern in candidates if score == top_score]
+    if len(top) != 1:
+        return None
+    if top_score < 2:
+        return None
+    return top[0]
+
+
 def _count(value: object) -> int:
     if isinstance(value, bool):
         return int(value)
@@ -423,7 +507,7 @@ def maybe_add_person_concern(
     existing = _find_matching_concern(concerns, topic)
     if existing:
         evidence_list = _string_list(existing.get("evidence"))
-        if evidence and evidence not in evidence_list:
+        if evidence and not _is_redundant_evidence(evidence_list, evidence):
             evidence_list.append(evidence)
         existing["evidence"] = evidence_list[-5:]
         _sync_concern_status(existing)
@@ -504,6 +588,14 @@ def mark_mirrored_multi(
                 break
 
     if not marked_any:
+        best = _best_matching_concern(concerns, clinician_text, require_mirrored=False)
+        if best is not None:
+            best["is_mirrored"] = True
+            best["mirror_count"] = _count(best.get("mirror_count")) + 1
+            _sync_concern_status(best)
+            marked_any = True
+
+    if not marked_any:
         for c in concerns:
             _normalize_existing_concern(c)
             if not c.get("is_mirrored"):
@@ -551,6 +643,18 @@ def mark_secured_by_topic(
                 _sync_concern_status(c)
                 marked_any = True
     if marked_any:
+        return
+
+    best = _best_matching_concern(
+        concerns,
+        clinician_text,
+        require_mirrored=True,
+        require_unsecured=True,
+    )
+    if best is not None:
+        best["is_secured"] = True
+        best["secure_count"] = _count(best.get("secure_count")) + 1
+        _sync_concern_status(best)
         return
 
     candidates = [
