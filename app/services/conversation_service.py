@@ -10,6 +10,7 @@ incrementally to avoid large diffs while preserving behavior.
 """
 from __future__ import annotations
 
+import re
 from typing import Dict, Iterable, List, Mapping, Optional, Set
 
 TopicalCues = Mapping[str, Iterable[str]]
@@ -46,12 +47,211 @@ def concern_topic(text: Optional[str], topical_cues: TopicalCues) -> Optional[st
     return None
 
 
+_CONCERN_LABELS = {
+    "autism": "wants autism risk addressed",
+    "immune_load": "wants immune load or spacing addressed",
+    "side_effects": "wants side effect risk addressed",
+    "ingredients": "wants vaccine ingredients addressed",
+    "schedule_timing": "wants timing or schedule addressed",
+    "disease_risk": "wants disease risk addressed",
+    "effectiveness": "wants effectiveness and benefit addressed",
+    "trust": "wants evidence, uncertainty, and trust addressed",
+    "autonomy": "wants decision authority respected",
+}
+
+
+_CONCERN_TOPIC_ALIASES = {
+    "adverse_events": "side_effects",
+    "adverse_reactions": "side_effects",
+    "reaction": "side_effects",
+    "reactions": "side_effects",
+    "safety": "side_effects",
+    "side_effect": "side_effects",
+    "side_effects": "side_effects",
+    "vaccine_safety": "side_effects",
+    "chemical": "ingredients",
+    "chemicals": "ingredients",
+    "ingredient": "ingredients",
+    "ingredients": "ingredients",
+    "metal": "ingredients",
+    "metals": "ingredients",
+    "aluminum": "ingredients",
+    "immune": "immune_load",
+    "immune_load": "immune_load",
+    "too_many": "immune_load",
+    "spacing": "immune_load",
+    "schedule": "schedule_timing",
+    "schedule_timing": "schedule_timing",
+    "timing": "schedule_timing",
+    "disease": "disease_risk",
+    "disease_risk": "disease_risk",
+    "low_disease_risk": "disease_risk",
+    "measles_gone": "disease_risk",
+    "effectiveness": "effectiveness",
+    "benefit": "effectiveness",
+    "benefits": "effectiveness",
+    "conflicting_information": "trust",
+    "evidence": "trust",
+    "pharma": "trust",
+    "trust": "trust",
+    "uncertainty": "trust",
+    "who_to_believe": "trust",
+    "choice": "autonomy",
+    "decision_authority": "autonomy",
+    "pressure": "autonomy",
+    "autonomy": "autonomy",
+}
+
+
+def _topic_key(topic: Optional[str]) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", (topic or "").strip().lower()).strip("_")
+
+
+def _canonical_topic(topic: Optional[str]) -> str:
+    key = _topic_key(topic)
+    if not key:
+        return "general"
+    return _CONCERN_TOPIC_ALIASES.get(key, key)
+
+
+def _canonical_id(topic: Optional[str]) -> str:
+    normalized_topic = re.sub(r"[^a-z0-9]+", "-", _canonical_topic(topic)).strip("-")
+    return normalized_topic or "general"
+
+
+def _clean_evidence_snippet(text: str) -> str:
+    """Keep the substantive concern text, not agreement or rapport preamble."""
+    cleaned = re.sub(r"\s+", " ", (text or "").strip())
+    if not cleaned:
+        return ""
+
+    preamble_patterns = (
+        r"^that lands (?:very )?well,\s*dr\.?\s+\w+\.\s*",
+        r"^you(?:'ve| have) articulated my position precisely\.\s*",
+        r"^that's (?:a )?(?:very )?(?:helpful|clear|fair|good|reasonable|candid) (?:way to frame it|explanation|point|approach),?\s*dr\.?\s+\w+\.?\s*",
+        r"^i appreciate (?:you|the) [^.]+\.?\s*",
+        r"^thank you,?\s*dr\.?\s+\w+\.?\s*",
+        r"^thanks,?\s*dr\.?\s+\w+\.?\s*",
+    )
+    lowered = cleaned.lower()
+    changed = True
+    while changed:
+        changed = False
+        for pattern in preamble_patterns:
+            match = re.match(pattern, lowered, flags=re.IGNORECASE)
+            if match:
+                cleaned = cleaned[match.end():].strip()
+                lowered = cleaned.lower()
+                changed = True
+                break
+
+    concern_starts = (
+        "i want",
+        "i'm trying",
+        "i am trying",
+        "i'm still",
+        "i am still",
+        "i'd like",
+        "i would like",
+        "when we talk",
+        "if the",
+        "it's not",
+        "it is not",
+    )
+    lowered = cleaned.lower()
+    for marker in concern_starts:
+        idx = lowered.find(marker)
+        if 0 < idx < 180:
+            cleaned = cleaned[idx:].strip()
+            break
+
+    return cleaned[:260]
+
+
+def _concern_label(topic: Optional[str], evidence: str) -> str:
+    topic = _canonical_topic(topic)
+    if topic in _CONCERN_LABELS:
+        return _CONCERN_LABELS[topic]
+    if evidence:
+        return evidence[:120]
+    return "wants a concern addressed"
+
+
+def _sync_concern_status(concern: Concern) -> None:
+    mirrored = bool(concern.get("is_mirrored"))
+    secured = bool(concern.get("is_secured"))
+    if mirrored and secured:
+        concern["status"] = "resolved"
+    elif secured:
+        concern["status"] = "secured"
+    elif mirrored:
+        concern["status"] = "mirrored"
+    else:
+        concern["status"] = "open"
+
+
+def _string_list(value: object) -> list[str]:
+    if isinstance(value, list):
+        return [str(item) for item in value if str(item or "").strip()]
+    return []
+
+
+def _count(value: object) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        if text.isdigit():
+            return int(text)
+    try:
+        return int(float(value)) if isinstance(value, float) else 0
+    except (TypeError, ValueError):
+        return 0
+
+
+def _normalize_existing_concern(concern: Concern) -> None:
+    topic = _canonical_topic(str(concern.get("topic") or "general"))
+    evidence = _clean_evidence_snippet(str(concern.get("desc") or concern.get("summary") or ""))
+    concern["topic"] = topic
+    concern["id"] = _canonical_id(topic)
+    concern.setdefault("canonical_label", _concern_label(topic, evidence))
+    concern.setdefault("summary", concern.get("canonical_label") or evidence)
+    concern["desc"] = str(concern.get("summary") or concern.get("canonical_label") or evidence)
+    existing_evidence = _string_list(concern.get("evidence"))
+    concern["evidence"] = existing_evidence or ([evidence] if evidence else [])
+    concern.setdefault("mirror_count", 1 if concern.get("is_mirrored") else 0)
+    concern.setdefault("secure_count", 1 if concern.get("is_secured") else 0)
+    _sync_concern_status(concern)
+
+
+def _find_matching_concern(concerns: List[Concern], topic: Optional[str]) -> Concern | None:
+    cid = _canonical_id(topic)
+    canonical_topic = _canonical_topic(topic)
+    for concern in concerns or []:
+        _normalize_existing_concern(concern)
+        if str(concern.get("id") or "") == cid:
+            return concern
+        if _canonical_topic(str(concern.get("topic") or "")) == canonical_topic:
+            return concern
+    return None
+
+
 def is_duplicate_concern(concerns: List[Concern], desc: str, topic: Optional[str]) -> bool:
-    """Basic duplicate detection by case-insensitive desc and topic match."""
-    dnorm = (desc or "").strip().lower()
-    tnorm = (topic or "").strip().lower()
-    for c in concerns or []:
-        if (str(c.get("desc", "")).strip().lower() == dnorm) and (str(c.get("topic", "")).strip().lower() == tnorm):
+    """Return True when a concern has the same canonical topic/meaning."""
+    if _find_matching_concern(concerns, topic):
+        return True
+
+    if topic:
+        return False
+
+    evidence = _clean_evidence_snippet(desc)
+    normalized = re.sub(r"[^a-z0-9]+", " ", evidence.lower()).strip()
+    for concern in concerns or []:
+        existing_evidence = " ".join(_string_list(concern.get("evidence")))
+        existing = re.sub(r"[^a-z0-9]+", " ", existing_evidence.lower()).strip()
+        if normalized and existing and (normalized in existing or existing in normalized):
             return True
     return False
 
@@ -144,6 +344,21 @@ _ACTIVE_CONCERN_CUES = (
     "hard to know what to believe",
 )
 
+_PLAN_NEGATION_CUES = (
+    "don't want",
+    "do not want",
+    "not going to read",
+    "won't read",
+    "will not read",
+    "rather not",
+    "not ready to plan",
+    "not ready to schedule",
+    "no follow-up",
+    "no follow up",
+    "without follow-up",
+    "without follow up",
+)
+
 
 def _is_acceptance_message(text: str) -> bool:
     """Return True if `text` is a positive response, not a new concern."""
@@ -162,6 +377,8 @@ def _is_materials_or_followup_acceptance(text: str) -> bool:
     """Return True when the person accepts materials/follow-up, not a new concern."""
     lt = (text or "").strip().lower()
     if not lt:
+        return False
+    if any(cue in lt for cue in _PLAN_NEGATION_CUES):
         return False
     if not any(cue in lt for cue in _MATERIALS_OR_FOLLOWUP_CUES):
         return False
@@ -196,19 +413,37 @@ def maybe_add_person_concern(
     if llm_topic in {"autonomy", "trust"} and _is_materials_or_followup_acceptance(person_text):
         return
     
-    topic = llm_topic or concern_topic(person_text, topical_cues)
-    if not topic:
+    raw_topic = llm_topic or concern_topic(person_text, topical_cues)
+    if not raw_topic:
         return
+    topic = _canonical_topic(raw_topic)
         
     concerns: List[Concern] = state.setdefault("parent_concerns", [])  # type: ignore[assignment]
-    desc = person_text.strip()[:240]
-    if not is_duplicate_concern(concerns, desc, topic):
-        concerns.append({
-            "desc": desc,
-            "topic": topic,
-            "is_mirrored": False,
-            "is_secured": False,
-        })
+    evidence = _clean_evidence_snippet(person_text)
+    existing = _find_matching_concern(concerns, topic)
+    if existing:
+        evidence_list = _string_list(existing.get("evidence"))
+        if evidence and evidence not in evidence_list:
+            evidence_list.append(evidence)
+        existing["evidence"] = evidence_list[-5:]
+        _sync_concern_status(existing)
+        return
+
+    label = _concern_label(topic, evidence)
+    concern: Concern = {
+        "id": _canonical_id(topic),
+        "topic": topic,
+        "canonical_label": label,
+        "summary": label,
+        "desc": label,
+        "evidence": [evidence] if evidence else [],
+        "is_mirrored": False,
+        "is_secured": False,
+        "status": "open",
+        "mirror_count": 0,
+        "secure_count": 0,
+    }
+    concerns.append(concern)
 
 
 def mark_mirrored_multi(
@@ -234,16 +469,22 @@ def mark_mirrored_multi(
     marked_any = False
     if found:
         for c in concerns:
+            _normalize_existing_concern(c)
             if (c.get("topic") in found) and not c.get("is_mirrored"):
                 c["is_mirrored"] = True
+                c["mirror_count"] = _count(c.get("mirror_count")) + 1
+                _sync_concern_status(c)
                 marked_any = True
 
     if not marked_any:
         pt_topic = concern_topic(person_text, topical_cues)
         if pt_topic:
             for c in concerns:
+                _normalize_existing_concern(c)
                 if (c.get("topic") == pt_topic) and not c.get("is_mirrored"):
                     c["is_mirrored"] = True
+                    c["mirror_count"] = _count(c.get("mirror_count")) + 1
+                    _sync_concern_status(c)
                     marked_any = True
                     break
 
@@ -252,16 +493,23 @@ def mark_mirrored_multi(
     # reflective language ("Wanting to look into things yourself is reasonable") that
     # doesn't contain any of the topical keywords.
     if not marked_any and llm_topic:
+        semantic_topic = _canonical_topic(llm_topic)
         for c in concerns:
-            if (c.get("topic") == llm_topic) and not c.get("is_mirrored"):
+            _normalize_existing_concern(c)
+            if (c.get("topic") == semantic_topic) and not c.get("is_mirrored"):
                 c["is_mirrored"] = True
+                c["mirror_count"] = _count(c.get("mirror_count")) + 1
+                _sync_concern_status(c)
                 marked_any = True
                 break
 
     if not marked_any:
         for c in concerns:
+            _normalize_existing_concern(c)
             if not c.get("is_mirrored"):
                 c["is_mirrored"] = True
+                c["mirror_count"] = _count(c.get("mirror_count")) + 1
+                _sync_concern_status(c)
                 break
 
 
@@ -283,17 +531,24 @@ def mark_secured_by_topic(
         return
     
     if llm_topic:
+        semantic_topic = _canonical_topic(llm_topic)
         for c in concerns:
-            if (c.get("topic") == llm_topic) and c.get("is_mirrored") and not c.get("is_secured"):
+            _normalize_existing_concern(c)
+            if (c.get("topic") == semantic_topic) and c.get("is_mirrored") and not c.get("is_secured"):
                 c["is_secured"] = True
+                c["secure_count"] = _count(c.get("secure_count")) + 1
+                _sync_concern_status(c)
                 return
 
     found = topics_in(clinician_text, topical_cues)
     marked_any = False
     if found:
         for c in concerns:
+            _normalize_existing_concern(c)
             if (c.get("topic") in found) and c.get("is_mirrored") and not c.get("is_secured"):
                 c["is_secured"] = True
+                c["secure_count"] = _count(c.get("secure_count")) + 1
+                _sync_concern_status(c)
                 marked_any = True
     if marked_any:
         return
@@ -304,6 +559,8 @@ def mark_secured_by_topic(
     ]
     if len(candidates) == 1:
         candidates[0]["is_secured"] = True
+        candidates[0]["secure_count"] = _count(candidates[0].get("secure_count")) + 1
+        _sync_concern_status(candidates[0])
 
 
 __all__ = [

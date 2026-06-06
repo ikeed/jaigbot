@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import List
 
 from .loader import load_and_render
@@ -105,4 +106,19 @@ def build_summary_analysis_prompt(*, metrics_blob: str, mapping_blob: str, trans
         metrics_blob=metrics_blob,
         mapping_blob=mapping_blob,
         transcript=transcript,
+    )
+
+
+def build_fallback_feedback_prompt(*, context: dict) -> str:
+    """Render the fallback coaching refinement prompt.
+
+    This prompt is used only when the turn falls back to deterministic
+    scoring/coaching. It asks the model to rewrite the user-facing coaching
+    so it is more specific and less formulaic, while preserving the detected
+    step and score.
+    """
+    return load_and_render(
+        "app.prompts",
+        "aims_fallback_feedback.txt",
+        context_json=json.dumps(context, ensure_ascii=False, separators=(",", ":")),
     )

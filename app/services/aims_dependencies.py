@@ -164,6 +164,21 @@ class AimsTelemetryDependency(Protocol):
         ...
 
 
+class AimsFeedbackDependency(Protocol):
+    async def refine_fallback_feedback(
+        self,
+        *,
+        cls_payload: dict[str, Any],
+        clinician_message: str,
+        person_last: str,
+        history_text: str,
+        state: dict[str, Any] | None,
+        character: str | None,
+        person_topic: str | None,
+    ) -> dict[str, Any]:
+        ...
+
+
 class AimsTurnCoordinatorDependency(Protocol):
     async def run(
         self,

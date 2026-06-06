@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from app.constants import KEY_COACH_POST, KEY_GAME_OVER, SESSION_HISTORY
 from app.models import ChatRequest, ClassifierResult, Coaching
 from app.services.aims_coaching_handler import AimsCoachingHandler
 from app.services.aims_turn_coordinator import AimsTurnResult
@@ -89,6 +90,7 @@ def _turn(
     tips=None,
     is_small_talk=False,
     patient_reply="Thanks, Doctor.",
+    was_fallback=False,
 ):
     classification_result = ClassifierResult(
         is_small_talk=is_small_talk,
@@ -110,6 +112,7 @@ def _turn(
         is_small_talk=is_small_talk,
         classification_result=classification_result,
         reply_payload={"patient_reply": patient_reply},
+        was_fallback=was_fallback,
     )
 
 
@@ -206,6 +209,67 @@ async def test_handle_uses_injected_services(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_handle_refines_fallback_coaching_when_available(monkeypatch):
+    classifier = Mock()
+    patient_reply = Mock()
+    patient_reply.generate = AsyncMock(return_value={"patient_reply": "Thanks, Doctor."})
+    metrics = _metrics()
+    feedback = _feedback()
+    endgame = _endgame()
+    handler = _handler(
+        classifier=classifier,
+        patient_reply=patient_reply,
+        metrics=metrics,
+        feedback=feedback,
+        endgame=endgame,
+        turn_coordinator=Mock(),
+    )
+
+    fallback_turn = _turn(
+        step="Secure",
+        score=1,
+        reasons=["Secure before mirroring."],
+        tips=["Affirm autonomy explicitly."],
+        was_fallback=True,
+    )
+    handler.turn_coordinator.run = AsyncMock(return_value=fallback_turn)
+    handler.feedback_service = Mock()
+    handler.feedback_service.refine_fallback_feedback = AsyncMock(
+        return_value={
+            "step": "Secure",
+            "steps": ["Secure"],
+            "score": 1,
+            "reasons": ["You gave reassurance before naming her choice."],
+            "tips": ["Name that it is her decision before offering the fact."],
+            "step_feedback": [
+                {
+                    "step": "Secure",
+                    "feedback": "You gave reassurance before naming her choice.",
+                    "tone": "improvement",
+                }
+            ],
+            "phase": "Secure",
+        }
+    )
+
+    async def fake_mapping():
+        return {}
+
+    monkeypatch.setattr(handler, "_load_aims_mapping", fake_mapping)
+
+    ctx = _basic_context()
+    result = await handler.handle(
+        req=None,
+        body=ChatRequest(message="We can do it today.", sessionId="sid", coach=True),
+        ctx=ctx,
+    )
+
+    handler.feedback_service.refine_fallback_feedback.assert_awaited_once()
+    assert result["coaching"]["tips"] == ["Name that it is her decision before offering the fact."]
+    assert result["coaching"]["step_feedback"][0]["feedback"] == "You gave reassurance before naming her choice."
+
+
+@pytest.mark.asyncio
 async def test_handle_continues_when_telemetry_and_metrics_fail(monkeypatch):
     telemetry = Mock()
     for method_name in (
@@ -294,6 +358,121 @@ async def test_handle_small_talk_without_step_clears_coaching(monkeypatch):
     assert result["coaching"]["step"] is None
     assert result["coaching"]["score"] == 0
     assert "LLM flagged as small talk" in result["coaching"]["reasons"]
+
+
+@pytest.mark.asyncio
+async def test_handle_sets_coach_post_and_game_over_for_ethan_style_literature_followup(monkeypatch):
+    feedback = _feedback()
+    endgame = _endgame(
+        coach_post={
+            "title": "\U0001f389 Great job!",
+            "lines": ["Outcome: Ethan agreed to review the material and revisit the decision at follow-up."],
+        }
+    )
+    turn_coordinator = Mock()
+    turn_coordinator.run = AsyncMock(
+        return_value=_turn(
+            step="Secure",
+            score=2,
+            reasons=["You supported autonomy and offered a review plan."],
+            tips=["Keep anchoring the plan to his actual concern."],
+            patient_reply=(
+                "I'm still weighing the numbers, but I have enough to review at home, and we can "
+                "talk about it again at the next appointment."
+            ),
+        )
+    )
+
+    handler = _handler(
+        classifier=Mock(),
+        patient_reply=Mock(),
+        metrics=_metrics(),
+        feedback=feedback,
+        endgame=endgame,
+        turn_coordinator=turn_coordinator,
+    )
+
+    async def fake_mapping():
+        return {}
+
+    monkeypatch.setattr(handler, "_load_aims_mapping", fake_mapping)
+
+    ctx = _basic_context()
+    ctx.mem[SESSION_HISTORY] = [
+        {"role": "user", "content": "I can send you home with the evidence summary and we can revisit this in two weeks."}
+    ]
+    ctx.mem["aims_state"] = {
+        "phase": "Secure",
+        "announced": True,
+        "parent_concerns": [
+            {
+                "id": "trust",
+                "topic": "trust",
+                "summary": "wants evidence, uncertainty, and trust addressed",
+                "desc": "wants evidence, uncertainty, and trust addressed",
+                "is_mirrored": True,
+                "is_secured": True,
+                "status": "resolved",
+            }
+        ],
+    }
+
+    result = await handler.handle(
+        req=Mock(headers={}),
+        body=ChatRequest(message="I can send you home with the evidence summary and we can revisit this in two weeks.", sessionId="sid", coach=True),
+        ctx=ctx,
+    )
+
+    assert result["coach_post"]["title"] == "\U0001f389 Great job!"
+    assert ctx.mem[KEY_GAME_OVER] is True
+    assert ctx.mem[KEY_COACH_POST]["title"] == "\U0001f389 Great job!"
+
+
+@pytest.mark.asyncio
+async def test_handle_mixed_resolution_vaccine_today_plus_literature_surfaces_coach_post(monkeypatch):
+    feedback = _feedback()
+    endgame = _endgame(
+        coach_post={
+            "title": "\U0001f389 Great job!",
+            "lines": ["Outcome: Zia agreed to proceed with one vaccine today and review information on the others."],
+        }
+    )
+    turn_coordinator = Mock()
+    turn_coordinator.run = AsyncMock(
+        return_value=_turn(
+            step="Secure",
+            score=3,
+            reasons=["You made a concrete plan and preserved choice."],
+            tips=[],
+            patient_reply=(
+                "That sounds like a reasonable plan. I'm comfortable proceeding with the Tdap today, "
+                "and I'd appreciate reading material for the others."
+            ),
+        )
+    )
+
+    handler = _handler(
+        classifier=Mock(),
+        patient_reply=Mock(),
+        metrics=_metrics(),
+        feedback=feedback,
+        endgame=endgame,
+        turn_coordinator=turn_coordinator,
+    )
+
+    async def fake_mapping():
+        return {}
+
+    monkeypatch.setattr(handler, "_load_aims_mapping", fake_mapping)
+
+    result = await handler.handle(
+        req=Mock(headers={}),
+        body=ChatRequest(message="We could do the Tdap today and send you home with information on the others.", sessionId="sid", coach=True),
+        ctx=_basic_context(),
+    )
+
+    assert result["reply"].startswith("That sounds like a reasonable plan.")
+    assert result["coach_post"]["lines"][0].startswith("Outcome:")
 
 
 @pytest.mark.asyncio

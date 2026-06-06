@@ -61,8 +61,10 @@ else:
         url = url[:-len(PATH_CHAT)-1].rstrip("/")
         os.environ[ENV_CHAINLIT_URL] = url
         print(f"DEBUG: Stripped {PATH_CHAT}/ from {ENV_CHAINLIT_URL}: {url}")
-    
+
+    # noinspection HttpUrlsUsage
     if ".a.run.app" in url and url.startswith("http://"):
+        # noinspection HttpUrlsUsage
         os.environ[ENV_CHAINLIT_URL] = url.replace("http://", "https://")
         print(f"DEBUG: Forced {ENV_CHAINLIT_URL} to HTTPS: {os.environ[ENV_CHAINLIT_URL]}")
 

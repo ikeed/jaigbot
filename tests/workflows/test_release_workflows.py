@@ -1,7 +1,7 @@
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_main_pr_source_guard_requires_staging():

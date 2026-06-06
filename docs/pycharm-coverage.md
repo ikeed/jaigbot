@@ -46,7 +46,7 @@ The pytest.ini already includes:
 Keep `chainlit_app.py` out of the broad coverage run. It is a Chainlit
 entrypoint with module-level decorators and framework wiring; tracing it during
 PyCharm test instantiation can hang the run. Cover reusable behavior in
-`app/services/chainlit/*`, and use `tests/test_chainlit_callbacks.py` as a
+`app/services/chainlit/*`, and use `tests/unit/services/chainlit/test_chainlit_callbacks.py` as a
 lightweight smoke test for the entrypoint callbacks.
 
 ## If you still see 0%
