@@ -60,8 +60,62 @@ _CONCERN_LABELS = {
 }
 
 
+_CONCERN_TOPIC_ALIASES = {
+    "adverse_events": "side_effects",
+    "adverse_reactions": "side_effects",
+    "reaction": "side_effects",
+    "reactions": "side_effects",
+    "safety": "side_effects",
+    "side_effect": "side_effects",
+    "side_effects": "side_effects",
+    "vaccine_safety": "side_effects",
+    "chemical": "ingredients",
+    "chemicals": "ingredients",
+    "ingredient": "ingredients",
+    "ingredients": "ingredients",
+    "metal": "ingredients",
+    "metals": "ingredients",
+    "aluminum": "ingredients",
+    "immune": "immune_load",
+    "immune_load": "immune_load",
+    "too_many": "immune_load",
+    "spacing": "immune_load",
+    "schedule": "schedule_timing",
+    "schedule_timing": "schedule_timing",
+    "timing": "schedule_timing",
+    "disease": "disease_risk",
+    "disease_risk": "disease_risk",
+    "low_disease_risk": "disease_risk",
+    "measles_gone": "disease_risk",
+    "effectiveness": "effectiveness",
+    "benefit": "effectiveness",
+    "benefits": "effectiveness",
+    "conflicting_information": "trust",
+    "evidence": "trust",
+    "pharma": "trust",
+    "trust": "trust",
+    "uncertainty": "trust",
+    "who_to_believe": "trust",
+    "choice": "autonomy",
+    "decision_authority": "autonomy",
+    "pressure": "autonomy",
+    "autonomy": "autonomy",
+}
+
+
+def _topic_key(topic: Optional[str]) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", (topic or "").strip().lower()).strip("_")
+
+
+def _canonical_topic(topic: Optional[str]) -> str:
+    key = _topic_key(topic)
+    if not key:
+        return "general"
+    return _CONCERN_TOPIC_ALIASES.get(key, key)
+
+
 def _canonical_id(topic: Optional[str]) -> str:
-    normalized_topic = re.sub(r"[^a-z0-9]+", "-", (topic or "general").strip().lower()).strip("-")
+    normalized_topic = re.sub(r"[^a-z0-9]+", "-", _canonical_topic(topic)).strip("-")
     return normalized_topic or "general"
 
 
@@ -115,6 +169,7 @@ def _clean_evidence_snippet(text: str) -> str:
 
 
 def _concern_label(topic: Optional[str], evidence: str) -> str:
+    topic = _canonical_topic(topic)
     if topic in _CONCERN_LABELS:
         return _CONCERN_LABELS[topic]
     if evidence:
@@ -157,9 +212,10 @@ def _count(value: object) -> int:
 
 
 def _normalize_existing_concern(concern: Concern) -> None:
-    topic = str(concern.get("topic") or "general")
+    topic = _canonical_topic(str(concern.get("topic") or "general"))
     evidence = _clean_evidence_snippet(str(concern.get("desc") or concern.get("summary") or ""))
-    concern.setdefault("id", _canonical_id(topic))
+    concern["topic"] = topic
+    concern["id"] = _canonical_id(topic)
     concern.setdefault("canonical_label", _concern_label(topic, evidence))
     concern.setdefault("summary", concern.get("canonical_label") or evidence)
     concern["desc"] = str(concern.get("summary") or concern.get("canonical_label") or evidence)
@@ -172,11 +228,12 @@ def _normalize_existing_concern(concern: Concern) -> None:
 
 def _find_matching_concern(concerns: List[Concern], topic: Optional[str]) -> Concern | None:
     cid = _canonical_id(topic)
+    canonical_topic = _canonical_topic(topic)
     for concern in concerns or []:
         _normalize_existing_concern(concern)
         if str(concern.get("id") or "") == cid:
             return concern
-        if str(concern.get("topic") or "").strip().lower() == (topic or "").strip().lower():
+        if _canonical_topic(str(concern.get("topic") or "")) == canonical_topic:
             return concern
     return None
 
@@ -287,6 +344,21 @@ _ACTIVE_CONCERN_CUES = (
     "hard to know what to believe",
 )
 
+_PLAN_NEGATION_CUES = (
+    "don't want",
+    "do not want",
+    "not going to read",
+    "won't read",
+    "will not read",
+    "rather not",
+    "not ready to plan",
+    "not ready to schedule",
+    "no follow-up",
+    "no follow up",
+    "without follow-up",
+    "without follow up",
+)
+
 
 def _is_acceptance_message(text: str) -> bool:
     """Return True if `text` is a positive response, not a new concern."""
@@ -305,6 +377,8 @@ def _is_materials_or_followup_acceptance(text: str) -> bool:
     """Return True when the person accepts materials/follow-up, not a new concern."""
     lt = (text or "").strip().lower()
     if not lt:
+        return False
+    if any(cue in lt for cue in _PLAN_NEGATION_CUES):
         return False
     if not any(cue in lt for cue in _MATERIALS_OR_FOLLOWUP_CUES):
         return False
@@ -339,9 +413,10 @@ def maybe_add_person_concern(
     if llm_topic in {"autonomy", "trust"} and _is_materials_or_followup_acceptance(person_text):
         return
     
-    topic = llm_topic or concern_topic(person_text, topical_cues)
-    if not topic:
+    raw_topic = llm_topic or concern_topic(person_text, topical_cues)
+    if not raw_topic:
         return
+    topic = _canonical_topic(raw_topic)
         
     concerns: List[Concern] = state.setdefault("parent_concerns", [])  # type: ignore[assignment]
     evidence = _clean_evidence_snippet(person_text)
@@ -418,9 +493,10 @@ def mark_mirrored_multi(
     # reflective language ("Wanting to look into things yourself is reasonable") that
     # doesn't contain any of the topical keywords.
     if not marked_any and llm_topic:
+        semantic_topic = _canonical_topic(llm_topic)
         for c in concerns:
             _normalize_existing_concern(c)
-            if (c.get("topic") == llm_topic) and not c.get("is_mirrored"):
+            if (c.get("topic") == semantic_topic) and not c.get("is_mirrored"):
                 c["is_mirrored"] = True
                 c["mirror_count"] = _count(c.get("mirror_count")) + 1
                 _sync_concern_status(c)
@@ -455,9 +531,10 @@ def mark_secured_by_topic(
         return
     
     if llm_topic:
+        semantic_topic = _canonical_topic(llm_topic)
         for c in concerns:
             _normalize_existing_concern(c)
-            if (c.get("topic") == llm_topic) and c.get("is_mirrored") and not c.get("is_secured"):
+            if (c.get("topic") == semantic_topic) and c.get("is_mirrored") and not c.get("is_secured"):
                 c["is_secured"] = True
                 c["secure_count"] = _count(c.get("secure_count")) + 1
                 _sync_concern_status(c)

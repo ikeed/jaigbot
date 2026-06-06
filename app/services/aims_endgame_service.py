@@ -106,6 +106,11 @@ class AimsEndgameService:
                 if not heuristic or heuristic.get("reason") != "accepted_now":
                     is_endgame = False
 
+            if is_endgame and outcome == "accepted_literature":
+                combined_lower = combined_reply_text.lower()
+                if any(cue in combined_lower for cue in EndGameDetector.PLAN_NEGATIVE_CUES):
+                    is_endgame = False
+
             if outcome == "deferred":
                 is_endgame = False
 
