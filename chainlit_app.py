@@ -46,7 +46,7 @@ def get_chainlit_data_layer():
 @cl.set_chat_profiles
 async def chat_profiles():
     try:
-        icon = "/public/avatars/aimsbot.svg"
+        icon = "/public/avatars/spinner.svg"
         return [
             cl.ChatProfile(
                 name="AIMSBot",
