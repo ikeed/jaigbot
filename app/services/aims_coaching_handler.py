@@ -245,7 +245,10 @@ class AimsCoachingHandler:
         mem = ctx.mem
         aims_state = mem.get(KEY_AIMS_STATE, {}) or {}
         parent_concerns = aims_state.get("parent_concerns", [])
-        recent_concerns_texts = [c["desc"] for c in parent_concerns] if parent_concerns else []
+        recent_concerns_texts = [
+            str(c.get("summary") or c.get("desc") or " ".join(c.get("evidence") or []))
+            for c in parent_concerns
+        ] if parent_concerns else []
         
         cls_payload = VaccineRelevanceGate.gate(
             cls_payload=cls_payload,

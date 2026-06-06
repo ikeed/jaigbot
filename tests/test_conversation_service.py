@@ -39,7 +39,8 @@ def test_concern_topic_picks_first_match_by_order():
 def test_is_duplicate_concern_basic():
     concerns = [{"desc": "Late bedtime", "topic": "sleep"}]
     assert is_duplicate_concern(concerns, "late bedtime", "sleep") is True
-    assert is_duplicate_concern(concerns, "late bedtime!", "sleep") is False
+    assert is_duplicate_concern(concerns, "late bedtime!", "sleep") is True
+    assert is_duplicate_concern(concerns, "late bedtime", "diet") is False
 
 
 def test_maybe_add_person_concern_adds_and_trims():
@@ -47,8 +48,10 @@ def test_maybe_add_person_concern_adds_and_trims():
     long_text = "x" * 300
     maybe_add_person_concern(st, long_text + " sleep", TOPICAL_CUES)
     assert st["parent_concerns"]
-    assert len(st["parent_concerns"][0]["desc"]) == 240
+    assert st["parent_concerns"][0]["desc"] == st["parent_concerns"][0]["summary"]
+    assert len(st["parent_concerns"][0]["evidence"][0]) == 260
     assert st["parent_concerns"][0]["topic"] == "sleep"
+    assert st["parent_concerns"][0]["status"] == "open"
 
 
 def test_maybe_add_person_concern_uses_llm_topic():
@@ -57,6 +60,7 @@ def test_maybe_add_person_concern_uses_llm_topic():
     maybe_add_person_concern(st, "I'm worried about what he eats.", TOPICAL_CUES, llm_topic="diet")
     assert st["parent_concerns"][0]["topic"] == "diet"
     assert st["parent_concerns"][0]["desc"] == "I'm worried about what he eats."
+    assert st["parent_concerns"][0]["evidence"] == ["I'm worried about what he eats."]
 
 
 def test_maybe_add_person_concern_skips_materials_followup_acceptance_even_with_llm_topic():
@@ -100,6 +104,33 @@ def test_maybe_add_person_concern_skips_empty_acceptance_and_duplicates():
     maybe_add_person_concern(st, "I'm worried about sleep.", TOPICAL_CUES)
     maybe_add_person_concern(st, "I'm worried about sleep.", TOPICAL_CUES)
     assert len(st["parent_concerns"]) == 1
+
+
+def test_maybe_add_person_concern_merges_same_topic_paraphrases_and_cleans_evidence():
+    st = {"parent_concerns": []}
+
+    maybe_add_person_concern(
+        st,
+        "I'm primarily interested in understanding the data and absolute risk.",
+        TOPICAL_CUES,
+        llm_topic="trust",
+    )
+    maybe_add_person_concern(
+        st,
+        (
+            "That lands very well, Dr. Burnett. You've articulated my position precisely. "
+            "It's not about denying the evidence, but about understanding the quantitative basis."
+        ),
+        TOPICAL_CUES,
+        llm_topic="trust",
+    )
+
+    assert len(st["parent_concerns"]) == 1
+    concern = st["parent_concerns"][0]
+    assert concern["id"] == "trust"
+    assert concern["desc"] == "wants evidence, uncertainty, and trust addressed"
+    assert len(concern["evidence"]) == 2
+    assert concern["evidence"][1].startswith("It's not about denying the evidence")
 
 
 def test_materials_followup_acceptance_requires_plan_cue_and_no_active_concern():

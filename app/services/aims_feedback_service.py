@@ -157,8 +157,11 @@ class AimsFeedbackService:
         for concern in state.get("parent_concerns") or []:
             concerns.append(
                 {
+                    "id": concern.get("id"),
                     "topic": concern.get("topic"),
-                    "desc": concern.get("desc"),
+                    "summary": concern.get("summary") or concern.get("desc"),
+                    "evidence": list(concern.get("evidence") or [])[-3:],
+                    "status": concern.get("status"),
                     "is_mirrored": bool(concern.get("is_mirrored")),
                     "is_secured": bool(concern.get("is_secured")),
                 }

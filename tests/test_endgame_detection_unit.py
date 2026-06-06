@@ -355,6 +355,56 @@ def test_unmirrored_concerns_block_endgame():
     assert mock_svc.last_history_text == ""
 
 
+def test_unmirrored_concern_does_not_block_literature_followup_closure():
+    """Residual uncertainty can close with literature + follow-up."""
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_literature",
+            "summary": "Person accepted information and follow-up.",
+            "reason": "",
+        }
+    )
+    store = {
+        "s12b": {
+            "history": [
+                {
+                    "role": "user",
+                    "content": (
+                        "I'll send you home with the vaccine information and book a follow-up "
+                        "so we can revisit it after you review the material."
+                    ),
+                },
+                {
+                    "role": "assistant",
+                    "content": (
+                        "Yes, some written information would be helpful for me to review at home. "
+                        "I'll look forward to the follow-up."
+                    ),
+                },
+            ],
+            "aims_state": {
+                "phase": "Secure",
+                "announced": True,
+                "parent_concerns": [
+                    {
+                        "id": "trust",
+                        "desc": "wants evidence, uncertainty, and trust addressed",
+                        "topic": "trust",
+                        "is_mirrored": False,
+                        "is_secured": False,
+                        "status": "open",
+                    },
+                ],
+            },
+        }
+    }
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s12b"], {}, None, "s12b"))
+    assert result is not None
+    assert mock_svc.last_history_text != ""
+
+
 def test_all_concerns_mirrored_allows_endgame():
     """Endgame should proceed when all concerns are mirrored (and heuristic confirms)."""
     mock_svc = _MockClassifierService(
