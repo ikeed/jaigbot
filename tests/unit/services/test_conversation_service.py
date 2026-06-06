@@ -242,6 +242,26 @@ def test_maybe_add_person_concern_keeps_recent_five_evidence_snippets():
     assert concern["evidence"][-1].endswith("example 5.")
 
 
+def test_maybe_add_person_concern_does_not_append_near_duplicate_evidence():
+    st = {"parent_concerns": []}
+
+    maybe_add_person_concern(
+        st,
+        "I want to understand the absolute risk reduction for someone like me.",
+        TOPICAL_CUES,
+        llm_topic="trust",
+    )
+    maybe_add_person_concern(
+        st,
+        "I still want to understand the absolute risk reduction for someone like me.",
+        TOPICAL_CUES,
+        llm_topic="trust",
+    )
+
+    concern = st["parent_concerns"][0]
+    assert len(concern["evidence"]) == 1
+
+
 def test_materials_followup_acceptance_requires_plan_cue_and_no_active_concern():
     st = {"parent_concerns": []}
 
@@ -375,6 +395,40 @@ def test_mark_mirrored_multi_updates_resolved_status_and_count():
     assert concern["status"] == "resolved"
 
 
+def test_mark_mirrored_multi_uses_evidence_to_pick_matching_concern():
+    st = {"parent_concerns": [
+        {
+            "desc": "wants side effect risk addressed",
+            "topic": "side_effects",
+            "summary": "wants side effect risk addressed",
+            "evidence": ["I'm worried about serious reactions and long-term side effects."],
+            "is_mirrored": False,
+            "is_secured": False,
+        },
+        {
+            "desc": "wants evidence, uncertainty, and trust addressed",
+            "topic": "trust",
+            "summary": "wants evidence, uncertainty, and trust addressed",
+            "evidence": ["What bothers me is when public messaging smooths over the uncertainty in the data."],
+            "is_mirrored": False,
+            "is_secured": False,
+        },
+    ]}
+
+    mark_mirrored_multi(
+        st,
+        clinician_text=(
+            "It sounds like the problem isn't uncertainty itself so much as feeling "
+            "like the nuance gets flattened when people talk about the data."
+        ),
+        person_text="no keyword",
+        topical_cues=TOPICAL_CUES,
+    )
+
+    assert st["parent_concerns"][0]["is_mirrored"] is False
+    assert st["parent_concerns"][1]["is_mirrored"] is True
+
+
 def test_mark_mirrored_helpers_noop_without_concerns_or_unmirrored_items():
     empty = {}
     mark_mirrored_multi(empty, clinician_text="sleep", person_text="sleep", topical_cues=TOPICAL_CUES)
@@ -459,3 +513,36 @@ def test_mark_secured_by_topic_updates_count_and_status():
     assert concern["is_secured"] is True
     assert concern["secure_count"] == 1
     assert concern["status"] == "resolved"
+
+
+def test_mark_secured_by_topic_uses_evidence_to_pick_matching_concern():
+    st = {"parent_concerns": [
+        {
+            "desc": "wants side effect risk addressed",
+            "topic": "side_effects",
+            "summary": "wants side effect risk addressed",
+            "evidence": ["I'm worried about serious reactions and long-term side effects."],
+            "is_mirrored": True,
+            "is_secured": False,
+        },
+        {
+            "desc": "wants evidence, uncertainty, and trust addressed",
+            "topic": "trust",
+            "summary": "wants evidence, uncertainty, and trust addressed",
+            "evidence": ["I need the uncertainty and limitations to be stated plainly."],
+            "is_mirrored": True,
+            "is_secured": False,
+        },
+    ]}
+
+    mark_secured_by_topic(
+        st,
+        clinician_text=(
+            "The studies have limits, and I want to be clear about the uncertainty "
+            "rather than pretending the evidence is more precise than it is."
+        ),
+        topical_cues=TOPICAL_CUES,
+    )
+
+    assert st["parent_concerns"][0]["is_secured"] is False
+    assert st["parent_concerns"][1]["is_secured"] is True
