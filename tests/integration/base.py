@@ -162,7 +162,6 @@ class TranscriptReplayTest:
         "first_inquire_done": False,
         "pending_concerns": False,
         "parent_concerns": [],
-        "mirrors_done": 0,
         "recent_coaching": [],
     }
 

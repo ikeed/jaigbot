@@ -58,6 +58,29 @@ def _basic_context() -> ChatContext:
     )
 
 
+def test_build_reply_concern_state_section_distinguishes_open_and_resolved_concerns():
+    section = AimsCoachingHandler._build_reply_concern_state_section(
+        {
+            "parent_concerns": [
+                {
+                    "topic": "ingredients",
+                    "canonical_label": "wants vaccine ingredients addressed",
+                    "is_secured": True,
+                },
+                {
+                    "topic": "timing",
+                    "summary": "wants timing addressed",
+                    "is_secured": False,
+                },
+            ]
+        }
+    )
+
+    assert "Open concerns: wants timing addressed." in section
+    assert "Resolved concerns: wants vaccine ingredients addressed." in section
+    assert "do not reopen resolved concerns as if unanswered" in section
+
+
 def _metrics(summary=None):
     metrics = Mock()
     metrics.persist.return_value = None

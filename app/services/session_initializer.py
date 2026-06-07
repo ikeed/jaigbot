@@ -47,6 +47,7 @@ def initialize_session(
             logger.info("Recovered personaId '%s' from existing memory for session %s", persona_id, sid)
 
     selected_persona = None
+    fields: dict[str, Any] | None = None
 
     if persona_id:
         try:
@@ -82,6 +83,8 @@ def initialize_session(
         recovered_persona_name = extract_persona_name_from_text(character)
         if recovered_persona_name:
             selected_persona = find_persona(name=recovered_persona_name)
+            if selected_persona:
+                fields = build_persona_session_fields(selected_persona)
 
     if not mem:
         mem = {
@@ -89,11 +92,7 @@ def initialize_session(
             "full_history": [],
             "character": character,
             "scene": scene,
-            "persona": (
-                {"id": selected_persona.get("id"), "name": selected_persona.get("name")}
-                if selected_persona
-                else None
-            ),
+            "persona": fields["persona"] if selected_persona else None,
             "user_info": body.userInfo,
             "updated": now,
             "session_started": now,
@@ -114,7 +113,7 @@ def initialize_session(
         if scene and not mem.get("scene"):
             mem["scene"] = scene
         if selected_persona and not mem.get("persona"):
-            mem["persona"] = {"id": selected_persona.get("id"), "name": selected_persona.get("name")}
+            mem["persona"] = fields["persona"]
         if body.userInfo and not mem.get("user_info"):
             mem["user_info"] = body.userInfo
 

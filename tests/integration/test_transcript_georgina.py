@@ -334,7 +334,6 @@ def _seed_session():
                     "is_secured": False,
                 },
             ],
-            "mirrors_done": 2,
             "recent_coaching": [],
         },
         "aims": {
@@ -436,11 +435,6 @@ class TestGeorginaTranscript:
             f"All trust concerns should be mirrored after 2 Mirror turns, "
             f"but {len(unmirrored_trust)} remain unmirrored: "
             f"{[c['desc'][:60] for c in unmirrored_trust]}"
-        )
-
-        # mirrors_done should have incremented (was 2, +3 Mirror turns = 5)
-        assert state["mirrors_done"] >= 4, (
-            f"mirrors_done should be >= 4 after transcript, got {state['mirrors_done']}"
         )
 
         # Phase should have advanced (Mirror+Secure with all concerns mirrored → Secure)

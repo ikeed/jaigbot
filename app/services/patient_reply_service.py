@@ -37,6 +37,7 @@ class PatientReplyService:
         character: str | None = None,
         scene: str | None = None,
         clinician_name: str | None = None,
+        concern_state_section: str | None = None,
     ) -> dict[str, Any]:
         """Generate patient reply with safety checks and jailbreak detection."""
         is_jb, jb_matches = self._jailbreak_guard.detect(clinician_message)
@@ -63,7 +64,9 @@ class PatientReplyService:
             character=character,
             scene=scene,
             clinician_name=clinician_name,
+            concern_state_section=concern_state_section,
         )
+        no_open_concerns = "open concerns: none" in (concern_state_section or "").lower()
 
         for attempt in (1, 2):
             try:
@@ -80,7 +83,11 @@ class PatientReplyService:
                 text = cand.get("patient_reply", "").strip()
 
                 if text.lower() == "ok":
-                    text = "I'm not sure — I have some questions, but I'd like to hear more."
+                    text = (
+                        "Yes, that helps. Thank you."
+                        if no_open_concerns
+                        else "I'm not sure — I have some questions, but I'd like to hear more."
+                    )
                 return {"patient_reply": text}
 
             except Exception as ve:
@@ -96,6 +103,18 @@ class PatientReplyService:
                 if attempt == 1:
                     continue
 
-                return {"patient_reply": "I'm not sure — I have some questions, but I'd like to hear more."}
+                return {
+                    "patient_reply": (
+                        "Yes, that helps. Thank you."
+                        if no_open_concerns
+                        else "I'm not sure — I have some questions, but I'd like to hear more."
+                    )
+                }
 
-        return {"patient_reply": "Okay."}
+        return {
+            "patient_reply": (
+                "Yes, that helps. Thank you."
+                if no_open_concerns
+                else "Okay."
+            )
+        }

@@ -255,6 +255,7 @@ def _best_matching_concern(
     *,
     require_mirrored: bool | None = None,
     require_unsecured: bool = False,
+    min_score: int = 2,
 ) -> Concern | None:
     candidates: list[tuple[int, Concern]] = []
     for concern in concerns or []:
@@ -275,7 +276,7 @@ def _best_matching_concern(
     top = [concern for score, concern in candidates if score == top_score]
     if len(top) != 1:
         return None
-    if top_score < 2:
+    if top_score < min_score:
         return None
     return top[0]
 
@@ -650,6 +651,7 @@ def mark_secured_by_topic(
         clinician_text,
         require_mirrored=True,
         require_unsecured=True,
+        min_score=1,
     )
     if best is not None:
         best["is_secured"] = True

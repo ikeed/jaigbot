@@ -46,6 +46,7 @@ def test_aims_dependency_protocol_stub_methods_are_executable():
                 clinician_message="msg",
                 history_text="history",
                 session_id="session",
+                concern_state_section="Open concerns: ingredients.",
             )
             is None
         )
@@ -90,6 +91,7 @@ def test_aims_dependency_protocol_stub_methods_are_executable():
                 character="Ethan",
                 scene="clinic",
                 clinician_name="Dr. Burnett",
+                concern_state_section="Open concerns: ingredients.",
             )
             is None
         )

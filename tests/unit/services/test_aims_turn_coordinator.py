@@ -42,9 +42,12 @@ async def test_run_uses_deterministic_fallback_when_classification_times_out():
         character=None,
         scene=None,
         clinician_name=None,
+        concern_state_section="Open concerns: ingredients.",
     )
 
     assert result.classification_result is None
     assert result.cls_payload["step"] == "Announce"
     assert "fallback" in result.cls_payload["reasons"]
     assert result.reply_payload == {"patient_reply": "Okay."}
+    patient_reply.generate.assert_awaited_once()
+    assert patient_reply.generate.await_args.kwargs["concern_state_section"] == "Open concerns: ingredients."

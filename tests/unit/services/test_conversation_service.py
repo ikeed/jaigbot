@@ -546,3 +546,62 @@ def test_mark_secured_by_topic_uses_evidence_to_pick_matching_concern():
 
     assert st["parent_concerns"][0]["is_secured"] is False
     assert st["parent_concerns"][1]["is_secured"] is True
+
+
+def test_mark_secured_by_topic_allows_unique_single_overlap_for_resolved_concern():
+    st = {"parent_concerns": [
+        {
+            "desc": "wants side effect risk addressed",
+            "topic": "side_effects",
+            "summary": "wants side effect risk addressed",
+            "evidence": ["I'm worried about serious reactions."],
+            "is_mirrored": True,
+            "is_secured": False,
+        },
+        {
+            "desc": "wants evidence, uncertainty, and trust addressed",
+            "topic": "trust",
+            "summary": "wants evidence, uncertainty, and trust addressed",
+            "evidence": ["I need the uncertainty stated plainly."],
+            "is_mirrored": True,
+            "is_secured": False,
+        },
+    ]}
+
+    mark_secured_by_topic(
+        st,
+        clinician_text="I want to be candid about the uncertainty here.",
+        topical_cues=TOPICAL_CUES,
+    )
+
+    assert st["parent_concerns"][0]["is_secured"] is False
+    assert st["parent_concerns"][1]["is_secured"] is True
+
+
+def test_mark_secured_by_topic_does_not_guess_on_ambiguous_single_overlap():
+    st = {"parent_concerns": [
+        {
+            "desc": "wants side effect risk addressed",
+            "topic": "side_effects",
+            "summary": "wants side effect risk addressed",
+            "evidence": ["I'm worried about the risk of side effects."],
+            "is_mirrored": True,
+            "is_secured": False,
+        },
+        {
+            "desc": "wants disease risk addressed",
+            "topic": "disease_risk",
+            "summary": "wants disease risk addressed",
+            "evidence": ["I don't know the real disease risk anymore."],
+            "is_mirrored": True,
+            "is_secured": False,
+        },
+    ]}
+
+    mark_secured_by_topic(
+        st,
+        clinician_text="There is always some risk to weigh here.",
+        topical_cues=TOPICAL_CUES,
+    )
+
+    assert not any(c["is_secured"] for c in st["parent_concerns"])
