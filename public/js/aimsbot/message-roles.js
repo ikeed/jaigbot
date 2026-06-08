@@ -117,7 +117,7 @@
     document.querySelectorAll('[data-step-type="user_message"]').forEach(tagDoctorMessage);
   }
 
-    const debounce = null;
+    let debounce = null;
     const observer = new MutationObserver(function () {
         if (debounce) return;
         debounce = window.setTimeout(function () {

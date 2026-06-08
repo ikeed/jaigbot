@@ -35,7 +35,7 @@
     return modal;
   }
 
-  var modal = createInfographicModal();
+  const modal = createInfographicModal();
 
   function resetScroll() {
       const scroll = modal.querySelector(".aims-infographic-scroll");
