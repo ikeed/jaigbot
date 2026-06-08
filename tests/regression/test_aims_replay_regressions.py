@@ -339,4 +339,5 @@ async def test_replay_mixed_resolution_vaccine_today_plus_literature_ends_as_vac
 
     assert result["coach_post"]["title"].endswith("job!")
     assert "Outcome:" in result["coach_post"]["lines"][0]
+    assert any("Overall AIMS score:" in line for line in result["coach_post"]["lines"])
     assert memory_store[session_id][KEY_GAME_OVER] is True
