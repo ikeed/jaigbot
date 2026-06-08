@@ -253,8 +253,8 @@ class EndGameDetector:
 
         # Accept now — check per sentence with guards to reduce false positives
         try:
-            for sent in parts:
-                if sentence_accepts(sent):
+            for sentence in parts:
+                if sentence_accepts(sentence):
                     return {"reason": "accepted_now"}
         except Exception as e:
             logger.debug(f"EndGameDetector.detect failed during sentence processing: {e}")
@@ -445,18 +445,18 @@ def build_endgame_bullets_fallback(session_obj: Dict | None) -> List[str]:
         bullets.append(f"Overall AIMS score: {overall_pct}%")
 
     # 2. Per-step contextual feedback
-    for step in ("Announce", "Inquire", "Mirror", "Secure"):
-        c = int(counts.get(step, 0) or 0)
-        a = _avg(step)
-        msgs = _MSGS[step]
+    for step_name in ("Announce", "Inquire", "Mirror", "Secure"):
+        c = int(counts.get(step_name, 0) or 0)
+        a = _avg(step_name)
+        msgs = _MSGS[step_name]
 
         if c == 0 or a != a:  # step not used or no score data
-            bullets.append(f"{step}: {msgs['absent']}")
+            bullets.append(f"{step_name}: {msgs['absent']}")
         elif a >= _HIGH:
-            bullets.append(f"{step} {_pct(a)}% \u2014 {msgs['high']}")
+            bullets.append(f"{step_name} {_pct(a)}% \u2014 {msgs['high']}")
         elif a >= _MID:
-            bullets.append(f"{step} {_pct(a)}% \u2014 {msgs['mid']}")
+            bullets.append(f"{step_name} {_pct(a)}% \u2014 {msgs['mid']}")
         else:
-            bullets.append(f"{step} {_pct(a)}% \u2014 {msgs['low']}")
+            bullets.append(f"{step_name} {_pct(a)}% \u2014 {msgs['low']}")
 
     return bullets[:6]

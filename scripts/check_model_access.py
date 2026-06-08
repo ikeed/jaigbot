@@ -44,6 +44,7 @@ def list_publisher_models(project: str, region: str, session: AuthorizedSession)
     return data.get("models", [])
 
 
+# noinspection PyUnresolvedReferences
 def try_generate(model_id: str) -> str:
     model = GenerativeModel(model_id)
     resp = model.generate_content("Say hello in one short sentence.")
@@ -64,6 +65,7 @@ def try_generate(model_id: str) -> str:
     raise RuntimeError("No text candidates returned from model")
 
 
+# noinspection PyUnresolvedReferences
 def main() -> int:
     project = os.getenv("PROJECT_ID") or os.getenv("GCP_PROJECT_ID")
     region = os.getenv("REGION") or os.getenv("GCP_REGION") or "us-west4"

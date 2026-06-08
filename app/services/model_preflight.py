@@ -4,7 +4,7 @@ import json
 import logging
 from typing import Any
 
-logger = logging.getLogger(__name__)
+module_logger = logging.getLogger(__name__)
 
 
 async def run_model_preflight(application: Any, *, settings: Any, logger: logging.Logger) -> None:
@@ -87,7 +87,7 @@ def check_models_list(application: Any, *, settings: Any, session: Any) -> None:
         try:
             data = response.json()
         except Exception as e:
-            logger.debug("Failed to parse models list JSON: %s", e)
+            module_logger.debug("Failed to parse models list JSON: %s", e)
             data = {}
         models = data.get("models", []) or []
         application.state.model_check["listCount"] = len(models)
@@ -109,4 +109,4 @@ def _set_generate_url(application: Any, *, settings: Any) -> None:
         )
         application.state.model_check["baseGenerateUrlPrimary"] = base_gen_url
     except Exception as e:
-        logger.debug("Failed to construct base generate URL: %s", e)
+        module_logger.debug("Failed to construct base generate URL: %s", e)

@@ -182,7 +182,7 @@ if is_oauth_enabled or is_valid_env_val(settings.CHAINLIT_AUTH_SECRET) or settin
 
 if is_oauth_enabled:
     @cl.oauth_callback
-    def oauth_callback(provider_id: str, token: str, raw_user_data: dict[str, str], default_user: cl.User) -> cl.User | None:
+    def oauth_callback(provider_id: str, _token: str, raw_user_data: dict[str, str], default_user: cl.User) -> cl.User | None:
         email = raw_user_data.get("email")
         name = raw_user_data.get("name")
         if provider_id == PROVIDER_GOOGLE:

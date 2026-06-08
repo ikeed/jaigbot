@@ -1,8 +1,8 @@
 (function (window, document) {
   "use strict";
 
-  var app = window.AIMSBotUI;
-  if (!app || app.modalReady) return;
+    const app = window.AIMSBotUI;
+    if (!app || app.modalReady) return;
 
   app.modalReady = true;
   app.modals = app.modals || {};
@@ -17,19 +17,19 @@
   }
 
   app.createModal = function (options) {
-    var existing = document.getElementById(options.id);
-    if (existing) existing.remove();
+      const existing = document.getElementById(options.id);
+      if (existing) existing.remove();
 
-    var modal = document.createElement("div");
-    modal.id = options.id;
+      const modal = document.createElement("div");
+      modal.id = options.id;
     modal.className = "aims-modal";
     modal.setAttribute("aria-hidden", "true");
 
-    var textareaHtml = options.showTextarea
-      ? '<textarea id="' + options.id + '-input" class="aims-modal-textarea" placeholder="' + escapeHtml(options.placeholder) + '"></textarea>'
-      : "";
+      const textareaHtml = options.showTextarea
+          ? '<textarea id="' + options.id + '-input" class="aims-modal-textarea" placeholder="' + escapeHtml(options.placeholder) + '"></textarea>'
+          : "";
 
-    modal.innerHTML =
+      modal.innerHTML =
       '<div class="aims-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="' + options.id + '-title">' +
       '  <h3 id="' + options.id + '-title" class="aims-modal-title">' + escapeHtml(options.title) + '</h3>' +
       '  <p class="aims-modal-description">' + escapeHtml(options.description) + '</p>' +
@@ -53,9 +53,9 @@
 
     modal.querySelector(".modal-confirm-btn").addEventListener("click", function (event) {
       app.prevent(event);
-      var textarea = modal.querySelector("textarea");
-      var value = textarea ? textarea.value.trim() : "";
-      if (options.showTextarea && !value) {
+        const textarea = modal.querySelector("textarea");
+        const value = textarea ? textarea.value.trim() : "";
+        if (options.showTextarea && !value) {
         alert(options.emptyMessage || "Please provide a reason.");
         return;
       }

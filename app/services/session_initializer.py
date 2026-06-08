@@ -56,9 +56,10 @@ def initialize_session(
                 raise ValueError(f"Unknown persona {persona_id}")
 
             fields = build_persona_session_fields(selected_persona)
-            character = character or fields["character"]
-            scene = scene or fields["scene"]
-            initial_card = initial_card or fields["initial_card"]
+            if fields is not None:
+                character = character or fields["character"]
+                scene = scene or fields["scene"]
+                initial_card = initial_card or fields["initial_card"]
         except Exception as exc:
             logger.error("Failed to load persona %s: %s", persona_id, exc)
     elif not mem and not character:
@@ -73,9 +74,10 @@ def initialize_session(
                 load_counts=storage_service.count_personas_for_user,
             )
             fields = build_persona_session_fields(selected_persona)
-            character = fields["character"]
-            scene = scene or fields["scene"]
-            initial_card = initial_card or fields["initial_card"]
+            if fields is not None:
+                character = fields["character"]
+                scene = scene or fields["scene"]
+                initial_card = initial_card or fields["initial_card"]
         except Exception as exc:
             logger.warning("Failed weighted persona selection for session %s: %s", sid, exc)
 
@@ -104,8 +106,16 @@ def initialize_session(
 
         if character:
             card_content = initial_card or _scenario_card_from_character(character)
-            mem["history"].append({"role": ROLE_SYSTEM, "content": card_content})
-            mem["full_history"].append({"role": ROLE_SYSTEM, "content": card_content, "time": now})
+            history = mem.get("history")
+            if not isinstance(history, list):
+                history = []
+                mem["history"] = history
+            full_history = mem.get("full_history")
+            if not isinstance(full_history, list):
+                full_history = []
+                mem["full_history"] = full_history
+            history.append({"role": ROLE_SYSTEM, "content": card_content})
+            full_history.append({"role": ROLE_SYSTEM, "content": card_content, "time": now})
 
         memory_store[sid] = mem
     else:
@@ -205,7 +215,7 @@ def _track_connection(body: Any, sid: str, mem: dict, memory_store: Any, logger:
     return already_active
 
 
-def _session_response(body: Any, sid: str, mem: dict, already_active: bool, initial_card: str | None) -> dict:
+def _session_response(_body: Any, sid: str, mem: dict, already_active: bool, initial_card: str | None) -> dict:
     persona_data = mem.get("persona")
     persona = persona_data if isinstance(persona_data, dict) else {}
     return {

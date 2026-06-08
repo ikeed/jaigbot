@@ -10,23 +10,23 @@
   if (window.__aimsbotCustomJsInitialized) return;
   window.__aimsbotCustomJsInitialized = true;
 
-  var modules = [
-    "/public/js/aimsbot/core.js",
-    "/public/js/aimsbot/modal.js",
-    "/public/js/aimsbot/report-issue.js",
-    "/public/js/aimsbot/infographic.js",
-    "/public/js/aimsbot/session-controls.js",
-    "/public/js/aimsbot/header-actions.js",
-    "/public/js/aimsbot/message-roles.js",
-    "/public/js/aimsbot/splash.js",
-    "/public/js/aimsbot/window-events.js"
-  ];
+    const modules = [
+        "/public/js/aimsbot/core.js",
+        "/public/js/aimsbot/modal.js",
+        "/public/js/aimsbot/report-issue.js",
+        "/public/js/aimsbot/infographic.js",
+        "/public/js/aimsbot/session-controls.js",
+        "/public/js/aimsbot/header-actions.js",
+        "/public/js/aimsbot/message-roles.js",
+        "/public/js/aimsbot/splash.js",
+        "/public/js/aimsbot/window-events.js"
+    ];
 
-  function loadNext(index) {
+    function loadNext(index) {
     if (index >= modules.length) return;
 
-    var script = document.createElement("script");
-    script.src = modules[index];
+      const script = document.createElement("script");
+      script.src = modules[index];
     script.async = false;
     script.onload = function () {
       loadNext(index + 1);
