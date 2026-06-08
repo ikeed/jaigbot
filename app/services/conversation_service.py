@@ -57,6 +57,7 @@ _CONCERN_LABELS = {
     "effectiveness": "wants effectiveness and benefit addressed",
     "trust": "wants evidence, uncertainty, and trust addressed",
     "autonomy": "wants decision authority respected",
+    "requirements": "wants rules, requirements, and consequences explained",
 }
 
 
@@ -100,6 +101,13 @@ _CONCERN_TOPIC_ALIASES = {
     "decision_authority": "autonomy",
     "pressure": "autonomy",
     "autonomy": "autonomy",
+    "required": "requirements",
+    "requirement": "requirements",
+    "requirements": "requirements",
+    "mandatory": "requirements",
+    "obligatory": "requirements",
+    "rules": "requirements",
+    "system_expectations": "requirements",
 }
 
 
@@ -421,6 +429,9 @@ _ACTIVE_CONCERN_CUES = (
     "pressure",
     "pushed",
     "forced",
+    "required",
+    "mandatory",
+    "have to",
     "cornered",
     "lectured",
     "trust",
@@ -495,40 +506,44 @@ def maybe_add_person_concern(
     # Guard against LLM person_topic false positives where a person is
     # accepting take-home materials or follow-up rather than raising a new
     # autonomy/trust barrier.
-    if llm_topic in {"autonomy", "trust"} and _is_materials_or_followup_acceptance(person_text):
+    if llm_topic in {"autonomy", "trust", "requirements"} and _is_materials_or_followup_acceptance(person_text):
         return
     
-    raw_topic = llm_topic or concern_topic(person_text, topical_cues)
-    if not raw_topic:
-        return
-    topic = _canonical_topic(raw_topic)
-        
-    concerns: List[Concern] = state.setdefault("parent_concerns", [])  # type: ignore[assignment]
-    evidence = _clean_evidence_snippet(person_text)
-    existing = _find_matching_concern(concerns, topic)
-    if existing:
-        evidence_list = _string_list(existing.get("evidence"))
-        if evidence and not _is_redundant_evidence(evidence_list, evidence):
-            evidence_list.append(evidence)
-        existing["evidence"] = evidence_list[-5:]
-        _sync_concern_status(existing)
+    detected_topics = {_canonical_topic(topic) for topic in topics_in(person_text, topical_cues)}
+    if llm_topic:
+        detected_topics.add(_canonical_topic(llm_topic))
+    detected_topics.discard("general")
+
+    if not detected_topics:
         return
 
-    label = _concern_label(topic, evidence)
-    concern: Concern = {
-        "id": _canonical_id(topic),
-        "topic": topic,
-        "canonical_label": label,
-        "summary": label,
-        "desc": label,
-        "evidence": [evidence] if evidence else [],
-        "is_mirrored": False,
-        "is_secured": False,
-        "status": "open",
-        "mirror_count": 0,
-        "secure_count": 0,
-    }
-    concerns.append(concern)
+    concerns: List[Concern] = state.setdefault("parent_concerns", [])  # type: ignore[assignment]
+    evidence = _clean_evidence_snippet(person_text)
+    for topic in sorted(detected_topics):
+        existing = _find_matching_concern(concerns, topic)
+        if existing:
+            evidence_list = _string_list(existing.get("evidence"))
+            if evidence and not _is_redundant_evidence(evidence_list, evidence):
+                evidence_list.append(evidence)
+            existing["evidence"] = evidence_list[-5:]
+            _sync_concern_status(existing)
+            continue
+
+        label = _concern_label(topic, evidence)
+        concern: Concern = {
+            "id": _canonical_id(topic),
+            "topic": topic,
+            "canonical_label": label,
+            "summary": label,
+            "desc": label,
+            "evidence": [evidence] if evidence else [],
+            "is_mirrored": False,
+            "is_secured": False,
+            "status": "open",
+            "mirror_count": 0,
+            "secure_count": 0,
+        }
+        concerns.append(concern)
 
 
 def mark_mirrored_multi(

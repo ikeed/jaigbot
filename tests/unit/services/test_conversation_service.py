@@ -12,6 +12,8 @@ TOPICAL_CUES = {
     "sleep": ["sleep", "bedtime"],
     "diet": ["diet", "veggies"],
     "screen_time": ["screen", "tablet"],
+    "side_effects": ["safe", "safety", "side effects"],
+    "requirements": ["required", "mandatory", "okay in canada"],
 }
 
 
@@ -61,6 +63,28 @@ def test_maybe_add_person_concern_uses_llm_topic():
     assert st["parent_concerns"][0]["topic"] == "diet"
     assert st["parent_concerns"][0]["desc"] == "I'm worried about what he eats."
     assert st["parent_concerns"][0]["evidence"] == ["I'm worried about what he eats."]
+
+
+def test_maybe_add_person_concern_can_seed_multiple_topics_from_one_reply():
+    st = {"parent_concerns": []}
+    maybe_add_person_concern(
+        st,
+        "Is it required? Is it safe for my son?",
+        TOPICAL_CUES,
+    )
+    assert {c["topic"] for c in st["parent_concerns"]} == {"requirements", "side_effects"}
+
+
+def test_maybe_add_person_concern_maps_requirement_llm_topic_to_dedicated_bucket():
+    st = {"parent_concerns": []}
+    maybe_add_person_concern(
+        st,
+        "What happens if I do not choose it?",
+        TOPICAL_CUES,
+        llm_topic="system_expectations",
+    )
+    assert st["parent_concerns"][0]["topic"] == "requirements"
+    assert st["parent_concerns"][0]["canonical_label"] == "wants rules, requirements, and consequences explained"
 
 
 def test_maybe_add_person_concern_skips_materials_followup_acceptance_even_with_llm_topic():

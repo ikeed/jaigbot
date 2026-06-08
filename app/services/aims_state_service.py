@@ -40,6 +40,8 @@ class AimsStateService:
             "overload the immune",
         ],
         "side_effects": [
+            "safe",
+            "safety",
             "side effect",
             "adverse event",
             "vaers",
@@ -113,6 +115,19 @@ class AimsStateService:
             "not ready",
             "without pressure",
             "not pushed",
+        ],
+        "requirements": [
+            "required",
+            "requirement",
+            "mandatory",
+            "have to",
+            "need to",
+            "supposed to",
+            "allowed",
+            "okay here",
+            "okay in canada",
+            "is it okay here",
+            "is it okay in canada",
         ],
     }
 
