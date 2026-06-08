@@ -87,12 +87,13 @@ def initialize_session(
                 fields = build_persona_session_fields(selected_persona)
 
     if not mem:
+        persona_payload = fields["persona"] if selected_persona and fields is not None else None
         mem = {
             "history": [],
             "full_history": [],
             "character": character,
             "scene": scene,
-            "persona": fields["persona"] if selected_persona else None,
+            "persona": persona_payload,
             "user_info": body.userInfo,
             "updated": now,
             "session_started": now,
@@ -113,7 +114,8 @@ def initialize_session(
         if scene and not mem.get("scene"):
             mem["scene"] = scene
         if selected_persona and not mem.get("persona"):
-            mem["persona"] = fields["persona"]
+            if fields is not None:
+                mem["persona"] = fields["persona"]
         if body.userInfo and not mem.get("user_info"):
             mem["user_info"] = body.userInfo
 
