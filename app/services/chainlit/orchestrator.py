@@ -17,6 +17,7 @@ from app.config import settings
 from app.constants import (
     MSG_INTRO_REQUIRED,
     MSG_DUPLICATE_TAB,
+    MSG_PERSONA_NAME,
     MSG_RESUME_THREAD,
 )
 from app.persona import DEFAULT_CHARACTER, DEFAULT_SCENE
@@ -154,6 +155,13 @@ class ChainlitOrchestrator:
                     self.session.character = init_data.get("character")
                 if init_data.get("scene"):
                     self.session.scene = init_data.get("scene")
+                persona_name = init_data.get("personaName")
+                if isinstance(persona_name, str) and persona_name.strip():
+                    self.session.persona_name = persona_name.strip()
+                if isinstance(persona_name, str) and persona_name.strip():
+                    await self.ui.send_window_message(
+                        {"type": MSG_PERSONA_NAME, "personaName": persona_name.strip()}
+                    )
 
                 # Always refresh history from backend source of truth
                 history = await self.backend.fetch_history(session_id)
@@ -225,7 +233,12 @@ class ChainlitOrchestrator:
         # Update local state
         self.session.character = session_data.get("character")
         self.session.scene = session_data.get("scene")
+        persona_name = session_data.get("personaName")
+        if isinstance(persona_name, str) and persona_name.strip():
+            self.session.persona_name = persona_name.strip()
         user_card = session_data.get("initialCard")
+
+        await self._send_persona_name(persona_name)
 
         if not self.session.history:
             self.session.history = history if history else []
@@ -239,9 +252,11 @@ class ChainlitOrchestrator:
             new_history = [{"role": ROLE_SYSTEM, "content": user_card}]
             self.session.history = new_history
             self._inject_scenario_into_scene(new_history, user_card)
+            await self._send_persona_name(persona_name)
 
         logger.info("Running preflight checks")
         await self._run_preflight_checks()
+        await self._send_persona_name(persona_name)
         logger.info("Startup flow complete")
 
     def _has_seen_intro_locally_or_persistently(self, user_id: Optional[str]) -> bool:
@@ -373,7 +388,7 @@ class ChainlitOrchestrator:
         reply = data.get("reply")
         if reply:
             history.append({"role": ROLE_ASSISTANT, "content": reply})
-            await self.ui.send_assistant_reply(reply)
+            await self.ui.send_assistant_reply(reply, author_name=self.session.persona_name)
 
         # 3. Coach Post (Game Over)
         coach_post = data.get("coachPost")
@@ -416,3 +431,9 @@ class ChainlitOrchestrator:
         except Exception as e:
             logger.error(f"Failed to report error silently: {e}")
             pass
+
+    async def _send_persona_name(self, persona_name: Any) -> None:
+        if isinstance(persona_name, str) and persona_name.strip():
+            await self.ui.send_window_message(
+                {"type": MSG_PERSONA_NAME, "personaName": persona_name.strip()}
+            )

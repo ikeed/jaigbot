@@ -6,9 +6,50 @@
 
   app.messageRolesReady = true;
 
+  function normalizedRole(author) {
+    if (author === "Doctor") return "Doctor";
+    if (author === "Coach") return "Coach";
+    if (author === "System") return "System";
+    if (!author || author === "default") return "";
+    return "Assistant";
+  }
+
+  function extractPersonaName(text) {
+    const source = String(text || "");
+    const patterns = [
+      /(?:^|\n)Person:\s*([^\n]+)/i,
+      /(?:^|\n)Parent:\s*([^\n]+)/i,
+      /(?:^|\n)Parent\/Patient:\s*([^\n]+)/i,
+      /(?:^|\n)Patient:\s*([^\n]+)/i
+    ];
+
+    for (const pattern of patterns) {
+      const match = source.match(pattern);
+      if (match && match[1]) return match[1].trim();
+    }
+    return "";
+  }
+
+  function getPersonaName() {
+    const cached = String((app.state && app.state.personaName) || "").trim();
+    if (cached) return cached;
+
+    const systemMessages = document.querySelectorAll('.ai-message[data-aims-role="System"] .message-content, .ai-message[data-author="System"] .message-content');
+    for (const message of systemMessages) {
+      const name = extractPersonaName(message.innerText || message.textContent || "");
+      if (name) {
+        app.state = app.state || {};
+        app.state.personaName = name;
+        return name;
+      }
+    }
+
+    return "";
+  }
+
   function roleLabel(author) {
     if (author === "Doctor") return "Clinician";
-    if (author === "Assistant") return "Patient";
+    if (normalizedRole(author) === "Assistant") return getPersonaName() || (author !== "Assistant" ? author : "") || "Patient";
     if (author === "Coach") return "Coach";
     if (author === "System") return "Scenario";
     return author || "";
@@ -30,20 +71,33 @@
         const img = message.querySelector('img[alt^="Avatar for "]');
         if (img) author = img.alt.replace("Avatar for ", "").trim();
     }
-    if (!author || author === "default") return;
+    const role = normalizedRole(author);
+    if (!role) return;
 
     message.setAttribute("data-author", author);
-    if (author === "System") {
+    message.setAttribute("data-aims-role", role);
+    if (role === "System") {
         const systemImg = message.querySelector('img[alt="Avatar for System"]');
         if (systemImg) systemImg.src = "/public/avatars/system.svg?v=2";
+    }
+    if (role === "Assistant") {
+        const personaName = getPersonaName() || (author !== "Assistant" ? author : "");
+        const assistantImg = message.querySelector('img[alt^="Avatar for "]');
+        if (assistantImg && personaName) {
+          const tooltip = "Avatar for " + personaName;
+          assistantImg.alt = tooltip;
+          assistantImg.title = tooltip;
+          assistantImg.setAttribute("aria-label", tooltip);
+        }
     }
 
       const step = message.closest("[data-step-type]");
       if (step) {
       step.setAttribute("data-author", author);
+      step.setAttribute("data-aims-role", role);
       step.classList.add("aims-message-row");
       decorateMessageSurface(step, message.querySelector(".message-content"), author);
-      if (author === "Coach" || author === "System") {
+      if (role === "Coach" || role === "System") {
         injectCopyButton(step);
       }
     }

@@ -208,6 +208,10 @@ body.aimsbot-shell .aims-message-enter {
   content: attr(data-role-label);
   display: inline-flex;
   align-items: center;
+  align-self: flex-start;
+  width: fit-content;
+  max-width: max-content;
+  flex: 0 0 auto;
   margin-bottom: 8px;
   padding: 3px 10px;
   border-radius: 999px;
@@ -247,7 +251,7 @@ body.aimsbot-shell .aims-message-enter {
   color: var(--doctor-text) !important;
 }
 
-.ai-message[data-author="Assistant"] .aims-message-bubble {
+.ai-message[data-aims-role="Assistant"] .aims-message-bubble {
   width: calc(100% - 28px) !important;
   max-width: calc(100% - 28px) !important;
   background: var(--assistant-bg) !important;
@@ -257,7 +261,7 @@ body.aimsbot-shell .aims-message-enter {
   margin-left: 0 !important;
 }
 
-.ai-message[data-author="Coach"] .aims-message-bubble {
+.ai-message[data-aims-role="Coach"] .aims-message-bubble {
   width: calc(100% - 28px) !important;
   max-width: calc(100% - 28px) !important;
   background: var(--coach-bg) !important;
@@ -267,7 +271,7 @@ body.aimsbot-shell .aims-message-enter {
   margin-left: 0 !important;
 }
 
-.ai-message[data-author="System"] .aims-message-bubble {
+.ai-message[data-aims-role="System"] .aims-message-bubble {
   width: calc(100% - 28px) !important;
   max-width: calc(100% - 28px) !important;
   background: var(--system-bg) !important;
@@ -279,23 +283,23 @@ body.aimsbot-shell .aims-message-enter {
 
 /* Match the right edge of non-user bubbles to Doctor bubbles, which reserve
    space for the injected Doctor avatar on the right. */
-.ai-message[data-author="Assistant"],
-.ai-message[data-author="Coach"],
-.ai-message[data-author="System"] {
+.ai-message[data-aims-role="Assistant"],
+.ai-message[data-aims-role="Coach"],
+.ai-message[data-aims-role="System"] {
   padding-right: 28px !important;
   box-sizing: border-box !important;
 }
 
-.ai-message[data-author="Assistant"] .message-content,
-.ai-message[data-author="Coach"] .message-content,
-.ai-message[data-author="System"] .message-content {
+.ai-message[data-aims-role="Assistant"] .message-content,
+.ai-message[data-aims-role="Coach"] .message-content,
+.ai-message[data-aims-role="System"] .message-content {
   margin-left: 0 !important;
 }
 
 /* Older sessions may contain an inline-styled scenario card inside the System
    message. Flatten that legacy inner frame so it does not render as a
    bubble-within-a-bubble. */
-.ai-message[data-author="System"] .aims-message-bubble .prose > div[style*="background"] {
+.ai-message[data-aims-role="System"] .aims-message-bubble .prose > div[style*="background"] {
   background: transparent !important;
   border: 0 !important;
   border-radius: 0 !important;
