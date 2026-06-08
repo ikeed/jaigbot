@@ -1,8 +1,8 @@
 (function (window, document) {
   "use strict";
 
-  var app = window.AIMSBotUI = window.AIMSBotUI || {};
-  if (app.coreReady) return;
+    const app = window.AIMSBotUI = window.AIMSBotUI || {};
+    if (app.coreReady) return;
 
   app.coreReady = true;
   app.state = app.state || {};
@@ -80,8 +80,8 @@
   };
 
   app.findHeaderActions = function () {
-    var header = document.getElementById("header");
-    if (!header) return null;
+      const header = document.getElementById("header");
+      if (!header) return null;
     return header.querySelector("div.flex.items-center.gap-1") || header.lastElementChild;
   };
 

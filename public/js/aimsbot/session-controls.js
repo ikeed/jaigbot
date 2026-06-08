@@ -1,8 +1,8 @@
 (function (window, document) {
   "use strict";
 
-  var app = window.AIMSBotUI;
-  if (!app || app.sessionControlsReady) return;
+    const app = window.AIMSBotUI;
+    if (!app || app.sessionControlsReady) return;
 
   app.sessionControlsReady = true;
 
@@ -34,8 +34,8 @@
     app.state.logoutInProgress = true;
     app.hideModal(app.modals.logout);
 
-    var confirmBtn = app.modals.logout.querySelector(".modal-confirm-btn");
-    if (confirmBtn) {
+      const confirmBtn = app.modals.logout.querySelector(".modal-confirm-btn");
+      if (confirmBtn) {
       confirmBtn.disabled = true;
       confirmBtn.style.cursor = "default";
       confirmBtn.textContent = "Logging out";
@@ -54,8 +54,8 @@
   }
 
   function attachLogoutConfirmHandler() {
-    var buttons = document.querySelectorAll("#logout-modal .modal-confirm-btn");
-    buttons.forEach(function (button) {
+      const buttons = document.querySelectorAll("#logout-modal .modal-confirm-btn");
+      buttons.forEach(function (button) {
       if (button._aimsLogoutConfirmAttached) return;
       button._aimsLogoutConfirmAttached = true;
 
@@ -69,13 +69,13 @@
   }
 
   function logoutConfirmTargetFromEvent(event) {
-    var directTarget = event.target && event.target.closest
-      ? event.target.closest("#logout-modal .modal-confirm-btn")
-      : null;
-    if (directTarget) return directTarget;
+      const directTarget = event.target && event.target.closest
+          ? event.target.closest("#logout-modal .modal-confirm-btn")
+          : null;
+      if (directTarget) return directTarget;
 
-    var elementAtPoint = null;
-    try {
+      let elementAtPoint = null;
+      try {
       elementAtPoint = document.elementFromPoint(event.clientX, event.clientY);
     } catch (_) {}
     return elementAtPoint && elementAtPoint.closest
@@ -84,15 +84,15 @@
   }
 
   function handleLogoutConfirmDocumentEvent(event) {
-    var target = logoutConfirmTargetFromEvent(event);
-    if (!target) return;
+      const target = logoutConfirmTargetFromEvent(event);
+      if (!target) return;
     app.prevent(event);
     leaveChatForLogout();
   }
 
   function interceptNewChat() {
-    var button = document.getElementById("new-chat-button");
-    if (!button || button._aimsIntercepted) return;
+      const button = document.getElementById("new-chat-button");
+      if (!button || button._aimsIntercepted) return;
 
     button.addEventListener("click", function (event) {
       if (button._aimsConfirmBypass) {
@@ -109,24 +109,24 @@
 
   function isLogoutControl(control) {
     if (!control) return false;
-    var text = (control.textContent || "").toLowerCase();
-    var href = control.href || "";
-    var id = control.id || "";
-    var role = control.getAttribute("role");
+      const text = (control.textContent || "").toLowerCase();
+      const href = control.href || "";
+      const id = control.id || "";
+      const role = control.getAttribute("role");
 
-    if (href.indexOf("logout") !== -1 || id.indexOf("logout") !== -1) return true;
+      if (href.indexOf("logout") !== -1 || id.indexOf("logout") !== -1) return true;
     return role === "menuitem" && (text.indexOf("logout") !== -1 || text.indexOf("sign out") !== -1);
   }
 
   function interceptLogout() {
-    var selectors = [
-      'a[href*="logout"]',
-      'button[id*="logout"]',
-      '[role="menuitem"]',
-      ".cl-user-menu-logout"
-    ];
+      const selectors = [
+          'a[href*="logout"]',
+          'button[id*="logout"]',
+          '[role="menuitem"]',
+          ".cl-user-menu-logout"
+      ];
 
-    document.querySelectorAll(selectors.join(",")).forEach(function (button) {
+      document.querySelectorAll(selectors.join(",")).forEach(function (button) {
       if (!isLogoutControl(button) || button._aimsIntercepted) return;
 
       button.addEventListener("click", function (event) {
@@ -148,8 +148,8 @@
   });
 
   document.addEventListener("click", function (event) {
-    var target = event.target.closest("a, button, [role='menuitem']");
-    if (!target || target._aimsIntercepted || !isLogoutControl(target)) return;
+      const target = event.target.closest("a, button, [role='menuitem']");
+      if (!target || target._aimsIntercepted || !isLogoutControl(target)) return;
 
     if (target._aimsLogoutBypass) {
       target._aimsLogoutBypass = false;

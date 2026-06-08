@@ -1,8 +1,8 @@
 (function (window, document) {
   "use strict";
 
-  var app = window.AIMSBotUI;
-  if (!app || app.reportIssueReady) return;
+    const app = window.AIMSBotUI;
+    if (!app || app.reportIssueReady) return;
 
   app.reportIssueReady = true;
   app.modals.reportIssue = app.createModal({
@@ -20,8 +20,8 @@
   app.showReportIssueModal = function () {
     app.showModal(app.modals.reportIssue);
     window.setTimeout(function () {
-      var input = document.getElementById("report-issue-modal-input");
-      if (input) input.focus();
+        const input = document.getElementById("report-issue-modal-input");
+        if (input) input.focus();
     }, 100);
   };
 })(window, document);

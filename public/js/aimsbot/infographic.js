@@ -1,17 +1,17 @@
 (function (window, document) {
   "use strict";
 
-  var app = window.AIMSBotUI;
-  if (!app || app.infographicReady) return;
+    const app = window.AIMSBotUI;
+    if (!app || app.infographicReady) return;
 
   app.infographicReady = true;
 
   function createInfographicModal() {
-    var existing = document.getElementById("aims-infographic-modal");
-    if (existing) existing.remove();
+      const existing = document.getElementById("aims-infographic-modal");
+      if (existing) existing.remove();
 
-    var modal = document.createElement("div");
-    modal.id = "aims-infographic-modal";
+      const modal = document.createElement("div");
+      modal.id = "aims-infographic-modal";
     modal.className = "aims-infographic-modal";
     modal.setAttribute("aria-hidden", "true");
     modal.innerHTML =
@@ -38,10 +38,10 @@
   var modal = createInfographicModal();
 
   function resetScroll() {
-    var scroll = modal.querySelector(".aims-infographic-scroll");
-    var img = modal.querySelector(".aims-infographic-scroll img");
+      const scroll = modal.querySelector(".aims-infographic-scroll");
+      const img = modal.querySelector(".aims-infographic-scroll img");
 
-    function reset() {
+      function reset() {
       if (!scroll) return;
       scroll.scrollTop = 0;
       scroll.scrollLeft = 0;
@@ -77,8 +77,8 @@
   }
 
   function showPendingWhenReady() {
-    var pending = false;
-    try {
+      let pending = false;
+      try {
       pending = window.sessionStorage.getItem(app.state.pendingIntroStorageKey) === "1";
     } catch (_) {}
 
