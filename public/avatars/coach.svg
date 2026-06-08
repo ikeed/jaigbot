@@ -1,11 +1,38 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
-  <title id="title">AIMSBot coaching avatar</title>
-  <desc id="desc">A circular orange avatar with a simple white compass needle icon.</desc>
-  <circle cx="64" cy="64" r="64" fill="#F28C28"/>
-  <g transform="rotate(45 64 64)">
-    <!-- compass needle -->
-    <path d="M64 18 L82 64 L64 110 L46 64 Z" fill="#FFFFFF"/>
-    <!-- center cutout -->
-    <circle cx="64" cy="64" r="8" fill="#F28C28"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="bg" x1="20" y1="16" x2="108" y2="112">
+      <stop offset="0" stop-color="#FFB449"/>
+      <stop offset="1" stop-color="#D97706"/>
+    </linearGradient>
+  </defs>
+
+  <!-- background -->
+  <circle cx="64" cy="64" r="60" fill="url(#bg)"/>
+
+  <!-- speech bubble -->
+  <path
+    d="M32 42
+       C32 31 41 22 52 22
+       H76
+       C91 22 102 33 102 48
+       V61
+       C102 76 91 87 76 87
+       H60
+       L42 102
+       L47 87
+       H52
+       C41 87 32 78 32 67
+       Z"
+    fill="#FFF3D6"/>
+
+  <!-- check mark -->
+  <path
+    d="M50 57
+       L60 67
+       L81 46"
+    fill="none"
+    stroke="#D97706"
+    stroke-width="10"
+    stroke-linecap="round"
+    stroke-linejoin="round"/>
 </svg>
