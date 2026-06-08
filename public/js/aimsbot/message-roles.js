@@ -6,31 +6,120 @@
 
   app.messageRolesReady = true;
 
+  function normalizedRole(author) {
+    if (author === "Doctor") return "Doctor";
+    if (author === "Coach") return "Coach";
+    if (author === "System") return "System";
+    if (!author || author === "default") return "";
+    return "Assistant";
+  }
+
+  function avatarSrcForRole(role) {
+    if (role === "Doctor") return "/public/avatars/doctor.svg?v=3";
+    if (role === "Assistant") return "/public/avatars/assistant.svg?v=3";
+    if (role === "Coach") return "/public/avatars/coach.svg?v=3";
+    if (role === "System") return "/public/avatars/system.svg?v=3";
+    return "";
+  }
+
+  function extractPersonaName(text) {
+    const source = String(text || "");
+    const patterns = [
+      /(?:^|\n)Person:\s*([^\n]+)/i,
+      /(?:^|\n)Parent:\s*([^\n]+)/i,
+      /(?:^|\n)Parent\/Patient:\s*([^\n]+)/i,
+      /(?:^|\n)Patient:\s*([^\n]+)/i
+    ];
+
+    for (const pattern of patterns) {
+      const match = source.match(pattern);
+      if (match && match[1]) return match[1].trim();
+    }
+    return "";
+  }
+
+  function getPersonaName() {
+    const cached = String((app.state && app.state.personaName) || "").trim();
+    if (cached) return cached;
+
+    const systemMessages = document.querySelectorAll('.ai-message[data-aims-role="System"] .message-content, .ai-message[data-author="System"] .message-content');
+    for (const message of systemMessages) {
+      const name = extractPersonaName(message.innerText || message.textContent || "");
+      if (name) {
+        app.state = app.state || {};
+        app.state.personaName = name;
+        return name;
+      }
+    }
+
+    return "";
+  }
+
+  function roleLabel(author) {
+    if (author === "Doctor") return "Clinician";
+    if (normalizedRole(author) === "Assistant") return getPersonaName() || (author !== "Assistant" ? author : "") || "Patient";
+    if (author === "Coach") return "Coach";
+    if (author === "System") return "Scenario";
+    return author || "";
+  }
+
+  function decorateMessageSurface(step, content, author) {
+    if (!step || !content || !author) return;
+    step.setAttribute("data-role-label", roleLabel(author));
+    if (!step.hasAttribute("data-aims-animated")) {
+      step.setAttribute("data-aims-animated", "true");
+      step.classList.add("aims-message-enter");
+    }
+    content.setAttribute("data-role-label", roleLabel(author));
+  }
+
   function tagAiMessage(message) {
       let author = message.getAttribute("data-author");
       if (!author) {
         const img = message.querySelector('img[alt^="Avatar for "]');
         if (img) author = img.alt.replace("Avatar for ", "").trim();
     }
-    if (!author || author === "default") return;
+    const role = normalizedRole(author);
+    if (!role) return;
 
     message.setAttribute("data-author", author);
-    if (author === "System") {
+    message.setAttribute("data-aims-role", role);
+    if (role === "System") {
         const systemImg = message.querySelector('img[alt="Avatar for System"]');
-        if (systemImg) systemImg.src = "/public/avatars/system.svg?v=2";
+        if (systemImg) systemImg.src = avatarSrcForRole("System");
+    }
+    if (role === "Coach") {
+        const coachImg = message.querySelector('img[alt="Avatar for Coach"]');
+        if (coachImg) coachImg.src = avatarSrcForRole("Coach");
+    }
+    if (role === "Assistant") {
+        const personaName = getPersonaName() || (author !== "Assistant" ? author : "");
+        const assistantImg = message.querySelector('img[alt^="Avatar for "]');
+        if (assistantImg && personaName) {
+          assistantImg.src = avatarSrcForRole("Assistant");
+          const tooltip = "Avatar for " + personaName;
+          assistantImg.alt = tooltip;
+          assistantImg.title = tooltip;
+          assistantImg.setAttribute("aria-label", tooltip);
+        }
     }
 
       const step = message.closest("[data-step-type]");
       if (step) {
       step.setAttribute("data-author", author);
+      step.setAttribute("data-aims-role", role);
       step.classList.add("aims-message-row");
-      if (author === "Coach" || author === "System") {
+      decorateMessageSurface(step, message.querySelector(".message-content"), author);
+      if (role === "Coach" || role === "System") {
         injectCopyButton(step);
       }
     }
 
       const content = message.querySelector(".message-content");
-      if (content) content.classList.add("aims-message-bubble");
+      if (content) {
+      content.classList.add("aims-message-bubble");
+      content.setAttribute("data-role-label", roleLabel(author));
+    }
   }
 
   function tagDoctorMessage(step) {
@@ -39,9 +128,11 @@
 
       const content = step.querySelector(".message-content");
       if (!content) return;
+      decorateMessageSurface(step, content, "Doctor");
 
       const bubble = content.closest(".relative") || content;
       bubble.classList.add("aims-message-bubble");
+      bubble.setAttribute("data-role-label", roleLabel("Doctor"));
 
       const row = bubble.parentElement;
       if (!row || row.querySelector(".aims-doctor-avatar")) {
@@ -55,7 +146,7 @@
       const avatar = document.createElement("span");
       avatar.className = "aims-doctor-avatar";
     avatar.setAttribute("data-state", "closed");
-    avatar.innerHTML = '<img alt="Avatar for Doctor" src="' + avatarBase + '/avatars/Doctor" />';
+    avatar.innerHTML = '<img alt="Avatar for Doctor" src="' + avatarSrcForRole("Doctor") + '" />';
     row.appendChild(avatar);
 
     injectCopyButton(step);

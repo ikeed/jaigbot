@@ -81,8 +81,13 @@ class UIHandler:
         await message.update()
 
     @staticmethod
-    async def send_assistant_reply(content: str):
-        await cl.Message(content, **get_ui_attributes(ROLE_ASSISTANT)).send()
+    async def send_assistant_reply(content: str, author_name: str | None = None):
+        attrs = get_ui_attributes(ROLE_ASSISTANT)
+        await cl.Message(
+            content,
+            author=(author_name or attrs["author"]),
+            type=attrs["type"],
+        ).send()
 
     async def send_coach_message(self, content: str):
         await cl.Message(

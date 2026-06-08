@@ -159,7 +159,7 @@ logo_file_url = "/public/aimsbot.png"
 default_avatar_file_url = ""
 
 # Avatar size in pixels (default: 20).
-# avatar_size = 20
+avatar_size = 24
 
 # Specify a custom build directory for the frontend.
 # This can be used to customize the frontend code.

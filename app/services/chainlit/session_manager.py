@@ -4,6 +4,7 @@ from app.constants import (
     SESSION_USER,
     SESSION_ID,
     SESSION_HISTORY,
+    SESSION_PERSONA_NAME,
     SESSION_INTRO_SEEN,
     SESSION_CHARACTER,
     SESSION_SCENE,
@@ -43,6 +44,15 @@ class SessionManager:
     @character.setter
     def character(self, value: Optional[str]):
         cl.user_session.set(SESSION_CHARACTER, value)
+
+    @property
+    def persona_name(self) -> Optional[str]:
+        value = cl.user_session.get(SESSION_PERSONA_NAME)
+        return value if isinstance(value, str) and value.strip() else None
+
+    @persona_name.setter
+    def persona_name(self, value: Optional[str]):
+        cl.user_session.set(SESSION_PERSONA_NAME, value)
 
     @property
     def scene(self) -> Optional[str]:

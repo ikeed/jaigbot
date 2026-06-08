@@ -28,6 +28,12 @@
       }
     } else if (type === "aims_intro_required") {
       app.infographic.show(true);
+    } else if (type === "aims_persona_name" && data.personaName) {
+      app.state = app.state || {};
+      app.state.personaName = String(data.personaName).trim();
+      if (app.messageRoles && app.messageRoles.injectDataAuthors) {
+        app.messageRoles.injectDataAuthors();
+      }
     }
   });
 })(window);
