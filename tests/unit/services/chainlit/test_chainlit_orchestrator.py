@@ -15,6 +15,7 @@ def mock_services():
     session.session_id = None
     session.character = None
     session.scene = None
+    session.persona_name = None
     session.history = []
     session.query_params = {}
     session.connection_id = None
@@ -130,6 +131,7 @@ async def test_handle_user_message_success(orchestrator, mock_services):
     mock_services["session"].intro_pending = False
     mock_services["session"].history = []
     mock_services["session"].session_id = "sess1"
+    mock_services["session"].persona_name = "Sarah"
     
     message = MagicMock()
     message.content = "ping"
@@ -148,7 +150,7 @@ async def test_handle_user_message_success(orchestrator, mock_services):
     
     mock_services["ui"].send_user_message_update.assert_called_with(message)
     mock_services["backend"].send_chat_message.assert_called()
-    mock_services["ui"].send_assistant_reply.assert_called_with("pong")
+    mock_services["ui"].send_assistant_reply.assert_called_with("pong", author_name="Sarah")
     assert len(mock_services["session"].history) == 2 # user + assistant
 
 
@@ -309,6 +311,7 @@ async def test_handle_session_resume_backend_failure_uses_defaults(orchestrator,
 @pytest.mark.asyncio
 async def test_process_backend_response_dispatches_coaching_reply_and_coach_post(orchestrator, mock_services):
     mock_services["session"].history = []
+    mock_services["session"].persona_name = "Sarah"
     mock_services["ui"].send_coach_message = AsyncMock()
     mock_services["ui"].send_assistant_reply = AsyncMock()
 
@@ -338,7 +341,9 @@ async def test_process_backend_response_dispatches_coaching_reply_and_coach_post
     mock_services["ui"].send_coach_message.assert_any_await(
         "Scenario complete\nOutcome: accepted literature"
     )
-    mock_services["ui"].send_assistant_reply.assert_awaited_once_with("I need to understand more.")
+    mock_services["ui"].send_assistant_reply.assert_awaited_once_with(
+        "I need to understand more.", author_name="Sarah"
+    )
 
 
 @pytest.mark.asyncio
