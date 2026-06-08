@@ -7,6 +7,16 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _persona_label(session_obj: Dict | None) -> str:
+    name = str((session_obj or {}).get("personaName") or "").strip()
+    return f"{name}'s" if name else "the parent's"
+
+
+def _patient_label(session_obj: Dict | None) -> str:
+    patient_name = str((session_obj or {}).get("patientName") or "").strip()
+    return f"{patient_name}'s" if patient_name else "the patient's"
+
+
 class VaccineRelevanceGate:
     """Applies vaccine-relevance gating to a classification payload.
 
@@ -160,6 +170,8 @@ class EndGameDetector:
         "i'm on board", "i am on board", "on board with",
         "comfortable moving forward", "comfortable with moving forward", "happy to move forward",
         "move forward with it", "move forward today", "happy to proceed",
+        "ready to go ahead", "i'm ready to go ahead", "i am ready to go ahead",
+        "ready to go ahead with it", "i'm ready to go ahead with it", "i am ready to go ahead with it",
     ]
 
     FOLLOWUP_CUES = [
@@ -369,26 +381,28 @@ def build_endgame_bullets_fallback(session_obj: Dict | None) -> List[str]:
     # Score range helpers
     _HIGH = 2.4    # >= 80%
     _MID  = 1.8    # >= 60%
+    persona_label = _persona_label(session_obj)
+    patient_label = _patient_label(session_obj)
 
     # Per-step messages keyed by performance tier
     _MSGS: Dict[str, Dict[str, str]] = {
         "Announce": {
             "high": "clear, non-pressuring recommendation — well done.",
             "mid":  "the recommendation was present; try making it more concise and following immediately with an open question.",
-            "low":  "lead with a brief presumptive recommendation, then invite input (e.g., \"Carter's due for MMR today — what are your thoughts?\").",
+            "low":  f"lead with a brief presumptive recommendation, then invite input (e.g., \"{patient_label} due for MMR today — what are your thoughts?\").",
             "absent": "introduce vaccines with a clear, non-pushy recommendation before asking for concerns.",
         },
         "Inquire": {
-            "high": "strong open questions that surfaced the parent's real concerns.",
+            "high": f"strong open questions that surfaced {persona_label} real concerns.",
             "mid":  "good inquiry; when closing the loop, explicitly invite any remaining concerns or what is still on their mind.",
             "low":  "use open-ended questions to surface concerns (e.g., \"What's still on your mind about vaccines today?\") before educating.",
-            "absent": "ask at least one open-ended question to discover the parent's specific concerns before educating.",
+            "absent": f"ask at least one open-ended question to discover {persona_label} specific concerns before educating.",
         },
         "Mirror": {
             "high": "excellent reflections — you consistently captured the concern before moving forward.",
             "mid":  "good reflections; make sure to capture the underlying value (not just the stated concern) and check for accuracy.",
-            "low":  "reflect the parent's concern before educating (e.g., \"It sounds like you want to be sure this is safe — did I get that right?\").",
-            "absent": "mirror the parent's concern back to them before offering any education — it makes them feel heard.",
+            "low":  f"reflect {persona_label} concern before educating (e.g., \"It sounds like you want to be sure this is safe — did I get that right?\").",
+            "absent": f"mirror {persona_label} concern back to them before offering any education — it makes them feel heard.",
         },
         "Secure": {
             "high": "education was well-tailored to the stated concerns without overwhelming.",

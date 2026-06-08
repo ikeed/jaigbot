@@ -41,6 +41,7 @@ def test_init_session_backend_persona():
     assert mem["history"][0]["role"] == ROLE_SYSTEM
     assert mem["history"][0]["content"] == data["initialCard"]
     assert mem["persona"]["name"] == "Jasmine"
+    assert mem["persona"]["patient_name"] == "Sophia"
     assert data["personaName"] == "Jasmine"
 
 

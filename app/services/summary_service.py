@@ -68,6 +68,32 @@ async def build_summary(
     return base
 
 
+async def build_summary_analysis_bullets(
+    *,
+    mem: dict,
+    settings: Any,
+    logger: logging.Logger,
+    app_state: Any,
+    vertex_client_cls: Any,
+) -> list[str]:
+    """Return sanitized LLM analysis bullets for an in-memory AIMS session.
+
+    Raises on upstream analysis failures so callers can decide whether to
+    surface no analysis or fall back to deterministic messaging.
+    """
+    aims = mem.get("aims") or {}
+    per_counts = _step_counts(aims)
+    return await _analysis_bullets(
+        mem=mem,
+        aims=aims,
+        per_counts=per_counts,
+        settings=settings,
+        logger=logger,
+        app_state=app_state,
+        vertex_client_cls=vertex_client_cls,
+    )
+
+
 def _base_summary() -> dict:
     return {
         "overallScore": 0.0,

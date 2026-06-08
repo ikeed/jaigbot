@@ -16,6 +16,7 @@ from __future__ import annotations
 import os
 import time
 import uuid
+from types import SimpleNamespace
 from typing import Any, Dict, Optional
 
 from fastapi import Request
@@ -58,6 +59,7 @@ from app.services.aims_metrics_service import AimsMetricsService
 from app.services.aims_state_service import AimsStateService
 from app.services.aims_turn_telemetry import AimsTurnTelemetry
 from app.services.aims_turn_coordinator import AimsTurnCoordinator
+from app.services.summary_service import build_summary_analysis_bullets
 from app.services.coach_feedback_history_service import CoachFeedbackHistoryService
 from app.services.coach_post import (
     VaccineRelevanceGate,
@@ -75,6 +77,44 @@ class AimsCoachingHandler:
     """Handles the full AIMS coaching flow."""
     
     _TOPICAL_CUES = AimsStateService.TOPICAL_CUES
+
+    @staticmethod
+    def _build_reply_concern_state_section(state: dict[str, Any] | None) -> str:
+        concerns = (state or {}).get("parent_concerns") or []
+        if not concerns:
+            return "No tracked vaccine concerns yet."
+
+        open_topics: list[str] = []
+        resolved_topics: list[str] = []
+        for concern in concerns:
+            topic = str(
+                concern.get("canonical_label")
+                or concern.get("summary")
+                or concern.get("topic")
+                or "unspecified concern"
+            ).strip()
+            if not topic:
+                continue
+            if concern.get("is_secured"):
+                if topic not in resolved_topics:
+                    resolved_topics.append(topic)
+            else:
+                if topic not in open_topics:
+                    open_topics.append(topic)
+
+        if not open_topics and resolved_topics:
+            return (
+                "Open concerns: none. "
+                f"Resolved concerns: {', '.join(resolved_topics)}. "
+                "Do not reopen resolved concerns as if unanswered."
+            )
+        if open_topics and resolved_topics:
+            return (
+                f"Open concerns: {', '.join(open_topics)}. "
+                f"Resolved concerns: {', '.join(resolved_topics)}. "
+                "Focus on open concerns; do not reopen resolved concerns as if unanswered."
+            )
+        return f"Open concerns: {', '.join(open_topics)}."
     
     def __init__(
         self,
@@ -119,6 +159,7 @@ class AimsCoachingHandler:
         
         self.memory_enabled = self.memory_config.enabled
         self.memory_max_turns = self.memory_config.max_turns
+        self.summary_app_state = SimpleNamespace()
         
         self.classifier_service = classifier_service or ClassifierService(
             project_id=self.project_id,
@@ -154,6 +195,13 @@ class AimsCoachingHandler:
         self.endgame_service = endgame_service or AimsEndgameService(
             logger=self.logger,
             classifier_service_getter=lambda: self.classifier_service,
+            summary_bullets_builder=lambda mem: build_summary_analysis_bullets(
+                mem=mem,
+                settings=settings,
+                logger=self.logger,
+                app_state=self.summary_app_state,
+                vertex_client_cls=self.client_cls,
+            ),
         )
         self.telemetry = telemetry or AimsTurnTelemetry(
             logger=self.logger,
@@ -211,6 +259,7 @@ class AimsCoachingHandler:
         prior_state = mem.get(KEY_AIMS_STATE) or {} if mem else {}
         prior_announced = bool(prior_state.get("announced", False))
         prior_phase = prior_state.get("phase", PHASE_PRE_ANNOUNCE)
+        concern_state_section = self._build_reply_concern_state_section(prior_state)
 
         turn = await self.turn_coordinator.run(
             clinician_message=body.message,
@@ -234,6 +283,7 @@ class AimsCoachingHandler:
             character=ctx.effective_character,
             scene=ctx.effective_scene,
             clinician_name=clinician_display_name_from_user_info(ctx.user_info),
+            concern_state_section=concern_state_section,
         )
         cls_payload = turn.cls_payload
         is_small_talk = turn.is_small_talk

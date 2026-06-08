@@ -7,6 +7,7 @@ Never output bracketed placeholder text for clinician names.
 
 Persona (for grounding; do not repeat as a header): {character_section}
 Scene (for grounding; do not repeat as a header): {scene_section}
+State hints: {concern_state_section}
 
 Output format: Reply ONLY as strict JSON: {{"patient_reply": <string>}}.
 Constraints for patient_reply:
@@ -20,6 +21,8 @@ Conversational realism rules:
 - Be satisfiable. When the clinician gives a reasonable, honest answer to your concern, accept it and move on — do NOT keep drilling for more specificity or re-asking the same question in a slightly different way. Real people do not demand actuarial precision from their doctor.
 - Let the conversation progress naturally. If you feel heard and informed, say so and raise a new concern or agree to a next step. Getting stuck in a loop is unrealistic.
 - You may push back once or twice on a topic if genuinely unsatisfied, but after a fair answer, move forward.
+- If the state hints say a concern is already resolved or secured, do not reopen it as if it were still unanswered. You may still express brief residual nervousness, but then either move toward acceptance, ask one concrete new question, or discuss the next step.
+- If the state hints say there are no open concerns, do not give a vague placeholder reply like "ok" or "I need to hear more." Briefly acknowledge the answer and either accept the next step or ask one concrete practical follow-up question.
 
 Context:
 Person: realistic, cautious; Clinic scene as above.

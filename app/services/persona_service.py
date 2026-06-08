@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 FALLBACK_PERSONA = {
     "name": "Jasmine",
+    "patient_name": "Sophia",
     "brief": "A nervous first-time parent.",
     "detailed": "Jasmine is a nervous first-time parent worried about vaccine risks.",
     "scenario": {
@@ -273,5 +274,6 @@ def build_persona_session_fields(persona: dict) -> dict:
         "persona": {
             "id": persona.get("id"),
             "name": persona.get("name"),
+            "patient_name": persona.get("patient_name"),
         },
     }

@@ -66,13 +66,30 @@ async def test_generate_passes_prompt_identity_and_rewrites_terse_ok():
         character="Persona text",
         scene="Scene text",
         clinician_name="Dr. Burnett",
+        concern_state_section="Open concerns: none. Resolved concerns: ingredients.",
     )
 
-    assert result == {"patient_reply": "I'm not sure — I have some questions, but I'd like to hear more."}
+    assert result == {"patient_reply": "Yes, that helps. Thank you."}
     assert len(caller.calls) == 1
     assert "you may use Doctor or Dr. Burnett" in caller.calls[0]["prompt"]
+    assert "Resolved concerns: ingredients." in caller.calls[0]["prompt"]
     assert caller.calls[0]["log_path"] == "coach_reply"
     assert caller.calls[0]["kwargs"] == {"temperature": 0.3, "max_tokens": 123}
+
+
+@pytest.mark.asyncio
+async def test_generate_rewrites_terse_ok_to_acknowledgment_when_no_open_concerns():
+    caller = JsonCaller(json.dumps({"patient_reply": "ok"}))
+    service = _service(caller)
+
+    result = await service.generate(
+        clinician_message="Does that answer your question?",
+        history_text="Clinician: Hello",
+        session_id="sid",
+        concern_state_section="Open concerns: none. Resolved concerns: ingredients.",
+    )
+
+    assert result == {"patient_reply": "Yes, that helps. Thank you."}
 
 
 @pytest.mark.asyncio
@@ -104,6 +121,22 @@ async def test_generate_invalid_json_twice_returns_safe_fallback():
     )
 
     assert result == {"patient_reply": "I'm not sure — I have some questions, but I'd like to hear more."}
+    assert len(caller.calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_generate_invalid_json_twice_returns_acknowledgment_when_no_open_concerns():
+    caller = JsonCaller("{", "not json")
+    service = _service(caller)
+
+    result = await service.generate(
+        clinician_message="Does that answer your question?",
+        history_text="",
+        session_id="sid",
+        concern_state_section="Open concerns: none. Resolved concerns: ingredients.",
+    )
+
+    assert result == {"patient_reply": "Yes, that helps. Thank you."}
     assert len(caller.calls) == 2
 
 

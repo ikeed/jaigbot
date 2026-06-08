@@ -150,6 +150,49 @@ def test_topic_mirroring_and_securing_state_updates(monkeypatch):
     assert any(c.get("is_secured") for c in state["parent_concerns"]) is True
 
 
+def test_zia_style_required_and_safe_reply_seeds_distinct_concerns_and_flags_secure_before_mirror(monkeypatch):
+    setup_env(monkeypatch)
+    c = TestClient(m.app)
+    sess = "zia-required-safe"
+    m.MEMORY_STORE[sess] = {
+        "history": [
+            {"role": "assistant", "content": "Is it required? Is it safe for my son? Is it okay here in Canada?"}
+        ],
+        "aims_state": {
+            "announced": True,
+            "phase": "InquireMirror",
+            "first_inquire_done": True,
+            "pending_concerns": True,
+            "parent_concerns": [],
+        },
+    }
+
+    GWStub.classify_payload = {"step": "Secure", "score": 3, "reasons": ["llm"], "tips": []}
+    GWStub.person_topic = None
+    GWStub.reply_json_payload = {"patient_reply": "ok"}
+    r2 = c.post(
+        "/chat",
+        json={
+            "message": (
+                "The decision is yours, and these vaccines are monitored for safety. "
+                "Most side effects are mild."
+            ),
+            "coach": True,
+            "sessionId": sess,
+        },
+    )
+    assert r2.status_code == 200
+    data = r2.json()
+
+    reasons = " ".join(data["coaching"]["reasons"]).lower()
+    assert "reflecting" in reasons or "mirroring" in reasons
+
+    concerns = m.MEMORY_STORE[sess]["aims_state"]["parent_concerns"]
+    assert {c["topic"] for c in concerns} == {"requirements", "side_effects"}
+    assert any(not c["is_mirrored"] for c in concerns)
+    assert m.MEMORY_STORE[sess]["aims_state"]["pending_concerns"] is True
+
+
 def test_running_average_populated(monkeypatch):
     setup_env(monkeypatch)
     c = TestClient(m.app)

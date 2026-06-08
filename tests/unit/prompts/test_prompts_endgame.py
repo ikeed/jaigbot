@@ -50,6 +50,19 @@ def test_patient_reply_prompt_includes_clinician_name_and_bans_placeholders():
     assert "[Clinician's last name]" not in prompt
 
 
+def test_patient_reply_prompt_includes_concern_state_hints():
+    prompt = build_patient_reply_prompt(
+        history_text="Clinician: Hello",
+        clinician_last="Hello",
+        concern_state_section="Open concerns: none. Resolved concerns: ingredients, timing.",
+    )
+
+    assert "State hints:" in prompt
+    assert "Resolved concerns: ingredients, timing." in prompt
+    assert "do not reopen it as if it were still unanswered" in prompt
+    assert 'do not give a vague placeholder reply like "ok"' in prompt.lower()
+
+
 def test_endgame_detector_prompt_requires_both_literature_and_followup():
     prompt = build_endgame_detector_prompt(
         history_text="Doctor: We can keep talking.\nAssistant: I'd like something to read.",

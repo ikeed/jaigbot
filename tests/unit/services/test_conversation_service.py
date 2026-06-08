@@ -12,6 +12,8 @@ TOPICAL_CUES = {
     "sleep": ["sleep", "bedtime"],
     "diet": ["diet", "veggies"],
     "screen_time": ["screen", "tablet"],
+    "side_effects": ["safe", "safety", "side effects"],
+    "requirements": ["required", "mandatory", "okay in canada"],
 }
 
 
@@ -61,6 +63,28 @@ def test_maybe_add_person_concern_uses_llm_topic():
     assert st["parent_concerns"][0]["topic"] == "diet"
     assert st["parent_concerns"][0]["desc"] == "I'm worried about what he eats."
     assert st["parent_concerns"][0]["evidence"] == ["I'm worried about what he eats."]
+
+
+def test_maybe_add_person_concern_can_seed_multiple_topics_from_one_reply():
+    st = {"parent_concerns": []}
+    maybe_add_person_concern(
+        st,
+        "Is it required? Is it safe for my son?",
+        TOPICAL_CUES,
+    )
+    assert {c["topic"] for c in st["parent_concerns"]} == {"requirements", "side_effects"}
+
+
+def test_maybe_add_person_concern_maps_requirement_llm_topic_to_dedicated_bucket():
+    st = {"parent_concerns": []}
+    maybe_add_person_concern(
+        st,
+        "What happens if I do not choose it?",
+        TOPICAL_CUES,
+        llm_topic="system_expectations",
+    )
+    assert st["parent_concerns"][0]["topic"] == "requirements"
+    assert st["parent_concerns"][0]["canonical_label"] == "wants rules, requirements, and consequences explained"
 
 
 def test_maybe_add_person_concern_skips_materials_followup_acceptance_even_with_llm_topic():
@@ -546,3 +570,62 @@ def test_mark_secured_by_topic_uses_evidence_to_pick_matching_concern():
 
     assert st["parent_concerns"][0]["is_secured"] is False
     assert st["parent_concerns"][1]["is_secured"] is True
+
+
+def test_mark_secured_by_topic_allows_unique_single_overlap_for_resolved_concern():
+    st = {"parent_concerns": [
+        {
+            "desc": "wants side effect risk addressed",
+            "topic": "side_effects",
+            "summary": "wants side effect risk addressed",
+            "evidence": ["I'm worried about serious reactions."],
+            "is_mirrored": True,
+            "is_secured": False,
+        },
+        {
+            "desc": "wants evidence, uncertainty, and trust addressed",
+            "topic": "trust",
+            "summary": "wants evidence, uncertainty, and trust addressed",
+            "evidence": ["I need the uncertainty stated plainly."],
+            "is_mirrored": True,
+            "is_secured": False,
+        },
+    ]}
+
+    mark_secured_by_topic(
+        st,
+        clinician_text="I want to be candid about the uncertainty here.",
+        topical_cues=TOPICAL_CUES,
+    )
+
+    assert st["parent_concerns"][0]["is_secured"] is False
+    assert st["parent_concerns"][1]["is_secured"] is True
+
+
+def test_mark_secured_by_topic_does_not_guess_on_ambiguous_single_overlap():
+    st = {"parent_concerns": [
+        {
+            "desc": "wants side effect risk addressed",
+            "topic": "side_effects",
+            "summary": "wants side effect risk addressed",
+            "evidence": ["I'm worried about the risk of side effects."],
+            "is_mirrored": True,
+            "is_secured": False,
+        },
+        {
+            "desc": "wants disease risk addressed",
+            "topic": "disease_risk",
+            "summary": "wants disease risk addressed",
+            "evidence": ["I don't know the real disease risk anymore."],
+            "is_mirrored": True,
+            "is_secured": False,
+        },
+    ]}
+
+    mark_secured_by_topic(
+        st,
+        clinician_text="There is always some risk to weigh here.",
+        topical_cues=TOPICAL_CUES,
+    )
+
+    assert not any(c["is_secured"] for c in st["parent_concerns"])

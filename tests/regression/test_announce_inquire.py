@@ -114,7 +114,6 @@ class TestObservationalStateAnnounceInquire:
             "phase": "PreAnnounce",
             "first_inquire_done": False,
             "parent_concerns": [],
-            "mirrors_done": 0,
         }
         AimsStateService(logger=MagicMock()).update_observational_state(
             state, "Announce+Inquire", ["Announce", "Inquire"]
@@ -167,7 +166,6 @@ class TestSecuringBeforeInquiringCoaching:
             "phase": "PreAnnounce",
             "first_inquire_done": False,
             "parent_concerns": [],
-            "mirrors_done": 0,
             "recent_coaching": [],
         }
         cls_payload = {
@@ -198,7 +196,6 @@ class TestSecuringBeforeInquiringCoaching:
             "parent_concerns": [
                 {"desc": "worried about side effects", "topic": "side_effects", "is_mirrored": True, "is_secured": False}
             ],
-            "mirrors_done": 1,
             "recent_coaching": [],
         }
         cls_payload = {

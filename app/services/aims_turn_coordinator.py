@@ -52,6 +52,7 @@ class AimsTurnCoordinator:
         character: str | None,
         scene: str | None,
         clinician_name: str | None,
+        concern_state_section: str | None = None,
     ) -> AimsTurnResult:
         task_cls = asyncio.create_task(
             self._classifier_service.classify_turn(clinician_message=clinician_message, person_last=person_last,
@@ -69,6 +70,7 @@ class AimsTurnCoordinator:
                 character=character,
                 scene=scene,
                 clinician_name=clinician_name,
+                concern_state_section=concern_state_section,
             )
         )
 

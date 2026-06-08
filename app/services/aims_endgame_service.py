@@ -17,9 +17,16 @@ from app.telemetry.events import log_event as telemetry_log_event
 class AimsEndgameService:
     """Detects completed AIMS sessions and builds final coach posts."""
 
-    def __init__(self, *, logger: Any, classifier_service_getter: Callable[[], Any]) -> None:
+    def __init__(
+        self,
+        *,
+        logger: Any,
+        classifier_service_getter: Callable[[], Any],
+        summary_bullets_builder: Callable[[dict[str, Any]], Any] | None = None,
+    ) -> None:
         self._logger = logger
         self._classifier_service_getter = classifier_service_getter
+        self._summary_bullets_builder = summary_bullets_builder
 
     @staticmethod
     def _could_be_literature_followup_closure(reply_text: str) -> bool:
@@ -121,8 +128,8 @@ class AimsEndgameService:
                 summary = ""
 
             if is_endgame and outcome == "accepted_vaccine":
-                heuristic = EndGameDetector.detect(combined_reply_text)
-                if not heuristic or heuristic.get("reason") != "accepted_now":
+                has_unsecured = any(not concern.get("is_secured") for concern in concerns)
+                if concerns and has_unsecured:
                     is_endgame = False
 
             if is_endgame and outcome == "accepted_literature":
@@ -140,13 +147,24 @@ class AimsEndgameService:
 
             title = endgame_title(session_obj, outcome=outcome)
             lines = [f"Outcome: {summary}"] if summary else []
+            used_summary_bullets = False
 
             try:
-                fallback_bullets = build_endgame_bullets_fallback(session_obj)
-                if fallback_bullets:
-                    lines.extend(fallback_bullets)
+                if self._summary_bullets_builder is not None:
+                    summary_bullets = await self._summary_bullets_builder(mem)
+                    if summary_bullets:
+                        lines.extend(summary_bullets)
+                    used_summary_bullets = True
             except Exception as e:
-                self._logger.debug("Deterministic evaluation failed: %s", e)
+                self._logger.debug("Summary analysis failed for endgame coach post: %s", e)
+
+            if not used_summary_bullets:
+                try:
+                    fallback_bullets = build_endgame_bullets_fallback(session_obj)
+                    if fallback_bullets:
+                        lines.extend(fallback_bullets)
+                except Exception as e:
+                    self._logger.debug("Deterministic evaluation failed: %s", e)
 
             return {"title": title, "lines": lines}
 

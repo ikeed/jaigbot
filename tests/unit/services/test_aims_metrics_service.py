@@ -43,6 +43,7 @@ def test_build_summary_handles_none_empty_and_existing_scores():
     assert empty_summary["runningAverage"] == {}
 
     summary = service.build_summary({
+        "persona": {"name": "Zia", "patient_name": "Nathaniel"},
         KEY_AIMS_METRICS: {
             "totalTurns": 2,
             "perStepCounts": {"Mirror": 2},
@@ -52,6 +53,8 @@ def test_build_summary_handles_none_empty_and_existing_scores():
     assert summary["totalTurns"] == 2
     assert summary["perStepCounts"]["Mirror"] == 2
     assert summary["runningAverage"]["Mirror"] == 2.5
+    assert summary["personaName"] == "Zia"
+    assert summary["patientName"] == "Nathaniel"
 
 
 def test_running_average_errors_are_logged_and_skipped():
