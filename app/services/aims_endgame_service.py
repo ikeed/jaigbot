@@ -77,6 +77,7 @@ class AimsEndgameService:
             heuristic = EndGameDetector.detect(combined_reply_text)
 
             concerns = aims_state.get("parent_concerns") or []
+            first_inquire_done = bool(aims_state.get("first_inquire_done", False))
             has_unmirrored = any(not concern.get("is_mirrored") for concern in concerns)
             literature_followup_closure = (
                 heuristic is not None
@@ -135,6 +136,8 @@ class AimsEndgameService:
             if is_endgame and outcome == "accepted_literature":
                 combined_lower = combined_reply_text.lower()
                 if any(cue in combined_lower for cue in EndGameDetector.PLAN_NEGATIVE_CUES):
+                    is_endgame = False
+                elif not first_inquire_done or not concerns:
                     is_endgame = False
 
             if outcome == "deferred":
