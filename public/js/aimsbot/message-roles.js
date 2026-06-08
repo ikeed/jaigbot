@@ -14,6 +14,14 @@
     return "Assistant";
   }
 
+  function avatarSrcForRole(role) {
+    if (role === "Doctor") return "/public/avatars/doctor.svg?v=3";
+    if (role === "Assistant") return "/public/avatars/assistant.svg?v=3";
+    if (role === "Coach") return "/public/avatars/coach.svg?v=3";
+    if (role === "System") return "/public/avatars/system.svg?v=3";
+    return "";
+  }
+
   function extractPersonaName(text) {
     const source = String(text || "");
     const patterns = [
@@ -78,12 +86,17 @@
     message.setAttribute("data-aims-role", role);
     if (role === "System") {
         const systemImg = message.querySelector('img[alt="Avatar for System"]');
-        if (systemImg) systemImg.src = "/public/avatars/system.svg?v=2";
+        if (systemImg) systemImg.src = avatarSrcForRole("System");
+    }
+    if (role === "Coach") {
+        const coachImg = message.querySelector('img[alt="Avatar for Coach"]');
+        if (coachImg) coachImg.src = avatarSrcForRole("Coach");
     }
     if (role === "Assistant") {
         const personaName = getPersonaName() || (author !== "Assistant" ? author : "");
         const assistantImg = message.querySelector('img[alt^="Avatar for "]');
         if (assistantImg && personaName) {
+          assistantImg.src = avatarSrcForRole("Assistant");
           const tooltip = "Avatar for " + personaName;
           assistantImg.alt = tooltip;
           assistantImg.title = tooltip;
@@ -133,7 +146,7 @@
       const avatar = document.createElement("span");
       avatar.className = "aims-doctor-avatar";
     avatar.setAttribute("data-state", "closed");
-    avatar.innerHTML = '<img alt="Avatar for Doctor" src="' + avatarBase + '/avatars/Doctor" />';
+    avatar.innerHTML = '<img alt="Avatar for Doctor" src="' + avatarSrcForRole("Doctor") + '" />';
     row.appendChild(avatar);
 
     injectCopyButton(step);
