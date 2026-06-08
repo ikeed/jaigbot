@@ -91,6 +91,7 @@ class _PubSub:
             self._channels.discard(channel)
 
 
+# noinspection PyUnusedLocal
 class _Sentinel:
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         self.args = args
@@ -105,6 +106,7 @@ class _SentinelModule:
     Sentinel = _Sentinel
 
 
+# noinspection PyUnusedLocal
 class Redis:
     def __init__(
         self,

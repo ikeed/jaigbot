@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+# noinspection PyBroadException
 try:
     from jsonschema import Draft7Validator
 except Exception:  # pragma: no cover - import error exercised in tests indirectly

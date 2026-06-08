@@ -110,6 +110,7 @@ def _step_counts(aims: dict) -> dict[str, int]:
     return per_counts
 
 
+# noinspection PyUnresolvedReferences
 def _running_average(aims: dict) -> dict[str, float]:
     running_avg: dict[str, float] = {}
     for key, scores in (aims.get("scores", {}) or {}).items():

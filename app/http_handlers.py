@@ -17,6 +17,7 @@ def get_request_id(request: Request) -> Optional[str]:
     header = request.headers.get("x-cloud-trace-context") or request.headers.get("x-request-id")
     if header:
         return header
+    # noinspection PyBroadException
     try:
         return getattr(request.state, "request_id", None) or str(uuid.uuid4())
     except Exception:
@@ -88,6 +89,7 @@ def install_http_handlers(app: FastAPI, *, settings: Any, logger: logging.Logger
             content={"error": {"message": "Internal server error", "code": 500, "requestId": req_id}},
         )
 
+    # noinspection PyUnresolvedReferences
     @app.middleware("http")
     async def log_requests(request: Request, call_next):
         req_id = request.headers.get("x-cloud-trace-context") or request.headers.get("x-request-id") or str(uuid.uuid4())
