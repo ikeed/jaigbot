@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import time
 from collections.abc import Callable
 from typing import Any
@@ -147,30 +148,68 @@ class AimsEndgameService:
 
             title = endgame_title(session_obj, outcome=outcome)
             lines = [f"Outcome: {summary}"] if summary else []
-            used_summary_bullets = False
+            llm_commentary: list[str] = []
 
             try:
                 if self._summary_bullets_builder is not None:
                     summary_bullets = await self._summary_bullets_builder(mem)
-                    if summary_bullets:
-                        lines.extend(summary_bullets)
-                    used_summary_bullets = True
+                    llm_commentary = self._select_summary_commentary(summary_bullets)
             except Exception as e:
                 self._logger.debug("Summary analysis failed for endgame coach post: %s", e)
 
-            if not used_summary_bullets:
-                try:
-                    fallback_bullets = build_endgame_bullets_fallback(session_obj)
-                    if fallback_bullets:
-                        lines.extend(fallback_bullets)
-                except Exception as e:
-                    self._logger.debug("Deterministic evaluation failed: %s", e)
+            try:
+                fallback_bullets = build_endgame_bullets_fallback(session_obj)
+                if fallback_bullets:
+                    lines.extend(fallback_bullets)
+            except Exception as e:
+                self._logger.debug("Deterministic evaluation failed: %s", e)
+
+            if llm_commentary:
+                lines.extend(llm_commentary)
 
             return {"title": title, "lines": lines}
 
         except Exception as e:
             self._logger.exception("LLM endgame detection failed: %s", e)
             return None
+
+    @staticmethod
+    def _select_summary_commentary(summary_bullets: list[str] | None) -> list[str]:
+        if not summary_bullets:
+            return []
+
+        structural_prefixes = (
+            "overall aims score:",
+            "announce ",
+            "announce:",
+            "inquire ",
+            "inquire:",
+            "mirror ",
+            "mirror:",
+            "secure ",
+            "secure:",
+            "outcome:",
+        )
+        filtered: list[str] = []
+        seen: set[str] = set()
+
+        for raw in summary_bullets:
+            text = (raw or "").strip()
+            if not text:
+                continue
+            lowered = text.lower()
+            if lowered.startswith(structural_prefixes):
+                continue
+            if re.search(r"\b(announce|inquire|mirror|secure)\b\s+\d+%", lowered):
+                continue
+            if text in seen:
+                continue
+            seen.add(text)
+            filtered.append(text)
+
+        if len(filtered) < 2:
+            return []
+        return filtered[:2]
 
     def _log_endgame_begin(
         self,
