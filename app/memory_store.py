@@ -15,7 +15,7 @@ import logging
 import os
 from typing import Any, Dict, List, Optional, Tuple, cast
 
-logger = logging.getLogger(__name__)
+module_logger = logging.getLogger(__name__)
 
 
 class InMemoryStore:
@@ -47,7 +47,7 @@ class InMemoryStore:
         except FileNotFoundError:
             return
         except Exception as e:
-            logger.error("Failed to load memory store from %s: %s", self._persist_path, e)
+            module_logger.error("Failed to load memory store from %s: %s", self._persist_path, e)
             self._store = {}
 
     def _persist(self) -> None:
@@ -62,7 +62,7 @@ class InMemoryStore:
                 json.dump(self._store, f, ensure_ascii=False)
             os.replace(tmp_path, self._persist_path)
         except Exception as e:
-            logger.error("Failed to persist memory store to %s: %s", self._persist_path, e)
+            module_logger.error("Failed to persist memory store to %s: %s", self._persist_path, e)
             pass
 
     def get(self, key: str) -> Optional[Dict[str, Any]]:

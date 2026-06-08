@@ -158,6 +158,7 @@ class Settings(BaseSettings):
             
         if not v:
             # 2. Try to get it from Google Auth default (if available)
+            # noinspection PyBroadException
             try:
                 import google.auth
                 _, project = google.auth.default()

@@ -17,6 +17,12 @@ TopicalCues = Mapping[str, Iterable[str]]
 Concern = Dict[str, object]
 
 
+def _as_text(value: object, default: str = "") -> str:
+    if isinstance(value, str):
+        return value
+    return default
+
+
 def topics_in(text: Optional[str], topical_cues: TopicalCues) -> Set[str]:
     """Detect topics present in `text` based on simple substring cues.
 
@@ -247,9 +253,9 @@ def _concern_match_score(concern: Concern, text: str) -> int:
         return 0
 
     concern_tokens = set()
-    concern_tokens |= _semantic_tokens(str(concern.get("summary") or ""))
-    concern_tokens |= _semantic_tokens(str(concern.get("canonical_label") or ""))
-    concern_tokens |= _semantic_tokens(str(concern.get("desc") or ""))
+    concern_tokens |= _semantic_tokens(_as_text(concern.get("summary")))
+    concern_tokens |= _semantic_tokens(_as_text(concern.get("canonical_label")))
+    concern_tokens |= _semantic_tokens(_as_text(concern.get("desc")))
     for evidence in _string_list(concern.get("evidence"))[-3:]:
         concern_tokens |= _semantic_tokens(evidence)
 
@@ -305,13 +311,15 @@ def _count(value: object) -> int:
 
 
 def _normalize_existing_concern(concern: Concern) -> None:
-    topic = _canonical_topic(str(concern.get("topic") or "general"))
-    evidence = _clean_evidence_snippet(str(concern.get("desc") or concern.get("summary") or ""))
+    topic = _canonical_topic(_as_text(concern.get("topic"), "general"))
+    evidence = _clean_evidence_snippet(
+        _as_text(concern.get("desc")) or _as_text(concern.get("summary"))
+    )
     concern["topic"] = topic
     concern["id"] = _canonical_id(topic)
     concern.setdefault("canonical_label", _concern_label(topic, evidence))
-    concern.setdefault("summary", concern.get("canonical_label") or evidence)
-    concern["desc"] = str(concern.get("summary") or concern.get("canonical_label") or evidence)
+    concern.setdefault("summary", _as_text(concern.get("canonical_label")) or evidence)
+    concern["desc"] = _as_text(concern.get("summary")) or _as_text(concern.get("canonical_label")) or evidence
     existing_evidence = _string_list(concern.get("evidence"))
     concern["evidence"] = existing_evidence or ([evidence] if evidence else [])
     concern.setdefault("mirror_count", 1 if concern.get("is_mirrored") else 0)
@@ -324,9 +332,9 @@ def _find_matching_concern(concerns: List[Concern], topic: Optional[str]) -> Con
     canonical_topic = _canonical_topic(topic)
     for concern in concerns or []:
         _normalize_existing_concern(concern)
-        if str(concern.get("id") or "") == cid:
+        if _as_text(concern.get("id")) == cid:
             return concern
-        if _canonical_topic(str(concern.get("topic") or "")) == canonical_topic:
+        if _canonical_topic(_as_text(concern.get("topic"))) == canonical_topic:
             return concern
     return None
 

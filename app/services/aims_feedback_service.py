@@ -47,6 +47,10 @@ class AimsFeedbackService:
         "additionalProperties": False,
     }
 
+    @staticmethod
+    def _text_value(value: object, default: str = "") -> str:
+        return value if isinstance(value, str) else default
+
     def __init__(
         self,
         *,
@@ -141,8 +145,8 @@ class AimsFeedbackService:
 
         return refined
 
+    @staticmethod
     def _build_context(
-        self,
         *,
         cls_payload: dict[str, Any],
         clinician_message: str,
@@ -220,9 +224,9 @@ class AimsFeedbackService:
             for item in raw:
                 if not isinstance(item, dict):
                     continue
-                sf_step = str(item.get("step") or step or "").strip()
-                feedback = str(item.get("feedback") or "").strip()
-                tone = str(item.get("tone") or "improvement").strip().lower()
+                sf_step = AimsFeedbackService._text_value(item.get("step"), step or "").strip()
+                feedback = AimsFeedbackService._text_value(item.get("feedback")).strip()
+                tone = AimsFeedbackService._text_value(item.get("tone"), "improvement").strip().lower()
                 if not sf_step or not feedback:
                     continue
                 if tone not in {"praise", "improvement"}:

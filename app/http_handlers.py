@@ -10,13 +10,14 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-logger = logging.getLogger(__name__)
+module_logger = logging.getLogger(__name__)
 
 
 def get_request_id(request: Request) -> Optional[str]:
     header = request.headers.get("x-cloud-trace-context") or request.headers.get("x-request-id")
     if header:
         return header
+    # noinspection PyBroadException
     try:
         return getattr(request.state, "request_id", None) or str(uuid.uuid4())
     except Exception:
@@ -88,6 +89,7 @@ def install_http_handlers(app: FastAPI, *, settings: Any, logger: logging.Logger
             content={"error": {"message": "Internal server error", "code": 500, "requestId": req_id}},
         )
 
+    # noinspection PyUnresolvedReferences
     @app.middleware("http")
     async def log_requests(request: Request, call_next):
         req_id = request.headers.get("x-cloud-trace-context") or request.headers.get("x-request-id") or str(uuid.uuid4())
@@ -105,11 +107,12 @@ def install_http_handlers(app: FastAPI, *, settings: Any, logger: logging.Logger
             logger.debug("Failed to patch request._receive: %s", e)
             pass
 
+        client_host = request.client.host if request.client is not None else None
         logger.info(json.dumps({
             "event": "request_start",
             "method": request.method,
             "path": request.url.path,
-            "client": request.client.host if request.client else None,
+            "client": client_host,
             "requestId": req_id,
             "bodySize": len(body_bytes) if body_bytes else 0,
             "body": _body_preview_for_log(body_bytes, settings=settings),
@@ -147,11 +150,11 @@ async def _request_body_for_log(request: Request) -> Any:
             try:
                 body_logged = json.loads(raw.decode("utf-8"))
             except (json.JSONDecodeError, UnicodeDecodeError) as e:
-                logger.debug("Failed to decode request body as JSON: %s", e)
+                module_logger.debug("Failed to decode request body as JSON: %s", e)
                 try:
                     body_logged = raw.decode("utf-8", errors="replace")
                 except Exception as e:
-                    logger.debug("Failed to decode request body as UTF-8: %s", e)
+                    module_logger.debug("Failed to decode request body as UTF-8: %s", e)
                     body_logged = "<binary>"
     return body_logged
 
@@ -160,7 +163,7 @@ async def _read_body(request: Request) -> bytes:
     try:
         return await request.body()
     except Exception as e:
-        logger.warning("Failed to read request body: %s", e)
+        module_logger.warning("Failed to read request body: %s", e)
         return b""
 
 
@@ -177,11 +180,11 @@ def _body_preview_for_log(body_bytes: bytes, *, settings: Any) -> Any:
                 body_logged["scene"] = "<hidden>"
         return body_logged
     except (json.JSONDecodeError, UnicodeDecodeError) as e:
-        logger.debug("Failed to decode body preview as JSON: %s", e)
+        module_logger.debug("Failed to decode body preview as JSON: %s", e)
         try:
             return body_preview.decode("utf-8", errors="replace")
         except Exception as e:
-            logger.debug("Failed to decode body preview as UTF-8: %s", e)
+            module_logger.debug("Failed to decode body preview as UTF-8: %s", e)
             return "<binary>"
 
 

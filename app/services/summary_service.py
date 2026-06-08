@@ -9,7 +9,7 @@ from typing import Any
 from app.chat_roles import ROLE_ASSISTANT, get_ui_attributes
 from app.telemetry.events import log_event as telemetry_log_event
 
-logger = logging.getLogger(__name__)
+module_logger = logging.getLogger(__name__)
 
 
 DEFAULT_STEP_COVERAGE = {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0}
@@ -37,7 +37,8 @@ async def build_summary(
     aims = mem.get("aims") or {}
     per_counts = _step_counts(aims)
     running_avg = _running_average(aims)
-    overall = (sum(running_avg.values()) / len(running_avg)) if running_avg else 0.0
+    overall_total = float(sum(running_avg.values()))
+    overall = (overall_total / len(running_avg)) if running_avg else 0.0
 
     base.update({
         "overallScore": overall,
@@ -109,6 +110,7 @@ def _step_counts(aims: dict) -> dict[str, int]:
     return per_counts
 
 
+# noinspection PyUnresolvedReferences
 def _running_average(aims: dict) -> dict[str, float]:
     running_avg: dict[str, float] = {}
     for key, scores in (aims.get("scores", {}) or {}).items():
@@ -116,7 +118,7 @@ def _running_average(aims: dict) -> dict[str, float]:
             try:
                 running_avg[key] = sum(scores) / len(scores)
             except Exception as e:
-                logger.debug("Failed to calculate running average for %s: %s", key, e)
+                module_logger.debug("Failed to calculate running average for %s: %s", key, e)
                 pass
     return running_avg
 
@@ -186,7 +188,7 @@ def _build_transcript(mem: dict) -> str:
                 parts.append(f"{author}: {text}")
         return "\n".join(parts)
     except Exception as e:
-        logger.debug("Failed to build transcript: %s", e)
+        module_logger.debug("Failed to build transcript: %s", e)
         return ""
 
 
@@ -200,7 +202,7 @@ def _load_mapping(app_state: Any) -> dict:
         app_state.aims_mapping = mapping
         return mapping
     except Exception as e:
-        logger.debug("Failed to load mapping: %s", e)
+        module_logger.debug("Failed to load mapping: %s", e)
         return {}
 
 

@@ -50,6 +50,7 @@ class VertexGateway:
     def _log_fallback(log_fallback: Optional[Callable], model_id: str) -> None:
         if not log_fallback:
             return
+        # noinspection PyBroadException
         try:
             log_fallback(model_id)
         except Exception:

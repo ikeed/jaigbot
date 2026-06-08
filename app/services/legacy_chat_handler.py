@@ -55,7 +55,7 @@ class LegacyChatHandler:
         self.jailbreak_guard = JailbreakGuard()
     
     async def handle(
-        self, req: Request, body: ChatRequest, ctx: ChatContext
+        self, _req: Request, body: ChatRequest, ctx: ChatContext
     ) -> Dict[str, Any]:
         """Handle the traditional chat flow."""
         started = time.time()
@@ -181,10 +181,18 @@ class LegacyChatHandler:
             }
             user_entry = {"role": ROLE_USER, "content": user_message}
             asst_entry = {"role": ROLE_ASSISTANT, "content": assistant_reply}
-            mem.setdefault("history", []).append(user_entry)
-            mem["history"].append(asst_entry)
-            mem.setdefault("full_history", []).append({**user_entry, "time": now})
-            mem["full_history"].append({**asst_entry, "time": now})
+            history = mem.setdefault("history", [])
+            if not isinstance(history, list):
+                history = []
+                mem["history"] = history
+            history.append(user_entry)
+            history.append(asst_entry)
+            full_history = mem.setdefault("full_history", [])
+            if not isinstance(full_history, list):
+                full_history = []
+                mem["full_history"] = full_history
+            full_history.append({**user_entry, "time": now})
+            full_history.append({**asst_entry, "time": now})
             
             # Trim working history (coach-aware)
             from app.services.session_service import SessionService
