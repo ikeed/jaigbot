@@ -7,7 +7,7 @@ Principles
 - Keep changes minimal and targeted to satisfy the issue.
 - Communicate clearly using status updates (plan + progress) before submitting.
 - Run pytest for any change that touches Python runtime or APIs; optional for pure docs but recommended.
-- Maintain API contracts covered by tests (see tests/test_chat.py and related files).
+- Maintain API contracts covered by tests (see tests/unit/routes/test_chat.py and related files).
 
 Efficient Tool Use
 - Code navigation and edits: Use JetBrains IDE features (project search, file structure) and precise edit tools.

@@ -1,0 +1,25 @@
+version: 2
+
+multi-ecosystem-groups:
+  all-dependencies:
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: deps
+      include: scope
+    open-pull-requests-limit: 1
+
+updates:
+  - package-ecosystem: pip
+    directory: /
+    patterns:
+      - "*"
+    multi-ecosystem-group: all-dependencies
+    rebase-strategy: disabled
+
+  - package-ecosystem: github-actions
+    directory: /
+    patterns:
+      - "*"
+    multi-ecosystem-group: all-dependencies
+    rebase-strategy: disabled

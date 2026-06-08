@@ -1,0 +1,244 @@
+name: Quality Checks
+
+on:
+  pull_request:
+    branches: [ "staging" ]
+  push:
+    branches: [ "staging" ]
+
+env:
+  # Simulate deployment environment variables for testing
+  PROJECT_ID: test-project
+  REGION: us-central1
+  MODEL_ID: gemini-2.0-flash
+  TEMPERATURE: "0.2"
+  MAX_TOKENS: "768"
+  AIMS_COACHING_ENABLED: "true"
+  AIMS_COACHING_DEFAULT: "true"
+  MEMORY_BACKEND: memory
+  CHAINLIT_AUTH_SECRET: test-chainlit-secret-for-ci
+  OAUTH_GOOGLE_CLIENT_ID: test-client-id-for-ci
+  OAUTH_GOOGLE_CLIENT_SECRET: test-client-secret-for-ci
+
+jobs:
+  lint-and-sec:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6.0.3
+      - name: Set up Python
+        uses: actions/setup-python@v6.2.0
+        with:
+          python-version: '3.13'
+      - name: Install Linting Tools
+        run: pip install ruff==0.15.15 mypy==1.18.2 bandit==1.9.4
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
+      - name: Run Ruff
+        run: ruff check .
+      - name: Run Mypy
+        run: mypy app
+      - name: Run Bandit
+        run: bandit -r app -x tests,scripts --severity-level medium
+
+  coverage:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6.0.3
+        with:
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@v6.2.0
+        with:
+          python-version: '3.13'
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
+      - name: Run Tests with Coverage
+        run: |
+          export PYTHONPATH="$GITHUB_WORKSPACE:${PYTHONPATH:-}"
+          pytest --ignore=tests/integration --cov=app --cov-report=xml
+      - name: Detect changed covered files
+        id: coverage_scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+          CURRENT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            RANGE="${PR_BASE_SHA}...${PR_HEAD_SHA}"
+          elif [[ -n "${BEFORE_SHA:-}" && "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]]; then
+            RANGE="${BEFORE_SHA}...${CURRENT_SHA}"
+          else
+            RANGE="${CURRENT_SHA}~1...${CURRENT_SHA}"
+          fi
+
+          echo "Coverage diff range: $RANGE"
+          CHANGED="$(
+            git diff --name-only "$RANGE" -- \
+              'app/*.py' \
+              'app/**/*.py' \
+              ':(exclude)app/__init__.py' \
+              ':(exclude)app/*/__init__.py' \
+              ':(exclude)app/static/**' \
+              ':(exclude)app/vertex.py' \
+              ':(exclude)app/services/aims_dependencies.py' \
+              ':(exclude)app/memory_store.py' || true
+          )"
+
+          if [[ -n "$CHANGED" ]]; then
+            echo "has_covered_changes=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "changed_files<<EOF"
+              echo "$CHANGED"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+            echo "Changed covered files:"
+            echo "$CHANGED"
+          else
+            echo "has_covered_changes=false" >> "$GITHUB_OUTPUT"
+            echo "No changed covered app Python files; skipping changed-file coverage gate."
+          fi
+      - name: Enforce Coverage on Changed Files
+        if: steps.coverage_scope.outputs.has_covered_changes == 'true'
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+          CURRENT_SHA: ${{ github.sha }}
+          CHANGED_COVERED_FILES: ${{ steps.coverage_scope.outputs.changed_files }}
+          THRESHOLD_MODIFIED: "0.85"
+          THRESHOLD_NEW: "0.85"
+        run: |
+          set -euo pipefail
+
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            RANGE="${PR_BASE_SHA}...${PR_HEAD_SHA}"
+          elif [[ -n "${BEFORE_SHA:-}" && "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]]; then
+            RANGE="${BEFORE_SHA}...${CURRENT_SHA}"
+          else
+            RANGE="${CURRENT_SHA}~1...${CURRENT_SHA}"
+          fi
+
+          python - <<'PY'
+          import os
+          import subprocess
+          import sys
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          range_spec = os.environ["RANGE"] if "RANGE" in os.environ else None
+          if not range_spec:
+              event_name = os.environ.get("EVENT_NAME", "")
+              pr_base = os.environ.get("PR_BASE_SHA", "")
+              pr_head = os.environ.get("PR_HEAD_SHA", "")
+              before = os.environ.get("BEFORE_SHA", "")
+              current = os.environ.get("CURRENT_SHA", "")
+              if event_name == "pull_request":
+                  range_spec = f"{pr_base}...{pr_head}"
+              elif before and before != "0000000000000000000000000000000000000000":
+                  range_spec = f"{before}...{current}"
+              else:
+                  range_spec = f"{current}~1...{current}"
+
+          changed_files = [line.strip() for line in os.environ.get("CHANGED_COVERED_FILES", "").splitlines() if line.strip()]
+          if not changed_files:
+              print("No changed covered files to evaluate.")
+              sys.exit(0)
+
+          diff_output = subprocess.check_output(
+              ["git", "diff", "--name-status", range_spec, "--", *changed_files],
+              text=True,
+          )
+          statuses: dict[str, str] = {}
+          for raw_line in diff_output.splitlines():
+              parts = raw_line.split("\t")
+              if len(parts) < 2:
+                  continue
+              status = parts[0].strip()
+              path = parts[-1].strip()
+              statuses[path] = status
+
+          coverage_xml = Path("coverage.xml")
+          if not coverage_xml.exists():
+              print("coverage.xml not found", file=sys.stderr)
+              sys.exit(1)
+
+          root = ET.parse(coverage_xml).getroot()
+          coverage_by_file: dict[str, float] = {}
+          for cls in root.findall(".//class"):
+              filename = cls.attrib.get("filename")
+              line_rate = cls.attrib.get("line-rate")
+              if not filename or line_rate is None:
+                  continue
+              try:
+                  coverage_by_file[filename] = float(line_rate)
+              except ValueError:
+                  continue
+
+          modified_files: list[tuple[str, float]] = []
+          new_files: list[tuple[str, float]] = []
+          missing_files: list[str] = []
+
+          for path in changed_files:
+              coverage_key = path[4:] if path.startswith("app/") else path
+              if coverage_key not in coverage_by_file:
+                  missing_files.append(path)
+                  continue
+              rate = coverage_by_file[coverage_key]
+              status = statuses.get(path, "M")
+              if status == "A":
+                  new_files.append((path, rate))
+              else:
+                  modified_files.append((path, rate))
+
+          threshold_modified = float(os.environ.get("THRESHOLD_MODIFIED", "0.85"))
+          threshold_new = float(os.environ.get("THRESHOLD_NEW", "0.85"))
+
+          def avg(rows: list[tuple[str, float]]) -> float:
+              return sum(rate for _, rate in rows) / len(rows) if rows else 0.0
+
+          modified_avg = avg(modified_files)
+          new_avg = avg(new_files)
+
+          print("Changed covered files:")
+          for path in changed_files:
+              print(f"  - {path} ({statuses.get(path, 'M')})")
+
+          if missing_files:
+              print("Covered files missing from coverage.xml:")
+              for path in missing_files:
+                  print(f"  - {path}")
+              sys.exit(1)
+
+          if modified_files:
+              print(f"Modified file average coverage: {modified_avg:.1%}")
+              for path, rate in modified_files:
+                  print(f"  {path}: {rate:.1%}")
+          else:
+              print("No covered modified files in this PR")
+
+          if new_files:
+              print(f"New file average coverage: {new_avg:.1%}")
+              for path, rate in new_files:
+                  print(f"  {path}: {rate:.1%}")
+          else:
+              print("No covered new files in this PR")
+
+          failed = False
+          if modified_files and modified_avg < threshold_modified:
+              print("Modified files coverage below threshold", file=sys.stderr)
+              failed = True
+          if new_files and new_avg < threshold_new:
+              print("New files coverage below threshold", file=sys.stderr)
+              failed = True
+
+          if failed:
+              sys.exit(1)
+          PY

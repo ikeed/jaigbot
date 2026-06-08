@@ -6,6 +6,7 @@ from typing import Any, Callable, Optional
 from fastapi import APIRouter, Depends, Request
 
 from app.services.summary_service import build_summary
+from app.constants import ENDPOINT_SUMMARY
 
 
 def create_summary_router(
@@ -17,7 +18,7 @@ def create_summary_router(
 ) -> APIRouter:
     router = APIRouter()
 
-    @router.get("/summary")
+    @router.get(ENDPOINT_SUMMARY)
     async def summary(
         request: Request,
         sessionId: Optional[str] = None,

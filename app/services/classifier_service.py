@@ -2,13 +2,11 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from typing import Any, Dict, List, Optional
 
 from app.aims_engine import evaluate_turn
 from app.models import ClassifierResult, Coaching, StepFeedback
 from app.services.chat_helpers import recent_context as build_recent_context
-from app.services.coach_safety import detect_advice_patterns
 from app.services.prompt_builders import AimsPromptBuilder
 from app.vertex import VertexClient
 
@@ -40,26 +38,12 @@ class ClassifierService:
         self.max_tokens = max_tokens
         self.client_cls = client_cls
 
-    async def classify_turn(
-        self,
-        *,
-        clinician_message: str,
-        person_last: str,
-        history: List[Dict[str, str]],
-        prior_announced: bool,
-        prior_phase: str,
-        mapping: Dict[str, Any],
-        context_turns: int = 3,
-        max_concerns: int = 3,
-        inquired_concerns_list: List[str] = None,
-        mirrored_concerns_list: List[str] = None,
-    ) -> ClassifierResult:
+    async def classify_turn(self, *, clinician_message: str, person_last: str, history: List[Dict[str, str]],
+                            prior_announced: bool, prior_phase: str, mapping: Dict[str, Any], context_turns: int = 3,
+                            inquired_concerns_list: List[str] = None, mirrored_concerns_list: List[str] = None) -> ClassifierResult:
         """Perform unified classification for a clinician turn."""
         
-        # 1. Pre-filter with deterministic hints (optional, used as context)
-        safety_hints = detect_advice_patterns(clinician_message)
-
-        # 2. Build the prompt (split: static system instruction + lean per-turn prompt)
+        # 1. Build the prompt (split: static system instruction + lean per-turn prompt)
         # The system instruction contains the full AIMS rubric, scoring rules, and
         # reference data — identical across all requests (benefits from implicit caching).
         # The per-turn prompt contains only the dynamic conversation state.
@@ -157,7 +141,7 @@ class ClassifierService:
                 
             self.logger.error("Unified classification failed, falling back: %s", e)
             return self._get_deterministic_fallback(
-                clinician_message, person_last, mapping, safety_hints
+                clinician_message, mapping
             )
 
     @staticmethod
@@ -191,10 +175,11 @@ class ClassifierService:
         mirrored_concerns: List[str],
         secured_concerns: List[str],
     ) -> Dict[str, Any]:
-        """Call Gemini to detect if the session has reached a natural conclusion.
+        """Call Gemini to detect whether the session reached a natural conclusion.
 
-        TODO: Wire this into AimsCoachingHandler._check_end_game() as an LLM-based
-        complement/replacement to the heuristic EndGameDetector. Currently prep work only.
+        AimsEndgameService.check() calls this after its hard guards pass. The
+        service then applies deterministic confirmation/fallback gates around
+        this LLM result.
         """
         prompt = AimsPromptBuilder.build_endgame_detector_prompt(
             history_text=history_text,
@@ -237,16 +222,14 @@ class ClassifierService:
             thinking_budget=128,
         )
 
+    @staticmethod
     def _get_deterministic_fallback(
-        self,
-        clinician_message: str,
-        person_last: str,
+            clinician_message: str,
         mapping: Dict[str, Any],
-        safety_hints: List[str]
     ) -> ClassifierResult:
         """Invoke the original deterministic engine as a fallback."""
         
-        fb = evaluate_turn(person_last, clinician_message, mapping)
+        fb = evaluate_turn(clinician_message, mapping)
         
         # Map deterministic 'evaluate_turn' result to ClassifierResult
         reasons = fb.get("reasons", [])
@@ -264,6 +247,6 @@ class ClassifierService:
             is_small_talk=False, # Fallback doesn't explicitly detect this well
             is_vaccine_relevant=True,
             aims=aims_coaching,
-            safety_flags=safety_hints,
+            safety_flags=[],
             reasoning="deterministic fallback"
         )

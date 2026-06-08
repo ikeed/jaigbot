@@ -5,23 +5,30 @@ import time
 from typing import Any
 
 from app.config import settings
+from app.constants import (
+    PREFIX_CHAINLIT,
+    PREFIX_CURRENT_THREAD,
+    PREFIX_THREAD,
+    KEY_THREAD_ID,
+    KEY_UPDATED
+)
 
-LEGACY_CURRENT_THREAD_KEY_PREFIX = "chainlit:current_thread:"
-LEGACY_THREAD_KEY_PREFIX = "chainlit:thread:"
+LEGACY_CURRENT_THREAD_KEY_PREFIX = f"{PREFIX_CHAINLIT}:{PREFIX_CURRENT_THREAD}:"
+LEGACY_THREAD_KEY_PREFIX = f"{PREFIX_CHAINLIT}:{PREFIX_THREAD}:"
 
 
 def _current_thread_key_prefix() -> str:
-    return f"chainlit:{settings.APP_ENV}:current_thread:"
+    return f"{PREFIX_CHAINLIT}:{settings.APP_ENV}:{PREFIX_CURRENT_THREAD}:"
 
 
 def _thread_key_prefix() -> str:
-    return f"chainlit:{settings.APP_ENV}:thread:"
+    return f"{PREFIX_CHAINLIT}:{settings.APP_ENV}:{PREFIX_THREAD}:"
 
 
 def _store() -> Any:
-    from app.main import _MEMORY_STORE
+    from app.main import MEMORY_STORE
 
-    return _MEMORY_STORE
+    return MEMORY_STORE
 
 
 def _key(user_identifier: str) -> str:
@@ -47,7 +54,7 @@ def get_current_thread_id(user_identifier: str | None) -> str | None:
     store = _store()
     value = store.get(_key(user_identifier)) or store.get(_legacy_key(user_identifier))
     if isinstance(value, dict):
-        thread_id = value.get("thread_id")
+        thread_id = value.get(KEY_THREAD_ID)
     elif isinstance(value, str):
         thread_id = value
     else:
@@ -66,8 +73,8 @@ def set_current_thread_id(user_identifier: str | None, thread_id: str | None) ->
     if not user_identifier or not thread_id:
         return
     _store()[_key(user_identifier)] = {
-        "thread_id": thread_id,
-        "updated": time.time(),
+        KEY_THREAD_ID: thread_id,
+        KEY_UPDATED: time.time(),
     }
 
 

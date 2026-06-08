@@ -13,7 +13,6 @@ permissions:
   id-token: write
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
   REGION: ${{ vars.GCP_REGION }}
   TF_BACKEND_BUCKET: ${{ vars.TF_BACKEND_BUCKET }}
@@ -51,7 +50,6 @@ jobs:
           echo "ref=${{ github.ref }}"
           echo "event_name=${{ github.event_name }}"
           echo "workflow_ref=${{ github.workflow_ref }}"
-          echo "job_workflow_ref=${{ github.job_workflow_ref }}"
           echo "actor=${{ github.actor }}"
 
       - name: Dump OIDC claims (DEBUG ONLY)
@@ -104,7 +102,7 @@ jobs:
           terraform_version: 1.7.5
 
       - name: Cache Terraform plugins
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: terraform/.terraform/providers
           key: ${{ runner.os }}-terraform-${{ hashFiles('terraform/.terraform.lock.hcl') }}

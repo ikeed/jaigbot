@@ -1,9 +1,12 @@
 import contextvars
 import json
+import logging
 import re
-from typing import Callable, Optional
+from typing import Any, Optional
 
-from ..vertex import VertexClient
+from ..vertex import VertexAIError, VertexClient
+
+_logger = logging.getLogger(__name__)
 
 # Track the model that produced the most recent response, per async task.
 # Using ContextVar instead of a module-level global avoids race conditions
@@ -17,7 +20,11 @@ def get_last_model_used() -> Optional[str]:
     return _last_model_used_var.get()
 
 
-def _extract_json_payload(text: str) -> Optional[object]:
+def _coerce_json_object(value: Any) -> Optional[dict[Any, Any]]:
+    return value if isinstance(value, dict) else None
+
+
+def _extract_json_payload(text: str) -> Optional[dict[Any, Any]]:
     """Extract a JSON value from a model response without manual brace scanning.
 
     Strategy (stable and maintainable):
@@ -41,21 +48,24 @@ def _extract_json_payload(text: str) -> Optional[object]:
         if lang and lang.lower() not in {"json", "json5"}:
             continue
         try:
-            return json.loads(body)
-        except Exception:
+            return _coerce_json_object(json.loads(body))
+        except Exception as e:
+            _logger.debug("Failed to extract JSON from labeled block: %s", e)
             pass
     # Second pass: unlabeled fences
     for _, body in matches:
         try:
-            return json.loads(body)
-        except Exception:
+            return _coerce_json_object(json.loads(body))
+        except Exception as e:
+            _logger.debug("Failed to extract JSON from unlabeled block: %s", e)
             pass
 
     # 2) Minimal cleanup fallback: remove raw fence markers/backticks and try once
     cleaned = s.replace("```", "").strip()
     try:
-        return json.loads(cleaned)
-    except Exception:
+        return _coerce_json_object(json.loads(cleaned))
+    except Exception as e:
+        _logger.debug("Failed to extract JSON from cleaned text: %s", e)
         return None
 
 
@@ -149,9 +159,13 @@ def vertex_call_with_fallback_text(
                 )
                 return plain
             return result
-        except Exception:
+        except Exception as e:
+            _logger.warning("Secondary generate_text call failed for legacy path: %s", e)
             return result
-    except Exception:
+    except VertexAIError:
+        raise
+    except Exception as e:
+        _logger.error("Primary vertex call failed: %s", e)
         result = gateway.generate_text(
             prompt=prompt,
             system_instruction=system_instruction,
@@ -240,11 +254,13 @@ async def avertex_call_with_fallback_text(
                 )
                 return plain
             return result
-        except Exception:
+        except Exception as e:
+            _logger.warning("Secondary agenerate_text call failed for legacy path: %s", e)
             return result
     except VertexAIError:
         raise
-    except Exception:
+    except Exception as e:
+        _logger.error("Primary avertex call failed: %s", e)
         result = await gateway.agenerate_text(
             prompt=prompt,
             system_instruction=system_instruction,
@@ -314,73 +330,7 @@ async def avertex_call_with_fallback_json(
             if reply:
                 return json.dumps({"patient_reply": reply}, separators=(",", ":"))
             return json.dumps(obj, separators=(",", ":"))
-        except Exception:
-            pass
-    return result
-
-
-def vertex_call_with_fallback_json(
-    *,
-    project: str,
-    region: str,
-    primary_model: str,
-    fallbacks: list[str],
-    temperature: float,
-    max_tokens: int,
-    prompt: str,
-    system_instruction: Optional[str],
-    schema: dict,
-    log_path: str,
-    logger,
-    client_cls: type = VertexClient,
-) -> str:
-    """Generate a JSON-constrained response using Vertex with model fallback logging."""
-    from .vertex_gateway import VertexGateway
-    from ..json_schemas import vertex_response_schema
-
-    models_to_try = [primary_model] + [m for m in fallbacks if m and m != primary_model]
-    tried: list[str] = []
-
-    def _on_fallback(failed_mid: str):
-        tried.append(failed_mid)
-        next_model = models_to_try[len(tried):][:1] or None
-        logger.info(
-            json.dumps(
-                {
-                    "event": "vertex_model_fallback",
-                    "path": log_path,
-                    "failedModel": failed_mid,
-                    "next": next_model,
-                }
-            )
-        )
-
-    gateway = VertexGateway(
-        project=project,
-        region=region,
-        primary_model=primary_model,
-        fallbacks=fallbacks,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        client_cls=client_cls,
-    )
-
-    result = gateway.generate_text_json(
-        prompt=prompt,
-        response_schema=vertex_response_schema(schema),
-        system_instruction=system_instruction,
-        log_fallback=_on_fallback,
-    )
-    _last_model_used_var.set(getattr(gateway, "last_model_used", primary_model))
-    # If JSON is wrapped, extract and re-serialize compactly for consumers that expect raw JSON
-    obj = _extract_json_payload(result)
-    if obj is not None:
-        try:
-            # If it's our REPLY-like schema, prefer returning the patient_reply scalar for compatibility
-            reply = _maybe_extract_patient_reply(obj)  # type: ignore[arg-type]
-            if reply:
-                return json.dumps({"patient_reply": reply}, separators=(",", ":"))
-            return json.dumps(obj, separators=(",", ":"))
-        except Exception:
+        except Exception as e:
+            _logger.warning("Failed to re-serialize JSON payload: %s", e)
             pass
     return result

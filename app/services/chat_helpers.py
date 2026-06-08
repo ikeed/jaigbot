@@ -1,6 +1,6 @@
 from typing import List, Optional
-from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, ROLE_COACH, AUTHOR_DOCTOR, AUTHOR_ASSISTANT
-from app.services.persona_service import load_robust_persona
+
+from app.chat_roles import ROLE_ASSISTANT, get_ui_attributes
 
 
 def build_system_instruction(effective_character: Optional[str], effective_scene: Optional[str]) -> Optional[str]:
@@ -27,32 +27,26 @@ def format_history(turns: list[dict], memory_max_turns: int) -> str:
     lines: List[str] = []
     for t in turns[-(memory_max_turns * 2) :]:  # user+assistant pairs
         role = t.get("role")
+        author = get_ui_attributes(role)["author"]
         content = t.get("content") or ""
-        if role == ROLE_USER:
-            lines.append(f"User: {content}")
-        elif role == ROLE_ASSISTANT:
-            lines.append(f"Assistant: {content}")
+        lines.append(f"{author}: {content}")
     return "\n".join(lines)
 
 
 def recent_context(turns: list[dict], n_turns: int) -> str:
     """Create compact recent context for classifier grounding.
-
-    Labels 'user' as Clinician and 'assistant' as Person, identical to current logic.
     """
     if not turns:
         return ""
-    tail = turns[-(n_turns) :]
+    tail = turns[-n_turns:]
     lines: List[str] = []
     for t in tail:
         role = t.get("role")
         content = (t.get("content") or "").strip()
         if not content:
             continue
-        if role == ROLE_USER:
-            lines.append(f"Clinician: {content}")
-        elif role == ROLE_ASSISTANT:
-            lines.append(f"Person: {content}")
+        author = get_ui_attributes(role)["author"]
+        lines.append(f"{author}: {content}")
     return "\n".join(lines)
 
 
@@ -110,23 +104,6 @@ def extract_recent_concerns(turns: list[dict], max_items: int = 3) -> list[str]:
                 if len(items) >= max_items:
                     break
     return list(reversed(items))
-
-
-def format_markers(md: dict) -> str:
-    """Format classification markers mapping into a compact string.
-
-    Mirrors inline helper logic in main.py exactly to avoid behavior changes.
-    """
-    try:
-        lines: List[str] = []
-        for step_name in ("Announce", "Inquire", "Mirror", "Secure"):
-            lst = (md.get(step_name, {}).get("linguistic", []) or [])
-            if lst:
-                excerpt = ", ".join(lst[:12])
-                lines.append(f"{step_name}.linguistic: [{excerpt}]")
-        return "\n".join(lines)
-    except Exception:
-        return ""
 
 
 def strip_appointment_headers(text: str) -> str:

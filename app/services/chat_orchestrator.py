@@ -20,7 +20,7 @@ from typing import Any, Optional
 from fastapi import HTTPException, Request, BackgroundTasks
 from fastapi.responses import JSONResponse
 
-from app.models import ChatRequest, Coaching, SessionMetrics, ReportRequest
+from app.models import ChatRequest, ReportRequest
 from app.services.chat_context import ChatContextBuilder, ChatContext
 from app.services.session_service import SessionService, CookieSettings
 from app.services.storage_service import storage_service
@@ -41,6 +41,7 @@ class ChatOrchestrator:
         debug_config: dict[str, Any],
         logger: Any,
     ):
+        self.background_tasks: Optional[BackgroundTasks] = None
         self.memory_store = memory_store
         self.logger = logger
         
@@ -60,7 +61,6 @@ class ChatOrchestrator:
         self.temperature = vertex_config.get("temperature", 0.0)
         self.max_tokens = vertex_config.get("max_tokens", 1024)
         self.client_cls = vertex_config.get("client_cls")
-        
         self.expose_upstream_error = debug_config.get("expose_upstream_error", False)
         self.log_response_preview_max = debug_config.get("log_response_preview_max", 100)
         
@@ -119,7 +119,8 @@ class ChatOrchestrator:
         # Validate size limit 2 KiB
         try:
             encoded = body.message.encode("utf-8")
-        except Exception:
+        except Exception as e:
+            self.logger.warning(f"UTF-8 encoding failed for message: {e}")
             raise HTTPException(
                 status_code=400,
                 detail={"error": {"message": "Invalid UTF-8 in message", "code": 400}}
@@ -175,7 +176,8 @@ class ChatOrchestrator:
             # Always include the sessionId for clients that track by id
             try:
                 response_payload["sessionId"] = ctx.session_id
-            except Exception:
+            except Exception as e:
+                self.logger.debug(f"Failed to set sessionId in response (non-fatal): {e}")
                 pass
             
             # Add optional coach post for end-game scenarios
@@ -217,7 +219,8 @@ class ChatOrchestrator:
             # Set session cookie
             try:
                 self.session_service.apply_cookie(resp, ctx.session_id)
-            except Exception:
+            except Exception as e:
+                self.logger.debug(f"Failed to apply session cookie (non-fatal): {e}")
                 pass
             
             return resp
@@ -267,7 +270,8 @@ class ChatOrchestrator:
             # Always include the sessionId for clients that track by id
             try:
                 response_payload["sessionId"] = ctx.session_id
-            except Exception:
+            except Exception as e:
+                self.logger.debug(f"Failed to set sessionId in legacy response (non-fatal): {e}")
                 pass
             
             # Add optional coaching/session if enabled and requested
@@ -281,7 +285,8 @@ class ChatOrchestrator:
             # Set session cookie
             try:
                 self.session_service.apply_cookie(resp, ctx.session_id)
-            except Exception:
+            except Exception as e:
+                self.logger.debug(f"Failed to apply session cookie in legacy path (non-fatal): {e}")
                 pass
             
             return resp
@@ -337,7 +342,8 @@ class ChatOrchestrator:
         # Set session cookie
         try:
             self.session_service.apply_cookie(resp, session_id)
-        except Exception:
+        except Exception as e:
+            self.logger.debug(f"Failed to apply session cookie (vertex error path): {e}")
             pass
         
         return resp
@@ -379,12 +385,15 @@ class ChatOrchestrator:
             
             # Identify user_id
             user_info = body.userInfo or (mem.get("user_info") if mem else None)
-            user_id = user_info.get("identifier") if user_info else "anonymous"
+            user_id = "anonymous"
+            if isinstance(user_info, dict):
+                user_id = str(user_info.get("identifier") or "anonymous")
 
             if not mem:
                 # If no session found in memory, try to fetch from GCS
                 self.logger.info(f"Session {session_id} not in memory, checking GCS for user {user_id}")
-                mem = storage_service.download_session(session_id, user_id)
+                downloaded = storage_service.download_session(session_id, user_id)
+                mem = downloaded or {}
                 
                 if not mem:
                     # No conversation history, but still archive the report itself
@@ -434,10 +443,12 @@ class ChatOrchestrator:
         
         try:
             return getattr(request.state, "request_id", None) or self._generate_uuid()
-        except Exception:
+        except Exception as e:
+            self.logger.debug(f"Error retrieving request ID: {e}")
             return self._generate_uuid()
     
-    def _generate_uuid(self) -> str:
+    @staticmethod
+    def _generate_uuid() -> str:
         """Generate a UUID string."""
         import uuid
         return str(uuid.uuid4())

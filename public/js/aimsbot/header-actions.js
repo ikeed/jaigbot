@@ -1,14 +1,14 @@
 (function (window, document) {
   "use strict";
 
-  var app = window.AIMSBotUI;
-  if (!app || app.headerActionsReady) return;
+    const app = window.AIMSBotUI;
+    if (!app || app.headerActionsReady) return;
 
   app.headerActionsReady = true;
 
   function makeHeaderButton(id, title, html, onClick) {
-    var button = document.createElement("button");
-    button.id = id;
+      const button = document.createElement("button");
+      button.id = id;
     button.type = "button";
     button.className = app.chainlitIconButtonClass;
     button.title = title;
@@ -18,8 +18,8 @@
   }
 
   function injectHeaderButtons() {
-    var rightContainer = app.findHeaderActions();
-    if (!rightContainer) return;
+      const rightContainer = app.findHeaderActions();
+      if (!rightContainer) return;
 
     if (!document.getElementById("aims-info-button")) {
       rightContainer.insertBefore(makeHeaderButton(

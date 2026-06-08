@@ -17,7 +17,12 @@ dist
 *.egg-info
 
 # Non-runtime assets
-docs/
+docs/*
+!docs/__init__.py
+!docs/aims/
+docs/aims/*
+!docs/aims/__init__.py
+!docs/aims/aims_mapping.json
 tests/
 terraform/
 scripts/

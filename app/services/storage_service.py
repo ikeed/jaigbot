@@ -5,14 +5,15 @@ import subprocess
 from typing import Dict, Any, Iterable, Optional
 from google.cloud import storage
 from app.config import settings
-from app.chat_roles import ROLE_ASSISTANT, ROLE_COACH, ROLE_SYSTEM, ROLE_USER, normalize_role
+from app.chat_roles import ROLE_ASSISTANT, ROLE_COACH, ROLE_SYSTEM, ROLE_USER
 
 logger = logging.getLogger(__name__)
 
 # Cache git hash once at startup
 try:
     GIT_HASH = subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode('ascii').strip()
-except Exception:
+except Exception as exc:
+    logger.debug("Git hash lookup failed: %s", exc)
     GIT_HASH = "unknown"
 
 class StorageService:
@@ -40,8 +41,8 @@ class StorageService:
         if self._bucket is None:
             try:
                 self._bucket = self.client.bucket(self.bucket_name)
-            except Exception as e:
-                logger.error(f"Failed to initialize GCS bucket {self.bucket_name}: {e}")
+            except Exception as bucket_exc:
+                logger.error(f"Failed to initialize GCS bucket {self.bucket_name}: {bucket_exc}")
         return self._bucket
 
     @property
@@ -51,8 +52,8 @@ class StorageService:
         if self._reports_bucket is None:
             try:
                 self._reports_bucket = self.client.bucket(self.reports_bucket_name)
-            except Exception as e:
-                logger.error(f"Failed to initialize GCS reports bucket {self.reports_bucket_name}: {e}")
+            except Exception as reports_bucket_exc:
+                logger.error(f"Failed to initialize GCS reports bucket {self.reports_bucket_name}: {reports_bucket_exc}")
         return self._reports_bucket
 
     def upload_session(self, session_id: str, user_id: str, session_data: Dict[str, Any], is_report: bool = False) -> bool:
@@ -85,22 +86,32 @@ class StorageService:
             
             logger.info(f"Successfully archived session {session_id} for user {user_id} to {path}")
             return True
-        except Exception as e:
-            logger.error(f"Failed to upload session {session_id} to GCS: {e}", exc_info=True)
+        except Exception as upload_exc:
+            logger.error(f"Failed to upload session {session_id} to GCS: {upload_exc}", exc_info=True)
             return False
 
-    def _transform_to_logical_schema(self, session_id: str, user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    @staticmethod
+    def _transform_to_logical_schema(session_id: str, user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """Convert messy internal memory to structured logical schema."""
         started_at = data.get("session_started")
         ended_at = data.get("session_ended") or data.get("updated")
 
         duration = None
-        if started_at and ended_at:
-            duration = round(ended_at - started_at, 2)
+        if started_at is not None and ended_at is not None:
+            try:
+                duration = round(float(ended_at) - float(started_at), 2)
+            except (TypeError, ValueError):
+                logger.warning("Could not calculate duration: started_at=%s, ended_at=%s", started_at, ended_at)
+                duration = None
 
         def iso(ts):
-            if not ts: return None
-            return datetime.datetime.fromtimestamp(ts, datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+            if ts is None:
+                return None
+            try:
+                return datetime.datetime.fromtimestamp(float(ts), datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+            except (TypeError, ValueError):
+                logger.warning("Could not format ISO timestamp: %s", ts)
+                return None
 
         # Re-group transcript into turns
         transcript = []
@@ -110,7 +121,7 @@ class StorageService:
         # user -> coach -> assistant, so archives should preserve that order too.
         current_turn = 0
         for entry in full_hist:
-            role = normalize_role(entry.get("role"))
+            role = (entry.get("role") or ROLE_ASSISTANT).lower().strip()
             if role == ROLE_SYSTEM:
                 transcript.append({
                     "turn": current_turn,
@@ -229,8 +240,8 @@ class StorageService:
             
             content = blob.download_as_string()
             return json.loads(content)
-        except Exception as e:
-            logger.error(f"Failed to download session {session_id} from GCS: {e}")
+        except Exception as download_exc:
+            logger.error(f"Failed to download session {session_id} from GCS: {download_exc}")
             return None
 
     def count_personas_for_user(self, user_id: str, persona_names: Iterable[str]) -> Dict[str, int]:
@@ -255,19 +266,27 @@ class StorageService:
         try:
             from app.services.persona_service import extract_persona_name_from_archive
 
+            logger.info("Starting GCS persona count for user %s", user_id)
+            count = 0
             for prefix in prefixes:
                 for blob in self.client.list_blobs(self.bucket_name, prefix=prefix):
+                    count += 1
+                    if count > 100: # Safety cap
+                        logger.warning("User %s has >100 sessions, capping count", user_id)
+                        break
                     if not str(getattr(blob, "name", "")).endswith(".json"):
                         continue
                     try:
                         data = json.loads(blob.download_as_string())
-                    except Exception:
+                    except Exception as blob_exc:
+                        logger.debug("Failed to download or parse blob %s: %s", getattr(blob, "name", "unknown"), blob_exc)
                         continue
                     persona_name = extract_persona_name_from_archive(data)
                     if persona_name in counts:
                         counts[persona_name] += 1
-        except Exception as e:
-            logger.warning("Failed to count personas for user %s from GCS: %s", user_id, e)
+            logger.info("Finished GCS persona count for user %s. Processed %d blobs.", user_id, count)
+        except Exception as count_exc:
+            logger.warning("Failed to count personas for user %s from GCS: %s", user_id, count_exc)
         return counts
 
 # Global instance

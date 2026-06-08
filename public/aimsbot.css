@@ -4,27 +4,181 @@
 */
 
 :root {
-  --coach-bg: #fff7e6;
-  --coach-border: #ffb020;
+  --shell-bg: #eef4ff;
+  --shell-bg-warm: #f8fbf4;
+  --shell-ink: #132238;
+  --shell-border: rgba(102, 134, 180, 0.2);
+  --shell-glass: rgba(255, 255, 255, 0.76);
+  --shell-shadow: 0 22px 54px rgba(30, 41, 59, 0.15);
+  --shell-shadow-strong: 0 28px 80px rgba(15, 23, 42, 0.22);
+
+  --coach-bg: linear-gradient(180deg, #fff7e5 0%, #fff2d4 100%);
+  --coach-border: #ffb44d;
+  --coach-accent: #d97a00;
   --coach-text: #704600;
 
-  --doctor-bg: #e6ffed;
-  --doctor-accent: #27c499;
-  --doctor-border: #7bdcb5;
-  --doctor-text: #123528;
+  --doctor-bg: linear-gradient(180deg, #ecfff4 0%, #ddfaec 100%);
+  --doctor-accent: #18b784;
+  --doctor-border: #87e1bf;
+  --doctor-text: #143f31;
 
-  --assistant-bg: #e6f0ff;
-  --assistant-border: #5dadec;
-  --assistant-text: #073763;
+  --assistant-bg: linear-gradient(180deg, #eef3ff 0%, #e1edff 100%);
+  --assistant-border: #8cb8ff;
+  --assistant-accent: #4d7ff7;
+  --assistant-text: #143259;
 
-  --system-bg: #f5f7fb;
-  --system-accent: #7b8794;
-  --system-border: #c9d2df;
+  --system-bg: linear-gradient(180deg, #f8faff 0%, #eef3fb 100%);
+  --system-accent: #6f83a6;
+  --system-border: #cfdaea;
   --system-text: #263241;
 
-  --aims-bubble-radius: 14px;
-  --aims-bubble-padding-y: 10px;
-  --aims-bubble-padding-x: 14px;
+  --aims-bubble-radius: 18px;
+  --aims-bubble-padding-y: 12px;
+  --aims-bubble-padding-x: 16px;
+}
+
+html,
+body {
+  background:
+    radial-gradient(circle at top left, rgba(118, 183, 255, 0.22), transparent 28%),
+    radial-gradient(circle at top right, rgba(74, 222, 128, 0.16), transparent 24%),
+    linear-gradient(180deg, var(--shell-bg) 0%, #f7fbff 48%, var(--shell-bg-warm) 100%);
+  color: var(--shell-ink);
+}
+
+body.aimsbot-shell::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 20% 18%, rgba(255, 176, 32, 0.08), transparent 20%),
+    radial-gradient(circle at 82% 12%, rgba(39, 196, 153, 0.08), transparent 18%),
+    radial-gradient(circle at 50% 100%, rgba(93, 173, 236, 0.1), transparent 28%);
+  z-index: 0;
+}
+
+body.aimsbot-shell #header,
+body.aimsbot-shell main,
+body.aimsbot-shell aside {
+  position: relative;
+  z-index: 1;
+}
+
+body.aimsbot-shell main {
+  background: transparent !important;
+}
+
+body.aimsbot-shell [class*="bg-background"] {
+  background: transparent !important;
+}
+
+body.aimsbot-shell .aimsbot-app-header,
+body.aimsbot-shell #header {
+  backdrop-filter: blur(20px);
+  background: rgba(249, 252, 255, 0.82) !important;
+  border-bottom: 1px solid var(--shell-border) !important;
+  box-shadow: 0 8px 24px rgba(41, 59, 92, 0.08);
+}
+
+body.aimsbot-shell .aimsbot-sidebar,
+body.aimsbot-shell aside {
+  backdrop-filter: blur(18px);
+  background: rgba(255, 255, 255, 0.58) !important;
+  border-right: 1px solid rgba(133, 161, 198, 0.18) !important;
+}
+
+body.aimsbot-shell #new-chat-button,
+body.aimsbot-shell #aims-info-button,
+body.aimsbot-shell #sidebar-report-button {
+  border: 1px solid rgba(128, 153, 195, 0.24) !important;
+  border-radius: 999px !important;
+  background: rgba(255, 255, 255, 0.78) !important;
+  box-shadow: 0 10px 22px rgba(22, 38, 68, 0.11);
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    background-color 160ms ease !important;
+}
+
+body.aimsbot-shell #new-chat-button:hover,
+body.aimsbot-shell #aims-info-button:hover,
+body.aimsbot-shell #sidebar-report-button:hover {
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.96) !important;
+  box-shadow: 0 16px 30px rgba(22, 38, 68, 0.16);
+}
+
+body.aimsbot-shell form.aimsbot-composer {
+  margin: 14px auto 18px !important;
+  border: 1px solid rgba(126, 155, 193, 0.22) !important;
+  border-radius: 24px !important;
+  background: rgba(255, 255, 255, 0.88) !important;
+  box-shadow: var(--shell-shadow);
+  backdrop-filter: blur(20px);
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+body.aimsbot-shell form.aimsbot-composer:focus-within {
+  border-color: rgba(77, 127, 247, 0.32) !important;
+  box-shadow: 0 22px 50px rgba(45, 92, 194, 0.2);
+  transform: translateY(-2px);
+}
+
+body.aimsbot-shell .aimsbot-composer-input,
+body.aimsbot-shell form.aimsbot-composer textarea {
+  min-height: 76px !important;
+  background: transparent !important;
+  color: #15304d !important;
+  font-size: 15px !important;
+  line-height: 1.5 !important;
+}
+
+body.aimsbot-shell .aimsbot-composer-input::placeholder,
+body.aimsbot-shell form.aimsbot-composer textarea::placeholder {
+  color: #7082a3 !important;
+}
+
+body.aimsbot-shell form.aimsbot-composer button[type="submit"] {
+  border-radius: 999px !important;
+  background: linear-gradient(135deg, #2563eb 0%, #0ea5e9 100%) !important;
+  box-shadow: 0 10px 22px rgba(37, 99, 235, 0.24);
+}
+
+body.aimsbot-shell form.aimsbot-composer button[type="submit"]:hover {
+  filter: brightness(1.04);
+}
+
+body.aimsbot-shell .aims-message-enter {
+  animation: aims-message-rise 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.aims-message-row {
+  width: min(100%, 88rem) !important;
+  margin: 0 auto 14px !important;
+}
+
+.aims-message-row + .aims-message-row {
+  margin-top: 8px !important;
+}
+
+[data-step-type] {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+@keyframes aims-message-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.988);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 /* --- Role-Based Bubble Styling --- */
@@ -33,55 +187,119 @@
   border-radius: var(--aims-bubble-radius) !important;
   padding: var(--aims-bubble-padding-y) var(--aims-bubble-padding-x) !important;
   line-height: 1.55 !important;
-  box-shadow: none !important;
+  position: relative !important;
+  overflow: visible !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+  box-shadow: var(--shell-shadow) !important;
+  transition:
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 180ms ease !important;
+}
+
+.aims-message-bubble:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shell-shadow-strong) !important;
+}
+
+.aims-message-bubble::before {
+  content: attr(data-role-label);
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  width: fit-content;
+  max-width: max-content;
+  flex: 0 0 auto;
+  margin-bottom: 8px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.55);
+  color: rgba(19, 34, 56, 0.72);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .aims-message-bubble .prose,
 .aims-message-bubble [role="article"] {
   color: inherit !important;
+  display: block !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+.aims-message-bubble .prose {
+  white-space: normal !important;
+}
+
+.aims-message-bubble > *,
+.aims-message-bubble .prose > * {
+  max-height: none !important;
+  overflow: visible !important;
 }
 
 [data-author="Doctor"] .aims-message-bubble {
-  background-color: var(--doctor-bg) !important;
+  max-width: min(60ch, 100%) !important;
+  background: var(--doctor-bg) !important;
   border: 1px solid var(--doctor-border) !important;
   border-right: 4px solid var(--doctor-accent) !important;
   color: var(--doctor-text) !important;
 }
 
-.ai-message[data-author="Assistant"] .aims-message-bubble {
-  background-color: var(--assistant-bg) !important;
+.ai-message[data-aims-role="Assistant"] .aims-message-bubble {
+  width: calc(100% - 28px) !important;
+  max-width: calc(100% - 28px) !important;
+  background: var(--assistant-bg) !important;
   border: 1px solid var(--assistant-border) !important;
-  border-left: 4px solid var(--assistant-border) !important;
+  border-left: 4px solid var(--assistant-accent) !important;
   color: var(--assistant-text) !important;
+  margin-left: 0 !important;
 }
 
-.ai-message[data-author="Coach"] .aims-message-bubble {
-  background-color: var(--coach-bg) !important;
+.ai-message[data-aims-role="Coach"] .aims-message-bubble {
+  width: calc(100% - 28px) !important;
+  max-width: calc(100% - 28px) !important;
+  background: var(--coach-bg) !important;
   border: 1px solid var(--coach-border) !important;
-  border-left: 4px solid var(--coach-border) !important;
+  border-left: 4px solid var(--coach-accent) !important;
   color: var(--coach-text) !important;
+  margin-left: 0 !important;
 }
 
-.ai-message[data-author="System"] .aims-message-bubble {
-  background-color: var(--system-bg) !important;
+.ai-message[data-aims-role="System"] .aims-message-bubble {
+  width: calc(100% - 28px) !important;
+  max-width: calc(100% - 28px) !important;
+  background: var(--system-bg) !important;
   border: 1px solid var(--system-border) !important;
   border-left: 4px solid var(--system-accent) !important;
   color: var(--system-text) !important;
+  margin-left: 0 !important;
 }
 
 /* Match the right edge of non-user bubbles to Doctor bubbles, which reserve
    space for the injected Doctor avatar on the right. */
-.ai-message[data-author="Assistant"],
-.ai-message[data-author="Coach"],
-.ai-message[data-author="System"] {
+.ai-message[data-aims-role="Assistant"],
+.ai-message[data-aims-role="Coach"],
+.ai-message[data-aims-role="System"] {
   padding-right: 28px !important;
   box-sizing: border-box !important;
+}
+
+.ai-message[data-aims-role="Assistant"] .message-content,
+.ai-message[data-aims-role="Coach"] .message-content,
+.ai-message[data-aims-role="System"] .message-content {
+  margin-left: 0 !important;
 }
 
 /* Older sessions may contain an inline-styled scenario card inside the System
    message. Flatten that legacy inner frame so it does not render as a
    bubble-within-a-bubble. */
-.ai-message[data-author="System"] .aims-message-bubble .prose > div[style*="background"] {
+.ai-message[data-aims-role="System"] .aims-message-bubble .prose > div[style*="background"] {
   background: transparent !important;
   border: 0 !important;
   border-radius: 0 !important;
@@ -90,7 +308,7 @@
 }
 
 .aims-scenario-title {
-  color: #1d4ed8 !important;
+  color: #2452b8 !important;
   font-weight: 700 !important;
   margin-bottom: 0.75rem !important;
 }
@@ -101,15 +319,16 @@
 
 .aims-scenario-line {
   margin-bottom: 0.45rem !important;
+  color: #334155 !important;
 }
 
 .aims-scenario-label {
   font-weight: 700 !important;
-  color: #374151 !important;
+  color: #24415f !important;
 }
 
 .aims-scenario-note {
-  color: #6b7280 !important;
+  color: #5f6f88 !important;
   font-style: italic !important;
 }
 
@@ -136,7 +355,7 @@
 }
 
 .aims-injected-actions {
-  margin-top: 4px !important;
+  margin-top: 8px !important;
   width: 100% !important;
   flex-basis: 100% !important;
 }
@@ -164,16 +383,37 @@
   color: hsl(var(--accent-foreground)) !important;
 }
 
+.aims-copy-button {
+  border-radius: 999px !important;
+  background: rgba(255, 255, 255, 0.65) !important;
+  border: 1px solid rgba(132, 152, 187, 0.18) !important;
+  box-shadow: 0 8px 18px rgba(29, 48, 79, 0.1);
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease !important;
+}
+
+.aims-copy-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px rgba(29, 48, 79, 0.14);
+}
+
 .aims-doctor-avatar {
   display: inline-flex !important;
-  width: 20px !important;
-  height: 20px !important;
-  margin-top: 3px !important;
+  width: 24px !important;
+  height: 24px !important;
+  margin-top: 2px !important;
   margin-left: 8px !important;
   align-self: flex-start !important;
   flex-shrink: 0 !important;
   overflow: hidden !important;
   border-radius: 9999px !important;
+}
+
+.ai-message img[alt^="Avatar for "] {
+  width: 24px !important;
+  height: 24px !important;
 }
 
 .aims-doctor-avatar img {
@@ -203,6 +443,126 @@ img[alt="AIMSBot"] {
   margin-left: 4px !important;
   font-size: 14px !important;
   font-weight: 500 !important;
+}
+
+.dark {
+  --shell-border: rgba(94, 119, 154, 0.34);
+  --shell-glass: rgba(15, 23, 42, 0.76);
+  --shell-shadow: 0 22px 54px rgba(2, 6, 23, 0.4);
+  --shell-shadow-strong: 0 28px 80px rgba(2, 6, 23, 0.5);
+
+  --coach-bg: linear-gradient(180deg, #3b2b07 0%, #2b2109 100%);
+  --coach-border: #a16a00;
+  --coach-accent: #f2ab21;
+  --coach-text: #f7e4b0;
+
+  --doctor-bg: linear-gradient(180deg, #0f2d23 0%, #12271f 100%);
+  --doctor-accent: #34d399;
+  --doctor-border: #206d56;
+  --doctor-text: #daf7ea;
+
+  --assistant-bg: linear-gradient(180deg, #152844 0%, #13233c 100%);
+  --assistant-border: #4576ba;
+  --assistant-accent: #7db5ff;
+  --assistant-text: #e5f0ff;
+
+  --system-bg: linear-gradient(180deg, #222a36 0%, #1a212c 100%);
+  --system-accent: #c0d1ea;
+  --system-border: #43556f;
+  --system-text: #f0f5ff;
+}
+
+.dark body,
+body.dark {
+  background:
+    radial-gradient(circle at top left, rgba(56, 189, 248, 0.12), transparent 28%),
+    radial-gradient(circle at top right, rgba(74, 222, 128, 0.08), transparent 24%),
+    linear-gradient(180deg, #08111f 0%, #0b1322 48%, #0e1725 100%);
+}
+
+.dark body.aimsbot-shell::before,
+body.dark.aimsbot-shell::before {
+  background:
+    radial-gradient(circle at 20% 18%, rgba(255, 176, 32, 0.08), transparent 22%),
+    radial-gradient(circle at 82% 12%, rgba(39, 196, 153, 0.08), transparent 18%),
+    radial-gradient(circle at 50% 100%, rgba(93, 173, 236, 0.08), transparent 30%);
+}
+
+.dark body.aimsbot-shell .aimsbot-app-header,
+.dark body.aimsbot-shell #header,
+body.dark.aimsbot-shell .aimsbot-app-header,
+body.dark.aimsbot-shell #header {
+  background: rgba(8, 15, 29, 0.78) !important;
+}
+
+.dark body.aimsbot-shell .aimsbot-sidebar,
+.dark body.aimsbot-shell aside,
+body.dark.aimsbot-shell .aimsbot-sidebar,
+body.dark.aimsbot-shell aside {
+  background: rgba(10, 17, 31, 0.72) !important;
+}
+
+.dark body.aimsbot-shell #new-chat-button,
+.dark body.aimsbot-shell #aims-info-button,
+.dark body.aimsbot-shell #sidebar-report-button,
+body.dark.aimsbot-shell #new-chat-button,
+body.dark.aimsbot-shell #aims-info-button,
+body.dark.aimsbot-shell #sidebar-report-button {
+  background: rgba(19, 31, 52, 0.82) !important;
+  border-color: rgba(97, 126, 166, 0.32) !important;
+}
+
+.dark body.aimsbot-shell form.aimsbot-composer,
+body.dark.aimsbot-shell form.aimsbot-composer {
+  background: rgba(11, 18, 32, 0.84) !important;
+  border-color: rgba(86, 114, 151, 0.32) !important;
+}
+
+.dark body.aimsbot-shell .aimsbot-composer-input,
+.dark body.aimsbot-shell form.aimsbot-composer textarea,
+body.dark.aimsbot-shell .aimsbot-composer-input,
+body.dark.aimsbot-shell form.aimsbot-composer textarea {
+  color: #e5eefc !important;
+}
+
+.dark body.aimsbot-shell .aimsbot-composer-input::placeholder,
+.dark body.aimsbot-shell form.aimsbot-composer textarea::placeholder,
+body.dark.aimsbot-shell .aimsbot-composer-input::placeholder,
+body.dark.aimsbot-shell form.aimsbot-composer textarea::placeholder {
+  color: #89a0c2 !important;
+}
+
+.dark .aims-message-bubble::before,
+body.dark .aims-message-bubble::before {
+  background: rgba(15, 23, 42, 0.52);
+  border-color: rgba(148, 163, 184, 0.24);
+  color: rgba(241, 245, 249, 0.88);
+}
+
+.dark .aims-copy-button,
+body.dark .aims-copy-button {
+  background: rgba(15, 23, 42, 0.56) !important;
+  border-color: rgba(100, 116, 139, 0.28) !important;
+}
+
+.dark .aims-scenario-title,
+body.dark .aims-scenario-title {
+  color: #9fc1ff !important;
+}
+
+.dark .aims-scenario-line,
+body.dark .aims-scenario-line {
+  color: #d8e4f6 !important;
+}
+
+.dark .aims-scenario-label,
+body.dark .aims-scenario-label {
+  color: #f4f8ff !important;
+}
+
+.dark .aims-scenario-note,
+body.dark .aims-scenario-note {
+  color: #b7c8e2 !important;
 }
 
 /* --- Generic AIMSBot Modals --- */

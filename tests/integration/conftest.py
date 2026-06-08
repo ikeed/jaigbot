@@ -16,7 +16,8 @@ from app.config import settings
 #   from tests.integration.conftest import ...  -- also fragile
 # The reliable pattern: test files do `from base import ...` with sys.path,
 # or we inject into conftest namespace.  We choose the latter.
-import os, sys
+import os
+import sys
 _integration_dir = os.path.dirname(__file__)
 if _integration_dir not in sys.path:
     sys.path.insert(0, _integration_dir)

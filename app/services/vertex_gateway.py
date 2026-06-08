@@ -1,4 +1,3 @@
-import json
 from typing import List, Optional, Callable
 
 from ..vertex import VertexClient as DefaultVertexClient
@@ -23,6 +22,7 @@ class VertexGateway:
         max_tokens: int = 2048,
         client_cls=None,
     ) -> None:
+        self.last_model_used: Optional[str] = None
         self.project = project
         self.region = region
         self.primary_model = primary_model
@@ -34,12 +34,27 @@ class VertexGateway:
     def _models_to_try(self) -> List[str]:
         return [self.primary_model] + self.fallbacks
 
+    def _project(self) -> str:
+        if not self.project:
+            raise RuntimeError("PROJECT_ID is required for Vertex model calls")
+        return self.project
+
     @staticmethod
     def _normalize_result(result) -> str:
         # Preserve historical behavior: support tuple(result, usage) and plain strings
         if isinstance(result, tuple) and len(result) == 2:
             return str(result[0])
         return str(result)
+
+    @staticmethod
+    def _log_fallback(log_fallback: Optional[Callable], model_id: str) -> None:
+        if not log_fallback:
+            return
+        # noinspection PyBroadException
+        try:
+            log_fallback(model_id)
+        except Exception:
+            pass
 
     def generate_text(
         self,
@@ -49,7 +64,7 @@ class VertexGateway:
     ) -> str:
         last_err = None
         for mid in self._models_to_try():
-            client = self.client_cls(project=self.project, region=self.region, model_id=mid)
+            client = self.client_cls(project=self._project(), region=self.region, model_id=mid)
             try:
                 try:
                     result = client.generate_text(
@@ -66,8 +81,7 @@ class VertexGateway:
                 return self._normalize_result(result)
             except Exception as e:
                 last_err = e
-                if log_fallback:
-                    log_fallback(mid)
+                self._log_fallback(log_fallback, mid)
                 continue
         if last_err:
             raise last_err
@@ -82,7 +96,7 @@ class VertexGateway:
     ) -> str:
         last_err = None
         for mid in self._models_to_try():
-            client = self.client_cls(project=self.project, region=self.region, model_id=mid)
+            client = self.client_cls(project=self._project(), region=self.region, model_id=mid)
             try:
                 try:
                     result = client.generate_text(
@@ -101,8 +115,7 @@ class VertexGateway:
                 return self._normalize_result(result)
             except Exception as e:
                 last_err = e
-                if log_fallback:
-                    log_fallback(mid)
+                self._log_fallback(log_fallback, mid)
                 continue
         if last_err:
             raise last_err
@@ -117,7 +130,7 @@ class VertexGateway:
         """Async variant of generate_text using VertexClient.generate_text_async()."""
         last_err = None
         for mid in self._models_to_try():
-            client = self.client_cls(project=self.project, region=self.region, model_id=mid)
+            client = self.client_cls(project=self._project(), region=self.region, model_id=mid)
             try:
                 result = await client.generate_text_async(
                     prompt=prompt,
@@ -129,8 +142,7 @@ class VertexGateway:
                 return result
             except Exception as e:
                 last_err = e
-                if log_fallback:
-                    log_fallback(mid)
+                self._log_fallback(log_fallback, mid)
                 continue
         if last_err:
             raise last_err
@@ -146,7 +158,7 @@ class VertexGateway:
         """Async variant of generate_text_json using VertexClient.generate_text_async()."""
         last_err = None
         for mid in self._models_to_try():
-            client = self.client_cls(project=self.project, region=self.region, model_id=mid)
+            client = self.client_cls(project=self._project(), region=self.region, model_id=mid)
             try:
                 result = await client.generate_text_async(
                     prompt=prompt,
@@ -160,8 +172,7 @@ class VertexGateway:
                 return result
             except Exception as e:
                 last_err = e
-                if log_fallback:
-                    log_fallback(mid)
+                self._log_fallback(log_fallback, mid)
                 continue
         if last_err:
             raise last_err

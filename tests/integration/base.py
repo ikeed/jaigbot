@@ -29,19 +29,19 @@ import copy
 import json
 import time
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Optional
 
 from fastapi.testclient import TestClient
 
 import app.main as m
-from app.config import settings
-from app.vertex import VertexAIError, VertexClient
+from app.vertex import VertexClient
 
 
 # ---------------------------------------------------------------------------
 # Stubs
 # ---------------------------------------------------------------------------
 
+# noinspection PyUnusedLocal
 class ReplyOnlyGateway:
     """Drop-in replacement for VertexGateway that scripts patient replies.
 
@@ -162,7 +162,6 @@ class TranscriptReplayTest:
         "first_inquire_done": False,
         "pending_concerns": False,
         "parent_concerns": [],
-        "mirrors_done": 0,
         "recent_coaching": [],
     }
 
@@ -193,7 +192,7 @@ class TranscriptReplayTest:
             history.append(entry)
             full_history.append({**entry, "time": now})
 
-        m._MEMORY_STORE[self.SESSION_ID] = {
+        m.MEMORY_STORE[self.SESSION_ID] = {
             "history": history,
             "full_history": full_history,
             "character": None,
@@ -281,7 +280,7 @@ class TranscriptReplayTest:
 
             # Phase assertion (needs SESSION_ID context)
             if exp.phase_after is not None:
-                state = m._MEMORY_STORE[self.SESSION_ID].get("aims_state", {})
+                state = m.MEMORY_STORE[self.SESSION_ID].get("aims_state", {})
                 actual_phase = state.get("phase")
                 prefix = f"Turn {i+1}"
                 if exp.label:
@@ -300,7 +299,7 @@ class TranscriptReplayTest:
         for msg in self.CLINICIAN_TURNS:
             self._post_turn(client, msg)
 
-        mem = m._MEMORY_STORE[self.SESSION_ID]
+        mem = m.MEMORY_STORE[self.SESSION_ID]
         full = mem.get("full_history", [])
         trimmed = mem.get("history", [])
 

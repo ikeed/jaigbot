@@ -1,0 +1,45 @@
+# Coverage.py configuration for AIMSBot
+# Explicitly define what is measured and what is omitted.
+# Docs: https://coverage.readthedocs.io/en/latest/config.html
+
+[run]
+# Measure backend package code. Non-Python files and unrelated support folders
+# remain excluded by source/omit settings.
+source =
+    app
+branch = True
+# Help IDEs like PyCharm map collected paths back to project files
+# regardless of working directory or runner intricacies.
+relative_files = True
+
+[paths]
+# Normalize paths between CLI, IDE, and potential virtualized environments.
+# This helps the IDE map measured files back to the local project tree.
+source =
+    app
+    */app
+
+# You can also set concurrency options here if needed in the future.
+# concurrency = thread
+
+[report]
+# Omit specific files/modules if needed. Non-Python files are excluded by nature,
+# but we keep explicit patterns here for clarity and future-proofing.
+omit =
+    # package dunder files and static assets
+    app/__init__.py
+    app/*/__init__.py
+    app/static/*
+    # Exclude scripts and tests from coverage
+    scripts/*
+    tests/*
+
+# Lines to exclude from consideration when computing covered/uncov lines.
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.
+    # typing-only blocks
+    if TYPE_CHECKING:
+
+# Show missing lines by default (also enabled via pytest.ini --cov-report)
+show_missing = True
