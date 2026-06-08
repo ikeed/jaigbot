@@ -224,6 +224,65 @@ async def test_replay_split_acceptance_requires_second_turn():
 
 
 @pytest.mark.asyncio
+async def test_replay_literature_followup_cannot_end_without_inquiry_or_surfaced_concern():
+    handler, memory_store = _handler(
+        turn_results=[
+            _turn(
+                step="Secure",
+                score=2,
+                patient_reply=(
+                    "I guess I can look at the literature, and we can talk about it later. "
+                    "I just really want to focus on today's problem right now."
+                ),
+                reasons=["You offered materials and a follow-up."],
+                person_topic=None,
+            ),
+        ],
+        endgame_results=[
+            {
+                "is_endgame": True,
+                "resolution_type": "accepted_literature",
+                "summary": "Person accepted information and follow-up.",
+                "reason": "",
+            },
+        ],
+    )
+    session_id = "literature-no-inquire"
+    mem = {
+        SESSION_HISTORY: [],
+        "full_history": [],
+        KEY_AIMS_STATE: {
+            "announced": True,
+            "phase": "Secure",
+            "first_inquire_done": False,
+            "pending_concerns": False,
+            "parent_concerns": [],
+            "recent_coaching": [],
+        },
+        KEY_UPDATED: time.time(),
+    }
+    ctx = _context(
+        session_id=session_id,
+        mem=mem,
+        person_last="Vaccines? I thought we were here for today's problem.",
+    )
+
+    result = await handler.handle(
+        req=None,
+        body=ChatRequest(
+            message="I can send you home with some literature and book a follow-up to talk about it.",
+            sessionId=session_id,
+            coach=True,
+        ),
+        ctx=ctx,
+    )
+
+    assert "coach_post" not in result
+    assert memory_store[session_id].get(KEY_GAME_OVER, False) is False
+    assert KEY_COACH_POST not in memory_store[session_id]
+
+
+@pytest.mark.asyncio
 async def test_replay_polite_appreciation_near_miss_does_not_end():
     handler, memory_store = _handler(
         turn_results=[
