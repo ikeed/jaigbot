@@ -60,6 +60,7 @@ def test_build_persona_session_fields_includes_interaction_guidance():
     persona = {
         "id": 99,
         "name": "Test",
+        "patient_name": "Avery",
         "brief": "A test parent.",
         "detailed": "Detailed profile.",
         "scenario": {
@@ -83,6 +84,8 @@ def test_build_persona_session_fields_includes_interaction_guidance():
     assert "Communication needs:" in fields["character"]
     assert "- Needs plain language." in fields["character"]
     assert "Trust repair: Ask permission before sharing facts." in fields["character"]
+    assert fields["persona"]["name"] == "Test"
+    assert fields["persona"]["patient_name"] == "Avery"
 
 
 def test_load_personas_falls_back_when_persona_file_is_unreadable(monkeypatch):

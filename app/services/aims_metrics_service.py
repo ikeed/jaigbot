@@ -96,6 +96,8 @@ class AimsMetricsService:
             aims = mem.get(KEY_AIMS_METRICS) or {}
             counts = {s: 0 for s in self.VALID_STEPS}
             counts.update(aims.get("perStepCounts", {}))
+            persona_value = mem.get("persona")
+            persona: dict[str, Any] = persona_value if isinstance(persona_value, dict) else {}
 
             running_avg = aims.get("runningAverage") or {}
             if not running_avg:
@@ -105,6 +107,8 @@ class AimsMetricsService:
                 "totalTurns": aims.get("totalTurns", 0),
                 "perStepCounts": counts,
                 "runningAverage": running_avg,
+                "personaName": persona.get("name"),
+                "patientName": persona.get("patient_name"),
             }
 
         except Exception as e:

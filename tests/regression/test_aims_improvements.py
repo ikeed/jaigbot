@@ -253,7 +253,7 @@ def test_secure_before_mirror_first_time_gives_standard_feedback():
     cls = {"step": "Secure", "score": 2, "reasons": [], "tips": []}
     h.apply_coaching_guidance(cls, "Secure", state, "The data shows...", "I don't trust pharma")
     assert "reflecting" in cls["reasons"][0].lower() or "mirroring" in cls["reasons"][0].lower()
-    assert state.get("recent_coaching") == ["secure_before_mirror"]
+    assert state.get("recent_coaching") == ["secure_before_mirror:trust"]
 
 
 def test_secure_before_mirror_second_time_escalates_with_topic():
@@ -262,7 +262,7 @@ def test_secure_before_mirror_second_time_escalates_with_topic():
     state = _make_state(phase="InquireMirror", concerns=[
         {"desc": "x", "topic": "trust", "is_mirrored": False, "is_secured": False},
     ])
-    state["recent_coaching"] = ["secure_before_mirror"]  # simulate 1 prior
+    state["recent_coaching"] = ["secure_before_mirror:trust"]  # simulate 1 prior
     cls = {"step": "Secure", "score": 2, "reasons": [], "tips": []}
     h.apply_coaching_guidance(cls, "Secure", state, "Studies show...", "I don't trust pharma")
     assert "trust" in cls["reasons"][0].lower()
@@ -275,7 +275,7 @@ def test_secure_before_mirror_third_time_escalates_to_pattern():
     state = _make_state(phase="InquireMirror", concerns=[
         {"desc": "x", "topic": "trust", "is_mirrored": False, "is_secured": False},
     ])
-    state["recent_coaching"] = ["secure_before_mirror", "secure_before_mirror"]
+    state["recent_coaching"] = ["secure_before_mirror:trust", "secure_before_mirror:trust"]
     cls = {"step": "Secure", "score": 2, "reasons": [], "tips": []}
     h.apply_coaching_guidance(cls, "Secure", state, "Evidence says...", "I don't trust pharma")
     assert "3" in cls["reasons"][0]  # should mention the count
@@ -288,10 +288,37 @@ def test_secure_after_mirroring_resets_coaching_counter():
     state = _make_state(phase="Secure", concerns=[
         {"desc": "x", "topic": "trust", "is_mirrored": True, "is_secured": False},
     ])
-    state["recent_coaching"] = ["secure_before_mirror", "secure_before_mirror"]
+    state["recent_coaching"] = ["secure_before_mirror:trust", "secure_before_mirror:trust"]
     cls = {"step": "Secure", "score": 2, "reasons": [], "tips": []}
     h.apply_coaching_guidance(cls, "Secure", state, "The data is clear...", "")
     assert state["recent_coaching"] == []  # counter should be reset
+
+
+def test_secure_before_mirror_does_not_escalate_for_different_topic():
+    """A prior warning on a different topic should not escalate the new topic."""
+    h = _state_service()
+    state = _make_state(phase="InquireMirror", concerns=[
+        {"desc": "x", "topic": "trust", "is_mirrored": False, "is_secured": False},
+    ])
+    state["recent_coaching"] = ["secure_before_mirror:side_effects"]
+    cls = {"step": "Secure", "score": 2, "reasons": [], "tips": []}
+    h.apply_coaching_guidance(cls, "Secure", state, "Studies show...", "I don't trust pharma")
+    assert "still" not in cls["reasons"][0].lower()
+    assert "haven't" not in cls["reasons"][0].lower()
+    assert state.get("recent_coaching")[-1] == "secure_before_mirror:trust"
+
+
+def test_secure_before_mirror_is_not_suppressed_by_earlier_other_mirror():
+    """An earlier mirrored concern elsewhere should not suppress feedback for a new unmirrored one."""
+    h = _state_service()
+    state = _make_state(phase="InquireMirror", concerns=[
+        {"desc": "side effects", "topic": "side_effects", "is_mirrored": True, "is_secured": True},
+        {"desc": "x", "topic": "trust", "is_mirrored": False, "is_secured": False},
+    ])
+    cls = {"step": "Secure", "score": 3, "reasons": [], "tips": []}
+    h.apply_coaching_guidance(cls, "Secure", state, "Studies show...", "I don't trust pharma")
+    assert any("reflecting" in reason.lower() or "mirroring" in reason.lower() for reason in cls["reasons"])
+    assert state.get("recent_coaching") == ["secure_before_mirror:trust"]
 
 
 # ---------------------------------------------------------------------------

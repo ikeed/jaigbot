@@ -87,6 +87,13 @@ def test_endgame_detector_guards_conditional_and_question_acceptance():
     }
 
 
+def test_endgame_detector_accepts_ready_to_go_ahead_phrasings():
+    assert EndGameDetector.detect("I'm ready to go ahead.") == {"reason": "accepted_now"}
+    assert EndGameDetector.detect("I think I'm ready to go ahead with it for Sophia.") == {
+        "reason": "accepted_now"
+    }
+
+
 def test_sanitize_endgame_bullets_handles_empty_quotes_duplicates_and_cap():
     raw = [
         "''",
@@ -135,3 +142,28 @@ def test_build_endgame_bullets_fallback_handles_absent_low_mid_high_and_invalid_
     assert any("Inquire 67%" in bullet and "remaining concerns" in bullet for bullet in bullets)
     assert any("Mirror 33%" in bullet and "reflect" in bullet for bullet in bullets)
     assert any(bullet.startswith("Secure:") and "absent" not in bullet for bullet in bullets)
+
+
+def test_build_endgame_bullets_fallback_personalizes_with_persona_and_patient_names():
+    bullets = build_endgame_bullets_fallback(
+        {
+            "personaName": "Zia",
+            "patientName": "Nathaniel",
+            "perStepCounts": {"Announce": 1, "Inquire": 3, "Mirror": 1, "Secure": 1},
+            "runningAverage": {
+                "Announce": 1.0,
+                "Inquire": 3.0,
+                "Mirror": 1.0,
+                "Secure": 3.0,
+            },
+        }
+    )
+
+    announce = next(b for b in bullets if b.startswith("Announce "))
+    inquire = next(b for b in bullets if b.startswith("Inquire "))
+    mirror = next(b for b in bullets if b.startswith("Mirror "))
+
+    assert "Nathaniel's due for MMR today" in announce
+    assert "Carter" not in announce
+    assert "Zia's real concerns" in inquire
+    assert "Zia's concern" in mirror

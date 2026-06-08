@@ -21,10 +21,11 @@ from app.services.aims_state_service import AimsStateService
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_endgame_service(classifier_service) -> AimsEndgameService:
+def _make_endgame_service(classifier_service, summary_bullets_builder=None) -> AimsEndgameService:
     return AimsEndgameService(
         logger=logging.getLogger("test"),
         classifier_service_getter=lambda: classifier_service,
+        summary_bullets_builder=summary_bullets_builder,
     )
 
 
@@ -63,6 +64,16 @@ class _MockClassifierService:
     async def detect_endgame(self, *, history_text: str, **kwargs) -> dict:
         self.last_history_text = history_text
         return self._result
+
+
+async def _summary_bullets_ok(mem: dict) -> list[str]:
+    del mem
+    return ["LLM bullet 1", "LLM bullet 2"]
+
+
+async def _summary_bullets_fail(mem: dict) -> list[str]:
+    del mem
+    raise RuntimeError("summary failed")
 
 
 # ---------------------------------------------------------------------------
@@ -353,11 +364,11 @@ def test_separate_patient_messages_do_not_end_when_followup_is_rejected():
 
 
 # ---------------------------------------------------------------------------
-# Tests — dual-consent gate
+# Tests — accepted_vaccine gate
 # ---------------------------------------------------------------------------
 
-def test_dual_consent_gate_blocks_vaccine_without_heuristic_confirmation():
-    """LLM says accepted_vaccine but heuristic finds no explicit consent → no endgame."""
+def test_accepted_vaccine_llm_result_is_trusted_without_heuristic_match_when_concerns_secured():
+    """LLM-recognized vaccine acceptance should not need heuristic cue confirmation."""
     mock_svc = _MockClassifierService(
         {
             "is_endgame": True,
@@ -378,11 +389,11 @@ def test_dual_consent_gate_blocks_vaccine_without_heuristic_confirmation():
     }
     service = _make_endgame_service(mock_svc)
     result = _run(service.check(store["s8"], {}, None, "s8"))
-    assert result is None, "Dual-consent gate should block without heuristic confirmation"
+    assert result is not None, "LLM vaccine acceptance should be enough when concerns are secured"
 
 
-def test_dual_consent_gate_allows_vaccine_when_both_agree():
-    """Both LLM and heuristic confirm accepted_vaccine → endgame fires."""
+def test_accepted_vaccine_blocks_when_any_concern_is_not_secured():
+    """Even with LLM acceptance, unresolved concerns should block vaccine closure."""
     mock_svc = _MockClassifierService(
         {
             "is_endgame": True,
@@ -395,21 +406,68 @@ def test_dual_consent_gate_allows_vaccine_when_both_agree():
         "s9": {
             "history": [
                 {"role": "user", "content": "MMR is recommended today."},
-                # Explicit ACCEPT_NOW_CUES match
                 {"role": "assistant", "content": "Okay, let's do it today. I consent."},
             ],
-            "aims_state": _announced_state(),
+            "aims_state": {
+                "phase": "Secure",
+                "announced": True,
+                "parent_concerns": [
+                    {
+                        "id": "ingredients",
+                        "topic": "ingredients",
+                        "desc": "wants ingredients addressed",
+                        "is_mirrored": True,
+                        "is_secured": False,
+                    }
+                ],
+            },
         }
     }
     service = _make_endgame_service(mock_svc)
     result = _run(service.check(store["s9"], {}, None, "s9"))
-    assert result is not None, "Both LLM and heuristic agree — endgame should fire"
+    assert result is None, "Unsecured concerns should block accepted_vaccine closure"
+
+
+def test_accepted_vaccine_allows_when_all_concerns_are_secured():
+    """Secured concerns plus LLM acceptance should allow vaccine closure."""
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_vaccine",
+            "summary": "Person agreed to vaccinate today.",
+            "reason": "",
+        }
+    )
+    store = {
+        "s9b": {
+            "history": [
+                {"role": "user", "content": "MMR is recommended today."},
+                {"role": "assistant", "content": "That helps. I think I'm ready to go ahead with it."},
+            ],
+            "aims_state": {
+                "phase": "Secure",
+                "announced": True,
+                "parent_concerns": [
+                    {
+                        "id": "ingredients",
+                        "topic": "ingredients",
+                        "desc": "wants ingredients addressed",
+                        "is_mirrored": True,
+                        "is_secured": True,
+                    }
+                ],
+            },
+        }
+    }
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s9b"], {}, None, "s9b"))
+    assert result is not None
     assert "Great job" in result["title"]
     assert result["lines"][0].startswith("Outcome:")
 
 
-def test_dual_consent_gate_does_not_block_literature_outcome():
-    """The dual-consent gate only applies to accepted_vaccine, not accepted_literature."""
+def test_accepted_vaccine_gate_does_not_block_literature_outcome():
+    """The secured-concerns vaccine gate only applies to accepted_vaccine."""
     mock_svc = _MockClassifierService(
         {
             "is_endgame": True,
@@ -429,7 +487,7 @@ def test_dual_consent_gate_does_not_block_literature_outcome():
     }
     service = _make_endgame_service(mock_svc)
     result = _run(service.check(store["s10"], {}, None, "s10"))
-    assert result is not None, "accepted_literature should bypass the dual-consent gate"
+    assert result is not None, "accepted_literature should bypass the accepted_vaccine gate"
     assert "Great job" in result["title"]
 
 
@@ -1010,3 +1068,74 @@ def test_deferred_llm_endgame_blocked():
     service = _make_endgame_service(mock_svc)
     result = _run(service.check(store["s17"], {}, None, "s17"))
     assert result is None, "Deferred endgame should be blocked even when LLM and language agree"
+
+
+def test_endgame_uses_summary_analysis_bullets_when_available():
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_vaccine",
+            "summary": "Person accepted vaccination today.",
+            "reason": "",
+        }
+    )
+    store = {
+        "s18": {
+            "history": [
+                {"role": "user", "content": "We can go ahead with the vaccine today."},
+                {"role": "assistant", "content": "Yes, let's do it today."},
+            ],
+            "aims_state": _announced_state(),
+            "aims": {
+                "perStepCounts": {"Announce": 1, "Inquire": 1, "Mirror": 1, "Secure": 1},
+                "scores": {"Announce": [2], "Inquire": [2], "Mirror": [2], "Secure": [2]},
+                "runningAverage": {"Announce": 2.0, "Inquire": 2.0, "Mirror": 2.0, "Secure": 2.0},
+            },
+        }
+    }
+    session_obj = {
+        "totalTurns": 1,
+        "perStepCounts": {"Announce": 1, "Inquire": 1, "Mirror": 1, "Secure": 1},
+        "runningAverage": {"Announce": 2.0, "Inquire": 2.0, "Mirror": 2.0, "Secure": 2.0},
+    }
+
+    service = _make_endgame_service(mock_svc, summary_bullets_builder=_summary_bullets_ok)
+    result = _run(service.check(store["s18"], {}, session_obj, "s18"))
+
+    assert result is not None
+    assert result["lines"][0] == "Outcome: Person accepted vaccination today."
+    assert "LLM bullet 1" in result["lines"]
+    assert "LLM bullet 2" in result["lines"]
+    assert not any("Overall AIMS score:" in line for line in result["lines"])
+
+
+def test_endgame_falls_back_to_deterministic_bullets_when_summary_analysis_fails():
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_vaccine",
+            "summary": "Person accepted vaccination today.",
+            "reason": "",
+        }
+    )
+    store = {
+        "s19": {
+            "history": [
+                {"role": "user", "content": "We can go ahead with the vaccine today."},
+                {"role": "assistant", "content": "Yes, let's do it today."},
+            ],
+            "aims_state": _announced_state(),
+        }
+    }
+    session_obj = {
+        "totalTurns": 1,
+        "perStepCounts": {"Announce": 1, "Inquire": 1, "Mirror": 1, "Secure": 1},
+        "runningAverage": {"Announce": 2.0, "Inquire": 2.0, "Mirror": 2.0, "Secure": 2.0},
+    }
+
+    service = _make_endgame_service(mock_svc, summary_bullets_builder=_summary_bullets_fail)
+    result = _run(service.check(store["s19"], {}, session_obj, "s19"))
+
+    assert result is not None
+    assert result["lines"][0] == "Outcome: Person accepted vaccination today."
+    assert any("Overall AIMS score:" in line for line in result["lines"])

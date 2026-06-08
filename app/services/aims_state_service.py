@@ -40,6 +40,8 @@ class AimsStateService:
             "overload the immune",
         ],
         "side_effects": [
+            "safe",
+            "safety",
             "side effect",
             "adverse event",
             "vaers",
@@ -113,6 +115,19 @@ class AimsStateService:
             "not ready",
             "without pressure",
             "not pushed",
+        ],
+        "requirements": [
+            "required",
+            "requirement",
+            "mandatory",
+            "have to",
+            "need to",
+            "supposed to",
+            "allowed",
+            "okay here",
+            "okay in canada",
+            "is it okay here",
+            "is it okay in canada",
         ],
     }
 
@@ -290,8 +305,6 @@ class AimsStateService:
         needs_mirror = any(
             not concern.get("is_mirrored") for concern in (state.get("parent_concerns") or [])
         )
-        if needs_mirror and state.get("mirrors_done", 0) > 0:
-            needs_mirror = False
 
         if needs_mirror and first_inquire_done:
             self._add_secure_before_mirror_feedback(cls_payload, state, character)
@@ -307,8 +320,6 @@ class AimsStateService:
         character: str | None,
     ) -> None:
         recent = state.get("recent_coaching") or []
-        secure_before_mirror_key = "secure_before_mirror"
-        repeat_count = sum(1 for item in recent if item == secure_before_mirror_key)
 
         unmirrored_topics = [
             concern.get("topic", "unknown")
@@ -316,6 +327,8 @@ class AimsStateService:
             if not concern.get("is_mirrored")
         ]
         first_unmirrored = unmirrored_topics[0] if unmirrored_topics else None
+        secure_before_mirror_key = self._secure_before_mirror_key(first_unmirrored)
+        repeat_count = self._secure_before_mirror_repeat_count(recent, first_unmirrored)
 
         if repeat_count == 0:
             if self.detect_trust_style(character) == "analytical":
@@ -345,6 +358,25 @@ class AimsStateService:
         recent.append(secure_before_mirror_key)
         state["recent_coaching"] = recent[-3:]
 
+    @staticmethod
+    def _secure_before_mirror_key(topic: str | None) -> str:
+        normalized = str(topic).strip() if topic else ""
+        return f"secure_before_mirror:{normalized}" if normalized else "secure_before_mirror"
+
+    @classmethod
+    def _secure_before_mirror_repeat_count(cls, recent: list[Any], topic: str | None) -> int:
+        topic_key = cls._secure_before_mirror_key(topic)
+        generic_key = "secure_before_mirror"
+
+        count = 0
+        for item in recent:
+            if item == topic_key:
+                count += 1
+            elif item == generic_key and topic_key != generic_key:
+                # Backward compatibility for sessions seeded before topic-local keys.
+                count += 1
+        return count
+
     def update_observational_state(
         self,
         state: dict[str, Any],
@@ -356,9 +388,6 @@ class AimsStateService:
 
         if STEP_ANNOUNCE in all_steps:
             state["announced"] = True
-
-        if STEP_MIRROR in all_steps:
-            state["mirrors_done"] = state.get("mirrors_done", 0) + 1
 
         if (
             step_current

@@ -13,6 +13,7 @@ def build_patient_reply_prompt(
     character: str | None = None,
     scene: str | None = None,
     clinician_name: str | None = None,
+    concern_state_section: str | None = None,
 ) -> str:
     """Render the AIMS patient reply prompt from the template.
 
@@ -26,6 +27,7 @@ def build_patient_reply_prompt(
         character_section=(character or ""),
         scene_section=(scene or ""),
         clinician_name_section=_clinician_name_section(clinician_name),
+        concern_state_section=(concern_state_section or "Concern state: unknown."),
     )
 
 
