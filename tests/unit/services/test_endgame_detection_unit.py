@@ -71,6 +71,11 @@ async def _summary_bullets_ok(mem: dict) -> list[str]:
     return ["LLM bullet 1", "LLM bullet 2"]
 
 
+async def _summary_bullets_thin(mem: dict) -> list[str]:
+    del mem
+    return ["Outcome: Thin summary only"]
+
+
 async def _summary_bullets_fail(mem: dict) -> list[str]:
     del mem
     raise RuntimeError("summary failed")
@@ -1104,9 +1109,47 @@ def test_endgame_uses_summary_analysis_bullets_when_available():
 
     assert result is not None
     assert result["lines"][0] == "Outcome: Person accepted vaccination today."
+    assert any("Overall AIMS score:" in line for line in result["lines"])
     assert "LLM bullet 1" in result["lines"]
     assert "LLM bullet 2" in result["lines"]
-    assert not any("Overall AIMS score:" in line for line in result["lines"])
+
+
+def test_endgame_ignores_thin_summary_analysis_and_keeps_deterministic_card():
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_vaccine",
+            "summary": "Person accepted vaccination today.",
+            "reason": "",
+        }
+    )
+    store = {
+        "s18b": {
+            "history": [
+                {"role": "user", "content": "We can go ahead with the vaccine today."},
+                {"role": "assistant", "content": "Yes, let's do it today."},
+            ],
+            "aims_state": _announced_state(),
+            "aims": {
+                "perStepCounts": {"Announce": 1, "Inquire": 1, "Mirror": 1, "Secure": 1},
+                "scores": {"Announce": [2], "Inquire": [2], "Mirror": [2], "Secure": [2]},
+                "runningAverage": {"Announce": 2.0, "Inquire": 2.0, "Mirror": 2.0, "Secure": 2.0},
+            },
+        }
+    }
+    session_obj = {
+        "totalTurns": 1,
+        "perStepCounts": {"Announce": 1, "Inquire": 1, "Mirror": 1, "Secure": 1},
+        "runningAverage": {"Announce": 2.0, "Inquire": 2.0, "Mirror": 2.0, "Secure": 2.0},
+    }
+
+    service = _make_endgame_service(mock_svc, summary_bullets_builder=_summary_bullets_thin)
+    result = _run(service.check(store["s18b"], {}, session_obj, "s18b"))
+
+    assert result is not None
+    assert result["lines"][0] == "Outcome: Person accepted vaccination today."
+    assert any("Overall AIMS score:" in line for line in result["lines"])
+    assert all("Thin summary only" not in line for line in result["lines"])
 
 
 def test_endgame_falls_back_to_deterministic_bullets_when_summary_analysis_fails():

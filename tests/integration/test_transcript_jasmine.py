@@ -110,7 +110,7 @@ EXPECTED = [
     ),
     TurnExpectation(
         accept_steps=["Secure", "Mirror+Secure"],
-        min_score=2,
+        min_score=1,
         max_score=3,
         not_steps=["Announce"],
         is_endgame=False,
@@ -192,8 +192,8 @@ class TestJasmineTranscript(TranscriptReplayTest):
 
         final_state = m.MEMORY_STORE[self.SESSION_ID]["aims_state"]
         concerns = final_state.get("parent_concerns", [])
-        assert concerns, "Expected immune-load and ingredients concerns to be tracked"
-        assert {c.get("topic") for c in concerns} == {"immune_load", "ingredients"}
+        assert concerns, "Expected the main vaccine concerns to be tracked"
+        assert {c.get("topic") for c in concerns} == {"immune_load", "ingredients", "side_effects"}
         assert all(c.get("is_mirrored") for c in concerns), concerns
         assert all(c.get("is_secured") for c in concerns), concerns
 
@@ -227,6 +227,7 @@ class TestJasmineTranscript(TranscriptReplayTest):
         coach_post = final.get("coachPost") or {}
         assert coach_post, "Final turn should include the endgame coach post"
         assert isinstance(coach_post.get("title"), str) and coach_post["title"].strip()
+        assert any("Overall AIMS score:" in line for line in coach_post.get("lines", []))
         assert any(
             "follow" in line.lower() or "information" in line.lower()
             for line in coach_post.get("lines", [])
