@@ -41,6 +41,24 @@ def _announced_state(phase: str = "InquireMirror", announced: bool = True) -> di
     return {"phase": phase, "announced": announced, "parent_concerns": []}
 
 
+def _literature_ready_state() -> dict:
+    return {
+        "phase": "Secure",
+        "announced": True,
+        "first_inquire_done": True,
+        "parent_concerns": [
+            {
+                "id": "trust",
+                "desc": "wants evidence, uncertainty, and trust addressed",
+                "topic": "trust",
+                "is_mirrored": True,
+                "is_secured": False,
+                "status": "open",
+            },
+        ],
+    }
+
+
 def _history_with_coach(include_coach: bool = True) -> list:
     hist = [
         {"role": "user", "content": "We recommend the MMR vaccine today."},
@@ -317,7 +335,7 @@ def test_separate_patient_messages_can_complete_literature_followup_endgame():
                 {"role": "user", "content": "Would a follow-up in a few weeks also be useful?"},
                 {"role": "assistant", "content": "A follow-up appointment in a few weeks sounds good."},
             ],
-            "aims_state": _announced_state(phase="Secure", announced=True),
+            "aims_state": _literature_ready_state(),
         }
     }
     service = _make_endgame_service(mock_svc)
@@ -339,7 +357,7 @@ def test_separate_patient_messages_can_complete_followup_then_literature_endgame
                 {"role": "user", "content": "Would written information also help?"},
                 {"role": "assistant", "content": "Yes, I would like some written information to review at home."},
             ],
-            "aims_state": _announced_state(phase="Secure", announced=True),
+            "aims_state": _literature_ready_state(),
         }
     }
     service = _make_endgame_service(mock_svc)
@@ -416,6 +434,7 @@ def test_accepted_vaccine_blocks_when_any_concern_is_not_secured():
             "aims_state": {
                 "phase": "Secure",
                 "announced": True,
+                "first_inquire_done": True,
                 "parent_concerns": [
                     {
                         "id": "ingredients",
@@ -452,6 +471,7 @@ def test_accepted_vaccine_allows_when_all_concerns_are_secured():
             "aims_state": {
                 "phase": "Secure",
                 "announced": True,
+                "first_inquire_done": True,
                 "parent_concerns": [
                     {
                         "id": "ingredients",
@@ -487,13 +507,48 @@ def test_accepted_vaccine_gate_does_not_block_literature_outcome():
                 {"role": "user", "content": "Here is a handout about MMR."},
                 {"role": "assistant", "content": "Thank you, I will read it at home."},
             ],
-            "aims_state": _announced_state(),
+            "aims_state": _literature_ready_state(),
         }
     }
     service = _make_endgame_service(mock_svc)
     result = _run(service.check(store["s10"], {}, None, "s10"))
     assert result is not None, "accepted_literature should bypass the accepted_vaccine gate"
     assert "Great job" in result["title"]
+
+
+def test_accepted_literature_requires_inquiry_and_surfaced_concern():
+    """A pamphlet/follow-up cop-out cannot end the scenario before inquiry and concern surfacing."""
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_literature",
+            "summary": "Person accepted information and follow-up.",
+            "reason": "",
+        }
+    )
+    store = {
+        "s10a": {
+            "history": [
+                {"role": "user", "content": "I can send you home with some literature and book a follow-up."},
+                {
+                    "role": "assistant",
+                    "content": (
+                        "I guess I can look at the literature, and we can talk about it later. "
+                        "I just really want to deal with today's problem right now."
+                    ),
+                },
+            ],
+            "aims_state": {
+                "phase": "Secure",
+                "announced": True,
+                "first_inquire_done": False,
+                "parent_concerns": [],
+            },
+        }
+    }
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s10a"], {}, None, "s10a"))
+    assert result is None
 
 
 def test_negative_literature_language_blocks_llm_accepted_literature():
@@ -515,7 +570,7 @@ def test_negative_literature_language_blocks_llm_accepted_literature():
                     "content": "I'm not going to read that information and I don't want a follow-up appointment.",
                 },
             ],
-            "aims_state": _announced_state(),
+            "aims_state": _literature_ready_state(),
         }
     }
     service = _make_endgame_service(mock_svc)
@@ -539,7 +594,7 @@ def test_deferred_outcome_does_not_trigger_endgame():
                 {"role": "user", "content": "We can discuss more at your next visit."},
                 {"role": "assistant", "content": "Yes, I would like more time to think."},
             ],
-            "aims_state": _announced_state(),
+            "aims_state": _literature_ready_state(),
         }
     }
     service = _make_endgame_service(mock_svc)
@@ -613,12 +668,13 @@ def test_unmirrored_concern_does_not_block_literature_followup_closure():
                     ),
                 },
             ],
-            "aims_state": {
-                "phase": "Secure",
-                "announced": True,
-                "parent_concerns": [
-                    {
-                        "id": "trust",
+                "aims_state": {
+                    "phase": "Secure",
+                    "announced": True,
+                    "first_inquire_done": True,
+                    "parent_concerns": [
+                        {
+                            "id": "trust",
                         "desc": "wants evidence, uncertainty, and trust addressed",
                         "topic": "trust",
                         "is_mirrored": False,
@@ -657,12 +713,13 @@ def test_unmirrored_concern_allows_natural_language_review_and_followup_closure(
                     "content": "I'll go through the information at home and revisit it at the next appointment.",
                 },
             ],
-            "aims_state": {
-                "phase": "Secure",
-                "announced": True,
-                "parent_concerns": [
-                    {
-                        "id": "trust",
+                "aims_state": {
+                    "phase": "Secure",
+                    "announced": True,
+                    "first_inquire_done": True,
+                    "parent_concerns": [
+                        {
+                            "id": "trust",
                         "desc": "wants evidence, uncertainty, and trust addressed",
                         "topic": "trust",
                         "is_mirrored": False,
@@ -704,12 +761,13 @@ def test_unmirrored_concern_with_natural_review_plan_and_active_concern_still_bl
                     ),
                 },
             ],
-            "aims_state": {
-                "phase": "Secure",
-                "announced": True,
-                "parent_concerns": [
-                    {
-                        "id": "trust",
+                "aims_state": {
+                    "phase": "Secure",
+                    "announced": True,
+                    "first_inquire_done": True,
+                    "parent_concerns": [
+                        {
+                            "id": "trust",
                         "desc": "wants evidence, uncertainty, and trust addressed",
                         "topic": "trust",
                         "is_mirrored": False,
@@ -745,6 +803,7 @@ def test_unmirrored_concern_with_literature_only_blocks_before_llm():
             "aims_state": {
                 "phase": "Secure",
                 "announced": True,
+                "first_inquire_done": True,
                 "parent_concerns": [
                     {
                         "id": "trust",
@@ -938,7 +997,7 @@ def test_llm_accepted_literature_trusted_without_keyword_match():
                 {"role": "user", "content": "Vaccines are recommended."},
                 {"role": "assistant", "content": "That sounds fair, I'll take a look at the information."},
             ],
-            "aims_state": _announced_state(),
+            "aims_state": _literature_ready_state(),
         }
     }
     service = _make_endgame_service(mock_svc)
@@ -1008,6 +1067,7 @@ def test_analytical_persona_literature_followup_closure_with_residual_uncertaint
             "aims_state": {
                 "phase": "Secure",
                 "announced": True,
+                "first_inquire_done": True,
                 "parent_concerns": [
                     {
                         "id": "trust",
@@ -1043,7 +1103,7 @@ def test_llm_deferred_not_trusted_as_endgame():
                 {"role": "user", "content": "We can discuss more about this."},
                 {"role": "assistant", "content": "Two or three weeks should give me enough time to look things over."},
             ],
-            "aims_state": _announced_state(),
+            "aims_state": _literature_ready_state(),
         }
     }
     service = _make_endgame_service(mock_svc)
