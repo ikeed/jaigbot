@@ -6,6 +6,24 @@
 
   app.messageRolesReady = true;
 
+  function roleLabel(author) {
+    if (author === "Doctor") return "Clinician";
+    if (author === "Assistant") return "Patient";
+    if (author === "Coach") return "Coach";
+    if (author === "System") return "Scenario";
+    return author || "";
+  }
+
+  function decorateMessageSurface(step, content, author) {
+    if (!step || !content || !author) return;
+    step.setAttribute("data-role-label", roleLabel(author));
+    if (!step.hasAttribute("data-aims-animated")) {
+      step.setAttribute("data-aims-animated", "true");
+      step.classList.add("aims-message-enter");
+    }
+    content.setAttribute("data-role-label", roleLabel(author));
+  }
+
   function tagAiMessage(message) {
       let author = message.getAttribute("data-author");
       if (!author) {
@@ -24,13 +42,17 @@
       if (step) {
       step.setAttribute("data-author", author);
       step.classList.add("aims-message-row");
+      decorateMessageSurface(step, message.querySelector(".message-content"), author);
       if (author === "Coach" || author === "System") {
         injectCopyButton(step);
       }
     }
 
       const content = message.querySelector(".message-content");
-      if (content) content.classList.add("aims-message-bubble");
+      if (content) {
+      content.classList.add("aims-message-bubble");
+      content.setAttribute("data-role-label", roleLabel(author));
+    }
   }
 
   function tagDoctorMessage(step) {
@@ -39,9 +61,11 @@
 
       const content = step.querySelector(".message-content");
       if (!content) return;
+      decorateMessageSurface(step, content, "Doctor");
 
       const bubble = content.closest(".relative") || content;
       bubble.classList.add("aims-message-bubble");
+      bubble.setAttribute("data-role-label", roleLabel("Doctor"));
 
       const row = bubble.parentElement;
       if (!row || row.querySelector(".aims-doctor-avatar")) {
