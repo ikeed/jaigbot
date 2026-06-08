@@ -228,8 +228,8 @@ class AimsCoachingHandler:
                     or req.headers.get("x-request-id")
                     or str(uuid.uuid4())
                 )
-            except Exception as e:
-                self.logger.warning("Failed to get request correlation id: %s", e)
+            except Exception as exc:
+                self.logger.warning("Failed to get request correlation id: %s", exc)
                 return str(uuid.uuid4())
 
         request_id = _req_id()
@@ -292,7 +292,7 @@ class AimsCoachingHandler:
 
         # Apply post-processors to BOTH LLM and fallback results
         # Vaccine relevance gate
-        mem = ctx.mem
+        mem = ctx.mem or {}
         aims_state = mem.get(KEY_AIMS_STATE, {}) or {}
         parent_concerns = aims_state.get("parent_concerns", [])
         recent_concerns_texts = [

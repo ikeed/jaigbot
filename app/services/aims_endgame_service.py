@@ -43,12 +43,11 @@ class AimsEndgameService:
     async def check(
         self,
         mem: dict[str, Any] | None,
-        reply_payload: dict[str, Any],
+        _reply_payload: dict[str, Any],
         session_obj: dict[str, Any] | None,
         session_id: str,
     ) -> dict[str, Any] | None:
         """Check for end-game scenarios using LLM-centric detection with heuristic fallback."""
-        del reply_payload
         started = time.time()
         try:
             if mem is None:

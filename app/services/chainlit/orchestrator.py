@@ -355,7 +355,7 @@ class ChainlitOrchestrator:
         
         # 1. Coaching
         coaching = data.get("coaching")
-        if coaching:
+        if isinstance(coaching, dict):
             parts = []
             if coaching.get("step"):
                 parts.append(f"Detected step: {coaching['step']}")
@@ -377,7 +377,7 @@ class ChainlitOrchestrator:
 
         # 3. Coach Post (Game Over)
         coach_post = data.get("coachPost")
-        if coach_post:
+        if isinstance(coach_post, dict):
             title = coach_post.get("title") or "✅ Scenario complete"
             combined = "\n".join([title, *(coach_post.get("lines") or [])])
             await self.ui.send_coach_message(combined)

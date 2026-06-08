@@ -210,16 +210,16 @@ class AimsStateService:
         """Return de-duplicated atomic AIMS steps for state transitions."""
         out: list[str] = []
 
-        def add(step: str | None) -> None:
-            if not step:
+        def add(component_name: str | None) -> None:
+            if not component_name:
                 return
-            expanded = cls.COMPOUND_EXPANSIONS.get(step, [step])
+            expanded = cls.COMPOUND_EXPANSIONS.get(component_name, [component_name])
             for item in expanded:
                 if item and item not in out:
                     out.append(item)
 
-        for step in steps or []:
-            add(step)
+        for item_name in steps or []:
+            add(item_name)
         add(step_current)
         return out
 
@@ -284,7 +284,7 @@ class AimsStateService:
         cls_payload: dict[str, Any],
         state: dict[str, Any],
         clinician_message: str,
-        person_last: str,
+        _person_last: str,
         character: str | None,
     ) -> None:
         first_inquire_done = state.get("first_inquire_done", False)

@@ -54,6 +54,7 @@ class AimsTurnCoordinator:
         clinician_name: str | None,
         concern_state_section: str | None = None,
     ) -> AimsTurnResult:
+        _ = max_concerns
         task_cls = asyncio.create_task(
             self._classifier_service.classify_turn(clinician_message=clinician_message, person_last=person_last,
                                                    history=history, prior_announced=prior_announced,

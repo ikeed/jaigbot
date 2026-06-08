@@ -15,6 +15,10 @@ from app.config import DEFAULT_CHARACTER, DEFAULT_SCENE, settings
 logger = logging.getLogger(__name__)
 
 
+def _text_value(value: object, default: str = "") -> str:
+    return value if isinstance(value, str) else default
+
+
 FALLBACK_PERSONA = {
     "name": "Jasmine",
     "patient_name": "Sophia",
@@ -58,7 +62,8 @@ def find_persona(name: str | None = None, persona_id: int | str | None = None) -
                 return persona
     if persona_id is not None:
         for persona in personas:
-            if str(persona.get("id")) == str(persona_id):
+            persona_value = persona.get("id")
+            if isinstance(persona_value, (str, int)) and str(persona_value) == str(persona_id):
                 return persona
     return None
 
@@ -167,7 +172,7 @@ def get_persona_counts(
     if cached is not None:
         return cached
     personas = load_personas()
-    valid_names = [str(p.get("name")) for p in personas if p.get("name")]
+    valid_names = [_text_value(p.get("name")) for p in personas if _text_value(p.get("name"))]
     counts = load_counts(user_id, valid_names) if load_counts else {}
     normalized = {name: int(counts.get(name, 0) or 0) for name in valid_names}
     save_persona_counts(user_id, normalized, store)
@@ -177,7 +182,7 @@ def get_persona_counts(
 def choose_weighted_persona(personas: list[dict], counts: dict[str, int]) -> dict:
     if not personas:
         return FALLBACK_PERSONA
-    weights = [1.0 / (int(counts.get(str(p.get("name")), 0) or 0) + 1.0) for p in personas]
+    weights = [1.0 / (int(counts.get(_text_value(p.get("name")), 0) or 0) + 1.0) for p in personas]
     return random.choices(personas, weights=weights, k=1)[0]
 
 
