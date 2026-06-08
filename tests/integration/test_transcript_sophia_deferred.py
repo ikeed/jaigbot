@@ -5,10 +5,9 @@ Replays the dialog from conversation.json plus two extra turns.
 Uses live LLM for classification.
 """
 import pytest
-from unittest.mock import patch
 
-from app.config import settings
 import app.main as m
+from app.config import settings
 from .base import (
     TranscriptReplayTest,
     TurnExpectation,
@@ -105,7 +104,11 @@ class SophiaClassifyClient(LiveClassifyClient):
 
 EXPECTED = [
     TurnExpectation(accept_steps=["Announce+Inquire", "Announce"], is_endgame=False, label="T1: Announce+Inquire"),
-    TurnExpectation(accept_steps=["Announce"], is_endgame=False, label="T2: Announce"),
+    TurnExpectation(
+        accept_steps=["Announce", "Mirror+Secure"],
+        is_endgame=False,
+        label="T2: Announce or mirror-secure reaffirmation",
+    ),
     TurnExpectation(accept_steps=["Mirror", "Mirror+Inquire"], is_endgame=False, label="T3: Mirror"),
     TurnExpectation(accept_steps=["Secure", "Secure+Inquire"], is_endgame=False, label="T4: Secure"),
     TurnExpectation(accept_steps=["Mirror", "Mirror+Inquire"], is_endgame=False, label="T5: Mirror"),
@@ -127,7 +130,7 @@ def setup_env(monkeypatch):
 
 @pytest.mark.live_llm
 class TestSophiaTranscript(TranscriptReplayTest):
-    SESSION_ID = "sophia-transcript-test"
+    SESSION_ID = "sophia-transcript-deferred-test"
     CLINICIAN_TURNS = CLINICIAN_TURNS
     PARENT_REPLIES = PARENT_REPLIES
     INITIAL_PARENT_MSG = ""

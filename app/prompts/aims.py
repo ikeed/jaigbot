@@ -1,11 +1,20 @@
 from __future__ import annotations
 
+import json
 from typing import List
 
 from .loader import load_and_render
 
 
-def build_patient_reply_prompt(*, history_text: str, clinician_last: str, character: str | None = None, scene: str | None = None) -> str:
+def build_patient_reply_prompt(
+    *,
+    history_text: str,
+    clinician_last: str,
+    character: str | None = None,
+    scene: str | None = None,
+    clinician_name: str | None = None,
+    concern_state_section: str | None = None,
+) -> str:
     """Render the AIMS patient reply prompt from the template.
 
     This is behavior-preserving relative to the previous inline string in main.py.
@@ -17,7 +26,19 @@ def build_patient_reply_prompt(*, history_text: str, clinician_last: str, charac
         clinician_last=clinician_last,
         character_section=(character or ""),
         scene_section=(scene or ""),
+        clinician_name_section=_clinician_name_section(clinician_name),
+        concern_state_section=(concern_state_section or "Concern state: unknown."),
     )
+
+
+def _clinician_name_section(clinician_name: str | None) -> str:
+    name = (clinician_name or "").strip()
+    if name:
+        return (
+            f"The clinician's name is {name}. If you naturally address the clinician, "
+            f"you may use Doctor or {name}; vary naturally and do not address them by name in every reply."
+        )
+    return "The clinician's name is unknown. Do not invent one; say doctor or omit direct address."
 
 
 def get_classify_system_instruction() -> str:
@@ -79,17 +100,6 @@ def build_endgame_detector_prompt(
     )
 
 
-def build_endgame_summary_prompt(*, metrics_blob: str, transcript: str) -> str:
-    """Render the end-of-game coaching summary prompt from the template file.
-
-    Uses the generic prompt loader to keep strings out of code and enable
-    prompt-only tuning without code changes.
-    """
-    return load_and_render(
-        "app.prompts", "endgame_summary.txt", metrics_blob=metrics_blob, transcript=transcript
-    )
-
-
 def build_summary_analysis_prompt(*, metrics_blob: str, mapping_blob: str, transcript: str) -> str:
     """Render the /summary analysis prompt using metrics, aims mapping, and transcript."""
     return load_and_render(
@@ -98,4 +108,19 @@ def build_summary_analysis_prompt(*, metrics_blob: str, mapping_blob: str, trans
         metrics_blob=metrics_blob,
         mapping_blob=mapping_blob,
         transcript=transcript,
+    )
+
+
+def build_fallback_feedback_prompt(*, context: dict) -> str:
+    """Render the fallback coaching refinement prompt.
+
+    This prompt is used only when the turn falls back to deterministic
+    scoring/coaching. It asks the model to rewrite the user-facing coaching
+    so it is more specific and less formulaic, while preserving the detected
+    step and score.
+    """
+    return load_and_render(
+        "app.prompts",
+        "aims_fallback_feedback.txt",
+        context_json=json.dumps(context, ensure_ascii=False, separators=(",", ":")),
     )

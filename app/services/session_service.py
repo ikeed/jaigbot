@@ -13,11 +13,15 @@ Design goals:
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Optional, Tuple
+import logging
 import time
 import uuid
-from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, ROLE_COACH
+from dataclasses import dataclass
+from typing import Any, Optional, Tuple
+
+from app.chat_roles import ROLE_USER, ROLE_ASSISTANT
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -86,12 +90,6 @@ class SessionService:
             return {}
         return self._store.get(session_id) or {}
 
-    def save_mem(self, session_id: str, mem: dict) -> None:
-        if not (self.memory_enabled and session_id):
-            return
-        mem["updated"] = time.time()
-        self._store[session_id] = mem
-
     def update_persona_scene(self, session_id: str, character: Optional[str], scene: Optional[str]) -> dict:
         if not (self.memory_enabled and session_id):
             return {}
@@ -106,7 +104,7 @@ class SessionService:
         return mem
 
     @staticmethod
-    def _trim_history(history: list, max_turns: int) -> list:
+    def trim_history(history: list, max_turns: int) -> list:
         """Trim history to the last *max_turns* dialogue pairs.
 
         Coach entries are interleaved but should not count toward the
@@ -132,42 +130,6 @@ class SessionService:
             kept.append(entry)
         kept.reverse()
         return kept
-
-    def append_history(self, session_id: str, role: str, content: str) -> None:
-        if not (self.memory_enabled and session_id):
-            return
-        now = time.time()
-        mem = self._store.get(session_id) or {"history": [], "full_history": [], "character": None, "scene": None, "updated": now}
-        entry = {"role": role, "content": content}
-        mem.setdefault("history", []).append(entry)
-        mem.setdefault("full_history", []).append({**entry, "time": now})
-        # Trim working history (coach-aware)
-        mem["history"] = self._trim_history(mem["history"], self.memory_max_turns)
-        mem["updated"] = now
-        self._store[session_id] = mem
-
-    # Optional helpers for metrics/state (thin wrappers around mem dict)
-    def get_aims_state(self, session_id: str) -> dict:
-        mem = self.get_mem(session_id)
-        return mem.get("aims_state") or {}
-
-    def set_aims_state(self, session_id: str, state: dict) -> None:
-        if not (self.memory_enabled and session_id):
-            return
-        mem = self.get_mem(session_id)
-        mem["aims_state"] = state
-        self.save_mem(session_id, mem)
-
-    def get_aims_metrics(self, session_id: str) -> dict:
-        mem = self.get_mem(session_id)
-        return mem.get("aims") or {}
-
-    def set_aims_metrics(self, session_id: str, aims: dict) -> None:
-        if not (self.memory_enabled and session_id):
-            return
-        mem = self.get_mem(session_id)
-        mem["aims"] = aims
-        self.save_mem(session_id, mem)
 
     # TTL prune (invoked occasionally by API layer)
     def prune_expired(self) -> None:
@@ -204,13 +166,13 @@ class SessionService:
                         # Note: prune_expired is usually called in the background or between requests,
                         # so we call upload_session directly (blocking this minor loop, not the user).
                         storage_service.upload_session(sid, user_id, archive_data)
-                    except Exception:
-                        pass # Ignore archive errors during prune
+                    except Exception as e:
+                        logger.debug("Failed to archive session %s during prune: %s", sid, e)
                         
                 self._store.pop(sid, None)
-        except Exception:
+        except Exception as e:
             # best-effort only
-            pass
+            logger.debug("Error during prune_expired: %s", e)
 
     # -------- HTTP cookie helper --------
     def apply_cookie(self, response, session_id: str) -> None:
@@ -229,6 +191,6 @@ class SessionService:
                 samesite=self.cookie.samesite,
                 path="/",
             )
-        except Exception:
+        except Exception as e:
             # Best-effort only; ignore failures
-            pass
+            logger.debug("Failed to apply session cookie: %s", e)

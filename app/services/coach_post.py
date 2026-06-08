@@ -2,6 +2,20 @@ from __future__ import annotations
 
 from typing import Dict, List
 
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def _persona_label(session_obj: Dict | None) -> str:
+    name = str((session_obj or {}).get("personaName") or "").strip()
+    return f"{name}'s" if name else "the parent's"
+
+
+def _patient_label(session_obj: Dict | None) -> str:
+    patient_name = str((session_obj or {}).get("patientName") or "").strip()
+    return f"{patient_name}'s" if patient_name else "the patient's"
+
 
 class VaccineRelevanceGate:
     """Applies vaccine-relevance gating to a classification payload.
@@ -119,7 +133,8 @@ class AimsPostProcessor:
                     filtered = ["Keep framing neutral and open; invite questions."]
                 cls_payload = dict(cls_payload)
                 cls_payload["reasons"] = filtered
-        except Exception:
+        except Exception as e:
+            logger.debug(f"AimsPostProcessor.post_process failed (non-fatal): {e}")
             pass
         return cls_payload
 
@@ -155,6 +170,8 @@ class EndGameDetector:
         "i'm on board", "i am on board", "on board with",
         "comfortable moving forward", "comfortable with moving forward", "happy to move forward",
         "move forward with it", "move forward today", "happy to proceed",
+        "ready to go ahead", "i'm ready to go ahead", "i am ready to go ahead",
+        "ready to go ahead with it", "i'm ready to go ahead with it", "i am ready to go ahead with it",
     ]
 
     FOLLOWUP_CUES = [
@@ -170,6 +187,27 @@ class EndGameDetector:
         "look over", "at home", "read over", "information",
     ]
 
+    PLAN_ACCEPTANCE_CUES = [
+        "sounds good", "sounds like a plan", "that would help", "would be helpful",
+        "would be very helpful", "that would be helpful", "excellent approach",
+        "reasonable plan", "helpful for me", "i'd like that", "i would like that",
+        "yes,", "yes ", "helpful", "sounds reasonable", "works for me",
+        "i'll take", "i will take", "talk about it at the next appointment",
+        "talk about it at the next visit", "we can talk about it",
+    ]
+
+    PLAN_NEGATIVE_CUES = [
+        "don't want", "do not want", "not going to read", "would not help",
+        "wouldn't help", "not helpful", "no point", "don't think", "do not think",
+        "not interested", "rather not", "won't read", "will not read",
+    ]
+
+    PLAN_ACTIVE_CONCERN_CUES = [
+        "still worried", "still worry", "still concerned", "still nervous",
+        "still scared", "not convinced", "not sure", "do not trust",
+        "don't trust", "safety risk", "unsafe", "still a risk",
+    ]
+
     @staticmethod
     def detect(patient_reply: str) -> dict | None:
         lt = (patient_reply or "").strip().lower()
@@ -181,7 +219,7 @@ class EndGameDetector:
         # Normalize whitespace
         lt_norm = re.sub(r"\s+", " ", lt)
         # Split into sentences; keep punctuation to check questions
-        parts = re.split(r"(?<=[\.\!\?])\s+", lt_norm) if lt_norm else []
+        parts = re.split(r"(?<=[.!?])\s+", lt_norm) if lt_norm else []
         if not parts:
             parts = [lt_norm]
 
@@ -215,19 +253,29 @@ class EndGameDetector:
 
         # Accept now — check per sentence with guards to reduce false positives
         try:
-            for sent in parts:
-                if sentence_accepts(sent):
+            for sentence in parts:
+                if sentence_accepts(sentence):
                     return {"reason": "accepted_now"}
-        except Exception:
+        except Exception as e:
+            logger.debug(f"EndGameDetector.detect failed during sentence processing: {e}")
             # Fallback to original behavior if something goes wrong
             if any(cue in lt for cue in EndGameDetector.ACCEPT_NOW_CUES):
                 return {"reason": "accepted_now"}
 
-        # Follow-up AND literature (require explicit follow-up appointment intent)
+        # Follow-up AND literature require explicit positive acceptance and no negation.
         has_followup = any(c in lt for c in EndGameDetector.FOLLOWUP_CUES)
         has_literature = any(c in lt for c in EndGameDetector.LITERATURE_CUES)
+        has_positive_acceptance = any(c in lt for c in EndGameDetector.PLAN_ACCEPTANCE_CUES)
+        has_negative_acceptance = any(c in lt for c in EndGameDetector.PLAN_NEGATIVE_CUES)
+        has_active_concern = any(c in lt for c in EndGameDetector.PLAN_ACTIVE_CONCERN_CUES)
 
-        if has_followup and has_literature:
+        if (
+            has_followup
+            and has_literature
+            and has_positive_acceptance
+            and not has_negative_acceptance
+            and not has_active_concern
+        ):
             return {"reason": "followup_literature"}
 
         return None
@@ -319,7 +367,8 @@ def endgame_title(session_obj: Dict | None, outcome: str = "") -> str:
         if overall >= 55:
             return "👏 Good job!"
         return "💪 Nice job!"
-    except Exception:
+    except Exception as e:
+        logger.debug(f"Error determining endgame title: {e}")
         return "🎉 Great job!"
 
 
@@ -332,26 +381,28 @@ def build_endgame_bullets_fallback(session_obj: Dict | None) -> List[str]:
     # Score range helpers
     _HIGH = 2.4    # >= 80%
     _MID  = 1.8    # >= 60%
+    persona_label = _persona_label(session_obj)
+    patient_label = _patient_label(session_obj)
 
     # Per-step messages keyed by performance tier
     _MSGS: Dict[str, Dict[str, str]] = {
         "Announce": {
             "high": "clear, non-pressuring recommendation — well done.",
             "mid":  "the recommendation was present; try making it more concise and following immediately with an open question.",
-            "low":  "lead with a brief presumptive recommendation, then invite input (e.g., \"Carter's due for MMR today — what are your thoughts?\").",
+            "low":  f"lead with a brief presumptive recommendation, then invite input (e.g., \"{patient_label} due for MMR today — what are your thoughts?\").",
             "absent": "introduce vaccines with a clear, non-pushy recommendation before asking for concerns.",
         },
         "Inquire": {
-            "high": "strong open questions that surfaced the parent's real concerns.",
+            "high": f"strong open questions that surfaced {persona_label} real concerns.",
             "mid":  "good inquiry; when closing the loop, explicitly invite any remaining concerns or what is still on their mind.",
             "low":  "use open-ended questions to surface concerns (e.g., \"What's still on your mind about vaccines today?\") before educating.",
-            "absent": "ask at least one open-ended question to discover the parent's specific concerns before educating.",
+            "absent": f"ask at least one open-ended question to discover {persona_label} specific concerns before educating.",
         },
         "Mirror": {
             "high": "excellent reflections — you consistently captured the concern before moving forward.",
             "mid":  "good reflections; make sure to capture the underlying value (not just the stated concern) and check for accuracy.",
-            "low":  "reflect the parent's concern before educating (e.g., \"It sounds like you want to be sure this is safe — did I get that right?\").",
-            "absent": "mirror the parent's concern back to them before offering any education — it makes them feel heard.",
+            "low":  f"reflect {persona_label} concern before educating (e.g., \"It sounds like you want to be sure this is safe — did I get that right?\").",
+            "absent": f"mirror {persona_label} concern back to them before offering any education — it makes them feel heard.",
         },
         "Secure": {
             "high": "education was well-tailored to the stated concerns without overwhelming.",
@@ -376,7 +427,8 @@ def build_endgame_bullets_fallback(session_obj: Dict | None) -> List[str]:
         try:
             v = ra.get(step)
             return float(v) if isinstance(v, (int, float)) else float("nan")
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Error calculating average score for {step}: {e}")
             return float("nan")
 
     def _pct(a: float) -> int:
@@ -393,18 +445,18 @@ def build_endgame_bullets_fallback(session_obj: Dict | None) -> List[str]:
         bullets.append(f"Overall AIMS score: {overall_pct}%")
 
     # 2. Per-step contextual feedback
-    for step in ("Announce", "Inquire", "Mirror", "Secure"):
-        c = int(counts.get(step, 0) or 0)
-        a = _avg(step)
-        msgs = _MSGS[step]
+    for step_name in ("Announce", "Inquire", "Mirror", "Secure"):
+        c = int(counts.get(step_name, 0) or 0)
+        a = _avg(step_name)
+        msgs = _MSGS[step_name]
 
         if c == 0 or a != a:  # step not used or no score data
-            bullets.append(f"{step}: {msgs['absent']}")
+            bullets.append(f"{step_name}: {msgs['absent']}")
         elif a >= _HIGH:
-            bullets.append(f"{step} {_pct(a)}% \u2014 {msgs['high']}")
+            bullets.append(f"{step_name} {_pct(a)}% \u2014 {msgs['high']}")
         elif a >= _MID:
-            bullets.append(f"{step} {_pct(a)}% \u2014 {msgs['mid']}")
+            bullets.append(f"{step_name} {_pct(a)}% \u2014 {msgs['mid']}")
         else:
-            bullets.append(f"{step} {_pct(a)}% \u2014 {msgs['low']}")
+            bullets.append(f"{step_name} {_pct(a)}% \u2014 {msgs['low']}")
 
     return bullets[:6]

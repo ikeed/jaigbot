@@ -86,37 +86,43 @@ try:
         ret_frontend = frontend.poll()
         if ret_backend is not None:
             print(f"[dev_run.py] Backend exited with code {ret_backend}. Stopping Chainlit...")
+            # noinspection PyBroadException
             try:
                 frontend.terminate()
                 frontend.wait(timeout=5)
-            except Exception:
+            except Exception as _e:
                 pass
             sys.exit(ret_backend)
         if ret_frontend is not None:
             print(f"[dev_run.py] Chainlit exited with code {ret_frontend}. Stopping backend...")
+            # noinspection PyBroadException
             try:
                 backend.terminate()
                 backend.wait(timeout=5)
-            except Exception:
+            except Exception as _e:
                 pass
             sys.exit(ret_frontend)
         time.sleep(0.5)
 except KeyboardInterrupt:
     print("[dev_run.py] KeyboardInterrupt: terminating children...")
+    # noinspection PyBroadException
     try:
         backend.terminate()
-    except Exception:
+    except Exception as _e:
         pass
+    # noinspection PyBroadException
     try:
         frontend.terminate()
-    except Exception:
+    except Exception as _e:
         pass
+    # noinspection PyBroadException
     try:
         backend.wait(timeout=5)
-    except Exception:
+    except Exception as _e:
         pass
+    # noinspection PyBroadException
     try:
         frontend.wait(timeout=5)
-    except Exception:
+    except Exception as _e:
         pass
     sys.exit(130)

@@ -11,8 +11,11 @@ configuration values via the constructor in app.main.
 from __future__ import annotations
 
 import json
+import logging
 import os
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
+
+module_logger = logging.getLogger(__name__)
 
 
 class InMemoryStore:
@@ -43,7 +46,8 @@ class InMemoryStore:
                         value["active_connections"] = []
         except FileNotFoundError:
             return
-        except Exception:
+        except Exception as e:
+            module_logger.error("Failed to load memory store from %s: %s", self._persist_path, e)
             self._store = {}
 
     def _persist(self) -> None:
@@ -57,7 +61,8 @@ class InMemoryStore:
             with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump(self._store, f, ensure_ascii=False)
             os.replace(tmp_path, self._persist_path)
-        except Exception:
+        except Exception as e:
+            module_logger.error("Failed to persist memory store to %s: %s", self._persist_path, e)
             pass
 
     def get(self, key: str) -> Optional[Dict[str, Any]]:
@@ -70,6 +75,7 @@ class InMemoryStore:
         self._store[key] = value
         self._persist()
 
+    # noinspection PyUnusedLocal
     def set(self, key: str, value: Dict[str, Any], ttl: Optional[int] = None) -> None:
         self.__setitem__(key, value)
 
@@ -110,10 +116,13 @@ class RedisStore:
         prefix: str = "aims:session:",
         fallback_prefixes: Optional[List[str]] = None,
         ttl: int = 3600,
+        logger: Optional[logging.Logger] = None,
     ) -> None:
+        self.logger = logger or logging.getLogger(__name__)
         try:
             import redis  # type: ignore
-        except Exception as e:  # pragma: no cover - import error path
+        except Exception as e:
+            self.logger.error("Failed to import Redis library: %s", e)
             raise RuntimeError(f"Redis library not available: {e}")
 
         self._prefix = prefix
@@ -123,7 +132,7 @@ class RedisStore:
         if url:
             self.r = redis.from_url(url, decode_responses=True)
         else:
-            self.r = redis.Redis(host=host, port=port, db=db, password=password, decode_responses=True)
+            self.r = redis.Redis(host=host or "localhost", port=port, db=db, password=password, decode_responses=True)
 
         # Verify connection early
         try:
@@ -144,14 +153,16 @@ class RedisStore:
                 continue
             try:
                 return json.loads(raw)
-            except Exception:  # pragma: no cover - corrupt value
+            except Exception as e:
+                self.logger.error(f"Failed to parse Redis value for key {redis_key}: {e}")
                 return None
         return None
 
     def set(self, key: str, value: Dict[str, Any], ttl: Optional[int] = None) -> None:
         try:
             raw = json.dumps(value)
-        except Exception:  # pragma: no cover - serialization error
+        except Exception as e:
+            self.logger.exception(f"Failed to serialize value for key {key}: {e}")
             raw = "{}"
         pipe = self.r.pipeline()
         pipe.set(self._k(key), raw)
@@ -164,7 +175,6 @@ class RedisStore:
         self.set(key, value)
 
     def items(self) -> List[Tuple[str, Dict[str, Any]]]:
-        cursor = 0
         out: List[Tuple[str, Dict[str, Any]]] = []
         seen = set()
         for prefix in [self._prefix, *self._fallback_prefixes]:
@@ -177,15 +187,17 @@ class RedisStore:
                     for k, v in zip(keys, vals):
                         if not v:
                             continue
+                        redis_key = k.decode("utf-8") if isinstance(k, bytes) else str(k)
                         try:
                             data = json.loads(v)
-                        except Exception:
+                        except Exception as e:
+                            self.logger.debug(f"Failed to parse Redis value for key {redis_key}: {e}")
                             data = None
                         if data is not None:
-                            sid = k[len(prefix) :]
+                            sid = redis_key[len(prefix) :]
                             if sid not in seen:
                                 seen.add(sid)
-                                out.append((sid, data))
+                                out.append((sid, cast(Dict[str, Any], data)))
                 if cursor == 0:
                     break
         return out

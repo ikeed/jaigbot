@@ -7,42 +7,36 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
 from .http_handlers import get_request_id as _get_request_id, install_http_handlers
 from .vertex import VertexClient
-from .runtime import VertexClientCache, create_memory_store
+from .runtime import VertexClientCache, create_memory_store, get_logging_config
 from .routes.chat import create_chat_router
 from .routes.session import create_session_router
 from .routes.summary import create_summary_router
 from .routes.system import create_system_router
 from .services.model_preflight import run_model_preflight
+from .constants import APP_TITLE, APP_VERSION
 
 _VERTEX_CLIENT_CACHE = VertexClientCache()
 
-
-def _get_vertex_client(project: str, region: str, model_id: str):
-    return _VERTEX_CLIENT_CACHE.get(project, region, model_id, VertexClient)
-
-logging.basicConfig(
-    level=getattr(logging, settings.LOG_LEVEL, logging.INFO),
-    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
-)
+logging.basicConfig(**get_logging_config(settings))
 logger = logging.getLogger("app")
 
-_MEMORY_STORE = create_memory_store(settings, logger)
+MEMORY_STORE = create_memory_store(settings, logger)
 
 
 @asynccontextmanager
 async def _lifespan(application: FastAPI):
     """Application lifespan: run startup tasks before yielding, cleanup after."""
-    application.state.memory_store = _MEMORY_STORE
+    application.state.memory_store = MEMORY_STORE
     application.state.vertex_client_cache = _VERTEX_CLIENT_CACHE
     await _model_preflight(application)
     yield
 
 
-app = FastAPI(title="AIMSBot (Gemini Enterprise)", version="0.2.0", lifespan=_lifespan)
+app = FastAPI(title=APP_TITLE, version=APP_VERSION, lifespan=_lifespan)
 
 
 def get_memory_store(request: Request):
-    return getattr(request.app.state, "memory_store", _MEMORY_STORE)
+    return getattr(request.app.state, "memory_store", MEMORY_STORE)
 
 
 def get_model_check(request: Request) -> dict:
@@ -140,7 +134,7 @@ def _chat_orchestrator(memory_store=None):
     from .services.chat_orchestrator import ChatOrchestrator
 
     return ChatOrchestrator(
-        memory_store=memory_store or _MEMORY_STORE,
+        memory_store=memory_store or MEMORY_STORE,
         session_cookie_settings=_session_cookie_settings(),
         memory_config=_memory_config(),
         aims_config=_aims_config(),

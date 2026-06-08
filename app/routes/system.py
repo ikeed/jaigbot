@@ -9,6 +9,14 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
 from app.persona import DEFAULT_CHARACTER, DEFAULT_SCENE
+from app.constants import (
+    ENDPOINT_HEALTHZ,
+    ENDPOINT_HISTORY,
+    ENDPOINT_CONFIG,
+    ENDPOINT_MODELCHECK,
+    ENDPOINT_DIAGNOSTICS,
+    ENDPOINT_MODELS,
+)
 
 
 def create_system_router(
@@ -21,11 +29,11 @@ def create_system_router(
 ) -> APIRouter:
     router = APIRouter()
 
-    @router.get("/healthz")
+    @router.get(ENDPOINT_HEALTHZ)
     async def healthz():
         return {"status": "ok"}
 
-    @router.get("/history")
+    @router.get(ENDPOINT_HISTORY)
     async def history(
         sessionId: Optional[str] = None,
         full: Optional[bool] = False,
@@ -51,13 +59,15 @@ def create_system_router(
                     content = it.get("content")
                     if isinstance(role, str) and isinstance(content, str):
                         out.append({"role": role, "content": content})
-                except Exception:
+                except Exception as e:
+                    logger.debug("Failed to parse history item: %s. Error: %s", it, e)
                     continue
             return {"history": out}
-        except Exception:
+        except Exception as e:
+            logger.error("Error retrieving history for session %s: %s", sessionId, e)
             return {"history": []}
 
-    @router.get("/config")
+    @router.get(ENDPOINT_CONFIG)
     async def config(
         memory_store=Depends(get_memory_store),
         model_check: dict = Depends(get_model_check),
@@ -107,11 +117,11 @@ def create_system_router(
             },
         }
 
-    @router.get("/modelcheck")
+    @router.get(ENDPOINT_MODELCHECK)
     async def modelcheck(model_check: dict = Depends(get_model_check)):
         return {"modelId": settings.MODEL_ID, "region": settings.VERTEX_LOCATION, **model_check}
 
-    @router.get("/diagnostics")
+    @router.get(ENDPOINT_DIAGNOSTICS)
     async def diagnostics(memory_store=Depends(get_memory_store)):
         """Expose effective generation settings to help root-cause truncation issues."""
         return {
@@ -142,7 +152,7 @@ def create_system_router(
             },
         }
 
-    @router.get("/models")
+    @router.get(ENDPOINT_MODELS)
     async def list_models(request: Request):
         """List available google/publisher models in this project+region using ADC."""
         import google.auth

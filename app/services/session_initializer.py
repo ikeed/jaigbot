@@ -4,7 +4,7 @@ import logging
 import time
 from typing import Any
 
-from app.chat_roles import ROLE_ASSISTANT, ROLE_SYSTEM, is_scenario_card, normalize_role
+from app.chat_roles import ROLE_ASSISTANT, ROLE_SYSTEM, is_scenario_card
 from app.services.persona_service import (
     build_persona_session_fields,
     extract_persona_name_from_text,
@@ -31,6 +31,7 @@ def initialize_session(
         return {"status": "ok"}
 
     sid = body.sessionId
+    logger.info("Initializing session %s", sid)
     now = time.time()
     mem = memory_store.get(sid)
 
@@ -46,6 +47,7 @@ def initialize_session(
             logger.info("Recovered personaId '%s' from existing memory for session %s", persona_id, sid)
 
     selected_persona = None
+    fields: dict[str, Any] | None = None
 
     if persona_id:
         try:
@@ -54,9 +56,10 @@ def initialize_session(
                 raise ValueError(f"Unknown persona {persona_id}")
 
             fields = build_persona_session_fields(selected_persona)
-            character = character or fields["character"]
-            scene = scene or fields["scene"]
-            initial_card = initial_card or fields["initial_card"]
+            if fields is not None:
+                character = character or fields["character"]
+                scene = scene or fields["scene"]
+                initial_card = initial_card or fields["initial_card"]
         except Exception as exc:
             logger.error("Failed to load persona %s: %s", persona_id, exc)
     elif not mem and not character:
@@ -71,9 +74,10 @@ def initialize_session(
                 load_counts=storage_service.count_personas_for_user,
             )
             fields = build_persona_session_fields(selected_persona)
-            character = fields["character"]
-            scene = scene or fields["scene"]
-            initial_card = initial_card or fields["initial_card"]
+            if fields is not None:
+                character = fields["character"]
+                scene = scene or fields["scene"]
+                initial_card = initial_card or fields["initial_card"]
         except Exception as exc:
             logger.warning("Failed weighted persona selection for session %s: %s", sid, exc)
 
@@ -81,18 +85,17 @@ def initialize_session(
         recovered_persona_name = extract_persona_name_from_text(character)
         if recovered_persona_name:
             selected_persona = find_persona(name=recovered_persona_name)
+            if selected_persona:
+                fields = build_persona_session_fields(selected_persona)
 
     if not mem:
+        persona_payload = fields["persona"] if selected_persona and fields is not None else None
         mem = {
             "history": [],
             "full_history": [],
             "character": character,
             "scene": scene,
-            "persona": (
-                {"id": selected_persona.get("id"), "name": selected_persona.get("name")}
-                if selected_persona
-                else None
-            ),
+            "persona": persona_payload,
             "user_info": body.userInfo,
             "updated": now,
             "session_started": now,
@@ -103,8 +106,16 @@ def initialize_session(
 
         if character:
             card_content = initial_card or _scenario_card_from_character(character)
-            mem["history"].append({"role": ROLE_SYSTEM, "content": card_content})
-            mem["full_history"].append({"role": ROLE_SYSTEM, "content": card_content, "time": now})
+            history = mem.get("history")
+            if not isinstance(history, list):
+                history = []
+                mem["history"] = history
+            full_history = mem.get("full_history")
+            if not isinstance(full_history, list):
+                full_history = []
+                mem["full_history"] = full_history
+            history.append({"role": ROLE_SYSTEM, "content": card_content})
+            full_history.append({"role": ROLE_SYSTEM, "content": card_content, "time": now})
 
         memory_store[sid] = mem
     else:
@@ -113,7 +124,8 @@ def initialize_session(
         if scene and not mem.get("scene"):
             mem["scene"] = scene
         if selected_persona and not mem.get("persona"):
-            mem["persona"] = {"id": selected_persona.get("id"), "name": selected_persona.get("name")}
+            if fields is not None:
+                mem["persona"] = fields["persona"]
         if body.userInfo and not mem.get("user_info"):
             mem["user_info"] = body.userInfo
 
@@ -203,8 +215,9 @@ def _track_connection(body: Any, sid: str, mem: dict, memory_store: Any, logger:
     return already_active
 
 
-def _session_response(body: Any, sid: str, mem: dict, already_active: bool, initial_card: str | None) -> dict:
-    persona = mem.get("persona") if isinstance(mem.get("persona"), dict) else {}
+def _session_response(_body: Any, sid: str, mem: dict, already_active: bool, initial_card: str | None) -> dict:
+    persona_data = mem.get("persona")
+    persona = persona_data if isinstance(persona_data, dict) else {}
     return {
         "status": "ok",
         "sessionId": sid,
@@ -218,7 +231,7 @@ def _session_response(body: Any, sid: str, mem: dict, already_active: bool, init
             (
                 m["content"]
                 for m in mem["history"]
-                if normalize_role(m.get("role")) in {ROLE_SYSTEM, ROLE_ASSISTANT}
+                if (m.get("role") or ROLE_ASSISTANT).lower().strip() in {ROLE_SYSTEM, ROLE_ASSISTANT}
                 and is_scenario_card(m.get("content"))
             ),
             initial_card,

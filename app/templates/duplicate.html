@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>AIMSBot - Duplicate Tab</title>
+        <style>
+            body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background: #f0f2f5; margin: 0; }
+            .card { background: white; padding: 3rem; border-radius: 12px; box-shadow: 0 8px 16px rgba(0,0,0,0.1); text-align: center; width: 500px; }
+            h2 { color: #856404; margin-top: 1rem; }
+            p { color: #666; line-height: 1.6; margin: 1.5rem 0; }
+            .btn { 
+                display: inline-block;
+                background: #007bff;
+                color: white;
+                text-decoration: none;
+                padding: 12px 24px;
+                border-radius: 6px;
+                font-weight: 600;
+                transition: background 0.2s;
+                cursor: pointer;
+                border: none;
+            }
+            .btn:hover { background: #0056b3; }
+            .icon { font-size: 48px; margin-bottom: 1rem; }
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <img src="/public/aimsbot.png" alt="AIMSBot" style="width: 256px; height: 256px; margin: 0 auto 1rem; display: block;" />
+            <div class="icon">⚠️</div>
+            <h2>Duplicate Tab Detected</h2>
+            <p>
+                It looks like you've got another tab open already. 
+                To ensure the accuracy of the simulation, only one active tab is allowed at a time.
+            </p>
+            <p style="font-size: 0.9em; color: #888;">
+                Please use your other open tab, or close it and click the button below to resume here.
+            </p>
+            <button onclick="window.location.href='/chat?force=true'" class="btn">Refresh This Tab</button>
+        </div>
+    </body>
+</html>

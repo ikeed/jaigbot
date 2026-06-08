@@ -1,8 +1,8 @@
 (function (window, document) {
   "use strict";
 
-  var app = window.AIMSBotUI = window.AIMSBotUI || {};
-  if (app.coreReady) return;
+    const app = window.AIMSBotUI = window.AIMSBotUI || {};
+    if (app.coreReady) return;
 
   app.coreReady = true;
   app.state = app.state || {};
@@ -80,9 +80,31 @@
   };
 
   app.findHeaderActions = function () {
-    var header = document.getElementById("header");
-    if (!header) return null;
+      const header = document.getElementById("header");
+      if (!header) return null;
     return header.querySelector("div.flex.items-center.gap-1") || header.lastElementChild;
+  };
+
+  app.decorateShell = function () {
+    document.documentElement.classList.add("aimsbot-shell-root");
+    document.body.classList.add("aimsbot-shell");
+
+    const header = document.getElementById("header");
+    if (header) header.classList.add("aimsbot-app-header");
+
+    document.querySelectorAll("textarea[placeholder]").forEach(function (textarea) {
+      if (textarea.id === "report-issue-modal-input") return;
+      if (textarea.closest("#report-issue-modal")) return;
+
+      const form = textarea.closest("form");
+      if (!form) return;
+      form.classList.add("aimsbot-composer");
+      textarea.classList.add("aimsbot-composer-input");
+    });
+
+    document.querySelectorAll("aside").forEach(function (aside) {
+      aside.classList.add("aimsbot-sidebar");
+    });
   };
 
   if (window.location.search.indexOf("aims_new=1") !== -1) {
@@ -90,4 +112,8 @@
   }
 
   app.removeManagedModals();
+  app.decorateShell();
+  window.setTimeout(app.decorateShell, 300);
+  window.setTimeout(app.decorateShell, 1000);
+  window.setTimeout(app.decorateShell, 2500);
 })(window, document);

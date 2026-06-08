@@ -16,14 +16,17 @@ def truncate_for_log(s: str, cap: int) -> str:
 
     If `s` is not a string or len() fails, returns the original value's str().
     """
+    # noinspection PyBroadException
     try:
         if not isinstance(s, str):
             s = str(s)
         return s if len(s) <= cap else s[:cap]
     except Exception:
+        # noinspection PyBroadException
         try:
             return str(s)
         except Exception:
+            # If even str() fails, we really can't log this safely
             return ""
 
 
@@ -52,10 +55,18 @@ def log_event(logger, event_name: str, *, caps: Optional[Dict[str, int]] = None,
 
     try:
         logger.info(json.dumps(payload))
-    except Exception:
+    except (TypeError, ValueError) as json_err:
         # Fall back to best-effort string logging if JSON serialization fails
+        # noinspection PyBroadException
         try:
-            logger.info(str(payload))
+            logger.warning("Telemetry JSON serialization failed: %s. Payload: %s", json_err, str(payload))
+        except Exception:
+            pass
+    except Exception as e:
+        # Catch-all for other logger issues
+        # noinspection PyBroadException
+        try:
+            logger.debug("Unexpected telemetry logging error: %s", e)
         except Exception:
             pass
 

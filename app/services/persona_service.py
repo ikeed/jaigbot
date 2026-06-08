@@ -3,17 +3,25 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import logging
 import random
 import time
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, Optional
+from typing import Any, Callable, Iterable
 
 from app.config import DEFAULT_CHARACTER, DEFAULT_SCENE, settings
+
+logger = logging.getLogger(__name__)
+
+
+def _text_value(value: object, default: str = "") -> str:
+    return value if isinstance(value, str) else default
 
 
 FALLBACK_PERSONA = {
     "name": "Jasmine",
+    "patient_name": "Sophia",
     "brief": "A nervous first-time parent.",
     "detailed": "Jasmine is a nervous first-time parent worried about vaccine risks.",
     "scenario": {
@@ -37,7 +45,8 @@ def _load_personas_cached() -> tuple[dict, ...]:
         personas = data.get("personas") or []
         loaded = [p for p in personas if p.get("name")]
         return tuple(loaded or [FALLBACK_PERSONA])
-    except Exception:
+    except Exception as e:
+        logger.error("Failed to load personas from %s: %s", _personas_path(), e)
         return (FALLBACK_PERSONA,)
 
 
@@ -53,7 +62,8 @@ def find_persona(name: str | None = None, persona_id: int | str | None = None) -
                 return persona
     if persona_id is not None:
         for persona in personas:
-            if str(persona.get("id")) == str(persona_id):
+            persona_value = persona.get("id")
+            if isinstance(persona_value, (str, int)) and str(persona_value) == str(persona_id):
                 return persona
     return None
 
@@ -69,7 +79,8 @@ def load_robust_persona(name: str | None = None) -> dict:
         try:
             idx = max(0, min(int(settings.PERSONA_INDEX), len(personas) - 1))
             return personas[idx]
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to use PERSONA_INDEX %s: %s", settings.PERSONA_INDEX, e)
             pass
     return random.choice(personas) if personas else FALLBACK_PERSONA
 
@@ -161,7 +172,7 @@ def get_persona_counts(
     if cached is not None:
         return cached
     personas = load_personas()
-    valid_names = [str(p.get("name")) for p in personas if p.get("name")]
+    valid_names = [_text_value(p.get("name")) for p in personas if _text_value(p.get("name"))]
     counts = load_counts(user_id, valid_names) if load_counts else {}
     normalized = {name: int(counts.get(name, 0) or 0) for name in valid_names}
     save_persona_counts(user_id, normalized, store)
@@ -171,7 +182,7 @@ def get_persona_counts(
 def choose_weighted_persona(personas: list[dict], counts: dict[str, int]) -> dict:
     if not personas:
         return FALLBACK_PERSONA
-    weights = [1.0 / (int(counts.get(str(p.get("name")), 0) or 0) + 1.0) for p in personas]
+    weights = [1.0 / (int(counts.get(_text_value(p.get("name")), 0) or 0) + 1.0) for p in personas]
     return random.choices(personas, weights=weights, k=1)[0]
 
 
@@ -268,5 +279,6 @@ def build_persona_session_fields(persona: dict) -> dict:
         "persona": {
             "id": persona.get("id"),
             "name": persona.get("name"),
+            "patient_name": persona.get("patient_name"),
         },
     }

@@ -44,6 +44,7 @@ def list_publisher_models(project: str, region: str, session: AuthorizedSession)
     return data.get("models", [])
 
 
+# noinspection PyUnresolvedReferences
 def try_generate(model_id: str) -> str:
     model = GenerativeModel(model_id)
     resp = model.generate_content("Say hello in one short sentence.")
@@ -64,6 +65,7 @@ def try_generate(model_id: str) -> str:
     raise RuntimeError("No text candidates returned from model")
 
 
+# noinspection PyUnresolvedReferences
 def main() -> int:
     project = os.getenv("PROJECT_ID") or os.getenv("GCP_PROJECT_ID")
     region = os.getenv("REGION") or os.getenv("GCP_REGION") or "us-west4"
@@ -82,7 +84,8 @@ def main() -> int:
     print(f"[check] Project={project} region={region}")
     try:
         account = creds.service_account_email if hasattr(creds, "service_account_email") else getattr(creds, "_service_account_email", None)
-    except Exception:
+    except Exception as e:
+        print(f"[check] Could not determine account email: {e}", file=sys.stderr)
         account = None
     try:
         from google.auth.transport.requests import Request as _Req

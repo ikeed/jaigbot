@@ -1,4 +1,4 @@
-from app.services.chat_helpers import format_markers, recent_context, extract_recent_concerns
+from app.services.chat_helpers import recent_context as _recent_context, extract_recent_concerns
 from app.prompts.aims import (
     build_endgame_detector_prompt as _build_endgame,
     get_classify_system_instruction as _get_classify_sysinstruction,
@@ -14,12 +14,8 @@ class AimsPromptBuilder:
     """
 
     @staticmethod
-    def markers_text(markers: dict) -> str:
-        return format_markers(markers)
-
-    @staticmethod
     def recent_context(history: list[dict], n_turns: int) -> str:
-        return recent_context(history, n_turns)
+        return _recent_context(history, n_turns)
 
     @staticmethod
     def extract_recent_concerns(history: list[dict], max_items: int) -> list[str]:

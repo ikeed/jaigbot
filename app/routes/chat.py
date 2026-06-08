@@ -5,6 +5,7 @@ from typing import Any, Callable
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
 from app.models import ChatRequest, ReportRequest
+from app.constants import ENDPOINT_CHAT, ENDPOINT_REPORT
 
 
 def create_chat_router(
@@ -14,7 +15,7 @@ def create_chat_router(
 ) -> APIRouter:
     router = APIRouter()
 
-    @router.post("/chat")
+    @router.post(ENDPOINT_CHAT)
     async def chat(
         req: Request,
         body: ChatRequest,
@@ -32,7 +33,7 @@ def create_chat_router(
 
         return await orchestrator.handle_chat(req, body, background_tasks)
 
-    @router.post("/report")
+    @router.post(ENDPOINT_REPORT)
     async def report(
         req: Request,
         body: ReportRequest,

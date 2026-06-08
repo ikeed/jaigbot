@@ -129,7 +129,6 @@ Terraform (project passed via variable):
 - terraform/README.md (examples show specific project IDs)
 
 Docs and scripts showing example defaults (replace with your project):
-- docs/plan.md (examples like `your-project-id`)
 - docs/developer-setup.md (example commands include a project id)
 - docs/api.md (mentions PROJECT_ID in configuration notes)
 - scripts/dev_run.sh (fallback default PROJECT_ID shown for convenience)
@@ -172,4 +171,4 @@ To locate references yourself, search terms used:
 ---
 
 ## Appendix: How the backend uses PROJECT_ID
-- The FastAPI backend uses `PROJECT_ID` to construct Vertex API endpoints (REST) at runtime. If `PROJECT_ID` is missing, the `/chat` route returns a structured 500 error explaining the misconfiguration (see tests/test_chat.py). It does not store or hardcode any project ids in code.
+- The FastAPI backend uses `PROJECT_ID` to construct Vertex API endpoints (REST) at runtime. If `PROJECT_ID` is missing, the `/chat` route returns a structured 500 error explaining the misconfiguration (see tests/unit/routes/test_chat.py). It does not store or hardcode any project ids in code.

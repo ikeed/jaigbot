@@ -12,15 +12,14 @@ Behavior-preserving extraction from the else/fallback path in app.main.chat().
 from __future__ import annotations
 
 import time
-from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, ROLE_COACH
 from typing import Any, Dict
 
 from fastapi import Request
 
+from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, get_ui_attributes
 from app.models import ChatRequest
 from app.services.chat_context import ChatContext
 from app.services.security_guard import JailbreakGuard
-from app.services.vertex_helpers import vertex_call_with_fallback_text
 from app.vertex import VertexClient
 
 
@@ -56,7 +55,7 @@ class LegacyChatHandler:
         self.jailbreak_guard = JailbreakGuard()
     
     async def handle(
-        self, req: Request, body: ChatRequest, ctx: ChatContext
+        self, _req: Request, body: ChatRequest, ctx: ChatContext
     ) -> Dict[str, Any]:
         """Handle the traditional chat flow."""
         started = time.time()
@@ -82,7 +81,8 @@ class LegacyChatHandler:
             if not (ctx.person_last or "").strip():
                 from app.services.chat_helpers import strip_appointment_headers
                 reply_text = strip_appointment_headers(reply_text)
-        except Exception:
+        except Exception as e:
+            self.logger.debug(f"Failed to strip appointment headers: {e}")
             pass
         
         # Update conversation history
@@ -107,7 +107,8 @@ class LegacyChatHandler:
         try:
             from app.services.vertex_helpers import get_last_model_used
             model_used = get_last_model_used() or self.model_id
-        except Exception:
+        except Exception as e:
+            self.logger.debug(f"Failed to determine last model used: {e}")
             model_used = self.model_id
 
         return {
@@ -116,7 +117,8 @@ class LegacyChatHandler:
             "latency_ms": latency_ms,
         }
     
-    def _build_full_prompt(self, ctx: ChatContext, current_message: str) -> str:
+    @staticmethod
+    def _build_full_prompt(ctx: ChatContext, current_message: str) -> str:
         """Build complete prompt from system + history + current message."""
         # Start with system instruction if available
         parts = []
@@ -129,8 +131,10 @@ class LegacyChatHandler:
             parts.append(ctx.history_text)
         
         # Add current user message
-        parts.append(f"User: {current_message}")
-        parts.append("Assistant:")
+        user_author = get_ui_attributes(ROLE_USER)["author"]
+        asst_author = get_ui_attributes(ROLE_ASSISTANT)["author"]
+        parts.append(f"{user_author}: {current_message}")
+        parts.append(f"{asst_author}:")
         
         return "\n\n".join(parts)
     
@@ -156,7 +160,7 @@ class LegacyChatHandler:
             
             return (raw_response or "").strip() or "I'm sorry, I didn't understand that. Could you please rephrase?"
             
-        except VertexAIError as e:
+        except VertexAIError:
             # Re-raise VertexAI errors so the orchestrator can handle them properly
             raise
         except Exception as e:
@@ -177,17 +181,25 @@ class LegacyChatHandler:
             }
             user_entry = {"role": ROLE_USER, "content": user_message}
             asst_entry = {"role": ROLE_ASSISTANT, "content": assistant_reply}
-            mem.setdefault("history", []).append(user_entry)
-            mem["history"].append(asst_entry)
-            mem.setdefault("full_history", []).append({**user_entry, "time": now})
-            mem["full_history"].append({**asst_entry, "time": now})
+            history = mem.setdefault("history", [])
+            if not isinstance(history, list):
+                history = []
+                mem["history"] = history
+            history.append(user_entry)
+            history.append(asst_entry)
+            full_history = mem.setdefault("full_history", [])
+            if not isinstance(full_history, list):
+                full_history = []
+                mem["full_history"] = full_history
+            full_history.append({**user_entry, "time": now})
+            full_history.append({**asst_entry, "time": now})
             
             # Trim working history (coach-aware)
             from app.services.session_service import SessionService
-            mem["history"] = SessionService._trim_history(mem["history"], self.memory_max_turns)
+            mem["history"] = SessionService.trim_history(mem["history"], self.memory_max_turns)
             
             mem["updated"] = now
             self.memory_store[session_id] = mem
             
-        except Exception:
-            self.logger.debug("Memory persistence failed for session %s", session_id)
+        except Exception as e:
+            self.logger.debug("Memory persistence failed for session %s: %s", session_id, e)

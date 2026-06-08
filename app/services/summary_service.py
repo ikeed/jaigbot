@@ -3,11 +3,13 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, ROLE_COACH, AUTHOR_DOCTOR, AUTHOR_ASSISTANT
 import re
 from typing import Any
 
+from app.chat_roles import ROLE_ASSISTANT, get_ui_attributes
 from app.telemetry.events import log_event as telemetry_log_event
+
+module_logger = logging.getLogger(__name__)
 
 
 DEFAULT_STEP_COVERAGE = {"Announce": 0, "Inquire": 0, "Mirror": 0, "Secure": 0}
@@ -35,7 +37,8 @@ async def build_summary(
     aims = mem.get("aims") or {}
     per_counts = _step_counts(aims)
     running_avg = _running_average(aims)
-    overall = (sum(running_avg.values()) / len(running_avg)) if running_avg else 0.0
+    overall_total = float(sum(running_avg.values()))
+    overall = (overall_total / len(running_avg)) if running_avg else 0.0
 
     base.update({
         "overallScore": overall,
@@ -66,6 +69,32 @@ async def build_summary(
     return base
 
 
+async def build_summary_analysis_bullets(
+    *,
+    mem: dict,
+    settings: Any,
+    logger: logging.Logger,
+    app_state: Any,
+    vertex_client_cls: Any,
+) -> list[str]:
+    """Return sanitized LLM analysis bullets for an in-memory AIMS session.
+
+    Raises on upstream analysis failures so callers can decide whether to
+    surface no analysis or fall back to deterministic messaging.
+    """
+    aims = mem.get("aims") or {}
+    per_counts = _step_counts(aims)
+    return await _analysis_bullets(
+        mem=mem,
+        aims=aims,
+        per_counts=per_counts,
+        settings=settings,
+        logger=logger,
+        app_state=app_state,
+        vertex_client_cls=vertex_client_cls,
+    )
+
+
 def _base_summary() -> dict:
     return {
         "overallScore": 0.0,
@@ -81,13 +110,15 @@ def _step_counts(aims: dict) -> dict[str, int]:
     return per_counts
 
 
+# noinspection PyUnresolvedReferences
 def _running_average(aims: dict) -> dict[str, float]:
     running_avg: dict[str, float] = {}
     for key, scores in (aims.get("scores", {}) or {}).items():
         if scores:
             try:
                 running_avg[key] = sum(scores) / len(scores)
-            except Exception:
+            except Exception as e:
+                module_logger.debug("Failed to calculate running average for %s: %s", key, e)
                 pass
     return running_avg
 
@@ -139,7 +170,8 @@ async def _analysis_bullets(
     try:
         from app.services.coach_post import sanitize_endgame_bullets
         bullets = sanitize_endgame_bullets(bullets_raw)
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to sanitize bullets: %s", e)
         bullets = [line.strip(" -\t") for line in bullets_raw]
 
     return _enforce_metrics_consistency(bullets, per_counts)
@@ -150,12 +182,13 @@ def _build_transcript(mem: dict) -> str:
         parts = []
         for item in mem.get("history") or []:
             role = item.get("role") or ROLE_ASSISTANT
-            author = AUTHOR_DOCTOR if role == ROLE_USER else "Patient"
+            author = get_ui_attributes(role)["author"]
             text = (item.get("content") or "").strip()
             if text:
                 parts.append(f"{author}: {text}")
         return "\n".join(parts)
-    except Exception:
+    except Exception as e:
+        module_logger.debug("Failed to build transcript: %s", e)
         return ""
 
 
@@ -168,7 +201,8 @@ def _load_mapping(app_state: Any) -> dict:
         mapping = load_mapping()
         app_state.aims_mapping = mapping
         return mapping
-    except Exception:
+    except Exception as e:
+        module_logger.debug("Failed to load mapping: %s", e)
         return {}
 
 
