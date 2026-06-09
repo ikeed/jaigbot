@@ -71,7 +71,18 @@ def test_build_persona_session_fields_includes_interaction_guidance():
         },
         "interaction": {
             "communication_needs": ["Needs plain language."],
+            "opening_posture": "Guarded but polite.",
+            "voice": "Brief and practical.",
+            "response_style": "Answers directly.",
+            "decision_style": "Wants time to think.",
+            "non_vaccine_agenda": "Also wants help with today's symptoms.",
+            "emotional_triggers": ["Being rushed."],
+            "rapport_signals": ["Asks follow-up questions."],
+            "shutdown_signals": ["Becomes very brief."],
             "likely_questions": ["Is this safe?"],
+            "good_clinician_moves": ["Ask permission before advising."],
+            "bad_clinician_moves": ["Sound judgmental."],
+            "response_style_examples": ["I just need to understand it."],
             "avoid": ["Do not lecture."],
             "trust_repair": "Ask permission before sharing facts.",
             "conversation_challenge": "May agree before understanding.",
@@ -82,10 +93,45 @@ def test_build_persona_session_fields_includes_interaction_guidance():
 
     assert "Behavioral Guidance:" in fields["character"]
     assert "Communication needs:" in fields["character"]
+    assert "Opening posture: Guarded but polite." in fields["character"]
+    assert "Voice: Brief and practical." in fields["character"]
+    assert "Emotional triggers:" in fields["character"]
+    assert "- Being rushed." in fields["character"]
     assert "- Needs plain language." in fields["character"]
     assert "Trust repair: Ask permission before sharing facts." in fields["character"]
     assert fields["persona"]["name"] == "Test"
     assert fields["persona"]["patient_name"] == "Avery"
+
+
+def test_build_persona_session_fields_handles_string_and_invalid_interaction_types():
+    persona = {
+        "id": 100,
+        "name": "Test",
+        "patient_name": "Avery",
+        "brief": "A test parent.",
+        "detailed": "Detailed profile.",
+        "scenario": {
+            "visit_reason": "Clinic visit.",
+            "detailed_instructions": "Stay in role.",
+            "user_sketch": "At the clinic.",
+            "vaccine_related": True,
+        },
+        "interaction": {
+            "communication_needs": "Needs plain language.",
+            "opening_posture": ["wrong-shape"],
+            "voice": {"also": "wrong-shape"},
+            "response_style_examples": "I just need to understand it."
+        },
+    }
+
+    fields = persona_service.build_persona_session_fields(persona)
+
+    assert "Communication needs:" in fields["character"]
+    assert "- Needs plain language." in fields["character"]
+    assert "Opening posture:" not in fields["character"]
+    assert "Voice:" not in fields["character"]
+    assert "Response style examples: Use these as style guides only, not lines to copy verbatim." in fields["character"]
+    assert "- I just need to understand it." in fields["character"]
 
 
 def test_load_personas_falls_back_when_persona_file_is_unreadable(monkeypatch):
