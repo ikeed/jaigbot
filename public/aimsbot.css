@@ -667,6 +667,8 @@ body.dark .aims-scenario-note {
 }
 
 .aims-modal-description {
+  margin: 10px 0 14px;
+  padding: 3px 0 5px;
   color: #444444;
   font-size: 14px;
   line-height: 1.5;
@@ -734,6 +736,125 @@ body.dark .aims-scenario-note {
   border-color: #555555;
   background: #2d2d2d;
   color: #ffffff;
+}
+
+/* --- Built-in Chainlit Alert Dialogs --- */
+
+body.aimsbot-shell .aims-native-dialog,
+body.aimsbot-shell [role="alertdialog"] {
+  width: min(92vw, 420px) !important;
+  border: 1px solid rgba(126, 155, 193, 0.22) !important;
+  border-radius: 8px !important;
+  background: rgba(255, 255, 255, 0.96) !important;
+  color: var(--shell-ink) !important;
+  box-shadow: var(--shell-shadow-strong) !important;
+  backdrop-filter: blur(22px);
+}
+
+body.aimsbot-shell .aims-native-dialog h2,
+body.aimsbot-shell .aims-native-dialog h3,
+body.aimsbot-shell [role="alertdialog"] h2,
+body.aimsbot-shell [role="alertdialog"] h3 {
+  color: #132238 !important;
+}
+
+body.aimsbot-shell .aims-native-dialog p,
+body.aimsbot-shell [role="alertdialog"] p {
+  padding: 3px 0 5px;
+  line-height: 1.55 !important;
+  color: #43556f !important;
+}
+
+body.aimsbot-shell .aims-native-dialog button,
+body.aimsbot-shell [role="alertdialog"] button {
+  border-radius: 4px !important;
+  box-shadow: none !important;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    background-color 160ms ease !important;
+}
+
+body.aimsbot-shell .aims-native-dialog button:hover,
+body.aimsbot-shell [role="alertdialog"] button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 26px rgba(22, 38, 68, 0.16);
+}
+
+body.aimsbot-shell .aims-native-dialog-cancel,
+body.aimsbot-shell [role="alertdialog"] button:first-of-type {
+  border: 1px solid rgba(128, 153, 195, 0.24) !important;
+  background: rgba(255, 255, 255, 0.86) !important;
+  color: #26405f !important;
+}
+
+body.aimsbot-shell .aims-native-dialog-confirm,
+body.aimsbot-shell [role="alertdialog"] button.bg-primary,
+body.aimsbot-shell [role="alertdialog"] button.text-primary-foreground,
+body.aimsbot-shell [role="alertdialog"] button + button {
+  border: none !important;
+  background: linear-gradient(135deg, #2563eb 0%, #0ea5e9 100%) !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+body.aimsbot-shell .aims-native-dialog .flex.flex-col.space-y-2,
+body.aimsbot-shell [role="alertdialog"] .flex.flex-col.space-y-2 {
+  gap: 0.35rem !important;
+}
+
+body.aimsbot-shell .aims-native-dialog-actions,
+body.aimsbot-shell [role="alertdialog"] .flex.sm\:flex-row.sm\:justify-end.sm\:space-x-2 {
+  margin-top: 0.15rem;
+}
+
+.dark body.aimsbot-shell .aims-native-dialog,
+.dark body.aimsbot-shell [role="alertdialog"],
+body.dark.aimsbot-shell .aims-native-dialog,
+body.dark.aimsbot-shell [role="alertdialog"] {
+  border-color: rgba(104, 128, 166, 0.28) !important;
+  background: rgba(27, 35, 49, 0.96) !important;
+  color: #ebf2ff !important;
+}
+
+.dark body.aimsbot-shell .aims-native-dialog h2,
+.dark body.aimsbot-shell .aims-native-dialog h3,
+.dark body.aimsbot-shell [role="alertdialog"] h2,
+.dark body.aimsbot-shell [role="alertdialog"] h3,
+body.dark.aimsbot-shell .aims-native-dialog h2,
+body.dark.aimsbot-shell .aims-native-dialog h3,
+body.dark.aimsbot-shell [role="alertdialog"] h2,
+body.dark.aimsbot-shell [role="alertdialog"] h3 {
+  color: #f5f8ff !important;
+}
+
+.dark body.aimsbot-shell .aims-native-dialog p,
+.dark body.aimsbot-shell [role="alertdialog"] p,
+body.dark.aimsbot-shell .aims-native-dialog p,
+body.dark.aimsbot-shell [role="alertdialog"] p {
+  color: #b6c6de !important;
+}
+
+.dark body.aimsbot-shell .aims-native-dialog-cancel,
+.dark body.aimsbot-shell [role="alertdialog"] button:first-of-type,
+body.dark.aimsbot-shell .aims-native-dialog-cancel,
+body.dark.aimsbot-shell [role="alertdialog"] button:first-of-type {
+  border-color: rgba(104, 128, 166, 0.28) !important;
+  background: rgba(39, 50, 69, 0.96) !important;
+  color: #dbe9ff !important;
+}
+
+.dark body.aimsbot-shell .aims-native-dialog-confirm,
+.dark body.aimsbot-shell [role="alertdialog"] button.bg-primary,
+.dark body.aimsbot-shell [role="alertdialog"] button.text-primary-foreground,
+.dark body.aimsbot-shell [role="alertdialog"] button + button,
+body.dark.aimsbot-shell .aims-native-dialog-confirm,
+body.dark.aimsbot-shell [role="alertdialog"] button.bg-primary,
+body.dark.aimsbot-shell [role="alertdialog"] button.text-primary-foreground,
+body.dark.aimsbot-shell [role="alertdialog"] button + button {
+  background: linear-gradient(135deg, #3b82f6 0%, #0ea5e9 100%) !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
 }
 
 /* --- AIMS Infographic Interstitial / Reference Modal --- */
