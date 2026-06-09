@@ -6,6 +6,7 @@ load_and_sanitize_env()
 import json
 import logging
 import os
+from typing import Dict, Optional
 
 import chainlit as cl
 from fastapi import Request, Response
@@ -66,7 +67,7 @@ async def start_chat():
     await orchestrator.handle_chat_start()
 
 @cl.on_chat_resume
-async def resume_chat(thread: dict | None = None):
+async def resume_chat(thread: Optional[Dict] = None):
     await orchestrator.handle_session_resume(thread)
 
 @cl.on_message
@@ -112,6 +113,13 @@ async def on_window_message(message: str):
     elif msg_type == MSG_DUPLICATE_TAB:
         await cl.send_window_message({"type": MSG_DUPLICATE_TAB})
     elif msg_type == MSG_NEW_CHAT:
+        old_session_id = session_manager.session_id
+        old_connection_id = session_manager.connection_id
+        if old_session_id and old_connection_id:
+            try:
+                await backend_client.deregister_session(old_session_id, old_connection_id)
+            except Exception as e:
+                logger.debug("Failed to deregister session during new chat transition: %s", e)
         session_manager.session_id = None
         session_manager.history = []
         session_manager.session_ended = False
@@ -151,7 +159,7 @@ if is_oauth_enabled or is_valid_env_val(settings.CHAINLIT_AUTH_SECRET) or settin
 
     if should_enable_password:
         @cl.password_auth_callback
-        def auth_callback(username: str, password: str) -> cl.User | None:
+        def auth_callback(username: str, password: str) -> Optional[cl.User]:
             expected_user = os.getenv("AUTH_USERNAME", "admin")
             expected_pass = os.getenv("AUTH_PASSWORD")
             if not expected_pass:
@@ -173,7 +181,7 @@ if is_oauth_enabled or is_valid_env_val(settings.CHAINLIT_AUTH_SECRET) or settin
 
     if is_valid_env_val(os.environ.get("ENABLE_HEADER_AUTH")):
         @cl.header_auth_callback
-        def header_auth_callback(headers: dict) -> cl.User | None:
+        def header_auth_callback(headers: Dict) -> Optional[cl.User]:
             user_id = headers.get("x-user-id")
             user_name = headers.get("x-user-name")
             if user_id:
@@ -182,7 +190,12 @@ if is_oauth_enabled or is_valid_env_val(settings.CHAINLIT_AUTH_SECRET) or settin
 
 if is_oauth_enabled:
     @cl.oauth_callback
-    def oauth_callback(provider_id: str, _token: str, raw_user_data: dict[str, str], default_user: cl.User) -> cl.User | None:
+    def oauth_callback(
+        provider_id: str,
+        _token: str,
+        raw_user_data: Dict[str, str],
+        default_user: cl.User,
+    ) -> Optional[cl.User]:
         email = raw_user_data.get("email")
         name = raw_user_data.get("name")
         if provider_id == PROVIDER_GOOGLE:
