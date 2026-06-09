@@ -1,11 +1,10 @@
 name: Python Tests
 
 on:
+  workflow_call:
   pull_request:
-    branches: [ "**" ]
-  push:
-    branches: [ "main" ]
-    tags: [ "v*", "release-*" ]
+    branches: [ "staging" ]
+  workflow_dispatch:
 
 permissions:
   contents: read

@@ -5,15 +5,29 @@
 Production changes should flow through staging:
 
 1. Merge feature work into `staging`.
-2. Let the staging deploy run and smoke-test the staging Cloud Run service.
-3. Open a pull request from `staging` into `main`.
-4. Merge to `main` after required checks pass.
-5. The production deploy runs from `main`.
-6. The release-tag workflow creates an annotated tag named `vYYYY.MM.DD.<run_number>` at the merged commit.
+2. The `Staging Promotion Pipeline` runs on the `staging` push:
+   - `Quality Checks`
+   - deploy to the staging Cloud Run service
+3. Smoke-test the staging Cloud Run service.
+4. Open a pull request from `staging` into `main`.
+5. Merge to `main` after required checks pass.
+6. The `Main Promotion Pipeline` runs on the `main` push:
+   - `Python Tests`
+   - `Terraform Infra`
+   - deploy to production
+   - create the release tag
+   - merge `main` back into `staging`
+7. Confirm the production deploy completed and the sync-back merge landed on `staging`.
 
 Pull requests into `main` from any source branch other than `staging` fail the `Main PR Source Guard` check.
 
-To enforce this in GitHub, make `Main PR Source Guard / require-staging-source` a required status check in the `main` branch protection rule.
+To enforce this in GitHub, the `main` branch ruleset or protection rule must:
+
+- require `Main PR Source Guard / require-staging-source`
+- require pull requests before merging
+- block direct pushes to `main`
+
+Without those GitHub-side protections, Actions can fail after the fact, but GitHub can still allow an IDE or web merge into `main`.
 
 ## Release tags
 
