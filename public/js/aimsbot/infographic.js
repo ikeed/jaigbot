@@ -22,7 +22,7 @@
       '      <p>This bot is going to help you to practice the AIMS communication protocol for helping address vaccine hesitancy. Before you start, please review this infographic so you are best equipped to have a conversation with our vaccine hesitant patients.</p>' +
       '    </div>' +
       '    <div class="aims-infographic-actions">' +
-      '      <button type="button" class="aims-infographic-close" aria-label="Close">×</button>' +
+      '      <button type="button" class="aims-infographic-close" aria-label="Close">Close</button>' +
       '      <button type="button" class="aims-infographic-continue">Start practicing</button>' +
       '    </div>' +
       '  </div>' +
