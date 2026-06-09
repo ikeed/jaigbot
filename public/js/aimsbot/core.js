@@ -96,9 +96,9 @@
       if (textarea.id === "report-issue-modal-input") return;
       if (textarea.closest("#report-issue-modal")) return;
 
-      const form = textarea.closest("form");
-      if (!form) return;
-      form.classList.add("aimsbot-composer");
+      const composer = textarea.closest("form") || textarea.closest("#message-composer");
+      if (!composer) return;
+      composer.classList.add("aimsbot-composer");
       textarea.classList.add("aimsbot-composer-input");
     });
 

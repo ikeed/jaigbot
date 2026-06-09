@@ -109,7 +109,7 @@ body.aimsbot-shell #sidebar-report-button:hover {
   box-shadow: 0 16px 30px rgba(22, 38, 68, 0.16);
 }
 
-body.aimsbot-shell form.aimsbot-composer {
+body.aimsbot-shell .aimsbot-composer {
   margin: 14px auto 18px !important;
   border: 1px solid rgba(126, 155, 193, 0.22) !important;
   border-radius: 24px !important;
@@ -122,14 +122,14 @@ body.aimsbot-shell form.aimsbot-composer {
     transform 180ms ease;
 }
 
-body.aimsbot-shell form.aimsbot-composer:focus-within {
+body.aimsbot-shell .aimsbot-composer:focus-within {
   border-color: rgba(77, 127, 247, 0.32) !important;
   box-shadow: 0 22px 50px rgba(45, 92, 194, 0.2);
   transform: translateY(-2px);
 }
 
 body.aimsbot-shell .aimsbot-composer-input,
-body.aimsbot-shell form.aimsbot-composer textarea {
+body.aimsbot-shell .aimsbot-composer textarea {
   min-height: 76px !important;
   background: transparent !important;
   color: #15304d !important;
@@ -138,18 +138,65 @@ body.aimsbot-shell form.aimsbot-composer textarea {
 }
 
 body.aimsbot-shell .aimsbot-composer-input::placeholder,
-body.aimsbot-shell form.aimsbot-composer textarea::placeholder {
+body.aimsbot-shell .aimsbot-composer textarea::placeholder {
   color: #7082a3 !important;
 }
 
-body.aimsbot-shell form.aimsbot-composer button[type="submit"] {
+body.aimsbot-shell .aimsbot-composer button[type="submit"] {
   border-radius: 999px !important;
   background: linear-gradient(135deg, #2563eb 0%, #0ea5e9 100%) !important;
   box-shadow: 0 10px 22px rgba(37, 99, 235, 0.24);
 }
 
-body.aimsbot-shell form.aimsbot-composer button[type="submit"]:hover {
+body.aimsbot-shell .aimsbot-composer button[type="submit"]:hover {
   filter: brightness(1.04);
+}
+
+body.aimsbot-shell .aimsbot-composer .aims-dictation-button {
+  width: 2rem !important;
+  min-width: 2rem !important;
+  height: 2rem !important;
+  padding: 0 !important;
+  border: 1px solid rgba(128, 153, 195, 0.22) !important;
+  border-radius: 999px !important;
+  background: rgba(245, 249, 255, 0.92) !important;
+  box-shadow: 0 8px 18px rgba(33, 54, 88, 0.1);
+  color: #365275 !important;
+  flex: 0 0 auto !important;
+}
+
+body.aimsbot-shell .aimsbot-composer .aims-dictation-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px rgba(33, 54, 88, 0.15);
+}
+
+body.aimsbot-shell .aimsbot-composer .aims-dictation-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+body.aimsbot-shell .aimsbot-composer .aims-dictation-button[data-dictation-state="listening"] {
+  background: linear-gradient(135deg, #e4fbf4 0%, #d8f6ef 100%) !important;
+  border-color: rgba(38, 174, 132, 0.42) !important;
+  color: #0f7c5c !important;
+  box-shadow: 0 14px 30px rgba(29, 154, 119, 0.2);
+}
+
+body.aimsbot-shell .aimsbot-composer .aims-dictation-button.aims-dictation-active {
+  background: linear-gradient(135deg, #e4fbf4 0%, #d8f6ef 100%) !important;
+  border-color: rgba(38, 174, 132, 0.42) !important;
+  color: #0f7c5c !important;
+  box-shadow: 0 14px 30px rgba(29, 154, 119, 0.2);
+}
+
+body.aimsbot-shell .aimsbot-composer .aims-dictation-button[data-dictation-state="listening"] svg {
+  animation: aims-dictation-pulse 1.2s ease-in-out infinite;
+}
+
+body.aimsbot-shell .aimsbot-composer .aims-dictation-button[data-dictation-state="unsupported"] {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
 }
 
 body.aimsbot-shell .aims-message-enter {
@@ -178,6 +225,17 @@ body.aimsbot-shell .aims-message-enter {
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes aims-dictation-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.72;
   }
 }
 
@@ -512,24 +570,39 @@ body.dark.aimsbot-shell #sidebar-report-button {
   border-color: rgba(97, 126, 166, 0.32) !important;
 }
 
-.dark body.aimsbot-shell form.aimsbot-composer,
-body.dark.aimsbot-shell form.aimsbot-composer {
+.dark body.aimsbot-shell .aimsbot-composer,
+body.dark.aimsbot-shell .aimsbot-composer {
   background: rgba(11, 18, 32, 0.84) !important;
   border-color: rgba(86, 114, 151, 0.32) !important;
 }
 
 .dark body.aimsbot-shell .aimsbot-composer-input,
-.dark body.aimsbot-shell form.aimsbot-composer textarea,
+.dark body.aimsbot-shell .aimsbot-composer textarea,
 body.dark.aimsbot-shell .aimsbot-composer-input,
-body.dark.aimsbot-shell form.aimsbot-composer textarea {
+body.dark.aimsbot-shell .aimsbot-composer textarea {
   color: #e5eefc !important;
 }
 
 .dark body.aimsbot-shell .aimsbot-composer-input::placeholder,
-.dark body.aimsbot-shell form.aimsbot-composer textarea::placeholder,
+.dark body.aimsbot-shell .aimsbot-composer textarea::placeholder,
 body.dark.aimsbot-shell .aimsbot-composer-input::placeholder,
-body.dark.aimsbot-shell form.aimsbot-composer textarea::placeholder {
+body.dark.aimsbot-shell .aimsbot-composer textarea::placeholder {
   color: #89a0c2 !important;
+}
+
+.dark body.aimsbot-shell .aimsbot-composer .aims-dictation-button,
+body.dark.aimsbot-shell .aimsbot-composer .aims-dictation-button {
+  background: rgba(17, 28, 49, 0.92) !important;
+  border-color: rgba(87, 116, 156, 0.34) !important;
+  color: #d8e6ff !important;
+  box-shadow: 0 10px 22px rgba(2, 6, 23, 0.28);
+}
+
+.dark body.aimsbot-shell .aimsbot-composer .aims-dictation-button[data-dictation-state="listening"],
+body.dark.aimsbot-shell .aimsbot-composer .aims-dictation-button[data-dictation-state="listening"] {
+  background: linear-gradient(135deg, #10352f 0%, #0f2f2b 100%) !important;
+  border-color: rgba(69, 201, 158, 0.4) !important;
+  color: #c8fff1 !important;
 }
 
 .dark .aims-message-bubble::before,
