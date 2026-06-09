@@ -1,9 +1,20 @@
 name: Deploy to Cloud Run
 
 on:
-  push:
-    branches: [ "main", "staging" ]
+  workflow_call:
+    inputs:
+      target_env:
+        required: true
+        type: string
   workflow_dispatch:
+    inputs:
+      target_env:
+        description: "Deployment target"
+        required: true
+        type: choice
+        options:
+          - staging
+          - prod
 
 permissions:
   contents: read
@@ -13,7 +24,7 @@ env:
   PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
   REGION: ${{ vars.GCP_REGION }}
   GAR_REPO: ${{ vars.GAR_REPO }}
-  APP_ENV: ${{ github.ref_name == 'staging' && 'staging' || 'prod' }}
+  APP_ENV: ${{ inputs.target_env || github.event.inputs.target_env }}
   SERVICE_NAME: ${{ vars.SERVICE_NAME }}
   STAGING_SERVICE_NAME: ${{ vars.STAGING_SERVICE_NAME }}
   MODEL_ID: ${{ vars.MODEL_ID }}
@@ -39,6 +50,9 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-${{ inputs.target_env || github.event.inputs.target_env }}-${{ github.sha }}
+      cancel-in-progress: false
     env:
       WORKLOAD_IDP: ${{ secrets.WORKLOAD_IDP }}
       WORKLOAD_SA: ${{ secrets.WORKLOAD_SA }}

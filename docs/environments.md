@@ -44,6 +44,12 @@ The GitHub deploy workflow supports this layout:
 - The first staging deploy may run before `STAGING_CHAINLIT_URL` exists. That bootstrap deploy creates the Cloud Run service URL; set `STAGING_CHAINLIT_URL` afterward and rerun the deploy.
 - If using shared Memorystore, set repository variables `MEMORY_BACKEND=redis`, `REDIS_HOST`, `REDIS_PORT`, and `VPC_CONNECTOR` from Terraform outputs.
 
+Branch-driven promotion order:
+- push to `staging`: run quality checks, then deploy staging
+- push to `main`: run tests and Terraform, then deploy production, tag the release, and merge `main` back into `staging`
+
+To keep that flow enforceable, GitHub branch protection or rulesets for `main` should require pull requests, block direct pushes, and require the `Main PR Source Guard / require-staging-source` status check.
+
 ## Incremental rollout
 
 1. Merge the namespacing code and deploy production.
