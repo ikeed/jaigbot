@@ -10,6 +10,7 @@
   if (window.__aimsbotCustomJsInitialized) return;
   window.__aimsbotCustomJsInitialized = true;
 
+  const assetVersion = "20260609-dialogs-2";
   window.AIMSBotUI = window.AIMSBotUI || {};
   window.AIMSBotUI.pendingWindowMessages = window.AIMSBotUI.pendingWindowMessages || [];
   window.AIMSBotUI.handleWindowMessagePayload =
@@ -26,16 +27,16 @@
   });
 
     const modules = [
-        "/public/js/aimsbot/core.js",
-        "/public/js/aimsbot/modal.js",
-        "/public/js/aimsbot/report-issue.js",
-        "/public/js/aimsbot/infographic.js",
-        "/public/js/aimsbot/session-controls.js",
-        "/public/js/aimsbot/header-actions.js",
-        "/public/js/aimsbot/dictation.js",
-        "/public/js/aimsbot/message-roles.js",
-        "/public/js/aimsbot/splash.js",
-        "/public/js/aimsbot/window-events.js"
+        "/public/js/aimsbot/core.js?v=" + assetVersion,
+        "/public/js/aimsbot/modal.js?v=" + assetVersion,
+        "/public/js/aimsbot/report-issue.js?v=" + assetVersion,
+        "/public/js/aimsbot/infographic.js?v=" + assetVersion,
+        "/public/js/aimsbot/session-controls.js?v=" + assetVersion,
+        "/public/js/aimsbot/header-actions.js?v=" + assetVersion,
+        "/public/js/aimsbot/dictation.js?v=" + assetVersion,
+        "/public/js/aimsbot/message-roles.js?v=" + assetVersion,
+        "/public/js/aimsbot/splash.js?v=" + assetVersion,
+        "/public/js/aimsbot/window-events.js?v=" + assetVersion
     ];
 
     function loadNext(index) {
