@@ -124,14 +124,14 @@ cot = "full"
 
 # Specify a CSS file that can be used to customize the user interface.
 # The CSS file can be served from the public directory or via an external link.
-custom_css = "/public/aimsbot.css"
+custom_css = "/public/aimsbot.css?v=20260609-dialogs-2"
 
 # Specify additional attributes for a custom CSS file
 # custom_css_attributes = "media=\"print\""
 
 # Specify a JavaScript file that can be used to customize the user interface.
 # The JavaScript file can be served from the public directory.
-custom_js = "/public/aimsbot-ui.js"
+custom_js = "/public/aimsbot-ui.js?v=20260609-dialogs-2"
 
 # The style of alert boxes. Can be "classic" or "modern".
 alert_style = "classic"
