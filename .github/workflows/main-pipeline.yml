@@ -1,0 +1,58 @@
+name: Main Promotion Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+
+permissions:
+  contents: write
+  id-token: write
+  pull-requests: write
+
+jobs:
+  tests:
+    uses: ./.github/workflows/tests.yml
+    secrets: inherit
+
+  terraform:
+    uses: ./.github/workflows/terraform.yaml
+    secrets: inherit
+
+  deploy:
+    needs: [ tests, terraform ]
+    uses: ./.github/workflows/deploy.yaml
+    with:
+      target_env: prod
+    secrets: inherit
+
+  tag-release:
+    needs: deploy
+    uses: ./.github/workflows/release-tag.yml
+    secrets: inherit
+
+  sync-main-back-to-staging:
+    needs: [ deploy, tag-release ]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Merge main back to staging
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git fetch origin main staging
+          git checkout -B staging origin/staging
+
+          if git merge-base --is-ancestor origin/main HEAD; then
+            echo "Staging already contains main; nothing to do."
+            exit 0
+          fi
+
+          git merge --no-ff --no-edit origin/main
+          git push origin HEAD:staging

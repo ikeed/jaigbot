@@ -121,11 +121,29 @@ Add repo variables to enable CI apply:
 Optional: add a backend block to terraform/versions.tf later if you want backends pinned in code. The current CI workflow also accepts backend via -backend-config when these variables are present.
 
 ## 7) How the CI workflows run
-- PRs: run tests, optionally build+push preview image, and can deploy to a preview service.
-- main: deploys to Cloud Run service `SERVICE_NAME` with `APP_ENV=prod`.
-- staging: deploys to Cloud Run service `STAGING_SERVICE_NAME` (default `aimsbot-staging`) with `APP_ENV=staging`.
-- Pull requests into main must come from `staging`; the `Main PR Source Guard` workflow enforces this, and should be marked as a required status check in GitHub branch protection.
-- Pushes to main create an annotated release tag named `vYYYY.MM.DD.<run_number>`.
+- Pull requests into `staging` run:
+  - `Quality Checks`
+  - `Python Tests`
+  - `Terraform Infra` when `terraform/**` changed
+- Pull requests into `main` run:
+  - `Main PR Source Guard`
+- Push to `staging` runs the `Staging Promotion Pipeline`:
+  - `Quality Checks`
+  - deploy to Cloud Run service `STAGING_SERVICE_NAME` (default `aimsbot-staging`) with `APP_ENV=staging`
+- Push to `main` runs the `Main Promotion Pipeline`:
+  - `Python Tests`
+  - `Terraform Infra`
+  - deploy to Cloud Run service `SERVICE_NAME` with `APP_ENV=prod`
+  - create an annotated release tag named `vYYYY.MM.DD.<run_number>`
+  - merge `main` back into `staging`
+- Pull requests into `main` must come from `staging`; the `Main PR Source Guard` workflow enforces this in CI.
+
+Required GitHub protection for `main`:
+- require pull requests before merging
+- block direct pushes
+- require `Main PR Source Guard / require-staging-source`
+
+Without those GitHub protection settings, an IDE or the GitHub UI may still allow a merge into `main` even though the guard workflow would fail.
 
 Key requirements for main CI:
 - WORKLOAD_IDP and WORKLOAD_SA secrets must be configured from Terraform outputs.
