@@ -17,6 +17,7 @@
         "/public/js/aimsbot/infographic.js",
         "/public/js/aimsbot/session-controls.js",
         "/public/js/aimsbot/header-actions.js",
+        "/public/js/aimsbot/dictation.js",
         "/public/js/aimsbot/message-roles.js",
         "/public/js/aimsbot/splash.js",
         "/public/js/aimsbot/window-events.js"
