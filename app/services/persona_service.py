@@ -233,17 +233,28 @@ def _format_interaction_guidance(persona: dict) -> str:
             if cleaned:
                 lines.append(f"- {cleaned}")
 
+    def add_text(label: str, key: str) -> None:
+        value = str(interaction.get(key) or "").strip()
+        if value:
+            lines.append(f"{label}: {value}")
+
     add_list("Communication needs", "communication_needs")
+    add_text("Opening posture", "opening_posture")
+    add_text("Voice", "voice")
+    add_text("Response style", "response_style")
+    add_text("Decision style", "decision_style")
+    add_text("Non-vaccine agenda", "non_vaccine_agenda")
+    add_list("Emotional triggers", "emotional_triggers")
+    add_list("Rapport signals", "rapport_signals")
+    add_list("Shutdown signals", "shutdown_signals")
     add_list("Likely questions", "likely_questions")
+    add_list("Good clinician moves", "good_clinician_moves")
+    add_list("Bad clinician moves", "bad_clinician_moves")
+    add_list("Response style examples", "response_style_examples")
     add_list("Avoid", "avoid")
 
-    trust_repair = str(interaction.get("trust_repair") or "").strip()
-    if trust_repair:
-        lines.append(f"Trust repair: {trust_repair}")
-
-    challenge = str(interaction.get("conversation_challenge") or "").strip()
-    if challenge:
-        lines.append(f"Conversation challenge: {challenge}")
+    add_text("Trust repair", "trust_repair")
+    add_text("Conversation challenge", "conversation_challenge")
 
     return "\n".join(lines)
 

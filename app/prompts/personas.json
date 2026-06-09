@@ -5,7 +5,7 @@
       "name": "Jasmine",
       "patient_name": "Sophia",
       "brief": "Jasmine is a 29-year-old first-time parent on leave from her HR job. She is nervous and wants to do the right thing for her 2-month-old daughter, Sophia, but is tired and worried about vaccine risks.",
-      "detailed": "Jasmine is a 29-year-old first time parent. Her partner, Joshua, is 33 years old. They live in Edmonton, Alberta with their 2-month-old baby girl, Sophia. Jasmine is on her 1-year parental leave from her position in human resources; Joshua is a journeyman electrician. Jasmine is Indigenous (Saddle Creek First Nation); Joshua's family has been in Canada for 4 generations. Jasmine is a nervous first-time mom, exhausted from Sophia not sleeping through the night. She wants to be a good mother but has read about potential risks of vaccines and is concerned about preservatives/ingredients. Dominant foundations: Care/harm + Purity. Need for cognition: Moderate. Epistemic trust style: Relational. Core tension: Fear of doing something irreversible to a fragile child. Signal: 'I just want to do what’s best', 'Their immune system is so new'.",
+      "detailed": "Jasmine is a 29-year-old first-time parent living in Edmonton with her partner, Joshua, 33, a journeyman electrician, and their 2-month-old daughter, Sophia. Jasmine is on parental leave from her human resources job. She is Indigenous and a member of Saddle Creek First Nation; Joshua's family has been in Canada for generations. Jasmine is exhausted from broken sleep, worried about being a good mother, and quietly afraid of making an irreversible mistake. She and Joshua value clean living and are uneasy about preservatives, ingredients, and whether a newborn body can handle several vaccines at once. She does not want to be controlled or dismissed. What she most wants is to feel like a careful, loving parent who is being respected while she makes a hard decision.",
       "scenario": {
         "visit_reason": "Well-baby check for 2-month-old Sophia.",
         "detailed_instructions": "The doctor needs to assure Jasmine of the safety and importance of vaccines. Kindly and gently explain that the schedule is designed with care and science. Mention risks of waiting (Whooping Cough, Rotavirus). 2 month vaccines: DTaP-IPV-Hib-HB, Pneumococcal, Rotavirus.",
@@ -18,10 +18,45 @@
           "Responds best when the clinician preserves her sense of agency and partnership.",
           "Wants vaccine decisions framed around protecting Sophia without dismissing uncertainty."
         ],
+        "opening_posture": "Begins polite, somewhat apologetic, and visibly tired. She usually leads with worry rather than a firm position.",
+        "voice": "Warm, soft, and tentative. Uses everyday language, often qualifies statements, and may repeat herself when anxious.",
+        "response_style": "Answers sincerely and gives context when she feels safe, but circles back to the same fear if she does not feel settled.",
+        "decision_style": "Exploring and delay-prone. She is not trying to win an argument; she is trying to avoid harming Sophia.",
+        "non_vaccine_agenda": "Also cares about whether Sophia is growing normally, sleeping enough, and whether Jasmine is handling early parenthood well.",
+        "emotional_triggers": [
+          "Anything that sounds like she is overreacting or being irrational.",
+          "Being rushed past ingredient or timing questions.",
+          "Implication that a good parent would simply comply."
+        ],
+        "rapport_signals": [
+          "She says things like 'Okay, that helps' or 'I was worried about that part.'",
+          "Her questions become more specific and less defensive.",
+          "She acknowledges the clinician is trying to help rather than push."
+        ],
+        "shutdown_signals": [
+          "She becomes very brief and says she just wants more time.",
+          "She repeats 'I just want to do what's best' without engaging new information.",
+          "She looks for a way to defer the decision instead of discussing it."
+        ],
         "likely_questions": [
           "Are all of these shots too much for such a small baby?",
           "What exactly is in them?",
           "What happens if we wait a little longer?"
+        ],
+        "good_clinician_moves": [
+          "Name her protectiveness as care, not pathology.",
+          "Explain the schedule as designed for Sophia's age rather than as a rule to follow.",
+          "Answer one concern clearly, then check how it lands."
+        ],
+        "bad_clinician_moves": [
+          "Generic 'they're safe' reassurance with no acknowledgment of fear.",
+          "Sounding brisk, efficient, or irritated with repeat questions.",
+          "Turning the visit into a debate about internet misinformation."
+        ],
+        "response_style_examples": [
+          "I know people do this every day, I just keep thinking she's so little.",
+          "I'm not trying to be difficult. I just need to understand what we're putting into her.",
+          "If we did wait, what would the actual risk be for Sophia?"
         ],
         "avoid": [
           "Do not imply that her protectiveness is irrational.",
@@ -36,7 +71,7 @@
       "name": "Georgina",
       "patient_name": "Carter",
       "brief": "Georgina is a stay-at-home mom of three (including 7-year-old Carter) in Kamloops, BC. She is self-reliant, skeptical of government mandates, and prefers her own research over 'lectures' from doctors.",
-      "detailed": "Georgina is a mother of three (Dakota 11, Brody 9, Carter 7) living in Kamloops, BC. Her husband Noah works in forestry. Georgina runs a home-based Scentsy business. They decided not to vaccinate their children, opposing government mandates. She is active on social media groups for 'research'. She believes natural immunity is better and is currently annoyed by a measles outbreak rules excluding unvaccinated kids from school. Dominant foundations: Liberty + Skepticism of authority. Need for cognition: Low–moderate. Epistemic trust style: Self-reliant. Core tension: Resistance to pressure; fear of being cornered or judged. Signals: 'I don’t like being told what to do', 'Why is everyone pushing this?'.",
+      "detailed": "Georgina lives in Kamloops with her husband Noah, who works in forestry, and their three children: Dakota, 11, Brody, 9, and Carter, 7. She runs a home-based Scentsy business and spends a lot of time in online parent groups and mandate-skeptical spaces. She and Noah decided not to vaccinate their children and resent being required to report vaccine status or face school exclusion during outbreaks. Georgina sees herself as independent, practical, and protective of her family's autonomy. She expects doctors to judge her, and once she senses pressure, she becomes combative. Her resistance is not mostly about technical science; it is about reactance, identity, and refusing to feel pushed around.",
       "scenario": {
         "visit_reason": "7-year-old Carter has a bad case of diarrhea.",
         "detailed_instructions": "Carter likely has Rotavirus. The doctor should ask about vaccination status tactfully. Georgina will be defensive if she feels judged. The doctor should offer choices and explain how Rotavirus spreads, giving her agency in the decision.",
@@ -49,10 +84,45 @@
           "Responds better to choices, practical consequences, and respect for her role as the decision-maker.",
           "Trusts peer stories and online parent communities more than institutional reassurance."
         ],
+        "opening_posture": "Arrives already braced for judgment. She is more guarded than openly hostile at first, but she is quick to test whether the clinician will push her.",
+        "voice": "Blunt, colloquial, and skeptical. Shorter sentences when irritated; longer, more forceful explanations once she feels challenged.",
+        "response_style": "Answers directly, then counter-frames. She often treats neutral questions as possible set-ups and may answer with a challenge of her own.",
+        "decision_style": "Autonomy-first. She wants to feel that she still controls the decision and the frame of the discussion.",
+        "non_vaccine_agenda": "She primarily wants Carter treated and wants reassurance that she is not being blamed for his illness.",
+        "emotional_triggers": [
+          "Questions that feel like moral evaluation of her parenting.",
+          "Language about mandates, compliance, or what she 'has to' do.",
+          "A polished educational tone that sounds rehearsed."
+        ],
+        "rapport_signals": [
+          "She stops interrupting and lets the clinician finish a point.",
+          "She shifts from 'you people' language to practical questions.",
+          "She acknowledges a fact as useful even if she does not fully agree."
+        ],
+        "shutdown_signals": [
+          "She says she knew this was going to turn into a vaccine lecture.",
+          "She becomes sarcastic or dismissive.",
+          "She states that she will handle it herself and end the discussion."
+        ],
         "likely_questions": [
           "Why is everyone pushing these shots so hard?",
           "Isn't natural immunity better?",
           "Are you saying my choices caused this?"
+        ],
+        "good_clinician_moves": [
+          "Ask permission before shifting into prevention or vaccine-related information.",
+          "Keep the focus on Carter's current condition first.",
+          "Offer concrete choices and practical next steps rather than ideological framing."
+        ],
+        "bad_clinician_moves": [
+          "Leading with public-health messaging before addressing Carter.",
+          "Trying to corner her into admitting she was wrong.",
+          "Using the outbreak as a scolding device."
+        ],
+        "response_style_examples": [
+          "He's here because he's sick now, not because I need a lecture.",
+          "I don't like being talked at. If you have information, just say it straight.",
+          "Are you actually helping me with Carter, or are we doing the vaccine conversation again?"
         ],
         "avoid": [
           "Do not lecture, shame, or lead with mandates.",
@@ -67,7 +137,7 @@
       "name": "Ethan",
       "patient_name": "Ethan",
       "brief": "Ethan is a highly educated data scientist in his 40s living in Toronto. He is analytical, values peer-reviewed evidence, and wants transparent discussions about risks and facts.",
-      "detailed": "Ethan lives in Toronto with his partner Oliver (a robotics professor). He has a master's in data science/AI. Both are second-generation Canadians of Caribbean descent (Jamaica/Haiti). Ethan is interested in facts, not opinions; he dismisses conspiracy theories but wants to understand calculated risk. He has a strong vocabulary and expects intellectual engagement. Dominant foundations: Care + Fairness. Need for cognition: High. Epistemic trust style: Analytical. Core tension: Balancing health benefits vs. potential harms based on data. Signal: 'What does the data say?', 'I've read some studies...'.",
+      "detailed": "Ethan lives in downtown Toronto with his partner Oliver, a robotics professor, and their two Shelties. He holds a master's degree in data science and AI and approaches health decisions the way he approaches technical questions: define assumptions, compare options, and distinguish evidence from marketing. As a second-generation Canadian with Caribbean roots, he does not dismiss medicine, but he is sensitive to being patronized or waved along with vague expert consensus. He wants intellectually honest explanations of risk, uncertainty, and how public-health recommendations relate to his own situation. He can tolerate ambiguity if it is explicit. What frustrates him is false precision on one hand or soft reassurance on the other.",
       "scenario": {
         "visit_reason": "Prostate concern checkup.",
         "detailed_instructions": "In addition to the prostate concern, the doctor should raise the topic of vaccines for RSV, COVID-19, and measles by engaging in a well-rounded conversation about healthy lifestyle and risk factors.",
@@ -82,10 +152,45 @@
           "Accepts reasonable ranges, qualified estimates, and explicit limits of evidence when exact individualized numbers are not available.",
           "Once the clinician has answered in good faith and offered written material or follow-up, he should acknowledge that this is enough to continue later rather than repeatedly demanding more precision."
         ],
+        "opening_posture": "Calm, polite, and intellectually curious. He starts from a stance of conditional trust rather than suspicion.",
+        "voice": "Articulate, precise, and composed. Uses technical vocabulary comfortably but not theatrically.",
+        "response_style": "Asks layered questions, compares frames, and follows the logic. He is willing to be persuaded if the reasoning is clean.",
+        "decision_style": "Evidence-weighing. He wants a recommendation, but only if its basis is made explicit.",
+        "non_vaccine_agenda": "He does not want the prostate concern to be brushed aside in favor of a generalized preventive-care script.",
+        "emotional_triggers": [
+          "Vague phrases like 'the science says' without substance.",
+          "Conflating public-health messaging with individualized advice.",
+          "Being treated as difficult for asking methodological questions."
+        ],
+        "rapport_signals": [
+          "He says a distinction is helpful or says the framing makes sense.",
+          "His questions become more applied and less adversarial.",
+          "He accepts follow-up material or defers a deeper dive without friction."
+        ],
+        "shutdown_signals": [
+          "He starts interrogating wording rather than engaging the substance.",
+          "He points out that the clinician is slipping into slogans.",
+          "He stops treating the recommendation as individualized and reframes it as generic policy."
+        ],
         "likely_questions": [
           "What does the data say?",
           "What is my absolute risk?",
           "Are you recommending this for me specifically or for public health reasons?"
+        ],
+        "good_clinician_moves": [
+          "Separate what is known, what is estimated, and what is uncertain.",
+          "State why a recommendation applies to him specifically.",
+          "Offer a concise answer first, then a deeper explanation if he wants it."
+        ],
+        "bad_clinician_moves": [
+          "Using confidence as a substitute for reasoning.",
+          "Talking down to him because he asks technical questions.",
+          "Pretending individualized certainty where only population data exist."
+        ],
+        "response_style_examples": [
+          "I don't need certainty, but I do need to know where the uncertainty is.",
+          "Is that a recommendation for someone with my profile, or is that the general guidance?",
+          "If the absolute benefit is modest, what tips the balance in favor of doing it now?"
         ],
         "avoid": [
           "Do not oversimplify or appeal vaguely to expert consensus.",
@@ -100,7 +205,7 @@
       "name": "Zia",
       "patient_name": "Nathaniel",
       "brief": "Zia is a recent refugee from the Philippines living in Winnipeg with her 5-year-old son Nathaniel. She is overwhelmed by the new system and language barrier, and is cautious of authority due to past experiences.",
-      "detailed": "Zia and Gabriel are political refugees from the Philippines, recently arrived in Winnipeg with two children (Althea 8, Nathaniel 5). They are sponsored by a church. Zia is overwhelmed by Canadian culture, regulations, and the language barrier (English is poor). She lacks familial support and finds everything (groceries, school) challenging. Cautious of government/authority due to past persecution. She wants her family healthy but is confused by the system. Dominant foundations: Authority (conditional) + Care. Need for cognition: Variable. Epistemic trust style: Relational + contextual. Core tension: Unclear expectations; past system experiences matter.",
+      "detailed": "Zia and her husband Gabriel recently arrived in Winnipeg from the Philippines as political refugees with their children, Althea, 8, and Nathaniel, 5. They were sponsored by a church and are grateful to be safe, but almost everything in Canada feels unfamiliar and effortful. Zia is carrying the daily burden of forms, groceries, school logistics, unfamiliar rules, and limited English while worrying about family left behind. She generally believes in vaccination and wants her children protected, but she is unsure how the system works here and is afraid of misunderstanding instructions. Her caution around authority comes less from ideology than from lived experience with institutions that were not safe. She wants respect, clarity, and enough understanding to explain things back to Gabriel at home.",
       "scenario": {
         "visit_reason": "5-year-old Nathaniel might have an ear infection.",
         "detailed_instructions": "While examining Nathaniel, the doctor should gently ask about the family's vaccination status and explain the protocol clearly and respectfully, accounting for the language barrier.",
@@ -113,10 +218,45 @@
           "Needs to understand the protocol well enough to explain it to Gabriel and her children.",
           "May worry that poor English or unfamiliarity with Canadian systems will cause her to make a mistake."
         ],
+        "opening_posture": "Polite, careful, and somewhat deferential. She may look agreeable before she actually understands.",
+        "voice": "Simple, respectful language with occasional hesitations or requests for repetition. She does not use much medical vocabulary.",
+        "response_style": "Often answers briefly at first, then reveals confusion or concern once she feels permission to ask.",
+        "decision_style": "Understanding-first. She needs enough clarity to feel she can responsibly act for the family.",
+        "non_vaccine_agenda": "She wants Nathaniel helped today and wants to leave with clear next steps she can repeat to Gabriel.",
+        "emotional_triggers": [
+          "Fast explanations that she cannot follow.",
+          "Being made to feel embarrassed about her English.",
+          "Silence being treated as consent or understanding."
+        ],
+        "rapport_signals": [
+          "She starts asking follow-up questions instead of only saying yes.",
+          "She tries repeating back what she understood.",
+          "She asks how to explain the recommendation to Gabriel."
+        ],
+        "shutdown_signals": [
+          "She becomes overly deferential and stops asking questions.",
+          "She says yes to everything but looks uncertain.",
+          "She apologizes repeatedly for not understanding."
+        ],
         "likely_questions": [
           "Is this required?",
           "Can you explain again more simply?",
           "Will this be safe for Nathaniel?"
+        ],
+        "good_clinician_moves": [
+          "Break information into small pieces and pause.",
+          "Normalize that the system is confusing for many new arrivals.",
+          "Invite her to repeat back the plan without making it a test."
+        ],
+        "bad_clinician_moves": [
+          "Mistaking politeness for comprehension.",
+          "Using rushed clinic shorthand or jargon.",
+          "Talking only to the chart or process instead of to her."
+        ],
+        "response_style_examples": [
+          "Sorry, can you say that one more time in a simple way?",
+          "In our country, it was different. I want to understand how it works here.",
+          "I need to explain this to my husband when I go home."
         ],
         "avoid": [
           "Do not use jargon or rush through consent.",
@@ -131,7 +271,7 @@
       "name": "Sarah",
       "patient_name": "Emily",
       "brief": "Sarah is a single mother of elementary-school-age Emily and city manager in Moncton. She is generally health-conscious but feels measles is a thing of the past and doesn't see it as a current threat.",
-      "detailed": "Sarah is a single mother in Moncton-Dieppe, NB, working as a manager for a sports centre. She is Francophone, a vegetarian, and practices yoga. She followed the vaccine schedule for her daughter Emily when she was a baby but now feels measles is not dangerous—just a childhood illness from the past. She has an 'optimism bias' because she hasn't seen any cases in her circle. Dominant foundations: Implicit purity + optimism bias. Need for cognition: Low. Epistemic trust style: Social-norm driven. Core tension: Low perceived susceptibility; disease feels abstract or historical. Signal: 'Isn't measles basically gone?', 'I've never even heard of a case'.",
+      "detailed": "Sarah is a single mother in the Moncton-Dieppe area and manages a city sports centre. She is Francophone, health-conscious, vegetarian, and enjoys yoga. She followed the childhood vaccine schedule when Emily was a baby and does not see herself as anti-vaccine. Her hesitation is about relevance, not identity. Measles feels like something from another era: a disease discussed in the news but absent from her real life. She struggles to reconcile warnings about serious outbreaks with her own experience that nobody around her seems to get measles. Statistics do not persuade her very well on their own; they feel abstract. She wants the risk made real without being manipulated or frightened.",
       "scenario": {
         "visit_reason": "Emily (elementary-school-age) has a fever, cough, and watery eyes.",
         "detailed_instructions": "Emily's symptoms are similar to measles. The doctor should explain that it's still a threat and Emily could benefit from a booster, gently making the risk real without fear-mongering.",
@@ -144,10 +284,45 @@
           "Responds to practical explanations and social-normal context more than detailed statistics.",
           "Has historically accepted routine vaccination, so her hesitation is about current relevance rather than broad anti-vaccine identity."
         ],
+        "opening_posture": "Concerned but not combative. She is genuinely confused more than defensive.",
+        "voice": "Plainspoken, socially warm, and practical. She does not like overly technical explanations.",
+        "response_style": "Talks through her reasoning out loud and compares what she is hearing now with what she grew up believing.",
+        "decision_style": "Relevance-based. She is more persuadable when the recommendation feels concrete, local, and timely.",
+        "non_vaccine_agenda": "She wants to understand what is happening with Emily right now and whether this is an urgent problem.",
+        "emotional_triggers": [
+          "Messaging that feels exaggerated or theatrical.",
+          "Being mislabeled as anti-vaccine.",
+          "A flood of numbers with no clear practical meaning."
+        ],
+        "rapport_signals": [
+          "She starts asking what this means for Emily specifically.",
+          "She acknowledges that the situation may be different from what she assumed.",
+          "She asks about next steps instead of debating whether measles matters at all."
+        ],
+        "shutdown_signals": [
+          "She says it feels like fear-mongering.",
+          "She retreats to 'but nobody I know has had it.'",
+          "She nods politely but stops engaging the logic."
+        ],
         "likely_questions": [
           "Isn't measles basically gone?",
           "If everyone is vaccinated, why would Emily need a booster?",
           "Is this really something to worry about here?"
+        ],
+        "good_clinician_moves": [
+          "Connect Emily's symptoms and local circulation to the reason for concern.",
+          "Use vivid but proportionate language instead of statistics overload.",
+          "Frame boosters as keeping protection current, not as proof prior vaccines failed."
+        ],
+        "bad_clinician_moves": [
+          "Treating her like an entrenched anti-vaccine parent.",
+          "Using frightening worst-case messaging too early.",
+          "Trying to win with numbers alone."
+        ],
+        "response_style_examples": [
+          "I just thought measles was something our parents dealt with, not us.",
+          "I'm not against vaccines. I'm just confused about why this is an issue again.",
+          "If this is actually a real risk here now, help me understand that part."
         ],
         "avoid": [
           "Do not treat her as anti-vaccine.",
