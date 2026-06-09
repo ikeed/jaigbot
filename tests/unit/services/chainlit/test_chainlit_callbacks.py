@@ -1,5 +1,6 @@
 import sys
 import types
+import importlib
 from importlib.machinery import ModuleSpec
 from unittest.mock import MagicMock, AsyncMock, patch
 import pytest
@@ -40,6 +41,21 @@ mock_cl.set_chat_profiles = mock_decorator
 
 sys.modules["chainlit"] = mock_cl
 sys.modules["chainlit.context"] = MagicMock()
+
+mock_chainlit_message = types.ModuleType("chainlit.message")
+mock_chainlit_message.__spec__ = ModuleSpec("chainlit.message", loader=None)
+mock_chainlit_message.Message = MagicMock()
+sys.modules["chainlit.message"] = mock_chainlit_message
+
+mock_chainlit_element = types.ModuleType("chainlit.element")
+mock_chainlit_element.__spec__ = ModuleSpec("chainlit.element", loader=None)
+mock_chainlit_element.ElementDict = dict
+sys.modules["chainlit.element"] = mock_chainlit_element
+
+mock_chainlit_step = types.ModuleType("chainlit.step")
+mock_chainlit_step.__spec__ = ModuleSpec("chainlit.step", loader=None)
+mock_chainlit_step.StepDict = dict
+sys.modules["chainlit.step"] = mock_chainlit_step
 
 # Mock other chainlit submodules
 mock_chainlit_data = types.ModuleType("chainlit.data")
@@ -92,7 +108,8 @@ with patch("app.config.settings") as mock_settings:
     
     # We need to mock orchestrator BEFORE importing chainlit_app if it's instantiated at module level
     # Actually, it IS instantiated at module level.
-    with patch("app.services.chainlit.orchestrator.ChainlitOrchestrator") as mock_orch_cls:
+    orchestrator_module = importlib.import_module("app.services.chainlit.orchestrator")
+    with patch.object(orchestrator_module, "ChainlitOrchestrator") as mock_orch_cls:
         mock_orch_instance = mock_orch_cls.return_value
         import chainlit_app
 
@@ -144,6 +161,29 @@ async def test_on_chat_end_ignores_deregister_failure(monkeypatch):
     await chainlit_app.on_chat_end()
 
     deregister_session.assert_awaited_once_with("session-1", "connection-1")
+
+
+@pytest.mark.asyncio
+async def test_on_window_message_new_chat_deregisters_old_session(monkeypatch):
+    session_manager = MagicMock(
+        session_id="session-1",
+        connection_id="connection-1",
+        session_ended=False,
+    )
+    session_manager.get_user_identifier.return_value = "test-user"
+    deregister_session = AsyncMock()
+
+    monkeypatch.setattr(chainlit_app, "session_manager", session_manager)
+    monkeypatch.setattr(chainlit_app.backend_client, "deregister_session", deregister_session)
+
+    with patch("chainlit_app.clear_persistent_session_id") as mock_clear:
+        await chainlit_app.on_window_message('{"type": "new_chat"}')
+
+    deregister_session.assert_awaited_once_with("session-1", "connection-1")
+    assert session_manager.session_id is None
+    assert session_manager.history == []
+    assert session_manager.session_ended is False
+    mock_clear.assert_called_once_with("test-user")
 
 @pytest.mark.asyncio
 async def test_handle_message_delegates_to_orchestrator():
