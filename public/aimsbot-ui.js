@@ -10,6 +10,21 @@
   if (window.__aimsbotCustomJsInitialized) return;
   window.__aimsbotCustomJsInitialized = true;
 
+  window.AIMSBotUI = window.AIMSBotUI || {};
+  window.AIMSBotUI.pendingWindowMessages = window.AIMSBotUI.pendingWindowMessages || [];
+  window.AIMSBotUI.handleWindowMessagePayload =
+    window.AIMSBotUI.handleWindowMessagePayload || null;
+
+  window.addEventListener("message", function (event) {
+    const app = window.AIMSBotUI || {};
+    if (typeof app.handleWindowMessagePayload === "function") {
+      app.handleWindowMessagePayload(event.data);
+      return;
+    }
+    app.pendingWindowMessages = app.pendingWindowMessages || [];
+    app.pendingWindowMessages.push(event.data);
+  });
+
     const modules = [
         "/public/js/aimsbot/core.js",
         "/public/js/aimsbot/modal.js",
