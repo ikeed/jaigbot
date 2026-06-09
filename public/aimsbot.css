@@ -927,13 +927,13 @@ body.dark.aimsbot-shell [role="alertdialog"] button + button {
 .aims-infographic-close {
   min-height: 36px;
   border-radius: 6px;
+  padding: 0 14px;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
 }
 
 .aims-infographic-continue {
-  padding: 0 14px;
   border: 1px solid #0f6b8f;
   background: #0f6b8f;
   color: #ffffff;
@@ -944,14 +944,13 @@ body.dark.aimsbot-shell [role="alertdialog"] button + button {
 }
 
 .aims-infographic-close {
-  width: 36px;
-  border: 1px solid #cbd5e1;
-  background: #ffffff;
-  color: #344054;
+  border: 1px solid #0f6b8f;
+  background: #0f6b8f;
+  color: #ffffff;
 }
 
 .aims-infographic-close:hover {
-  background: #f1f5f9;
+  background: #0b5a78;
 }
 
 .aims-infographic-scroll {
@@ -1039,13 +1038,13 @@ body.dark.aimsbot-shell [role="alertdialog"] button + button {
 }
 
 .dark .aims-infographic-close {
-  border-color: #475569;
-  background: #1e293b;
-  color: #e2e8f0;
+  border-color: #0f6b8f;
+  background: #0f6b8f;
+  color: #ffffff;
 }
 
 .dark .aims-infographic-close:hover {
-  background: #334155;
+  background: #0b5a78;
 }
 
 .dark .aims-infographic-scroll {
