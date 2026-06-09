@@ -45,6 +45,7 @@ class ChainlitOrchestrator:
         try:
             user_id = self.session.get_user_identifier()
             if not self._has_seen_intro_locally_or_persistently(user_id):
+                logger.info("Chat start requires intro for user %s", user_id)
                 self.session.intro_pending = True
                 await self.ui.send_window_message({"type": MSG_INTRO_REQUIRED})
                 return

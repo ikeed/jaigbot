@@ -6,9 +6,9 @@
 
   app.windowEventsReady = true;
 
-  window.addEventListener("message", function (event) {
-      const type = app.messageType(event.data);
-      let data = event.data;
+  function handlePayload(payload) {
+      const type = app.messageType(payload);
+      let data = payload;
       if (typeof data === "string") {
       try {
         data = JSON.parse(data);
@@ -35,5 +35,10 @@
         app.messageRoles.injectDataAuthors();
       }
     }
-  });
+  }
+
+  app.handleWindowMessagePayload = handlePayload;
+
+  (app.pendingWindowMessages || []).forEach(handlePayload);
+  app.pendingWindowMessages = [];
 })(window);
