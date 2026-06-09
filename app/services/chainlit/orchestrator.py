@@ -130,6 +130,7 @@ class ChainlitOrchestrator:
                 set_current_thread_id(user_id, thread_id)
 
             connection_id = self._ensure_connection_id()
+            needs_fresh_start = False
             
             # Sync with backend
             try:
@@ -167,14 +168,31 @@ class ChainlitOrchestrator:
                 history = await self.backend.fetch_history(session_id)
                 self.session.history = history
             except Exception as e:
-                logger.debug(f"Failed to refresh history during resume (non-fatal): {e}")
-                pass
+                logger.warning("Failed to refresh history during resume for %s: %s", session_id, e)
+                needs_fresh_start = True
 
             # Fallbacks for missing state
             if self.session.character is None:
                 self.session.character = settings.CHARACTER_SYSTEM or DEFAULT_CHARACTER
             if self.session.scene is None:
                 self.session.scene = settings.SCENE_OBJECTIVES or DEFAULT_SCENE
+
+            if needs_fresh_start or not self.session.history:
+                logger.warning(
+                    "stale_resume_recovered: user=%s thread_id=%s session_id=%s needs_fresh_start=%s history_count=%s",
+                    user_id,
+                    thread_id,
+                    session_id,
+                    needs_fresh_start,
+                    len(self.session.history or []),
+                )
+                logger.info(
+                    "Resume for session %s produced no usable history; starting a fresh scenario flow",
+                    session_id,
+                )
+                self.session.history = []
+                await self._start_scenario_flow()
+                return
 
         except Exception as e:
             await self._report_error_silently(e, "handle_session_resume")

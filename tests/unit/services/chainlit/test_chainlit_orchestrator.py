@@ -281,7 +281,7 @@ async def test_handle_session_resume_duplicate_tab_short_circuits(orchestrator, 
 
 
 @pytest.mark.asyncio
-async def test_handle_session_resume_backend_failure_uses_defaults(orchestrator, mock_services, monkeypatch):
+async def test_handle_session_resume_backend_failure_starts_fresh_scenario(orchestrator, mock_services, monkeypatch):
     mock_services["session"].get_user_identifier.return_value = "user@example.com"
     mock_services["session"].user = None
     mock_services["session"].connection_id = None
@@ -300,12 +300,37 @@ async def test_handle_session_resume_backend_failure_uses_defaults(orchestrator,
         ),
     )
     mock_services["backend"].initialize_session = AsyncMock(side_effect=RuntimeError("backend down"))
+    orchestrator._start_scenario_flow = AsyncMock()
 
     await orchestrator.handle_session_resume({"id": "thread-1", "metadata": {}})
 
     assert mock_services["session"].session_id == "thread-1"
     assert mock_services["session"].character == "Default character"
     assert mock_services["session"].scene == "Default scene"
+    assert mock_services["session"].history == []
+    orchestrator._start_scenario_flow.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_handle_session_resume_empty_history_starts_fresh_scenario(orchestrator, mock_services):
+    mock_services["session"].get_user_identifier.return_value = "user@example.com"
+    mock_services["session"].user = None
+    mock_services["session"].connection_id = "connection-1"
+    mock_services["session"].character = "Recovered character"
+    mock_services["session"].scene = "Recovered scene"
+    orchestrator._has_seen_intro_locally_or_persistently = MagicMock(return_value=True)
+    orchestrator._get_thread_id = MagicMock(return_value="thread-1")
+    mock_services["backend"].initialize_session = AsyncMock(return_value={
+        "character": "Recovered character",
+        "scene": "Recovered scene",
+    })
+    mock_services["backend"].fetch_history = AsyncMock(return_value=[])
+    orchestrator._start_scenario_flow = AsyncMock()
+
+    await orchestrator.handle_session_resume({"id": "thread-1", "metadata": {}})
+
+    assert mock_services["session"].history == []
+    orchestrator._start_scenario_flow.assert_awaited_once()
 
 
 @pytest.mark.asyncio
