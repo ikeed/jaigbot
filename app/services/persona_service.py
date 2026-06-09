@@ -224,7 +224,13 @@ def _format_interaction_guidance(persona: dict) -> str:
     lines: list[str] = []
 
     def add_list(label: str, key: str) -> None:
-        values = interaction.get(key) or []
+        values = interaction.get(key)
+        if values is None:
+            return
+        if isinstance(values, str):
+            values = [values]
+        elif not isinstance(values, list):
+            return
         if not values:
             return
         lines.append(f"{label}:")
@@ -234,7 +240,12 @@ def _format_interaction_guidance(persona: dict) -> str:
                 lines.append(f"- {cleaned}")
 
     def add_text(label: str, key: str) -> None:
-        value = str(interaction.get(key) or "").strip()
+        raw = interaction.get(key)
+        if raw is None:
+            return
+        if isinstance(raw, (list, dict)):
+            return
+        value = str(raw).strip()
         if value:
             lines.append(f"{label}: {value}")
 
@@ -250,6 +261,8 @@ def _format_interaction_guidance(persona: dict) -> str:
     add_list("Likely questions", "likely_questions")
     add_list("Good clinician moves", "good_clinician_moves")
     add_list("Bad clinician moves", "bad_clinician_moves")
+    if interaction.get("response_style_examples"):
+        lines.append("Response style examples: Use these as style guides only, not lines to copy verbatim.")
     add_list("Response style examples", "response_style_examples")
     add_list("Avoid", "avoid")
 
