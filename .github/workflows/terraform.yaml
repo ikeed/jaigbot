@@ -1,11 +1,11 @@
 name: Terraform Infra
 
 on:
+  workflow_call:
   pull_request:
+    branches: [ 'staging' ]
     paths:
       - 'terraform/**'
-  push:
-    branches: [ 'main' ]
   workflow_dispatch:
 
 permissions:
