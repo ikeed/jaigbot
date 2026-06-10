@@ -136,3 +136,49 @@ Mitigation:
 2. AIMS UI behavior is manifest/module owned
 3. core event vocabulary is module-neutral
 4. Chainlit bootstrap remains deterministic and maintainable
+
+## Actual Implementation Notes
+
+Phase 6 is now implemented with these concrete repo changes:
+
+- `public/aimsbot-ui.js` remains the one Chainlit bootstrap entrypoint, but it
+  now behaves as a generic shell loader:
+  - it initializes `window.TrainingUI`
+  - loads platform JS first
+  - fetches `/config`
+  - then loads active-module JS bundles from
+    `activeModule.frontendJsBundles`
+- core window-message vocabulary is now generic in backend and frontend:
+  - `training_intro_required`
+  - `training_intro_continue`
+  - `training_resume_thread`
+  - `training_participant_name`
+- legacy `aims_*` event names are still accepted on the frontend as
+  compatibility aliases during the migration window
+- generic platform shell code stays in:
+  - `public/aimsbot-ui.js`
+  - `public/js/aimsbot/core.js`
+  - `modal.js`
+  - `report-issue.js`
+  - `session-controls.js`
+  - `dictation.js`
+  - `splash.js`
+  - `window-events.js`
+- AIMS-specific intro/infographic behavior now loads through:
+  - `public/js/modules/aims/module-ui.js`
+- AIMS-specific role-label behavior is module-owned logically and loaded through
+  the manifest, even though the file still lives at:
+  - `public/js/aimsbot/message-roles.js`
+- `/config` now exposes additive active-module frontend metadata:
+  - `frontendJsBundles`
+  - `frontendCss`
+  - `branding`
+- Chainlit chat profile branding now comes from the active module manifest
+  rather than hardcoded `AIMSBot` strings
+
+## Important Remaining Limitation
+
+- CSS ownership is only partially generalized. The active-module manifest now
+  exposes `frontendCss`, but Chainlit still serves one deployment-level CSS
+  entrypoint. That is a deliberate transitional state and should be resolved in
+  Phase 8.

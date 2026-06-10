@@ -27,7 +27,7 @@ def test_chat_login_callback_redirects_to_current_thread(monkeypatch):
     )
     monkeypatch.setattr(
         "app.middleware.get_current_thread_id",
-        lambda user_id: "existing-thread",
+        lambda user_id, active_module_id=None: "existing-thread",
     )
 
     response = _middleware_client().get(
@@ -44,9 +44,25 @@ def test_chat_login_callback_without_current_thread_reaches_chainlit(monkeypatch
         "app.middleware.authenticated_user_identifier",
         lambda request: "clinician@example.com",
     )
-    monkeypatch.setattr("app.middleware.get_current_thread_id", lambda user_id: None)
+    monkeypatch.setattr("app.middleware.get_current_thread_id", lambda user_id, active_module_id=None: None)
 
     response = _middleware_client().get("/chat/login/callback?success=True")
+
+    assert response.status_code == 200
+    assert response.json() == {"route": "login-callback"}
+
+
+def test_chat_login_callback_respects_generic_new_chat_query(monkeypatch):
+    monkeypatch.setattr(
+        "app.middleware.authenticated_user_identifier",
+        lambda request: "clinician@example.com",
+    )
+    monkeypatch.setattr(
+        "app.middleware.get_current_thread_id",
+        lambda user_id, active_module_id=None: "existing-thread",
+    )
+
+    response = _middleware_client().get("/chat/login/callback?training_new=1")
 
     assert response.status_code == 200
     assert response.json() == {"route": "login-callback"}

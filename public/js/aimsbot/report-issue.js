@@ -1,7 +1,7 @@
 (function (window, document) {
   "use strict";
 
-    const app = window.AIMSBotUI;
+    const app = window.TrainingUI || window.AIMSBotUI;
     if (!app || app.reportIssueReady) return;
 
   app.reportIssueReady = true;

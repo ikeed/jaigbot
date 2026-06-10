@@ -16,10 +16,12 @@ from app.chat_roles import (
 from app.config import settings
 from app.core.registry import build_builtin_registry
 from app.constants import (
+    LEGACY_QUERY_NEW_CHAT,
     MSG_INTRO_REQUIRED,
     MSG_DUPLICATE_TAB,
-    MSG_PERSONA_NAME,
+    MSG_PARTICIPANT_NAME,
     MSG_RESUME_THREAD,
+    QUERY_NEW_CHAT,
 )
 from app.persona import DEFAULT_CHARACTER, DEFAULT_SCENE
 from app.services.chainlit.backend_client import BackendClient
@@ -179,7 +181,7 @@ class ChainlitOrchestrator:
                     self.session.persona_name = persona_name.strip()
                 if isinstance(persona_name, str) and persona_name.strip():
                     await self.ui.send_window_message(
-                        {"type": MSG_PERSONA_NAME, "personaName": persona_name.strip()}
+                        {"type": MSG_PARTICIPANT_NAME, "participantName": persona_name.strip()}
                     )
 
                 # Always refresh history from backend source of truth
@@ -323,7 +325,10 @@ class ChainlitOrchestrator:
         return cid
 
     def _get_reconnect_thread_id(self, user_id: Optional[str]) -> Optional[str]:
-        if self.session.query_params.get("aims_new") == "1":
+        if (
+            self.session.query_params.get(QUERY_NEW_CHAT) == "1"
+            or self.session.query_params.get(LEGACY_QUERY_NEW_CHAT) == "1"
+        ):
             return None
         persisted_thread_id = get_current_thread_id(user_id, active_module_id=self.active_module.module_id)
         context_thread_id = self._get_thread_id()
@@ -475,5 +480,5 @@ class ChainlitOrchestrator:
     async def _send_persona_name(self, persona_name: Any) -> None:
         if isinstance(persona_name, str) and persona_name.strip():
             await self.ui.send_window_message(
-                {"type": MSG_PERSONA_NAME, "personaName": persona_name.strip()}
+                {"type": MSG_PARTICIPANT_NAME, "participantName": persona_name.strip()}
             )

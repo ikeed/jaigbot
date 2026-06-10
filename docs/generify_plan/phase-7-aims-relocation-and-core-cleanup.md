@@ -25,7 +25,7 @@ and harder to verify.
 
 ## Step-By-Step Plan
 
-## Actual Starting Point After Phase 5
+## Actual Starting Point After Phase 6
 
 The repo already has:
 
@@ -33,12 +33,17 @@ The repo already has:
 - module-owned session bootstrap
 - module-owned summary routing
 - module-owned archive-envelope shaping
+- a generic frontend bootstrap loader
+- manifest-driven module JS bundles
+- generic lifecycle/event names in core frontend/backend code
 
 Implication:
 
 - Phase 7 should move the remaining AIMS implementation behind the module
   boundary that already exists instead of trying to invent new seams during the
-  file moves.
+  file moves
+- frontend relocation is now part of the ownership cleanup as well, especially
+  for AIMS-owned JS that still sits under `public/js/aimsbot/`
 
 ### Step 1: Classify files by true ownership
 

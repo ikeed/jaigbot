@@ -365,7 +365,10 @@ def create_aims_training_module(*, settings: Any) -> AimsTrainingModule:
         supports_intro=True,
         supports_feedback=True,
         supports_summary=True,
-        frontend_js_bundles=("/public/aimsbot-ui.js",),
+        frontend_js_bundles=(
+            "/public/js/aimsbot/message-roles.js",
+            "/public/js/modules/aims/module-ui.js",
+        ),
         frontend_css="/public/aimsbot.css",
         branding=BrandingSpec(
             app_title=APP_TITLE,

@@ -1,21 +1,21 @@
 (function (window, document) {
   "use strict";
 
-    const app = window.AIMSBotUI;
+    const app = window.TrainingUI || window.AIMSBotUI;
     if (!app || app.sessionControlsReady) return;
 
   app.sessionControlsReady = true;
 
   app.modals.newSession = app.createModal({
     id: "new-session-modal",
-    title: "New Scenario",
+    title: "New Conversation",
     description: "This will clear your current chat history and start a fresh session. Are you sure you want to continue?",
     showTextarea: false,
     confirmText: "Confirm",
     onConfirm: function () {
       app.postToChainlit({ type: "new_chat" });
       window.setTimeout(function () {
-        window.location.href = window.location.origin + "/chat?aims_new=1";
+        window.location.href = window.location.origin + "/chat?training_new=1";
       }, 100);
     }
   });

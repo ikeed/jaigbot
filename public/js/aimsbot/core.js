@@ -1,20 +1,26 @@
 (function (window, document) {
   "use strict";
 
-    const app = window.AIMSBotUI = window.AIMSBotUI || {};
+    const app = window.TrainingUI = window.TrainingUI || {};
+    window.AIMSBotUI = app;
     if (app.coreReady) return;
 
   app.coreReady = true;
   app.state = app.state || {};
   app.state.logoutInProgress = false;
-  app.state.pendingIntroStorageKey = "aimsbot.pendingIntro";
-
-  app.managedModalSelector = [
+  app.state.pendingIntroStorageKey = "training.pendingIntro";
+  app.managedModalSelectors = new Set([
     "#report-issue-modal",
     "#new-session-modal",
-    "#logout-modal",
-    "#aims-infographic-modal"
-  ].join(", ");
+    "#logout-modal"
+  ]);
+  app.getManagedModalSelector = function () {
+    return Array.from(app.managedModalSelectors).join(", ");
+  };
+  app.registerManagedModalSelector = function (selector) {
+    if (!selector) return;
+    app.managedModalSelectors.add(selector);
+  };
 
   app.chainlitIconButtonClass = [
     "inline-flex",
@@ -44,7 +50,9 @@
   ].join(" ");
 
   app.removeManagedModals = function () {
-    document.querySelectorAll(app.managedModalSelector).forEach(function (modal) {
+    const selector = app.getManagedModalSelector();
+    if (!selector) return;
+    document.querySelectorAll(selector).forEach(function (modal) {
       modal.remove();
     });
   };
@@ -58,6 +66,10 @@
 
   app.postToChainlit = function (payload) {
     window.postMessage(JSON.stringify(payload), "*");
+  };
+
+  app.emitLifecycleEvent = function (name, detail) {
+    document.dispatchEvent(new CustomEvent("training:" + name, { detail: detail || {} }));
   };
 
   app.isLoginCallbackRoute = function () {
@@ -172,7 +184,7 @@
     });
   };
 
-  if (window.location.search.indexOf("aims_new=1") !== -1) {
+  if (window.location.search.indexOf("training_new=1") !== -1 || window.location.search.indexOf("aims_new=1") !== -1) {
     window.history.replaceState(null, "", window.location.origin + "/chat");
   }
 

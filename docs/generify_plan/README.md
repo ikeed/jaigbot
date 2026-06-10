@@ -143,6 +143,36 @@ Implication for later phases:
 - Phase 8 still needs a non-AIMS proof that "summary unsupported" and
   mixed-role/mixed-startup modules behave cleanly
 
+### Phase 6
+
+Implemented.
+
+Actual artifacts now present in the repo:
+
+- `public/aimsbot-ui.js` is now a generic bootstrap loader that initializes
+  `window.TrainingUI`, loads platform modules first, then loads
+  module-specific JS bundles from `/config`
+- additive active-module frontend metadata is exposed in `/config`:
+  - `frontendJsBundles`
+  - `frontendCss`
+  - `branding`
+- core frontend/backend event vocabulary is now module-neutral:
+  - `training_intro_required`
+  - `training_intro_continue`
+  - `training_resume_thread`
+  - `training_participant_name`
+- AIMS intro/infographic UI now loads through
+  `public/js/modules/aims/module-ui.js`
+- active-module branding now drives Chainlit chat-profile name/loading text
+  instead of hardcoded `AIMSBot` strings
+
+Implication for later phases:
+
+- Phase 7 should physically relocate the remaining AIMS-owned frontend file
+  (`public/js/aimsbot/message-roles.js`) behind the module tree
+- Phase 8 should finish CSS ownership, because JS is now manifest-driven but
+  CSS is still served through one deployment-level Chainlit entrypoint
+
 ## Cross-Phase Rules
 
 These rules apply across all remaining phases.

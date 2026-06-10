@@ -37,3 +37,20 @@ None currently.
   summary payload shape in the repo. Phase 8 should prove the "no summary
   capability" path with a second stub module rather than assuming the seam is
   complete because AIMS works.
+
+## Phase 6
+
+- Module-owned frontend CSS is not actually loaded through the manifest yet.
+  `frontendCss` is exposed via `/config`, but Chainlit still serves one
+  deployment-level `custom_css` entrypoint. Phase 8 should decide whether CSS
+  remains one shell asset with module sections or becomes manifest-driven like
+  JS bundles.
+- The AIMS message-role renderer is now module-owned logically, but it still
+  lives at `public/js/aimsbot/message-roles.js`. Phase 7 should relocate that
+  file under an AIMS-owned frontend path so the physical layout matches the
+  ownership boundary.
+- Browser-based local verification could not be completed in this environment:
+  the in-app browser runtime had no active `iab` instance, and fallback
+  Playwright verification could not launch because the required local browser
+  runtime was unavailable here. Re-run a real browser sanity check in a normal
+  local developer session before treating Phase 6 as fully field-verified.

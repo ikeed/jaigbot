@@ -1,10 +1,16 @@
 (function (window, document) {
   "use strict";
 
-    const app = window.AIMSBotUI;
+    const app = window.TrainingUI || window.AIMSBotUI;
     if (!app || app.splashReady) return;
 
   app.splashReady = true;
+
+  function matchesBrandingLogo(img) {
+    const src = String((img && img.src) || "").toLowerCase();
+    const logoAsset = String((app.branding && app.branding.logoAsset) || "").toLowerCase();
+    return !!logoAsset && src.indexOf(logoAsset) !== -1;
+  }
 
   function revealComposerWhenMessagesAppear(form) {
       const observer = new MutationObserver(function () {
@@ -18,8 +24,7 @@
 
   function tweakSplash() {
     document.querySelectorAll("img").forEach(function (img) {
-        const src = (img.src || "").toLowerCase();
-        if (src.indexOf("aimsbot") === -1) return;
+        if (!matchesBrandingLogo(img)) return;
 
       img.style.width = "256px";
       img.style.height = "256px";

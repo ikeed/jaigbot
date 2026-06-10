@@ -2,6 +2,7 @@ import sys
 import types
 import importlib
 from importlib.machinery import ModuleSpec
+from types import SimpleNamespace
 from unittest.mock import MagicMock, AsyncMock, patch
 import pytest
 
@@ -135,12 +136,56 @@ async def test_on_logout(monkeypatch):
 
     mock_cl.send_window_message.assert_called_with("on_logout")
 
+
+def test_get_chainlit_data_layer_uses_main_memory_store(monkeypatch):
+    memory_store = {"session": {"history": []}}
+    monkeypatch.setitem(sys.modules, "app.main", SimpleNamespace(MEMORY_STORE=memory_store))
+    monkeypatch.setattr(chainlit_app, "MemoryDataLayer", lambda store: ("layer", store))
+
+    assert chainlit_app.get_chainlit_data_layer() == ("layer", memory_store)
+
+
 @pytest.mark.asyncio
 async def test_oauth_callback_google():
     default_user = User()
     raw_data = {"email": "test@google.com", "name": "Google User"}
     user = await chainlit_app.oauth_callback("google", "token", raw_data, default_user)
     assert user.identifier == "test@google.com"
+
+
+@pytest.mark.asyncio
+async def test_oauth_callback_facebook():
+    default_user = User(identifier="fallback")
+    raw_data = {"id": "fb-123", "name": "Facebook User"}
+
+    user = await chainlit_app.oauth_callback("facebook", "token", raw_data, default_user)
+
+    assert user.identifier == "fb-123"
+    assert user.metadata["provider"] == "facebook"
+
+
+@pytest.mark.asyncio
+async def test_oauth_callback_github():
+    default_user = User(identifier="fallback")
+    raw_data = {"login": "octocat", "email": "octo@example.com", "name": "Octo Cat"}
+
+    user = await chainlit_app.oauth_callback("github", "token", raw_data, default_user)
+
+    assert user.identifier == "octocat"
+    assert user.metadata["provider"] == "github"
+    assert user.metadata["email"] == "octo@example.com"
+
+
+@pytest.mark.asyncio
+async def test_oauth_callback_fallback_provider():
+    default_user = User(identifier="fallback")
+    raw_data = {"preferred_username": "user@example.com", "nickname": "Nick"}
+
+    user = await chainlit_app.oauth_callback("custom", "token", raw_data, default_user)
+
+    assert user.identifier == "user@example.com"
+    assert user.metadata["provider"] == "custom"
+    assert user.metadata["name"] == "Nick"
 
 @pytest.mark.asyncio
 async def test_start_chat_delegates_to_orchestrator():
@@ -149,6 +194,39 @@ async def test_start_chat_delegates_to_orchestrator():
     await chainlit_app.start_chat()
     chainlit_app.orchestrator.handle_chat_start.assert_called_once()
     mock_cl.Avatar.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_chat_profiles_uses_active_module_branding(monkeypatch):
+    branding = SimpleNamespace(loading_text="Module loading…")
+    manifest = SimpleNamespace(chat_profile_name="Training Stub", branding=branding)
+    fake_module = SimpleNamespace(get_ui_manifest=lambda: manifest)
+    monkeypatch.setattr(chainlit_app, "active_module", fake_module)
+
+    profiles = await chainlit_app.chat_profiles()
+
+    assert len(profiles) == 1
+    assert mock_cl.ChatProfile.call_args.kwargs["name"] == "Training Stub"
+    assert mock_cl.ChatProfile.call_args.kwargs["markdown_description"] == "Module loading…"
+
+
+@pytest.mark.asyncio
+async def test_chat_profiles_falls_back_when_profile_creation_raises(monkeypatch):
+    branding = SimpleNamespace(loading_text="Module loading…")
+    manifest = SimpleNamespace(chat_profile_name="Training Stub", branding=branding)
+    fake_module = SimpleNamespace(get_ui_manifest=lambda: manifest)
+    fallback_profile = object()
+    chat_profile = MagicMock(side_effect=[RuntimeError("boom"), fallback_profile])
+    monkeypatch.setattr(chainlit_app, "active_module", fake_module)
+    monkeypatch.setattr(chainlit_app.cl, "ChatProfile", chat_profile)
+
+    profiles = await chainlit_app.chat_profiles()
+
+    assert profiles == [fallback_profile]
+    assert chat_profile.call_count == 2
+    assert chat_profile.call_args.kwargs["name"] == "Training Stub"
+    assert chat_profile.call_args.kwargs["markdown_description"] == "Module loading…"
+
 
 @pytest.mark.asyncio
 async def test_on_chat_end_ignores_deregister_failure(monkeypatch):
@@ -162,6 +240,52 @@ async def test_on_chat_end_ignores_deregister_failure(monkeypatch):
     await chainlit_app.on_chat_end()
 
     deregister_session.assert_awaited_once_with("session-1", "connection-1")
+
+
+@pytest.mark.asyncio
+async def test_resume_chat_delegates_to_orchestrator():
+    chainlit_app.orchestrator.handle_session_resume = AsyncMock()
+    thread = {"id": "thread-1"}
+
+    await chainlit_app.resume_chat(thread)
+
+    chainlit_app.orchestrator.handle_session_resume.assert_awaited_once_with(thread)
+
+
+@pytest.mark.asyncio
+async def test_report_issue_action_forwards_non_empty_reason():
+    chainlit_app.orchestrator.handle_report_issue = AsyncMock()
+    ask_message = MagicMock()
+    ask_message.send = AsyncMock(return_value=SimpleNamespace(content="  UI broke  "))
+    chainlit_app.cl.AskUserMessage.return_value = ask_message
+
+    await chainlit_app.on_report_issue(MagicMock(to_dict=lambda: {"name": "report_issue"}))
+
+    chainlit_app.orchestrator.handle_report_issue.assert_awaited_once_with("UI broke")
+
+
+@pytest.mark.asyncio
+async def test_report_issue_action_ignores_empty_reason():
+    chainlit_app.orchestrator.handle_report_issue = AsyncMock()
+    ask_message = MagicMock()
+    ask_message.send = AsyncMock(return_value=SimpleNamespace(content="   "))
+    chainlit_app.cl.AskUserMessage.return_value = ask_message
+
+    await chainlit_app.on_report_issue(MagicMock(to_dict=lambda: {"name": "report_issue"}))
+
+    chainlit_app.orchestrator.handle_report_issue.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_report_issue_action_ignores_missing_reply():
+    chainlit_app.orchestrator.handle_report_issue = AsyncMock()
+    ask_message = MagicMock()
+    ask_message.send = AsyncMock(return_value=None)
+    chainlit_app.cl.AskUserMessage.return_value = ask_message
+
+    await chainlit_app.on_report_issue(MagicMock(to_dict=lambda: {"name": "report_issue"}))
+
+    chainlit_app.orchestrator.handle_report_issue.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -186,6 +310,99 @@ async def test_on_window_message_new_chat_deregisters_old_session(monkeypatch):
     assert session_manager.session_ended is False
     mock_clear.assert_called_once_with("test-user")
 
+
+@pytest.mark.asyncio
+async def test_on_window_message_new_chat_ignores_deregister_failure(monkeypatch):
+    session_manager = MagicMock(
+        session_id="session-1",
+        connection_id="connection-1",
+        session_ended=False,
+    )
+    session_manager.get_user_identifier.return_value = None
+    deregister_session = AsyncMock(side_effect=RuntimeError("backend down"))
+
+    monkeypatch.setattr(chainlit_app, "session_manager", session_manager)
+    monkeypatch.setattr(chainlit_app.backend_client, "deregister_session", deregister_session)
+
+    with patch("chainlit_app.clear_persistent_session_id") as mock_clear:
+        await chainlit_app.on_window_message('{"type": "new_chat"}')
+
+    deregister_session.assert_awaited_once_with("session-1", "connection-1")
+    assert session_manager.session_id is None
+    assert session_manager.history == []
+    assert session_manager.session_ended is False
+    mock_clear.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_on_window_message_ignores_invalid_json():
+    chainlit_app.orchestrator.handle_report_issue = AsyncMock()
+
+    await chainlit_app.on_window_message("not-json")
+
+    chainlit_app.orchestrator.handle_report_issue.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_on_window_message_duplicate_tab_echoes_to_client():
+    mock_cl.send_window_message.reset_mock()
+
+    await chainlit_app.on_window_message('{"type": "on_duplicate_tab"}')
+
+    mock_cl.send_window_message.assert_awaited_once_with({"type": "on_duplicate_tab"})
+
+
+@pytest.mark.asyncio
+async def test_on_window_message_logout_echoes_to_client():
+    mock_cl.send_window_message.reset_mock()
+
+    await chainlit_app.on_window_message('{"type": "on_logout"}')
+
+    mock_cl.send_window_message.assert_awaited_once_with("on_logout")
+
+
+@pytest.mark.asyncio
+async def test_on_window_message_intro_continue_marks_intro_seen(monkeypatch):
+    session_manager = MagicMock()
+    session_manager.get_user_identifier.return_value = "Test.User@example.com"
+    session_manager.local_intro_seen = False
+    session_manager.intro_pending = True
+    memory_store = {}
+    chainlit_app.orchestrator.handle_chat_start = AsyncMock()
+
+    monkeypatch.setattr(chainlit_app, "session_manager", session_manager)
+    monkeypatch.setitem(sys.modules, "app.main", SimpleNamespace(MEMORY_STORE=memory_store))
+
+    await chainlit_app.on_window_message('{"type": "training_intro_continue"}')
+
+    assert memory_store["aims:local:intro_seen:test.user@example.com"]["seen"] is True
+    assert session_manager.local_intro_seen is True
+    assert session_manager.intro_pending is False
+    chainlit_app.orchestrator.handle_chat_start.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_on_window_message_intro_continue_survives_memory_store_failure(monkeypatch):
+    session_manager = MagicMock()
+    session_manager.get_user_identifier.return_value = "Test.User@example.com"
+    session_manager.local_intro_seen = False
+    session_manager.intro_pending = True
+    chainlit_app.orchestrator.handle_chat_start = AsyncMock()
+
+    class FailingStore(dict):
+        def __setitem__(self, key, value):
+            raise RuntimeError("write failed")
+
+    monkeypatch.setattr(chainlit_app, "session_manager", session_manager)
+    monkeypatch.setitem(sys.modules, "app.main", SimpleNamespace(MEMORY_STORE=FailingStore()))
+
+    await chainlit_app.on_window_message('{"type": "training_intro_continue"}')
+
+    assert session_manager.local_intro_seen is True
+    assert session_manager.intro_pending is False
+    chainlit_app.orchestrator.handle_chat_start.assert_awaited_once()
+
+
 @pytest.mark.asyncio
 async def test_handle_message_delegates_to_orchestrator():
     chainlit_app.orchestrator.handle_user_message = AsyncMock()
@@ -199,3 +416,33 @@ async def test_on_window_message_report_issue():
     message = '{"type": "report_issue", "reason": "UI Reason"}'
     await chainlit_app.on_window_message(message)
     chainlit_app.orchestrator.handle_report_issue.assert_called_once_with("UI Reason")
+
+
+@pytest.mark.asyncio
+async def test_on_window_message_report_issue_ignores_blank_reason():
+    chainlit_app.orchestrator.handle_report_issue = AsyncMock()
+
+    await chainlit_app.on_window_message('{"type": "report_issue", "reason": "   "}')
+
+    chainlit_app.orchestrator.handle_report_issue.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_on_chat_end_without_connection_is_noop(monkeypatch):
+    session_manager = MagicMock(session_id=None, connection_id=None)
+    deregister_session = AsyncMock()
+    monkeypatch.setattr(chainlit_app, "session_manager", session_manager)
+    monkeypatch.setattr(chainlit_app.backend_client, "deregister_session", deregister_session)
+
+    await chainlit_app.on_chat_end()
+
+    deregister_session.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_auth_callback_returns_none_without_password(monkeypatch):
+    monkeypatch.delenv("AUTH_PASSWORD", raising=False)
+
+    user = await chainlit_app.auth_callback("admin", "secret")
+
+    assert user is None

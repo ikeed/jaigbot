@@ -121,15 +121,20 @@ SESSION_INTRO_PENDING = "aims_intro_pending"
 SESSION_CONNECTION_ID = "connection_id"
 SESSION_QUERY_PARAMS = "query_params"
 
+# Frontend Query Params
+QUERY_NEW_CHAT = "training_new"
+LEGACY_QUERY_NEW_CHAT = "aims_new"
+
 # Window Message Types
-MSG_INTRO_REQUIRED = "aims_intro_required"
+MSG_INTRO_REQUIRED = "training_intro_required"
 MSG_DUPLICATE_TAB = "on_duplicate_tab"
 MSG_LOGOUT = "on_logout"
 MSG_REPORT_ISSUE = "report_issue"
 MSG_NEW_CHAT = "new_chat"
-MSG_INTRO_CONTINUE = "aims_intro_continue"
-MSG_RESUME_THREAD = "aims_resume_thread"
-MSG_PERSONA_NAME = "aims_persona_name"
+MSG_INTRO_CONTINUE = "training_intro_continue"
+MSG_RESUME_THREAD = "training_resume_thread"
+MSG_PARTICIPANT_NAME = "training_participant_name"
+MSG_PERSONA_NAME = MSG_PARTICIPANT_NAME
 
 # OAuth Providers
 PROVIDER_GOOGLE = "google"

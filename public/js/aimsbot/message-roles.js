@@ -1,7 +1,7 @@
 (function (window, document) {
   "use strict";
 
-    const app = window.AIMSBotUI;
+    const app = window.TrainingUI || window.AIMSBotUI;
     if (!app || app.messageRolesReady) return;
 
   app.messageRolesReady = true;
@@ -38,8 +38,10 @@
     return "";
   }
 
-  function getPersonaName() {
-    const cached = String((app.state && app.state.personaName) || "").trim();
+  function getParticipantName() {
+    const cached = String(
+      (app.state && (app.state.participantName || app.state.personaName)) || ""
+    ).trim();
     if (cached) return cached;
 
     const systemMessages = document.querySelectorAll('.ai-message[data-aims-role="System"] .message-content, .ai-message[data-author="System"] .message-content');
@@ -47,7 +49,7 @@
       const name = extractPersonaName(message.innerText || message.textContent || "");
       if (name) {
         app.state = app.state || {};
-        app.state.personaName = name;
+        app.state.participantName = name;
         return name;
       }
     }
@@ -57,7 +59,7 @@
 
   function roleLabel(author) {
     if (author === "Doctor") return "Clinician";
-    if (normalizedRole(author) === "Assistant") return getPersonaName() || (author !== "Assistant" ? author : "") || "Patient";
+    if (normalizedRole(author) === "Assistant") return getParticipantName() || (author !== "Assistant" ? author : "") || "Patient";
     if (author === "Coach") return "Coach";
     if (author === "System") return "Scenario";
     return author || "";
@@ -93,11 +95,11 @@
         if (coachImg) coachImg.src = avatarSrcForRole("Coach");
     }
     if (role === "Assistant") {
-        const personaName = getPersonaName() || (author !== "Assistant" ? author : "");
+        const participantName = getParticipantName() || (author !== "Assistant" ? author : "");
         const assistantImg = message.querySelector('img[alt^="Avatar for "]');
-        if (assistantImg && personaName) {
+        if (assistantImg && participantName) {
           assistantImg.src = avatarSrcForRole("Assistant");
-          const tooltip = "Avatar for " + personaName;
+          const tooltip = "Avatar for " + participantName;
           assistantImg.alt = tooltip;
           assistantImg.title = tooltip;
           assistantImg.setAttribute("aria-label", tooltip);

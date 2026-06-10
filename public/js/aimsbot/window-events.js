@@ -1,7 +1,7 @@
 (function (window) {
   "use strict";
 
-    const app = window.AIMSBotUI;
+    const app = window.TrainingUI || window.AIMSBotUI;
     if (!app || app.windowEventsReady) return;
 
   app.windowEventsReady = true;
@@ -21,16 +21,18 @@
       window.location.href = "/duplicate";
     } else if (type === "on_logout") {
       window.location.href = "/";
-    } else if (type === "aims_resume_thread" && data.threadId) {
+    } else if ((type === "training_resume_thread" || type === "aims_resume_thread") && data.threadId) {
         const target = "/chat/thread/" + encodeURIComponent(data.threadId);
         if (window.location.pathname !== target) {
         window.location.replace(target);
       }
-    } else if (type === "aims_intro_required") {
-      app.infographic.show(true);
-    } else if (type === "aims_persona_name" && data.personaName) {
+    } else if (type === "training_intro_required" || type === "aims_intro_required") {
+      app.emitLifecycleEvent("intro_required", data);
+    } else if (type === "training_participant_name" || type === "aims_persona_name") {
+      const participantName = data.participantName || data.personaName;
+      if (!participantName) return;
       app.state = app.state || {};
-      app.state.personaName = String(data.personaName).trim();
+      app.state.participantName = String(participantName).trim();
       if (app.messageRoles && app.messageRoles.injectDataAuthors) {
         app.messageRoles.injectDataAuthors();
       }

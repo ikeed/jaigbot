@@ -62,6 +62,10 @@ def _client(*, settings=None, store=None, model_check=None, logger=None):
             archive_schema_version="aims-v1",
             storage_prefix="aims:local:session:",
             dialogue_roles=DialogueRoles(participant_roles=("user", "assistant")),
+            frontend_js_bundles=(
+                "/public/js/aimsbot/message-roles.js",
+                "/public/js/modules/aims/module-ui.js",
+            ),
             branding=BrandingSpec(app_title="AIMSBot (Gemini Enterprise)"),
         )
     )
@@ -145,6 +149,11 @@ def test_config_modelcheck_and_diagnostics_use_injected_dependencies():
     assert config["modelCheck"]["reason"] == "missing"
     assert config["memoryStoreSize"] == 2
     assert config["activeModule"]["id"] == "aims"
+    assert config["activeModule"]["frontendJsBundles"] == [
+        "/public/js/aimsbot/message-roles.js",
+        "/public/js/modules/aims/module-ui.js",
+    ]
+    assert config["activeModule"]["branding"]["appTitle"] == "AIMSBot (Gemini Enterprise)"
 
     modelcheck = client.get("/modelcheck").json()
     assert modelcheck["modelId"] == "gemini-test"

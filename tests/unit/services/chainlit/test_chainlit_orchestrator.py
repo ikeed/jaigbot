@@ -99,7 +99,7 @@ async def test_handle_chat_start_redirects_reconnect_to_persisted_thread(
 def test_reconnect_redirect_does_not_hijack_explicit_new_chat(
     orchestrator, mock_services, monkeypatch
 ):
-    mock_services["session"].query_params = {"aims_new": "1"}
+    mock_services["session"].query_params = {"training_new": "1"}
     orchestrator._get_thread_id = MagicMock(return_value="new-socket-thread")
     monkeypatch.setattr(
         "app.services.chainlit.orchestrator.get_current_thread_id",

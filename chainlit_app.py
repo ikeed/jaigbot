@@ -53,12 +53,16 @@ def get_chainlit_data_layer():
 
 @cl.set_chat_profiles
 async def chat_profiles(_current_user: Optional[cl.User] = None):
+    manifest = active_module.get_ui_manifest()
+    branding = manifest.branding
+    profile_name = manifest.chat_profile_name
+    loading_text = (branding.loading_text if branding and branding.loading_text else "Loading…")
     try:
         icon = "/public/avatars/spinner.svg"
         return [
             cl.ChatProfile(
-                name="AIMSBot",
-                markdown_description="Loading your scenario…",
+                name=profile_name,
+                markdown_description=loading_text,
                 icon=icon,
                 default=True,
             )
@@ -67,7 +71,7 @@ async def chat_profiles(_current_user: Optional[cl.User] = None):
         # Import cl here if not available, though it should be.
         import logging
         logging.warning("Failed to load chat profiles, using default: %s", e)
-        return [cl.ChatProfile(name="AIMSBot", markdown_description="Loading your scenario…", default=True)]
+        return [cl.ChatProfile(name=profile_name, markdown_description=loading_text, default=True)]
 
 @cl.on_chat_start
 async def start_chat():

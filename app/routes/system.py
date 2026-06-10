@@ -125,6 +125,18 @@ def create_system_router(
                     "chatProfileName": active_module_manifest.chat_profile_name,
                     "storagePrefix": active_module_manifest.storage_prefix,
                     "archiveSchemaVersion": active_module_manifest.archive_schema_version,
+                    "frontendJsBundles": list(active_module_manifest.frontend_js_bundles),
+                    "frontendCss": active_module_manifest.frontend_css,
+                    "branding": (
+                        {
+                            "appTitle": active_module_manifest.branding.app_title,
+                            "avatarName": active_module_manifest.branding.avatar_name,
+                            "logoAsset": active_module_manifest.branding.logo_asset,
+                            "loadingText": active_module_manifest.branding.loading_text,
+                        }
+                        if active_module_manifest.branding
+                        else None
+                    ),
                 }
                 if active_module_manifest
                 else None
