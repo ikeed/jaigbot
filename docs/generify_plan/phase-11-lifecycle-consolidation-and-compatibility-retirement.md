@@ -1,5 +1,9 @@
 # Phase 11: Lifecycle Consolidation And Compatibility Retirement
 
+Status: Implemented. Use this file as the rationale and verification target for
+the landed lifecycle/runtime cleanup, and use `deferred-issues.md` plus Phase
+12-13 for the remaining follow-up work.
+
 ## Objective
 
 Consolidate lifecycle ownership now that the modular seams are proven, then

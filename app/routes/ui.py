@@ -7,7 +7,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.chainlit_thread_state import get_current_thread_id
 from app.config import settings
-from app.core.registry import build_builtin_registry
+from app.core.module_runtime import get_builtin_active_module
 from app.constants import (
     APP_TITLE,
     TEMPLATE_LOGIN,
@@ -28,10 +28,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 
-def _get_shell_context() -> dict[str, str]:
-    manifest = build_builtin_registry(settings=settings).get_active_module(
-        active_module=settings.ACTIVE_MODULE
-    ).get_ui_manifest()
+def _get_shell_context(request: Request) -> dict[str, str]:
+    active_module = getattr(request.app.state, "active_module", None) or get_builtin_active_module()
+    manifest = active_module.get_ui_manifest()
     branding = manifest.branding
     module_title = branding.app_title if branding and branding.app_title else manifest.display_name
     return {
@@ -58,7 +57,7 @@ async def custom_login_page(request: Request):
         context={
             "providers": providers,
             "auth_secret_set": auth_secret_set,
-            **_get_shell_context(),
+            **_get_shell_context(request),
         }
     )
 
@@ -68,7 +67,7 @@ async def duplicate_tab_page(request: Request):
     return templates.TemplateResponse(
         name=TEMPLATE_DUPLICATE,
         request=request,
-        context=_get_shell_context(),
+        context=_get_shell_context(request),
     )
 
 @router.get(ROUTE_CHAT_LOGIN, response_class=RedirectResponse)

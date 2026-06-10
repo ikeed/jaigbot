@@ -15,7 +15,8 @@ from app.chat_roles import (
     is_scenario_card
 )
 from app.config import settings
-from app.core.registry import build_builtin_registry
+from app.core.legacy_module_resolution import resolve_thread_metadata_module_id
+from app.core.module_runtime import get_builtin_active_module
 from app.constants import (
     LEGACY_QUERY_NEW_CHAT,
     MSG_INTRO_REQUIRED,
@@ -44,9 +45,7 @@ class ChainlitOrchestrator:
         self.backend = backend_client
         self.ui = ui_handler
         self.session = session_manager
-        self.active_module = active_module or build_builtin_registry(settings=settings).get_active_module(
-            active_module=settings.ACTIVE_MODULE
-        )
+        self.active_module = active_module or get_builtin_active_module()
 
     async def handle_chat_start(self):
         """Main entry point for starting or resuming a chat session."""
@@ -130,7 +129,7 @@ class ChainlitOrchestrator:
 
             metadata = (thread or {}).get("metadata") or {}
             thread_id = (thread or {}).get("id") or self._get_thread_id()
-            persisted_module_id = metadata.get("module_id") if isinstance(metadata.get("module_id"), str) else None
+            persisted_module_id = resolve_thread_metadata_module_id(metadata)
             resume_validation = self.active_module.resume_validation(persisted_module_id=persisted_module_id)
             if not resume_validation.is_resumable:
                 logger.warning(

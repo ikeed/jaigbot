@@ -16,6 +16,8 @@ sequence:
 9. role semantics and bootstrap contract generalization
 10. shell branding and module-owned presentation cleanup
 11. lifecycle consolidation and compatibility retirement
+12. frontend role/artifact presentation generalization
+13. compatibility shim retirement and broader documentation cleanup
 
 The goal is to let implementation proceed incrementally without forcing
 backtracking in storage, resume, or frontend work that will come later.
@@ -33,6 +35,8 @@ backtracking in storage, resume, or frontend work that will come later.
 - [Phase 9: Role And Bootstrap Generalization](./phase-9-role-and-bootstrap-generalization.md)
 - [Phase 10: Branding And Presentation Cleanup](./phase-10-branding-and-presentation-cleanup.md)
 - [Phase 11: Lifecycle Consolidation And Compatibility Retirement](./phase-11-lifecycle-consolidation-and-compatibility-retirement.md)
+- [Phase 12: Frontend Role And Artifact Presentation](./phase-12-frontend-role-and-artifact-presentation.md)
+- [Phase 13: Shim Retirement And Documentation Cleanup](./phase-13-shim-retirement-and-documentation-cleanup.md)
 
 ## Current Status
 
@@ -288,16 +292,56 @@ Still deferred:
 
 ### Phase 11
 
+Implemented.
+
+What landed:
+
+- process-wide built-in module runtime now lives in `app/core/module_runtime.py`
+- request paths no longer rebuild fresh registries in:
+  - `app/main.py`
+  - `app/routes/ui.py`
+  - `app/services/chat_orchestrator.py`
+  - `app/services/chainlit/orchestrator.py`
+  - `app/services/storage_service.py`
+  - `chainlit_app.py`
+- legacy archive/session payloads now resolve module ownership explicitly via
+  `app/core/legacy_module_resolution.py`
+- legacy Chainlit thread metadata now resolves module ownership explicitly
+  before resume validation
+
+Still deferred:
+
+- import-path compatibility shims remain because they are still used widely in
+  app-level AIMS services and test imports
+- direct-construction fallbacks still exist, but now converge on the cached
+  built-in runtime rather than rebuilding registries
+- legacy-module inference currently knows how to identify historical AIMS data,
+  not arbitrary future module families without explicit `module_id`
+
+### Phase 12
+
 Planned.
 
 Focus:
 
-- stop rebuilding fresh registries in request paths; move to one authoritative
-  lifecycle-owned registry/module graph
-- retire compatibility shims deliberately
-- add explicit legacy archive/bootstrap adapters where missing `module_id`
-  currently falls back to deployment defaults
+- make the browser shell consume module role labels for visible message
+  presentation
+- replace the “first artifact wins” startup assumption with an explicit
+  multi-artifact presentation model
+- decide whether stylesheet loading remains one shell asset or becomes
+  manifest-driven per module
 
+### Phase 13
+
+Planned.
+
+Focus:
+
+- retire old import-path compatibility shims in controlled batches
+- do a broader documentation pass once the core shell behavior is no longer
+  AIMS-first in the browser
+- update contributor guidance again, including `AGENTS.md`, to reflect the
+  post-shim ownership model
 ## Cross-Phase Rules
 
 These rules apply across all remaining phases.

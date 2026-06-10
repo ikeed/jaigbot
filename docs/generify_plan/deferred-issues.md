@@ -70,30 +70,6 @@ None currently.
   architecture without removing them; they should be retired only when
   downstream imports, test ownership, and docs are cleaned up deliberately.
 
-## Phase 8
-
-- UI author/label mapping is still largely AIMS-first. Core frontend code can
-  load different module bundles now, and backend helpers now understand
-  module-defined role labels, but the visible Chainlit shell still renders one
-  AIMS-first message family. Phase 9 created the backend seam; Phase 10 still
-  needs to make the frontend consume it coherently.
-- Deployment-level branding is still partially AIMS-specific:
-  FastAPI `APP_TITLE`, login/duplicate templates, avatar asset titles, and some
-  docs continue to say `AIMSBot`. The active module now controls Chainlit
-  profile/loading branding, but shell-level branding cleanup remains a separate
-  product decision.
-- Built-in registries are still reconstructed in several dependency and helper
-  paths (`app.main`, `ChatOrchestrator`, `ChainlitOrchestrator`,
-  `StorageService`). That is safe while modules are stateless, but it will
-  become the wrong lifecycle if modules later own caches, adapters, or shared
-  runtime collaborators.
-- Documentation still largely describes the product as AIMS-specific. That is
-  correct for the current shipped behavior, but the app now contains generic
-  module/runtime seams, a second built-in module, and new core packages.
-  `docs/`, setup guides, architecture notes, and `AGENTS.md` will need an
-  explicit pass so they stop steering future work back toward a single-module
-  mental model.
-
 ## Phase 9
 
 - The generic bootstrap transport now carries a first-class `module` block with
@@ -117,3 +93,16 @@ None currently.
   still intentionally dominate the repo. That is correct while AIMS remains the
   primary shipped module, but a future broader module rollout will need another
   documentation pass.
+
+## Phase 11
+
+- Compatibility shims remain at the old import paths for the AIMS engine,
+  prompt module, and several service modules. They are still referenced widely
+  across app-level AIMS services and tests, so Phase 11 stopped at lifecycle
+  cleanup and explicit legacy adapters rather than deleting them half-way.
+- Direct construction still falls back to the cached built-in runtime when an
+  explicit `active_module` is not supplied. That is a bounded fallback now, not
+  a registry rebuild path, but it is still transitional.
+- Legacy-module inference is now explicit, but it only recognizes historical
+  AIMS data families. That is the right move for this repo today, but it is not
+  a general cross-module migration system.

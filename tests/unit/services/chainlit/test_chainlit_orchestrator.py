@@ -177,6 +177,40 @@ async def test_handle_chat_start_reports_startup_failure(orchestrator, mock_serv
 
 
 @pytest.mark.asyncio
+async def test_handle_session_resume_rejects_legacy_aims_thread_under_other_module(mock_services):
+    active_module = MagicMock()
+    active_module.module_id = "interview"
+    active_module.resume_validation.return_value = SimpleNamespace(
+        is_resumable=False,
+        reason="legacy aims thread",
+    )
+    orchestrator = ChainlitOrchestrator(
+        backend_client=mock_services["backend"],
+        ui_handler=mock_services["ui"],
+        session_manager=mock_services["session"],
+        active_module=active_module,
+    )
+    orchestrator._has_seen_intro_locally_or_persistently = MagicMock(return_value=True)
+    orchestrator._start_scenario_flow = AsyncMock()
+
+    await orchestrator.handle_session_resume(
+        {
+            "id": "thread-legacy",
+            "metadata": {
+                "character": "Specific Persona: Sarah",
+                "scene": "Clinic",
+                "personaName": "Sarah",
+                "initialCard": "Scenario Briefing",
+                "history": [],
+            },
+        }
+    )
+
+    active_module.resume_validation.assert_called_once_with(persisted_module_id="aims")
+    orchestrator._start_scenario_flow.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_handle_user_message_success(orchestrator, mock_services):
     mock_services["session"].session_ended = False
     mock_services["session"].intro_pending = False

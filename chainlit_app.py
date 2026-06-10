@@ -14,7 +14,7 @@ from starlette.datastructures import Headers
 from chainlit.types import ThreadDict
 
 from app.config import settings
-from app.core.registry import build_builtin_registry
+from app.core.module_runtime import get_builtin_active_module
 from app.utils.env import is_valid_env_val
 from app.constants import (
     MSG_DUPLICATE_TAB,
@@ -42,7 +42,7 @@ session_manager = SessionManager()
 active_module_id = getattr(settings, "ACTIVE_MODULE", "aims")
 if not isinstance(active_module_id, str) or not active_module_id.strip():
     active_module_id = "aims"
-active_module = build_builtin_registry(settings=settings).get_active_module(active_module=active_module_id)
+active_module = get_builtin_active_module(active_module_id=active_module_id)
 orchestrator = ChainlitOrchestrator(backend_client, ui_handler, session_manager, active_module=active_module)
 logger = logging.getLogger(__name__)
 

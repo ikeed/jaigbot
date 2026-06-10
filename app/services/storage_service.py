@@ -5,7 +5,8 @@ from typing import Dict, Any, Iterable, Optional
 from google.cloud import storage
 from app.config import settings
 from app.core.archive_serialization import serialize_archive_envelope
-from app.core.registry import build_builtin_registry
+from app.core.legacy_module_resolution import resolve_archive_module_id
+from app.core.module_runtime import get_builtin_active_module
 
 logger = logging.getLogger(__name__)
 
@@ -93,9 +94,8 @@ class StorageService:
     @staticmethod
     def _transform_to_logical_schema(session_id: str, user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """Convert internal memory to a module-aware logical archive schema."""
-        persisted_module_id = data.get("module_id")
-        active_module_id = str(persisted_module_id).strip() if isinstance(persisted_module_id, str) and persisted_module_id.strip() else settings.ACTIVE_MODULE
-        active_module = build_builtin_registry(settings=settings).get_active_module(active_module=active_module_id)
+        persisted_module_id = resolve_archive_module_id(data) or settings.ACTIVE_MODULE
+        active_module = get_builtin_active_module(active_module_id=persisted_module_id)
         envelope = active_module.build_archive_envelope(
             session_id=session_id,
             user_id=user_id,

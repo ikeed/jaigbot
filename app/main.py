@@ -5,7 +5,7 @@ from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
-from .core.registry import build_builtin_registry
+from .core.module_runtime import get_builtin_active_module, get_builtin_module_registry
 from .http_handlers import get_request_id as _get_request_id, install_http_handlers
 from .vertex import VertexClient
 from .runtime import VertexClientCache, create_memory_store, get_logging_config
@@ -29,8 +29,8 @@ async def _lifespan(application: FastAPI):
     """Application lifespan: run startup tasks before yielding, cleanup after."""
     application.state.memory_store = MEMORY_STORE
     application.state.vertex_client_cache = _VERTEX_CLIENT_CACHE
-    module_registry = build_builtin_registry(settings=settings)
-    active_module = module_registry.get_active_module(active_module=settings.ACTIVE_MODULE)
+    module_registry = get_builtin_module_registry()
+    active_module = get_builtin_active_module()
     application.state.module_registry = module_registry
     application.state.active_module = active_module
     logger.info(
@@ -57,15 +57,14 @@ def get_active_module(request: Request):
     active_module = getattr(request.app.state, "active_module", None)
     if active_module is not None:
         return active_module
-    module_registry = build_builtin_registry(settings=settings)
-    return module_registry.get_active_module(active_module=settings.ACTIVE_MODULE)
+    return get_builtin_active_module()
 
 
 def get_module_registry(request: Request):
     module_registry = getattr(request.app.state, "module_registry", None)
     if module_registry is not None:
         return module_registry
-    return build_builtin_registry(settings=settings)
+    return get_builtin_module_registry()
 
 # Optional CORS
 if settings.ALLOWED_ORIGINS:
@@ -170,9 +169,7 @@ def _chat_orchestrator(memory_store=None, active_module=None):
         vertex_config=_vertex_config(),
         debug_config=_debug_config(),
         logger=logger,
-        active_module=active_module or build_builtin_registry(settings=settings).get_active_module(
-            active_module=settings.ACTIVE_MODULE
-        ),
+        active_module=active_module or get_builtin_active_module(),
     )
 
 

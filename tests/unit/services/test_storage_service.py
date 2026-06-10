@@ -156,6 +156,25 @@ def test_storage_service_duration_calculation_edge_cases():
     }
     result = service._transform_to_logical_schema("sid", "uid", data_numeric_strings)
     assert result["metadata"]["timestamps"]["durationSeconds"] == 100.0
+
+
+def test_storage_service_legacy_aims_payload_does_not_follow_active_module(monkeypatch):
+    monkeypatch.setattr("app.config.settings.ACTIVE_MODULE", "interview")
+    data = {
+        "session_started": 100.0,
+        "updated": 120.0,
+        "character": "Specific Persona: Jasmine",
+        "scene": "Clinic",
+        "full_history": [],
+        "aims": {"totalTurns": 1},
+        "coach_post": {"title": "Done"},
+    }
+
+    result = StorageService._transform_to_logical_schema("sid", "uid", data)
+
+    assert result["metadata"]["moduleId"] == "aims"
+    assert result["module"]["id"] == "aims"
+
 def test_storage_service_error_handling(mock_storage_client):
     service = StorageService(bucket_name="test-bucket")
     

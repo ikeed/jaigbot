@@ -37,7 +37,7 @@ async def test_custom_login_page_renders_template_for_unauthenticated_user(monke
     monkeypatch.setattr(
         ui,
         "_get_shell_context",
-        lambda: {
+        lambda request: {
             "shell_title": "Conversation Trainer",
             "module_title": "AIMSBot (Gemini Enterprise)",
             "module_display_name": "AIMS",
@@ -62,7 +62,7 @@ async def test_duplicate_tab_page_renders_template(monkeypatch):
     monkeypatch.setattr(
         ui,
         "_get_shell_context",
-        lambda: {
+        lambda request: {
             "shell_title": "Conversation Trainer",
             "module_title": "Interview Practice",
             "module_display_name": "Interview Practice",
