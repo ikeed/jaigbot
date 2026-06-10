@@ -20,6 +20,7 @@ def initialize_session(
     memory_store: Any,
     memory_enabled: bool,
     logger: logging.Logger,
+    module_id: str | None = None,
 ) -> dict:
     """Initialize or refresh a Chainlit-backed session.
 
@@ -96,6 +97,7 @@ def initialize_session(
             "character": character,
             "scene": scene,
             "persona": persona_payload,
+            "module_id": module_id,
             "user_info": body.userInfo,
             "updated": now,
             "session_started": now,
@@ -128,6 +130,8 @@ def initialize_session(
                 mem["persona"] = fields["persona"]
         if body.userInfo and not mem.get("user_info"):
             mem["user_info"] = body.userInfo
+        if module_id and not mem.get("module_id"):
+            mem["module_id"] = module_id
 
         if not mem.get("history") and character:
             if not mem.get("full_history"):
@@ -143,7 +147,7 @@ def initialize_session(
     logger.info("Session initialized: %s", sid)
 
     already_active = _track_connection(body, sid, mem, memory_store, logger)
-    return _session_response(body, sid, mem, already_active, initial_card)
+    return _session_response(body, sid, mem, already_active, initial_card, module_id)
 
 
 def deregister_session_connection(
@@ -215,11 +219,19 @@ def _track_connection(body: Any, sid: str, mem: dict, memory_store: Any, logger:
     return already_active
 
 
-def _session_response(_body: Any, sid: str, mem: dict, already_active: bool, initial_card: str | None) -> dict:
+def _session_response(
+    _body: Any,
+    sid: str,
+    mem: dict,
+    already_active: bool,
+    initial_card: str | None,
+    module_id: str | None,
+) -> dict:
     persona_data = mem.get("persona")
     persona = persona_data if isinstance(persona_data, dict) else {}
     return {
         "status": "ok",
+        "moduleId": mem.get("module_id") or module_id,
         "sessionId": sid,
         "alreadyActive": already_active,
         "character": mem.get("character"),

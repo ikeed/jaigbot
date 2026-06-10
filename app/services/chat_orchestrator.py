@@ -69,6 +69,7 @@ class ChatOrchestrator:
         self.active_module = active_module or build_builtin_registry(settings=settings).get_active_module(
             active_module=settings.ACTIVE_MODULE
         )
+        self.counted_roles = self.active_module.dialogue_roles().counted_roles
         
         # Initialize session service
         self.session_service = SessionService(
@@ -82,6 +83,8 @@ class ChatOrchestrator:
             memory_enabled=self.memory_enabled,
             memory_max_turns=self.memory_max_turns,
             memory_ttl_seconds=self.memory_ttl_seconds,
+            module_id=self.active_module.module_id,
+            counted_roles=self.counted_roles,
         )
         
         # Initialize context builder
@@ -90,6 +93,7 @@ class ChatOrchestrator:
             memory_enabled=self.memory_enabled,
             memory_max_turns=self.memory_max_turns,
             memory_ttl_seconds=self.memory_ttl_seconds,
+            counted_roles=self.counted_roles,
             do_prune_mod=29,
         )
     

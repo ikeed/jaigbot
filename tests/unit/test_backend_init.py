@@ -22,6 +22,7 @@ def test_init_session_backend_persona():
     data = response.json()
     
     assert data["status"] == "ok"
+    assert data["moduleId"] == "aims"
     assert data["sessionId"] == sid
     assert "character" in data
     assert "scene" in data
@@ -37,6 +38,7 @@ def test_init_session_backend_persona():
     mem = MEMORY_STORE[sid]
     assert mem["character"] == data["character"]
     assert mem["scene"] == data["scene"]
+    assert mem["module_id"] == "aims"
     assert len(mem["history"]) == 1
     assert mem["history"][0]["role"] == ROLE_SYSTEM
     assert mem["history"][0]["content"] == data["initialCard"]

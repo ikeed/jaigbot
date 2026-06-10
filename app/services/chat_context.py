@@ -44,12 +44,14 @@ class ChatContextBuilder:
         memory_enabled: bool,
         memory_max_turns: int,
         memory_ttl_seconds: int,
+        counted_roles: tuple[str, ...] | None = None,
         do_prune_mod: int = 29,
     ) -> None:
         self.sess = session_service
         self.memory_enabled = memory_enabled
         self.memory_max_turns = int(memory_max_turns)
         self.memory_ttl_seconds = int(memory_ttl_seconds)
+        self.counted_roles = counted_roles or ("user", "assistant")
         self._do_prune_mod = int(do_prune_mod)
 
     def build(self, req: Any, body_session_id: Optional[str], character: Optional[str], scene: Optional[str], user_info: Optional[dict] = None) -> ChatContext:
@@ -90,7 +92,11 @@ class ChatContextBuilder:
                     break
 
         # compact history text like before (tail of last N turns)
-        history_text = format_history(mem.get("history", []), self.memory_max_turns) if mem else ""
+        history_text = (
+            format_history(mem.get("history", []), self.memory_max_turns, counted_roles=self.counted_roles)
+            if mem
+            else ""
+        )
 
         # identify effective user_info (session vs request)
         effective_user_info = (mem.get("user_info") if mem else None) or user_info

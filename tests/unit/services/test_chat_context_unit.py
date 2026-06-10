@@ -67,3 +67,30 @@ def test_chat_context_builder_composes_instruction_and_history():
 
     # person_last should be the last assistant message from memory
     assert ctx.person_last == "hello"
+
+
+def test_chat_context_builder_uses_module_counted_roles_for_history_tail():
+    sess = FakeSessionService()
+    builder = ChatContextBuilder(
+        session_service=sess,
+        memory_enabled=True,
+        memory_max_turns=1,
+        memory_ttl_seconds=3600,
+        counted_roles=("student", "interviewer"),
+    )
+
+    sid, _ = sess.ensure_session(None, None)
+    mem = sess.get_mem(sid)
+    mem["history"] = [
+        {"role": "system", "content": "meta"},
+        {"role": "mentor", "content": "coach"},
+        {"role": "student", "content": "Q1"},
+        {"role": "interviewer", "content": "A1"},
+        {"role": "mentor", "content": "coach-2"},
+        {"role": "student", "content": "Q2"},
+        {"role": "interviewer", "content": "A2"},
+    ]
+
+    ctx = builder.build(req=None, body_session_id=sid, character="CHAR", scene="SCENE")
+
+    assert ctx.history_text.split("\n") == ["Assistant: coach-2", "Assistant: Q2", "Assistant: A2"]

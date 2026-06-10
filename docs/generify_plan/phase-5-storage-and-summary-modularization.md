@@ -31,6 +31,7 @@ The repo already has:
 - module-owned archive shaping for AIMS endgame exports via
   `build_archive_payload(...)`
 - module-owned turn dispatch and response shaping
+- module-owned session bootstrap and module-aware runtime memory metadata
 - core background upload mechanics still housed in `ChatOrchestrator` and
   `storage_service`
 

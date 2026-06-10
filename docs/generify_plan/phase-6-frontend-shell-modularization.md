@@ -24,6 +24,20 @@ message translations.
 - visual redesign
 - physical relocation of every AIMS frontend asset in one shot if wrappers are sufficient
 
+## Actual Starting Point After Phase 4
+
+The repo already has:
+
+- module-owned session bootstrap on the backend
+- module-aware current-thread and resume validation
+- compatibility-shaped frontend bootstrap fields such as `initialCard` and
+  `personaName`
+
+Implication:
+
+- Phase 6 should treat the remaining AIMS-specific startup UI as a frontend
+  vocabulary and asset-ownership problem, not as a session-bootstrap problem
+
 ## Step-By-Step Plan
 
 ### Step 1: Inventory shell vs AIMS-specific frontend behavior
@@ -119,4 +133,3 @@ Mitigation:
 2. AIMS UI behavior is manifest/module owned
 3. core event vocabulary is module-neutral
 4. Chainlit bootstrap remains deterministic and maintainable
-

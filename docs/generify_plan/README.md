@@ -97,6 +97,27 @@ Implication for later phases:
 - one intentional transitional compromise remains: legacy chat behavior is
   hidden behind the AIMS module rather than modeled as a separate module
 
+### Phase 4
+
+Implemented.
+
+Actual artifacts now present in the repo:
+
+- generic session bootstrap types in `app/core/session_types.py`
+- compatibility serialization for module-owned session bootstrap in
+  `app/core/session_serialization.py`
+- `/session` now delegates to `active_module.initialize_session(...)`
+- runtime session memory now records `module_id`
+- history trimming/counting seams accept module-counted roles
+- current-thread persistence and resume validation are module-aware
+
+Implication for later phases:
+
+- Phase 5 can persist `module_id` and module-shaped archive/session envelopes
+  without inventing a new bootstrap seam
+- Phase 6 should replace the remaining scenario-card-specific UI vocabulary
+  rather than trying to rebuild session bootstrap from scratch
+
 ## Cross-Phase Rules
 
 These rules apply across all remaining phases.
@@ -203,6 +224,8 @@ Phase 5 may assume:
 - session and resume semantics have a module-owned seam
 - `module_id` handling rules are explicit for runtime memory and thread state
 - AIMS endgame archive payload shaping already lives behind a module hook
+- `/session` bootstrap is already module-owned, even though its outward fields
+  remain compatibility-shaped
 
 ### Phase 5 -> Phase 6
 

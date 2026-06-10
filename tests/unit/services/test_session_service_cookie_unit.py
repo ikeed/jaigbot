@@ -50,6 +50,7 @@ def test_ensure_session_prefers_body_then_cookie_and_populates_user_info():
         memory_enabled=True,
         memory_max_turns=8,
         memory_ttl_seconds=3600,
+        module_id="aims",
     )
     request = MagicMock(cookies={"sid": "cookie-sid"})
 
@@ -64,6 +65,7 @@ def test_ensure_session_prefers_body_then_cookie_and_populates_user_info():
     assert store["body-sid"]["full_history"] == []
     assert store["body-sid"]["updated"] == 1
     assert store["body-sid"]["session_started"] >= 1
+    assert store["body-sid"]["module_id"] == "aims"
     assert store["body-sid"]["user_info"] == {"identifier": "doctor@example.com"}
 
 
@@ -116,6 +118,34 @@ def test_persona_scene_persists_memory():
 
     assert mem["character"] == "patient"
     assert mem["scene"] == "clinic"
+
+
+def test_trim_history_supports_module_counted_roles():
+    history = [
+        {"role": "system", "content": "meta"},
+        {"role": "mentor", "content": "coach"},
+        {"role": "student", "content": "user-1"},
+        {"role": "interviewer", "content": "assistant-1"},
+        {"role": "mentor", "content": "coach-2"},
+        {"role": "student", "content": "user-2"},
+        {"role": "interviewer", "content": "assistant-2"},
+        {"role": "student", "content": "user-3"},
+        {"role": "interviewer", "content": "assistant-3"},
+    ]
+
+    trimmed = SessionService.trim_history(
+        history,
+        max_turns=2,
+        counted_roles=("student", "interviewer"),
+    )
+
+    assert trimmed == [
+        {"role": "mentor", "content": "coach-2"},
+        {"role": "student", "content": "user-2"},
+        {"role": "interviewer", "content": "assistant-2"},
+        {"role": "student", "content": "user-3"},
+        {"role": "interviewer", "content": "assistant-3"},
+    ]
 
 
 def test_apply_cookie_ignores_response_errors():

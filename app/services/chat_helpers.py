@@ -19,13 +19,33 @@ def build_system_instruction(effective_character: Optional[str], effective_scene
     return None
 
 
-def format_history(turns: list[dict], memory_max_turns: int) -> str:
+def format_history(
+    turns: list[dict],
+    memory_max_turns: int,
+    *,
+    counted_roles: tuple[str, ...] | None = None,
+) -> str:
     """Format conversation history tail into plain text.
 
     Keeps identical role labels and slicing logic as the inline helper.
     """
+    countable_roles = counted_roles or ("user", "assistant")
+    if turns:
+        tail: list[dict] = []
+        seen_dialogue = 0
+        max_dialogue = memory_max_turns * 2
+        for turn in reversed(turns):
+            if turn.get("role") in countable_roles:
+                if seen_dialogue >= max_dialogue:
+                    break
+                seen_dialogue += 1
+            tail.append(turn)
+        tail.reverse()
+    else:
+        tail = []
+
     lines: List[str] = []
-    for t in turns[-(memory_max_turns * 2) :]:  # user+assistant pairs
+    for t in tail:
         role = t.get("role")
         author = get_ui_attributes(role)["author"]
         content = t.get("content") or ""

@@ -185,3 +185,26 @@ Mitigation:
 3. resume validation consults module-aware rules
 4. stale-thread handling no longer assumes AIMS-only semantics in core
 5. current user-visible AIMS behavior remains equivalent
+
+## Actual Implementation Notes
+
+Phase 4 landed with the following concrete seams:
+
+- `SessionBootstrapPayload` / `StartupArtifact` in
+  `app/core/session_types.py`
+- compatibility serialization for bootstrap payloads in
+  `app/core/session_serialization.py`
+- `AimsTrainingModule.initialize_session(...)` now owns `/session` bootstrap
+  behavior while still delegating to the existing `session_initializer` helper
+- runtime memory records `module_id`
+- `SessionService` and `ChatContextBuilder` accept module-counted dialogue
+  roles
+- current-thread persistence stores `module_id`, and Chainlit resume/start
+  logic validates against the active module
+
+Transitional compromises that remain intentionally:
+
+- the outward `/session` payload is still compatibility-shaped
+  (`character`, `scene`, `personaName`, `initialCard`)
+- Chainlit startup and UI rendering still assume a scenario-card-oriented
+  experience

@@ -117,7 +117,7 @@ with patch("app.config.settings") as mock_settings:
 @pytest.mark.asyncio
 async def test_auth_callback_success(monkeypatch):
     monkeypatch.setenv("AUTH_PASSWORD", "secret")
-    user = chainlit_app.auth_callback("admin", "secret")
+    user = await chainlit_app.auth_callback("admin", "secret")
     assert user is not None
     assert user.identifier == "admin"
 
@@ -135,10 +135,11 @@ async def test_on_logout(monkeypatch):
 
     mock_cl.send_window_message.assert_called_with("on_logout")
 
-def test_oauth_callback_google():
+@pytest.mark.asyncio
+async def test_oauth_callback_google():
     default_user = User()
     raw_data = {"email": "test@google.com", "name": "Google User"}
-    user = chainlit_app.oauth_callback("google", "token", raw_data, default_user)
+    user = await chainlit_app.oauth_callback("google", "token", raw_data, default_user)
     assert user.identifier == "test@google.com"
 
 @pytest.mark.asyncio

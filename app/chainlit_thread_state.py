@@ -15,6 +15,7 @@ from app.constants import (
 
 LEGACY_CURRENT_THREAD_KEY_PREFIX = f"{PREFIX_CHAINLIT}:{PREFIX_CURRENT_THREAD}:"
 LEGACY_THREAD_KEY_PREFIX = f"{PREFIX_CHAINLIT}:{PREFIX_THREAD}:"
+KEY_MODULE_ID = "module_id"
 
 
 def _current_thread_key_prefix() -> str:
@@ -65,20 +66,28 @@ def _thread_belongs_to_user(thread: Optional[Dict[str, Any]], user_identifier: s
     return owner.strip().lower() == user_identifier.strip().lower()
 
 
-def get_current_thread_id(user_identifier: Optional[str]) -> Optional[str]:
+def get_current_thread_id(user_identifier: Optional[str], active_module_id: Optional[str] = None) -> Optional[str]:
     if not user_identifier:
         return None
     store = _store()
     value = store.get(_key(user_identifier)) or store.get(_legacy_key(user_identifier))
     if isinstance(value, dict):
         thread_id = value.get(KEY_THREAD_ID)
+        persisted_module_id = value.get(KEY_MODULE_ID)
     elif isinstance(value, str):
         thread_id = value
+        persisted_module_id = None
     else:
         thread_id = None
+        persisted_module_id = None
 
     if not thread_id:
         return None
+
+    if active_module_id and isinstance(persisted_module_id, str) and persisted_module_id.strip():
+        if persisted_module_id.strip() != active_module_id:
+            clear_current_thread_id(user_identifier)
+            return None
 
     thread = _thread_record(store, thread_id)
     if not _thread_exists(store, thread_id) or not _thread_belongs_to_user(thread, user_identifier):
@@ -87,11 +96,16 @@ def get_current_thread_id(user_identifier: Optional[str]) -> Optional[str]:
     return thread_id
 
 
-def set_current_thread_id(user_identifier: Optional[str], thread_id: Optional[str]) -> None:
+def set_current_thread_id(
+    user_identifier: Optional[str],
+    thread_id: Optional[str],
+    module_id: Optional[str] = None,
+) -> None:
     if not user_identifier or not thread_id:
         return
     _store()[_key(user_identifier)] = {
         KEY_THREAD_ID: thread_id,
+        KEY_MODULE_ID: module_id,
         KEY_UPDATED: time.time(),
     }
 

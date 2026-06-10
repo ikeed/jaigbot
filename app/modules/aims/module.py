@@ -6,6 +6,8 @@ from typing import Any, Mapping, cast
 
 from app.chat_roles import ROLE_ASSISTANT, ROLE_COACH, ROLE_SYSTEM, ROLE_USER
 from app.constants import APP_TITLE
+from app.core.session_serialization import serialize_session_bootstrap_payload
+from app.core.session_types import SessionBootstrapPayload, StartupArtifact
 from app.core.response_serialization import game_over_completion, serialize_response_envelope
 from app.core.response_types import ModuleResponseEnvelope
 from app.core.module_types import BrandingSpec, DialogueRoles, ModuleManifest, ResumeValidationResult
@@ -13,7 +15,7 @@ from app.core.module_types import BrandingSpec, DialogueRoles, ModuleManifest, R
 
 @dataclass(frozen=True)
 class AimsTrainingModule:
-    """Thin Phase 1 adapter describing AIMS through the generic contract."""
+    """AIMS implementation of the generic training-module contract."""
 
     manifest: ModuleManifest
 
@@ -44,13 +46,44 @@ class AimsTrainingModule:
 
     # Future-facing methods. These will acquire real behavior in later phases.
     def initialize_session(self, **kwargs: Any) -> Mapping[str, Any]:
-        raise NotImplementedError("Session initialization is not routed through TrainingModule in Phase 1.")
+        from app.services.session_initializer import initialize_session as initialize_aims_session
+
+        raw = initialize_aims_session(
+            kwargs["body"],
+            memory_store=kwargs["memory_store"],
+            memory_enabled=bool(kwargs["memory_enabled"]),
+            logger=kwargs["logger"],
+            module_id=self.module_id,
+        )
+        artifact = None
+        if isinstance(raw.get("initialCard"), str) and raw["initialCard"].strip():
+            artifact = StartupArtifact(
+                kind="scenario_card",
+                title="Scenario Briefing",
+                content=raw["initialCard"],
+            )
+        payload = SessionBootstrapPayload(
+            module_id=self.module_id,
+            session_id=str(raw["sessionId"]),
+            already_active=bool(raw.get("alreadyActive", False)),
+            participant_context={
+                "character": raw.get("character"),
+                "scene": raw.get("scene"),
+            },
+            module_state={
+                "persona": raw.get("persona"),
+                "personaId": raw.get("personaId"),
+                "personaName": raw.get("personaName"),
+            },
+            artifacts=(artifact,) if artifact is not None else (),
+        )
+        return serialize_session_bootstrap_payload(payload)
 
     def build_startup_payload(self, **kwargs: Any) -> Mapping[str, Any]:
-        raise NotImplementedError("Startup payload is not routed through TrainingModule in Phase 1.")
+        raise NotImplementedError("Startup payload is not routed through TrainingModule yet.")
 
     def build_startup_artifacts(self, **kwargs: Any) -> list[Mapping[str, Any]]:
-        raise NotImplementedError("Startup artifacts are not routed through TrainingModule in Phase 1.")
+        raise NotImplementedError("Startup artifacts are not routed through TrainingModule yet.")
 
     async def handle_turn(self, **kwargs: Any) -> Mapping[str, Any]:
         req = kwargs["req"]
@@ -117,13 +150,13 @@ class AimsTrainingModule:
         return serialize_response_envelope(envelope, session_id=session_id, compatibility_overrides=compatibility)
 
     def build_system_instruction(self, **kwargs: Any) -> str | None:
-        raise NotImplementedError("Prompt construction is not routed through TrainingModule in Phase 1.")
+        raise NotImplementedError("Prompt construction is not routed through TrainingModule yet.")
 
     def build_history_projection(self, **kwargs: Any) -> Mapping[str, Any]:
-        raise NotImplementedError("History projection is not routed through TrainingModule in Phase 1.")
+        raise NotImplementedError("History projection is not routed through TrainingModule yet.")
 
     def build_summary(self, **kwargs: Any) -> Mapping[str, Any]:
-        raise NotImplementedError("Summary generation is not routed through TrainingModule in Phase 1.")
+        raise NotImplementedError("Summary generation is not routed through TrainingModule yet.")
 
     def build_archive_payload(self, **kwargs: Any) -> Mapping[str, Any] | None:
         result = kwargs.get("result") or {}
@@ -152,7 +185,7 @@ class AimsTrainingModule:
         }
 
     def build_jailbreak_fallback(self, **kwargs: Any) -> str:
-        raise NotImplementedError("Fallback copy is not routed through TrainingModule in Phase 1.")
+        raise NotImplementedError("Fallback copy is not routed through TrainingModule yet.")
 
 
 def create_aims_training_module(*, settings: Any) -> AimsTrainingModule:

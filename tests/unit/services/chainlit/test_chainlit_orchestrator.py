@@ -32,10 +32,14 @@ def mock_services():
 
 @pytest.fixture
 def orchestrator(mock_services):
+    active_module = MagicMock()
+    active_module.module_id = "aims"
+    active_module.resume_validation.return_value = SimpleNamespace(is_resumable=True, reason=None)
     return ChainlitOrchestrator(
         backend_client=mock_services["backend"],
         ui_handler=mock_services["ui"],
-        session_manager=mock_services["session"]
+        session_manager=mock_services["session"],
+        active_module=active_module,
     )
 
 
@@ -81,7 +85,7 @@ async def test_handle_chat_start_redirects_reconnect_to_persisted_thread(
     mock_services["ui"].send_window_message = AsyncMock()
     monkeypatch.setattr(
         "app.services.chainlit.orchestrator.get_current_thread_id",
-        lambda user_id: "persisted-thread",
+        lambda user_id, active_module_id=None: "persisted-thread",
     )
 
     await orchestrator.handle_chat_start()
@@ -99,7 +103,7 @@ def test_reconnect_redirect_does_not_hijack_explicit_new_chat(
     orchestrator._get_thread_id = MagicMock(return_value="new-socket-thread")
     monkeypatch.setattr(
         "app.services.chainlit.orchestrator.get_current_thread_id",
-        lambda user_id: "persisted-thread",
+        lambda user_id, active_module_id=None: "persisted-thread",
     )
 
     assert orchestrator._get_reconnect_thread_id("user1") is None
@@ -250,6 +254,22 @@ async def test_handle_session_resume_requires_intro(orchestrator, mock_services)
 
     assert mock_services["session"].intro_pending is True
     mock_services["ui"].send_window_message.assert_awaited_once_with({"type": MSG_INTRO_REQUIRED})
+
+
+@pytest.mark.asyncio
+async def test_handle_session_resume_rejects_module_mismatch_and_starts_fresh(orchestrator, mock_services):
+    mock_services["session"].get_user_identifier.return_value = "user@example.com"
+    orchestrator._has_seen_intro_locally_or_persistently = MagicMock(return_value=True)
+    orchestrator._start_scenario_flow = AsyncMock()
+    orchestrator.active_module.resume_validation.return_value = SimpleNamespace(
+        is_resumable=False,
+        reason="module mismatch",
+    )
+
+    await orchestrator.handle_session_resume({"id": "thread-1", "metadata": {"module_id": "interview"}})
+
+    orchestrator._start_scenario_flow.assert_awaited_once()
+    assert mock_services["session"].history == []
 
 
 @pytest.mark.asyncio
@@ -462,9 +482,9 @@ async def test_bind_thread_creates_user_and_updates_thread(orchestrator, mock_se
     data_layer.update_thread.assert_awaited_once_with(
         thread_id="thread-1",
         user_id="user-id",
-        metadata={"session_id": "session-1"},
+        metadata={"session_id": "session-1", "module_id": "aims"},
     )
-    set_current_thread_id.assert_called_once_with("doctor@example.com", "thread-1")
+    set_current_thread_id.assert_called_once_with("doctor@example.com", "thread-1", "aims")
 
 
 @pytest.mark.asyncio

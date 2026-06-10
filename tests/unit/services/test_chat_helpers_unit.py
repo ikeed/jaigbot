@@ -45,6 +45,22 @@ def test_format_history_limits_turns():
     assert lines == ["Doctor: U4", "Assistant: A4", "Doctor: U5", "Assistant: A5"]
 
 
+def test_format_history_uses_module_counted_roles():
+    turns = [
+        {"role": "system", "content": "meta"},
+        {"role": "mentor", "content": "coach"},
+        {"role": "student", "content": "Q1"},
+        {"role": "interviewer", "content": "A1"},
+        {"role": "mentor", "content": "coach-2"},
+        {"role": "student", "content": "Q2"},
+        {"role": "interviewer", "content": "A2"},
+    ]
+
+    formatted = format_history(turns, memory_max_turns=1, counted_roles=("student", "interviewer"))
+
+    assert formatted.split("\n") == ["Assistant: coach-2", "Assistant: Q2", "Assistant: A2"]
+
+
 def test_recent_context_labels_and_empty():
     # empty
     assert recent_context([], 4) == ""

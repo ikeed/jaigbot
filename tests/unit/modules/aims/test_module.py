@@ -47,7 +47,6 @@ def test_aims_module_future_hooks_remain_explicitly_unimplemented():
     module = create_aims_training_module(settings=settings)
 
     for fn in (
-        module.initialize_session,
         module.build_startup_payload,
         module.build_startup_artifacts,
         module.build_system_instruction,
@@ -60,6 +59,43 @@ def test_aims_module_future_hooks_remain_explicitly_unimplemented():
         except NotImplementedError:
             continue
         raise AssertionError(f"{fn.__name__} should raise NotImplementedError in Phase 2")
+
+
+def test_aims_module_initialize_session_serializes_generic_bootstrap(monkeypatch):
+    settings = SimpleNamespace(redis_key_prefix="aims:local:session:")
+    module = create_aims_training_module(settings=settings)
+    logger = MagicMock()
+
+    monkeypatch.setattr(
+        "app.services.session_initializer.initialize_session",
+        lambda body, memory_store, memory_enabled, logger, module_id=None: {
+            "status": "ok",
+            "moduleId": module_id,
+            "sessionId": "sid-1",
+            "alreadyActive": False,
+            "character": "Person: Zia",
+            "scene": "Reason for visit",
+            "persona": {"name": "Zia"},
+            "personaId": "zia",
+            "personaName": "Zia",
+            "initialCard": "Person: Zia\nReason for visit: Ear pain",
+        },
+    )
+
+    payload = module.initialize_session(
+        body=SimpleNamespace(sessionId="sid-1"),
+        memory_store={},
+        memory_enabled=True,
+        logger=logger,
+    )
+
+    assert payload["status"] == "ok"
+    assert payload["moduleId"] == "aims"
+    assert payload["sessionId"] == "sid-1"
+    assert payload["character"] == "Person: Zia"
+    assert payload["scene"] == "Reason for visit"
+    assert payload["personaName"] == "Zia"
+    assert payload["initialCard"] == "Person: Zia\nReason for visit: Ear pain"
 
 
 def test_aims_module_formats_generic_result_into_compatibility_payload():

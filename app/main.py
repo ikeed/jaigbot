@@ -101,6 +101,7 @@ app.include_router(create_session_router(
     settings=settings,
     logger=logger,
     get_memory_store=get_memory_store,
+    get_active_module=get_active_module,
 ))
 
 

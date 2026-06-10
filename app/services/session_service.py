@@ -41,12 +41,16 @@ class SessionService:
         memory_enabled: bool,
         memory_max_turns: int,
         memory_ttl_seconds: int,
+        module_id: str | None = None,
+        counted_roles: tuple[str, ...] | None = None,
     ) -> None:
         self._store = store
         self.cookie = cookie
         self.memory_enabled = memory_enabled
         self.memory_max_turns = int(memory_max_turns)
         self.memory_ttl_seconds = int(memory_ttl_seconds)
+        self.module_id = module_id
+        self.counted_roles = counted_roles or (ROLE_USER, ROLE_ASSISTANT)
 
     # -------- Session ID handling --------
     def ensure_session(self, request, body_session_id: Optional[str], user_info: Optional[dict] = None) -> Tuple[str, bool]:
@@ -69,6 +73,7 @@ class SessionService:
                     "full_history": [],
                     "character": None,
                     "scene": None,
+                    "module_id": self.module_id,
                     "updated": now,
                     "session_started": now,
                     "user_info": user_info,
@@ -79,9 +84,11 @@ class SessionService:
                 mem.setdefault("updated", now)
                 mem.setdefault("full_history", [])
                 mem.setdefault("session_started", now)
+                if self.module_id and not mem.get("module_id"):
+                    mem["module_id"] = self.module_id
                 if user_info and not mem.get("user_info"):
                     mem["user_info"] = user_info
-                    self._store[sid] = mem
+                self._store[sid] = mem
         return sid, generated
 
     # -------- Memory helpers --------
@@ -104,7 +111,7 @@ class SessionService:
         return mem
 
     @staticmethod
-    def trim_history(history: list, max_turns: int) -> list:
+    def trim_history(history: list, max_turns: int, counted_roles: tuple[str, ...] | None = None) -> list:
         """Trim history to the last *max_turns* dialogue pairs.
 
         Coach entries are interleaved but should not count toward the
@@ -113,7 +120,8 @@ class SessionService:
         that window.
         """
         # Count only dialogue (non-coach) entries
-        dialogue_count = sum(1 for m in history if m.get("role") in (ROLE_USER, ROLE_ASSISTANT))
+        countable_roles = counted_roles or (ROLE_USER, ROLE_ASSISTANT)
+        dialogue_count = sum(1 for m in history if m.get("role") in countable_roles)
         max_dialogue = max_turns * 2
         if dialogue_count <= max_dialogue:
             return history
@@ -123,7 +131,7 @@ class SessionService:
         kept: list = []
         seen_dialogue = 0
         for entry in reversed(history):
-            if entry.get("role") in (ROLE_USER, ROLE_ASSISTANT):
+            if entry.get("role") in countable_roles:
                 if seen_dialogue >= max_dialogue:
                     break
                 seen_dialogue += 1

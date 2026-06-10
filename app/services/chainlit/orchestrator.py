@@ -1,6 +1,6 @@
 import logging
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from chainlit.context import context as cl_context
 from chainlit.message import Message
@@ -14,6 +14,7 @@ from app.chat_roles import (
     is_scenario_card
 )
 from app.config import settings
+from app.core.registry import build_builtin_registry
 from app.constants import (
     MSG_INTRO_REQUIRED,
     MSG_DUPLICATE_TAB,
@@ -34,11 +35,15 @@ class ChainlitOrchestrator:
         self,
         backend_client: BackendClient,
         ui_handler: UIHandler,
-        session_manager: SessionManager
+        session_manager: SessionManager,
+        active_module: Any | None = None,
     ):
         self.backend = backend_client
         self.ui = ui_handler
         self.session = session_manager
+        self.active_module = active_module or build_builtin_registry(settings=settings).get_active_module(
+            active_module=settings.ACTIVE_MODULE
+        )
 
     async def handle_chat_start(self):
         """Main entry point for starting or resuming a chat session."""
@@ -111,7 +116,7 @@ class ChainlitOrchestrator:
             await self._report_error_silently(e, "handle_user_message")
             await self.ui.show_error(f"Error: {str(e)}")
 
-    async def handle_session_resume(self, thread: Dict[str, Any]):
+    async def handle_session_resume(self, thread: Optional[Mapping[str, Any]] = None):
         """Rehydrates session state from a resumed Chainlit thread."""
         try:
             user_id = self.session.get_user_identifier()
@@ -122,13 +127,25 @@ class ChainlitOrchestrator:
 
             metadata = (thread or {}).get("metadata") or {}
             thread_id = (thread or {}).get("id") or self._get_thread_id()
+            persisted_module_id = metadata.get("module_id") if isinstance(metadata.get("module_id"), str) else None
+            resume_validation = self.active_module.resume_validation(persisted_module_id=persisted_module_id)
+            if not resume_validation.is_resumable:
+                logger.warning(
+                    "Resume rejected by module validation: module=%s persisted_module_id=%s reason=%s",
+                    self.active_module.module_id,
+                    persisted_module_id,
+                    resume_validation.reason,
+                )
+                self.session.history = []
+                await self._start_scenario_flow()
+                return
             
             # Resolve Session ID
             session_id = self._resolve_session_id(thread_id, metadata.get("session_id"))
             self.session.session_id = session_id
             
             if user_id and thread_id:
-                set_current_thread_id(user_id, thread_id)
+                set_current_thread_id(user_id, thread_id, self.active_module.module_id)
 
             connection_id = self._ensure_connection_id()
             needs_fresh_start = False
@@ -308,7 +325,7 @@ class ChainlitOrchestrator:
     def _get_reconnect_thread_id(self, user_id: Optional[str]) -> Optional[str]:
         if self.session.query_params.get("aims_new") == "1":
             return None
-        persisted_thread_id = get_current_thread_id(user_id)
+        persisted_thread_id = get_current_thread_id(user_id, active_module_id=self.active_module.module_id)
         context_thread_id = self._get_thread_id()
         if persisted_thread_id and persisted_thread_id != context_thread_id:
             return persisted_thread_id
@@ -350,8 +367,12 @@ class ChainlitOrchestrator:
             
             persisted = await dl.get_user(user.identifier) or await dl.create_user(user)
             if persisted:
-                await dl.update_thread(thread_id=thread_id, user_id=persisted.id, metadata={"session_id": session_id})
-                set_current_thread_id(user.identifier, thread_id)
+                await dl.update_thread(
+                    thread_id=thread_id,
+                    user_id=persisted.id,
+                    metadata={"session_id": session_id, "module_id": self.active_module.module_id},
+                )
+                set_current_thread_id(user.identifier, thread_id, self.active_module.module_id)
         except Exception as e:
             logger.debug(f"Failed to bind thread (non-fatal): {e}")
             pass
