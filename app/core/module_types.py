@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional, Tuple
+from typing import Mapping, Optional, Tuple
 
 
 @dataclass(frozen=True)
@@ -22,6 +22,9 @@ class DialogueRoles:
     feedback_roles: Tuple[str, ...] = ()
     metadata_roles: Tuple[str, ...] = ()
     counted_roles: Tuple[str, ...] = ()
+    user_roles: Tuple[str, ...] = ()
+    counterpart_roles: Tuple[str, ...] = ()
+    display_names: Mapping[str, str] = field(default_factory=dict)
 
     def all_roles(self) -> Tuple[str, ...]:
         seen: list[str] = []
@@ -30,6 +33,8 @@ class DialogueRoles:
             *self.feedback_roles,
             *self.metadata_roles,
             *self.counted_roles,
+            *self.user_roles,
+            *self.counterpart_roles,
         ):
             if role and role not in seen:
                 seen.append(role)
@@ -60,4 +65,3 @@ class ModuleManifest:
     frontend_js_bundles: Tuple[str, ...] = field(default_factory=tuple)
     frontend_css: Optional[str] = None
     branding: Optional[BrandingSpec] = None
-

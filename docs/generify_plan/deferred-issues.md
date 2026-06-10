@@ -72,21 +72,34 @@ None currently.
 
 ## Phase 8
 
-- `ChatContextBuilder` still computes `person_last` only from the `assistant`
-  role. The interview proof module does not need that field, but a future
-  richer non-AIMS module may. Generalize that helper only when a real module
-  requires it; otherwise it is churn.
 - UI author/label mapping is still largely AIMS-first. Core frontend code can
-  load different module bundles now, but `app/chat_roles.py` and the generic
-  history-format helpers still assume the default `user`/`assistant`/`coach`
-  set. The interview stub proves routing and bootstrap, not polished multi-role
-  rendering.
-- Session bootstrap transport is still compatibility-shaped around
-  `character`, `scene`, `personaName`, and `initialCard`. The generic
-  `SessionBootstrapPayload` exists, but the outward JSON contract still favors
-  the AIMS shell.
+  load different module bundles now, and backend helpers now understand
+  module-defined role labels, but the visible Chainlit shell still renders one
+  AIMS-first message family. Phase 9 created the backend seam; Phase 10 still
+  needs to make the frontend consume it coherently.
 - Deployment-level branding is still partially AIMS-specific:
   FastAPI `APP_TITLE`, login/duplicate templates, avatar asset titles, and some
   docs continue to say `AIMSBot`. The active module now controls Chainlit
   profile/loading branding, but shell-level branding cleanup remains a separate
   product decision.
+- Built-in registries are still reconstructed in several dependency and helper
+  paths (`app.main`, `ChatOrchestrator`, `ChainlitOrchestrator`,
+  `StorageService`). That is safe while modules are stateless, but it will
+  become the wrong lifecycle if modules later own caches, adapters, or shared
+  runtime collaborators.
+- Documentation still largely describes the product as AIMS-specific. That is
+  correct for the current shipped behavior, but the app now contains generic
+  module/runtime seams, a second built-in module, and new core packages.
+  `docs/`, setup guides, architecture notes, and `AGENTS.md` will need an
+  explicit pass so they stop steering future work back toward a single-module
+  mental model.
+
+## Phase 9
+
+- The generic bootstrap transport now carries a first-class `module` block with
+  `participantContext`, `state`, and plural `artifacts`, but the Chainlit shell
+  still treats the first artifact as the one renderable startup surface. That
+  is good enough for the current shell, not a finished multi-artifact UI model.
+- Role-label metadata is now exposed in module dialogue roles and `/config`, but
+  the frontend does not consume it yet. Phase 9 fixed the backend seam; Phase
+  10 still owns the visible presentation cleanup.

@@ -170,6 +170,7 @@ def test_config_modelcheck_and_diagnostics_use_injected_dependencies():
     assert config["memoryStoreSize"] == 2
     assert config["activeModule"]["id"] == "aims"
     assert config["activeModule"]["supportsSummary"] is True
+    assert config["activeModule"]["dialogueRoles"]["participantRoles"] == ["user", "assistant"]
     assert config["activeModule"]["frontendJsBundles"] == [
         "/public/js/modules/aims/message-roles.js",
         "/public/js/modules/aims/module-ui.js",
@@ -177,6 +178,7 @@ def test_config_modelcheck_and_diagnostics_use_injected_dependencies():
     assert config["activeModule"]["branding"]["appTitle"] == "AIMSBot (Gemini Enterprise)"
     assert [module["id"] for module in config["availableModules"]] == ["aims", "interview"]
     assert config["availableModules"][1]["supportsSummary"] is False
+    assert config["availableModules"][1]["dialogueRoles"]["participantRoles"] == ["candidate", "interviewer"]
 
     modelcheck = client.get("/modelcheck").json()
     assert modelcheck["modelId"] == "gemini-test"

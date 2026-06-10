@@ -1,6 +1,6 @@
-from typing import List, Optional
+from typing import List, Mapping, Optional, Sequence
 
-from app.chat_roles import ROLE_ASSISTANT, get_ui_attributes
+from app.chat_roles import ROLE_ASSISTANT, author_label_for_role
 
 
 def build_system_instruction(effective_character: Optional[str], effective_scene: Optional[str]) -> Optional[str]:
@@ -24,6 +24,7 @@ def format_history(
     memory_max_turns: int,
     *,
     counted_roles: tuple[str, ...] | None = None,
+    role_labels: Mapping[str, str] | None = None,
 ) -> str:
     """Format conversation history tail into plain text.
 
@@ -47,13 +48,13 @@ def format_history(
     lines: List[str] = []
     for t in tail:
         role = t.get("role")
-        author = get_ui_attributes(role)["author"]
+        author = author_label_for_role(role, role_labels)
         content = t.get("content") or ""
         lines.append(f"{author}: {content}")
     return "\n".join(lines)
 
 
-def recent_context(turns: list[dict], n_turns: int) -> str:
+def recent_context(turns: list[dict], n_turns: int, *, role_labels: Mapping[str, str] | None = None) -> str:
     """Create compact recent context for classifier grounding.
     """
     if not turns:
@@ -65,17 +66,24 @@ def recent_context(turns: list[dict], n_turns: int) -> str:
         content = (t.get("content") or "").strip()
         if not content:
             continue
-        author = get_ui_attributes(role)["author"]
+        author = author_label_for_role(role, role_labels)
         lines.append(f"{author}: {content}")
     return "\n".join(lines)
 
 
-def extract_recent_concerns(turns: list[dict], max_items: int = 3) -> list[str]:
+def extract_recent_concerns(
+    turns: list[dict],
+    max_items: int = 3,
+    *,
+    concern_roles: Sequence[str] | None = None,
+    concern_keywords: Sequence[str] | None = None,
+    context_keywords: Sequence[str] | None = None,
+) -> list[str]:
     """Extract recent vaccine concerns from person (assistant) turns.
 
     Uses the exact cues and ordering from the inline implementation.
     """
-    vax_cues = [
+    vax_cues = list(concern_keywords or [
         "vaccine",
         "vaccin",
         "shot",
@@ -100,8 +108,8 @@ def extract_recent_concerns(turns: list[dict], max_items: int = 3) -> list[str]:
         "varicella",
         "dtap",
         "polio",
-    ]
-    concern_cues = [
+    ])
+    concern_cues = list(context_keywords or [
         "worried",
         "concern",
         "scared",
@@ -113,10 +121,11 @@ def extract_recent_concerns(turns: list[dict], max_items: int = 3) -> list[str]:
         "too many",
         "too soon",
         "safety",
-    ]
+    ])
+    roles = tuple(str(role).strip().lower() for role in (concern_roles or (ROLE_ASSISTANT,)) if str(role).strip())
     items: list[str] = []
     for t in reversed(turns or []):
-        if t.get("role") == ROLE_ASSISTANT:  # parent persona in this app
+        if str(t.get("role") or "").strip().lower() in roles:
             txt = (t.get("content") or "")
             lt = txt.lower()
             if any(v in lt for v in vax_cues) and any(c in lt for c in concern_cues):

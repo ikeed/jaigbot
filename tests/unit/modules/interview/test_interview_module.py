@@ -24,6 +24,9 @@ def test_interview_module_manifest_is_distinct_from_aims():
     assert manifest.dialogue_roles.feedback_roles == ("observer",)
     assert manifest.dialogue_roles.metadata_roles == ("system",)
     assert manifest.dialogue_roles.counted_roles == ("candidate", "interviewer")
+    assert manifest.dialogue_roles.user_roles == ("candidate",)
+    assert manifest.dialogue_roles.counterpart_roles == ("interviewer",)
+    assert manifest.dialogue_roles.display_names["candidate"] == "Candidate"
     assert manifest.frontend_js_bundles == ("/public/js/modules/interview/module-ui.js",)
     assert module.module_id == "interview"
     assert module.display_name == "Interview Practice"

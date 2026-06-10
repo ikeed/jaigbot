@@ -1,6 +1,7 @@
 import logging
 import uuid
-from typing import Any, Dict, List, Mapping, Optional
+from collections.abc import Mapping
+from typing import Any, Dict, List, Optional
 
 from chainlit.context import context as cl_context
 from chainlit.message import Message
@@ -269,12 +270,23 @@ class ChainlitOrchestrator:
         logger.info("Session data received from backend.")
         logger.debug("Character: %s, Scene: %s", session_data.get("character"), session_data.get("scene"))
         # Update local state
-        self.session.character = session_data.get("character")
-        self.session.scene = session_data.get("scene")
-        persona_name = session_data.get("personaName")
+        participant_context = self._get_bootstrap_participant_context(session_data)
+        module_state = self._get_bootstrap_module_state(session_data)
+        startup_artifacts = self._get_bootstrap_artifacts(session_data)
+
+        self.session.character = participant_context.get("character") or session_data.get("character")
+        self.session.scene = participant_context.get("scene") or session_data.get("scene")
+        persona_name = (
+            participant_context.get("personaName")
+            or module_state.get("personaName")
+            or session_data.get("personaName")
+        )
         if isinstance(persona_name, str) and persona_name.strip():
             self.session.persona_name = persona_name.strip()
-        user_card = session_data.get("initialCard")
+        user_card = (
+            next((artifact.get("content") for artifact in startup_artifacts if artifact.get("content")), None)
+            or session_data.get("initialCard")
+        )
 
         await self._send_persona_name(persona_name)
 
@@ -482,3 +494,29 @@ class ChainlitOrchestrator:
             await self.ui.send_window_message(
                 {"type": MSG_PARTICIPANT_NAME, "participantName": persona_name.strip()}
             )
+
+    @staticmethod
+    def _get_bootstrap_module_block(session_data: Mapping[str, Any]) -> Mapping[str, Any]:
+        module_block = session_data.get("module")
+        return module_block if isinstance(module_block, Mapping) else {}
+
+    def _get_bootstrap_participant_context(self, session_data: Mapping[str, Any]) -> Mapping[str, Any]:
+        module_block = self._get_bootstrap_module_block(session_data)
+        participant_context = module_block.get("participantContext")
+        if isinstance(participant_context, Mapping):
+            return participant_context
+        return {}
+
+    def _get_bootstrap_module_state(self, session_data: Mapping[str, Any]) -> Mapping[str, Any]:
+        module_block = self._get_bootstrap_module_block(session_data)
+        state = module_block.get("state")
+        if isinstance(state, Mapping):
+            return state
+        return {}
+
+    def _get_bootstrap_artifacts(self, session_data: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+        module_block = self._get_bootstrap_module_block(session_data)
+        artifacts = module_block.get("artifacts")
+        if not isinstance(artifacts, list):
+            return []
+        return [artifact for artifact in artifacts if isinstance(artifact, Mapping)]

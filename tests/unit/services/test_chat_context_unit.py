@@ -94,3 +94,31 @@ def test_chat_context_builder_uses_module_counted_roles_for_history_tail():
     ctx = builder.build(req=None, body_session_id=sid, character="CHAR", scene="SCENE")
 
     assert ctx.history_text.split("\n") == ["Assistant: coach-2", "Assistant: Q2", "Assistant: A2"]
+
+
+def test_chat_context_builder_uses_module_counterpart_roles_and_labels():
+    sess = FakeSessionService()
+    builder = ChatContextBuilder(
+        session_service=sess,
+        memory_enabled=True,
+        memory_max_turns=2,
+        memory_ttl_seconds=3600,
+        counted_roles=("candidate", "interviewer"),
+        counterpart_roles=("interviewer",),
+        role_labels={"candidate": "Candidate", "interviewer": "Interviewer"},
+    )
+
+    sid, _ = sess.ensure_session(None, None)
+    mem = sess.get_mem(sid)
+    mem["history"] = [
+        {"role": "candidate", "content": "I led the migration."},
+        {"role": "interviewer", "content": "What tradeoffs did you make?"},
+    ]
+
+    ctx = builder.build(req=None, body_session_id=sid, character="CHAR", scene="SCENE")
+
+    assert ctx.person_last == "What tradeoffs did you make?"
+    assert ctx.history_text.split("\n") == [
+        "Candidate: I led the migration.",
+        "Interviewer: What tradeoffs did you make?",
+    ]

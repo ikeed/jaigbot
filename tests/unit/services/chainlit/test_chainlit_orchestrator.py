@@ -96,6 +96,53 @@ async def test_handle_chat_start_redirects_reconnect_to_persisted_thread(
     })
     orchestrator._start_scenario_flow.assert_not_awaited()
 
+
+@pytest.mark.asyncio
+async def test_start_scenario_flow_prefers_generic_bootstrap_fields(orchestrator, mock_services):
+    mock_services["session"].query_params = {}
+    mock_services["session"].user = MagicMock(identifier="user@example.com", metadata={})
+    mock_services["backend"].fetch_history = AsyncMock(return_value=[])
+    mock_services["backend"].initialize_session = AsyncMock(
+        return_value={
+            "moduleId": "interview",
+            "character": "Legacy character",
+            "scene": "Legacy scene",
+            "personaName": "Legacy name",
+            "initialCard": "Legacy card",
+            "module": {
+                "id": "interview",
+                "participantContext": {
+                    "character": "Generic interviewer",
+                    "scene": "Generic interview scene",
+                    "personaName": "Hiring Manager",
+                },
+                "state": {"personaName": "Hiring Manager"},
+                "artifacts": [
+                    {
+                        "kind": "interview_brief",
+                        "title": "Interview Setup",
+                        "content": "Discuss one project in depth",
+                        "metadata": {},
+                    }
+                ],
+            },
+        }
+    )
+    mock_services["ui"].present_scenario_card = AsyncMock()
+    mock_services["ui"].send_window_message = AsyncMock()
+    orchestrator._bind_thread = AsyncMock()
+    orchestrator._run_preflight_checks = AsyncMock()
+    orchestrator._get_thread_id = MagicMock(return_value="thread-123")
+    orchestrator._get_user_info = MagicMock(return_value={"identifier": "user@example.com", "metadata": {}})
+
+    await orchestrator._start_scenario_flow()
+
+    assert mock_services["session"].character == "Generic interviewer"
+    assert mock_services["session"].scene.startswith("Generic interview scene")
+    assert "Discuss one project in depth" in mock_services["session"].scene
+    assert mock_services["session"].persona_name == "Hiring Manager"
+    mock_services["ui"].present_scenario_card.assert_awaited_once_with("Discuss one project in depth")
+
 def test_reconnect_redirect_does_not_hijack_explicit_new_chat(
     orchestrator, mock_services, monkeypatch
 ):

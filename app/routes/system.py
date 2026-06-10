@@ -31,6 +31,19 @@ def create_system_router(
 ) -> APIRouter:
     router = APIRouter()
 
+    def serialize_dialogue_roles(dialogue_roles: Any) -> dict[str, Any] | None:
+        if dialogue_roles is None:
+            return None
+        return {
+            "participantRoles": list(getattr(dialogue_roles, "participant_roles", ()) or ()),
+            "feedbackRoles": list(getattr(dialogue_roles, "feedback_roles", ()) or ()),
+            "metadataRoles": list(getattr(dialogue_roles, "metadata_roles", ()) or ()),
+            "countedRoles": list(getattr(dialogue_roles, "counted_roles", ()) or ()),
+            "userRoles": list(getattr(dialogue_roles, "user_roles", ()) or ()),
+            "counterpartRoles": list(getattr(dialogue_roles, "counterpart_roles", ()) or ()),
+            "displayNames": dict(getattr(dialogue_roles, "display_names", {}) or {}),
+        }
+
     @router.get(ENDPOINT_HEALTHZ)
     async def healthz():
         return {"status": "ok"}
@@ -91,6 +104,7 @@ def create_system_router(
                     "supportsFeedback": manifest.supports_feedback,
                     "supportsSummary": manifest.supports_summary,
                     "storagePrefix": manifest.storage_prefix,
+                    "dialogueRoles": serialize_dialogue_roles(manifest.dialogue_roles),
                     "frontendJsBundles": list(manifest.frontend_js_bundles),
                     "frontendCss": manifest.frontend_css,
                     "branding": (
@@ -155,6 +169,7 @@ def create_system_router(
                     "chatProfileName": active_module_manifest.chat_profile_name,
                     "storagePrefix": active_module_manifest.storage_prefix,
                     "archiveSchemaVersion": active_module_manifest.archive_schema_version,
+                    "dialogueRoles": serialize_dialogue_roles(active_module_manifest.dialogue_roles),
                     "supportsIntro": active_module_manifest.supports_intro,
                     "supportsFeedback": active_module_manifest.supports_feedback,
                     "supportsSummary": active_module_manifest.supports_summary,

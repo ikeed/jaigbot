@@ -13,6 +13,9 @@ sequence:
 6. frontend shell and UI message modularization
 7. AIMS relocation and core cleanup
 8. config/branding/test reorganization and second-module proof
+9. role semantics and bootstrap contract generalization
+10. shell branding and module-owned presentation cleanup
+11. lifecycle consolidation and compatibility retirement
 
 The goal is to let implementation proceed incrementally without forcing
 backtracking in storage, resume, or frontend work that will come later.
@@ -27,6 +30,9 @@ backtracking in storage, resume, or frontend work that will come later.
 - [Phase 6: Frontend Shell Modularization](./phase-6-frontend-shell-modularization.md)
 - [Phase 7: AIMS Relocation And Core Cleanup](./phase-7-aims-relocation-and-core-cleanup.md)
 - [Phase 8: Config, Tests, And Second-Module Proof](./phase-8-config-tests-and-second-module-proof.md)
+- [Phase 9: Role And Bootstrap Generalization](./phase-9-role-and-bootstrap-generalization.md)
+- [Phase 10: Branding And Presentation Cleanup](./phase-10-branding-and-presentation-cleanup.md)
+- [Phase 11: Lifecycle Consolidation And Compatibility Retirement](./phase-11-lifecycle-consolidation-and-compatibility-retirement.md)
 
 ## Current Status
 
@@ -233,6 +239,53 @@ Actual artifacts now present in the repo:
 
 Residual gaps are now recorded in `deferred-issues.md` rather than hidden in
 the phase plans.
+
+### Phase 9
+
+Implemented.
+
+Actual artifacts now present in the repo:
+
+- module dialogue roles can now carry:
+  - `user_roles`
+  - `counterpart_roles`
+  - `display_names`
+- `ChatContextBuilder` and shared chat helpers now accept module-defined
+  counterpart roles and author labels instead of assuming `assistant`
+- session bootstrap serialization now emits a generic `module` block with:
+  - `participantContext`
+  - `state`
+  - plural `artifacts`
+- compatibility bootstrap aliases (`character`, `scene`, `personaName`,
+  `initialCard`) still remain for the current shell
+- Chainlit startup now prefers generic bootstrap fields before falling back to
+  the compatibility aliases
+- `/config` now exposes dialogue-role metadata for each module
+
+### Phase 10
+
+Planned.
+
+Focus:
+
+- finish deployment-shell branding cleanup so core no longer presents itself as
+  `AIMSBot`
+- decide and implement module-owned CSS/theming strategy
+- make the frontend consume the role-label and bootstrap-artifact seams added in
+  Phase 9
+- align login/duplicate/shell presentation with active-module branding
+
+### Phase 11
+
+Planned.
+
+Focus:
+
+- stop rebuilding fresh registries in request paths; move to one authoritative
+  lifecycle-owned registry/module graph
+- retire compatibility shims deliberately
+- add explicit legacy archive/bootstrap adapters where missing `module_id`
+  currently falls back to deployment defaults
 
 ## Cross-Phase Rules
 

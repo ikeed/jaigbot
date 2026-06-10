@@ -24,6 +24,9 @@ def test_aims_module_manifest_exposes_expected_phase1_metadata():
     assert manifest.dialogue_roles.feedback_roles == ("coach",)
     assert manifest.dialogue_roles.metadata_roles == ("system",)
     assert manifest.dialogue_roles.counted_roles == ("user", "assistant")
+    assert manifest.dialogue_roles.user_roles == ("user",)
+    assert manifest.dialogue_roles.counterpart_roles == ("assistant",)
+    assert manifest.dialogue_roles.display_names["user"] == "Doctor"
     assert module.module_id == "aims"
     assert module.display_name == "AIMS"
     assert module.storage_prefix() == "aims:prod:session:"
