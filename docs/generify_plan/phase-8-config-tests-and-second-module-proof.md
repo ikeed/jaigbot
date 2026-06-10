@@ -24,6 +24,22 @@ AIMS-shaped even if the code looks modular.
 
 ## Step-By-Step Plan
 
+## Actual Starting Point After Phase 5
+
+The repo already has:
+
+- a real static module registry
+- module-owned dispatch, bootstrap, resume validation, archive shaping, and
+  summary routing for AIMS
+- compatibility layers that still preserve AIMS-first payloads for current
+  callers
+
+Implication:
+
+- the most important remaining proof is not "can AIMS still run?" but "can a
+  materially different stub module omit summary support, use different role
+  names, and still work without core edits?"
+
 ### Step 1: Clean config and branding assumptions
 
 Review:

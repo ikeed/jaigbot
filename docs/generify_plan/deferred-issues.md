@@ -25,3 +25,15 @@ None currently.
   The ownership seam is better now because `/session` is module-owned, but the
   frontend-facing bootstrap vocabulary is still compatibility-shaped and should
   be generalized in Phase 6.
+
+## Phase 5
+
+- `StorageService._transform_to_logical_schema(...)` resolves archives without
+  a persisted `module_id` through the deployment's active module. That is
+  correct for the current one-module-per-deployment runtime, but mixed-module
+  buckets or cross-deployment archive readers will need an explicit legacy
+  adapter strategy before multiple modules write into the same archive space.
+- Summary capability is now module-owned, but there is still only one concrete
+  summary payload shape in the repo. Phase 8 should prove the "no summary
+  capability" path with a second stub module rather than assuming the seam is
+  complete because AIMS works.

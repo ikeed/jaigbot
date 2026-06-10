@@ -25,6 +25,21 @@ and harder to verify.
 
 ## Step-By-Step Plan
 
+## Actual Starting Point After Phase 5
+
+The repo already has:
+
+- module-owned turn dispatch
+- module-owned session bootstrap
+- module-owned summary routing
+- module-owned archive-envelope shaping
+
+Implication:
+
+- Phase 7 should move the remaining AIMS implementation behind the module
+  boundary that already exists instead of trying to invent new seams during the
+  file moves.
+
 ### Step 1: Classify files by true ownership
 
 For each remaining AIMS-adjacent file, decide whether it is:
@@ -92,4 +107,3 @@ Mitigation:
 2. core no longer imports AIMS implementation directly
 3. remaining shared helpers are demonstrably generic
 4. runtime behavior remains unchanged
-

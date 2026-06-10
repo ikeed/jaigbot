@@ -118,6 +118,31 @@ Implication for later phases:
 - Phase 6 should replace the remaining scenario-card-specific UI vocabulary
   rather than trying to rebuild session bootstrap from scratch
 
+### Phase 5
+
+Implemented.
+
+Actual artifacts now present in the repo:
+
+- generic archive envelope types in `app/core/archive_types.py`
+- archive serialization in `app/core/archive_serialization.py`
+- module-owned archive-envelope shaping via
+  `AimsTrainingModule.build_archive_envelope(...)`
+- `StorageService` now writes through the active module's archive envelope
+  instead of hardcoding AIMS analytics/config fields in core
+- `/summary` now delegates through `active_module.build_summary(...)`
+- archive/persona readers were updated to read persona names from the new
+  generic `module.participantContext` block as well as the legacy AIMS shape
+
+Implication for later phases:
+
+- Phase 6 can treat frontend modularization as an asset/event problem rather
+  than a backend summary/bootstrap problem
+- Phase 7 should move remaining AIMS archive/summary helpers behind
+  module-owned paths instead of rebuilding these seams
+- Phase 8 still needs a non-AIMS proof that "summary unsupported" and
+  mixed-role/mixed-startup modules behave cleanly
+
 ## Cross-Phase Rules
 
 These rules apply across all remaining phases.
@@ -258,6 +283,8 @@ the main failure modes:
 3. Phase 3 routing chat through modules before compatibility envelopes exist
 4. Phase 4 trying to solve storage migration while resume semantics are still unstable
 5. Phase 5 migrating archives before session/module ownership is explicit
+6. Phase 5 adding a generic archive shell without keeping compatibility readers
+7. Phase 5 summary delegation landing before there is a module-owned seam
 6. Phase 6 modularizing frontend assets before manifests and message vocabulary are stable
 7. Phase 7 relocating AIMS files before runtime seams are proven
 

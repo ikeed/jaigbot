@@ -1,3 +1,6 @@
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
 from fastapi.testclient import TestClient
 
 import app.main as m
@@ -92,3 +95,20 @@ def test_summary_with_analysis_monkeypatched_llm(monkeypatch):
     joined = "\n".join(data["analysis"]).lower()
     assert "inquiry" in joined
     assert "mirror" in joined
+
+
+def test_summary_route_delegates_to_active_module():
+    fake_module = SimpleNamespace(
+        build_summary=AsyncMock(return_value={"moduleId": "stub", "overallScore": 1.0})
+    )
+    app.dependency_overrides[m.get_active_module] = lambda: fake_module
+    try:
+        response = client.get("/summary", params={"sessionId": "stub-session", "analysis": "true"})
+    finally:
+        app.dependency_overrides.pop(m.get_active_module, None)
+
+    assert response.status_code == 200
+    assert response.json()["moduleId"] == "stub"
+    fake_module.build_summary.assert_awaited_once()
+    assert fake_module.build_summary.await_args.kwargs["session_id"] == "stub-session"
+    assert fake_module.build_summary.await_args.kwargs["analysis"] is True

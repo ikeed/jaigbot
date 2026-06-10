@@ -51,7 +51,6 @@ def test_aims_module_future_hooks_remain_explicitly_unimplemented():
         module.build_startup_artifacts,
         module.build_system_instruction,
         module.build_history_projection,
-        module.build_summary,
         module.build_jailbreak_fallback,
     ):
         try:
@@ -224,3 +223,70 @@ def test_aims_module_build_archive_payload_returns_none_without_endgame():
     )
 
     assert archive is None
+
+
+@pytest.mark.asyncio
+async def test_aims_module_build_summary_delegates_to_summary_service(monkeypatch):
+    module = create_aims_training_module(settings=SimpleNamespace(redis_key_prefix="aims:local:session:"))
+    fake_summary = {"overallScore": 2.5, "moduleId": "aims"}
+
+    async def fake_build_summary(**kwargs):
+        assert kwargs["session_id"] == "sid"
+        return fake_summary
+
+    monkeypatch.setattr("app.services.summary_service.build_summary", fake_build_summary)
+
+    result = await module.build_summary(
+        session_id="sid",
+        analysis=False,
+        memory_store={},
+        memory_enabled=True,
+        settings=SimpleNamespace(),
+        logger=MagicMock(),
+        app_state=SimpleNamespace(),
+        vertex_client_cls=object(),
+    )
+
+    assert result == fake_summary
+
+
+def test_aims_module_build_archive_envelope_preserves_compatibility_fields():
+    module = create_aims_training_module(
+        settings=SimpleNamespace(
+            redis_key_prefix="aims:local:session:",
+            APP_ENV="local",
+            gcs_object_prefix="env=local",
+            MODEL_ID="gemini-test",
+            REGION="us-central1",
+        )
+    )
+
+    envelope = module.build_archive_envelope(
+        session_id="sid",
+        user_id="doctor@example.com",
+        data={
+            "module_id": "aims",
+            "session_started": 1716000000.0,
+            "updated": 1716000500.0,
+            "character": "Specific Persona: Jasmine",
+            "scene": "Clinic",
+            "persona": {"id": 1, "name": "Jasmine"},
+            "aims": {"totalTurns": 1, "perStepCounts": {"Announce": 1}, "runningAverage": {"Announce": 3.0}},
+            "coach_post": {"title": "Done", "lines": ["Good"]},
+            "full_history": [{"role": "user", "content": "Hello", "time": 1716000100.0}],
+        },
+        git_hash="abc123",
+        settings=SimpleNamespace(
+            APP_ENV="local",
+            gcs_object_prefix="env=local",
+            MODEL_ID="gemini-test",
+            REGION="us-central1",
+        ),
+    )
+
+    assert envelope.module_id == "aims"
+    assert envelope.metadata["moduleId"] == "aims"
+    assert envelope.participant_context["personaName"] == "Jasmine"
+    assert envelope.payload["summary"] == {"title": "Done", "lines": ["Good"]}
+    assert envelope.compatibility is not None
+    assert envelope.compatibility.analytics["summary"]["title"] == "Done"

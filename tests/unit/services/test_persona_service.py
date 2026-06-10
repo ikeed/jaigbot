@@ -188,6 +188,9 @@ def test_extract_persona_name_variants_and_archive_precedence():
     assert persona_service.extract_persona_name_from_archive(
         {"metadata": {"personaName": "Metadata"}, "character": "Person: Character"}
     ) == "Metadata"
+    assert persona_service.extract_persona_name_from_archive(
+        {"module": {"participantContext": {"personaName": "Module Name"}}}
+    ) == "Module Name"
     assert persona_service.extract_persona_name_from_archive({"character": "Parent: Character"}) == "Character"
 
 

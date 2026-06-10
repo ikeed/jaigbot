@@ -1,11 +1,11 @@
 import json
 import logging
-import datetime
 import subprocess
 from typing import Dict, Any, Iterable, Optional
 from google.cloud import storage
 from app.config import settings
-from app.chat_roles import ROLE_ASSISTANT, ROLE_COACH, ROLE_SYSTEM, ROLE_USER
+from app.core.archive_serialization import serialize_archive_envelope
+from app.core.registry import build_builtin_registry
 
 logger = logging.getLogger(__name__)
 
@@ -92,130 +92,18 @@ class StorageService:
 
     @staticmethod
     def _transform_to_logical_schema(session_id: str, user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Convert messy internal memory to structured logical schema."""
-        started_at = data.get("session_started")
-        ended_at = data.get("session_ended") or data.get("updated")
-
-        duration = None
-        if started_at is not None and ended_at is not None:
-            try:
-                duration = round(float(ended_at) - float(started_at), 2)
-            except (TypeError, ValueError):
-                logger.warning("Could not calculate duration: started_at=%s, ended_at=%s", started_at, ended_at)
-                duration = None
-
-        def iso(ts):
-            if ts is None:
-                return None
-            try:
-                return datetime.datetime.fromtimestamp(float(ts), datetime.timezone.utc).isoformat().replace("+00:00", "Z")
-            except (TypeError, ValueError):
-                logger.warning("Could not format ISO timestamp: %s", ts)
-                return None
-
-        # Re-group transcript into turns
-        transcript = []
-        full_hist = data.get("full_history") or []
-
-        # Scan in order and keep visible roles. The live UI renders each turn as
-        # user -> coach -> assistant, so archives should preserve that order too.
-        current_turn = 0
-        for entry in full_hist:
-            role = (entry.get("role") or ROLE_ASSISTANT).lower().strip()
-            if role == ROLE_SYSTEM:
-                transcript.append({
-                    "turn": current_turn,
-                    "role": ROLE_SYSTEM,
-                    "content": entry.get("content"),
-                    "timestamp": iso(entry.get("time"))
-                })
-            elif role == ROLE_USER:
-                current_turn += 1
-                transcript.append({
-                    "turn": current_turn,
-                    "role": ROLE_USER,
-                    "content": entry.get("content"),
-                    "timestamp": iso(entry.get("time"))
-                })
-            elif role == ROLE_ASSISTANT:
-                transcript.append({
-                    "turn": current_turn,
-                    "role": ROLE_ASSISTANT,
-                    "content": entry.get("content"),
-                    "timestamp": iso(entry.get("time")),
-                    "coaching": None
-                })
-            elif role == ROLE_COACH:
-                coaching_data = entry.get("coaching_data")
-                coaching = None
-                if coaching_data:
-                    coaching = {
-                        **coaching_data,
-                        "timestamp": iso(entry.get("time"))
-                    }
-                transcript.append({
-                    "turn": current_turn,
-                    "role": ROLE_COACH,
-                    "content": entry.get("content"),
-                    "timestamp": iso(entry.get("time")),
-                    "coaching": coaching,
-                })
-
-        metadata = {
-            "sessionId": session_id,
-            "userId": user_id,
-            "gitHash": GIT_HASH,
-            "timestamps": {
-                "startedAt": iso(started_at),
-                "endedAt": iso(ended_at),
-                "durationSeconds": duration
-            },
-            "outcome": {
-                "isGameOver": data.get("game_over", False),
-                "exitContext": "bug_report" if "error_report" in data else "completion" if data.get("game_over") else "abandoned",
-                "report": {
-                    "reason": data.get("error_report"),
-                    "reportedAt": data.get("reported_at")
-                } if "error_report" in data else None
-            }
-        }
-
-        # Filter out persona/config
-        config = {
-            "persona": {
-                "id": (data.get("persona") or {}).get("id") if isinstance(data.get("persona"), dict) else None,
-                "name": (data.get("persona") or {}).get("name") if isinstance(data.get("persona"), dict) else None,
-                "character": data.get("character"),
-                "scene": data.get("scene")
-            },
-            "model": {
-                "id": settings.MODEL_ID,
-                "region": settings.REGION
-            }
-        }
-
-        # Analytics
-        aims_metrics = data.get("aims") or {}
-        analytics = {
-            "aims": {
-                "totalTurns": aims_metrics.get("totalTurns"),
-                "perStepCounts": aims_metrics.get("perStepCounts"),
-                "runningAverage": aims_metrics.get("runningAverage")
-            },
-            "conversationState": data.get("aims_state"),
-            "summary": data.get("coach_post")
-        }
-
-        return {
-            "metadata": metadata,
-            "environment": {
-                "appEnv": settings.APP_ENV,
-                "gcsObjectPrefix": settings.gcs_object_prefix,
-            },
-            "config": config,
-            "transcript": transcript,
-            "analytics": analytics
-        }
+        """Convert internal memory to a module-aware logical archive schema."""
+        persisted_module_id = data.get("module_id")
+        active_module_id = str(persisted_module_id).strip() if isinstance(persisted_module_id, str) and persisted_module_id.strip() else settings.ACTIVE_MODULE
+        active_module = build_builtin_registry(settings=settings).get_active_module(active_module=active_module_id)
+        envelope = active_module.build_archive_envelope(
+            session_id=session_id,
+            user_id=user_id,
+            data=data,
+            git_hash=GIT_HASH,
+            settings=settings,
+        )
+        return serialize_archive_envelope(envelope)
 
     def download_session(self, session_id: str, user_id: str) -> Optional[dict]:
         """

@@ -69,10 +69,13 @@ class _StubModule:
     def build_history_projection(self, **kwargs):
         raise NotImplementedError
 
-    def build_summary(self, **kwargs):
+    async def build_summary(self, **kwargs):
         raise NotImplementedError
 
     def build_archive_payload(self, **kwargs):
+        raise NotImplementedError
+
+    def build_archive_envelope(self, **kwargs):
         raise NotImplementedError
 
     def build_jailbreak_fallback(self, **kwargs):

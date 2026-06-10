@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Protocol, runtime_checkable
 
+from app.core.archive_types import ModuleArchiveEnvelope
 from app.core.module_types import ModuleManifest, ResumeValidationResult
 
 
@@ -61,10 +62,13 @@ class TrainingModule(Protocol):
     def build_history_projection(self, **kwargs: Any) -> Mapping[str, Any]:
         ...  # pragma: no cover
 
-    def build_summary(self, **kwargs: Any) -> Mapping[str, Any]:
+    async def build_summary(self, **kwargs: Any) -> Mapping[str, Any]:
         ...  # pragma: no cover
 
     def build_archive_payload(self, **kwargs: Any) -> Mapping[str, Any] | None:
+        ...  # pragma: no cover
+
+    def build_archive_envelope(self, **kwargs: Any) -> ModuleArchiveEnvelope:
         ...  # pragma: no cover
 
     def build_jailbreak_fallback(self, **kwargs: Any) -> str:

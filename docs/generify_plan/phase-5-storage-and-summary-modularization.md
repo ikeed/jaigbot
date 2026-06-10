@@ -24,7 +24,7 @@ migrations.
 - physical relocation of AIMS files
 - removing old archive readers
 
-## Actual Starting Point After Phase 3
+## Actual Starting Point After Phase 4
 
 The repo already has:
 
@@ -32,6 +32,7 @@ The repo already has:
   `build_archive_payload(...)`
 - module-owned turn dispatch and response shaping
 - module-owned session bootstrap and module-aware runtime memory metadata
+- module-aware current-thread and resume validation
 - core background upload mechanics still housed in `ChatOrchestrator` and
   `storage_service`
 
@@ -152,3 +153,24 @@ Mitigation:
 3. summary generation is a module capability
 4. old AIMS archives remain readable
 5. key-prefix migration is prepared but not conflated with unrelated storage work
+
+## Phase 5 Implementation Notes
+
+Phase 5 was implemented with the following concrete choices:
+
+- added `app/core/archive_types.py` and `app/core/archive_serialization.py`
+  as the generic persistence shell
+- added `AimsTrainingModule.build_archive_envelope(...)` so archive shaping is
+  now module-owned
+- kept legacy `config` and `analytics` blocks in serialized archives for read
+  compatibility while also adding a generic `module` block
+- moved `/summary` to `active_module.build_summary(...)` while preserving the
+  existing AIMS summary payload shape
+- updated persona archive readers to prefer the legacy config shape first and
+  then fall back to `module.participantContext`
+
+One intentional compromise remains:
+
+- archives that predate persisted `module_id` still resolve through the
+  deployment's active module. That is acceptable for the current deployment
+  model, but not sufficient for mixed-module archive stores.

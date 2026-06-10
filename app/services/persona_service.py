@@ -114,6 +114,15 @@ def extract_persona_name_from_archive(data: dict | None) -> str | None:
             name = extract_persona_name_from_text(persona.get("character"))
             if name:
                 return name
+    module_block = data.get("module") or {}
+    participant_context = module_block.get("participantContext") if isinstance(module_block, dict) else None
+    if isinstance(participant_context, dict):
+        if participant_context.get("personaName"):
+            return str(participant_context["personaName"])
+        if participant_context.get("character"):
+            name = extract_persona_name_from_text(participant_context.get("character"))
+            if name:
+                return name
     metadata = data.get("metadata") or {}
     if isinstance(metadata, dict) and metadata.get("personaName"):
         return str(metadata["personaName"])

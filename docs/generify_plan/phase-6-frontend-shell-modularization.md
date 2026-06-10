@@ -24,19 +24,22 @@ message translations.
 - visual redesign
 - physical relocation of every AIMS frontend asset in one shot if wrappers are sufficient
 
-## Actual Starting Point After Phase 4
+## Actual Starting Point After Phase 5
 
 The repo already has:
 
 - module-owned session bootstrap on the backend
 - module-aware current-thread and resume validation
+- module-owned summary routing
+- module-aware archive/session payloads with generic `module` metadata
 - compatibility-shaped frontend bootstrap fields such as `initialCard` and
   `personaName`
 
 Implication:
 
 - Phase 6 should treat the remaining AIMS-specific startup UI as a frontend
-  vocabulary and asset-ownership problem, not as a session-bootstrap problem
+  vocabulary and asset-ownership problem, not as a backend bootstrap,
+  persistence, or summary problem
 
 ## Step-By-Step Plan
 
