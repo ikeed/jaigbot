@@ -1,4 +1,4 @@
-/* AIMSBot custom UI tweaks for Chainlit (v2.11.1)
+/* Training-platform custom UI tweaks for Chainlit (v2.11.1)
    aimsbot-ui.js modules tag message rows with data-author and aims-* classes so
    these selectors can avoid Chainlit's action buttons and layout controls.
 */
@@ -486,7 +486,8 @@ body.aimsbot-shell .aims-message-enter {
   display: none !important;
 }
 
-img[alt="AIMSBot"] {
+img.shell-logo,
+img[alt="Conversation Trainer"] {
   width: 192px !important;
   height: 192px !important;
 }
@@ -638,7 +639,7 @@ body.dark .aims-scenario-note {
   color: #b7c8e2 !important;
 }
 
-/* --- Generic AIMSBot Modals --- */
+/* --- Generic shell modals --- */
 
 .aims-modal {
   display: none;

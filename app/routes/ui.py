@@ -7,7 +7,9 @@ from fastapi.templating import Jinja2Templates
 
 from app.chainlit_thread_state import get_current_thread_id
 from app.config import settings
+from app.core.registry import build_builtin_registry
 from app.constants import (
+    APP_TITLE,
     TEMPLATE_LOGIN,
     TEMPLATE_DUPLICATE,
     ROUTE_ROOT,
@@ -25,12 +27,26 @@ router = APIRouter()
 BASE_DIR = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
+
+def _get_shell_context() -> dict[str, str]:
+    manifest = build_builtin_registry(settings=settings).get_active_module(
+        active_module=settings.ACTIVE_MODULE
+    ).get_ui_manifest()
+    branding = manifest.branding
+    module_title = branding.app_title if branding and branding.app_title else manifest.display_name
+    return {
+        "shell_title": APP_TITLE,
+        "module_title": module_title,
+        "module_display_name": manifest.display_name,
+        "logo_url": "/public/aimsbot.png",
+    }
+
 @router.get(ROUTE_ROOT, response_class=HTMLResponse)
 async def custom_login_page(request: Request):
     """Render the custom SSO landing page."""
     user_id = authenticated_user_identifier(request)
     if user_id:
-        thread_id = get_current_thread_id(user_id)
+        thread_id = get_current_thread_id(user_id, active_module_id=settings.ACTIVE_MODULE)
         target_url = f"{PATH_CHAT}/thread/{thread_id}" if thread_id else PATH_CHAT
         return RedirectResponse(url=target_url)
 
@@ -41,7 +57,8 @@ async def custom_login_page(request: Request):
         request=request,
         context={
             "providers": providers,
-            "auth_secret_set": auth_secret_set
+            "auth_secret_set": auth_secret_set,
+            **_get_shell_context(),
         }
     )
 
@@ -50,7 +67,8 @@ async def duplicate_tab_page(request: Request):
     """Render the duplicate tab warning page."""
     return templates.TemplateResponse(
         name=TEMPLATE_DUPLICATE,
-        request=request
+        request=request,
+        context=_get_shell_context(),
     )
 
 @router.get(ROUTE_CHAT_LOGIN, response_class=RedirectResponse)

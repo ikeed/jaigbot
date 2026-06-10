@@ -264,16 +264,27 @@ Actual artifacts now present in the repo:
 
 ### Phase 10
 
-Planned.
+Implemented.
 
-Focus:
+What landed:
 
-- finish deployment-shell branding cleanup so core no longer presents itself as
-  `AIMSBot`
-- decide and implement module-owned CSS/theming strategy
-- make the frontend consume the role-label and bootstrap-artifact seams added in
-  Phase 9
-- align login/duplicate/shell presentation with active-module branding
+- shell-facing app title now presents as `Conversation Trainer`
+- login and duplicate-tab templates now render shell/module branding separately
+- generic contributor guidance was updated in:
+  - `AGENTS.md`
+  - `docs/api.md`
+  - `docs/chainlit-ui.md`
+  - `docs/developer-setup.md`
+- active-module shell context now flows through the UI routes
+- module manifests now expose `frontendCss` coherently in `/config`
+
+Still deferred:
+
+- the shared logo asset and several internal asset names remain AIMS-named
+- the frontend still does not consume role-label metadata for live message
+  presentation
+- CSS remains one shell stylesheet rather than a manifest-driven per-module
+  loader
 
 ### Phase 11
 

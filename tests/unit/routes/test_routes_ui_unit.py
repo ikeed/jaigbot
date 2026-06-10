@@ -20,7 +20,7 @@ def _request(query_string: bytes = b"") -> Request:
 @pytest.mark.asyncio
 async def test_custom_login_page_redirects_authenticated_user_without_thread(monkeypatch):
     monkeypatch.setattr(ui, "authenticated_user_identifier", lambda request: "doctor@example.com")
-    monkeypatch.setattr(ui, "get_current_thread_id", lambda user_id: None)
+    monkeypatch.setattr(ui, "get_current_thread_id", lambda user_id, active_module_id=None: None)
 
     response = await ui.custom_login_page(_request())
 
@@ -34,6 +34,16 @@ async def test_custom_login_page_renders_template_for_unauthenticated_user(monke
     monkeypatch.setattr(ui, "authenticated_user_identifier", lambda request: None)
     monkeypatch.setattr(ui, "get_enabled_oauth_providers", lambda: [{"id": "google"}])
     monkeypatch.setattr(ui.settings, "CHAINLIT_AUTH_SECRET", "secret")
+    monkeypatch.setattr(
+        ui,
+        "_get_shell_context",
+        lambda: {
+            "shell_title": "Conversation Trainer",
+            "module_title": "AIMSBot (Gemini Enterprise)",
+            "module_display_name": "AIMS",
+            "logo_url": "/public/aimsbot.png",
+        },
+    )
     monkeypatch.setattr(ui.templates, "TemplateResponse", MagicMock(return_value=template_response))
 
     response = await ui.custom_login_page(_request())
@@ -42,16 +52,31 @@ async def test_custom_login_page_renders_template_for_unauthenticated_user(monke
     call = ui.templates.TemplateResponse.call_args.kwargs
     assert call["context"]["providers"] == [{"id": "google"}]
     assert call["context"]["auth_secret_set"] is True
+    assert call["context"]["shell_title"] == "Conversation Trainer"
+    assert call["context"]["module_title"] == "AIMSBot (Gemini Enterprise)"
 
 
 @pytest.mark.asyncio
 async def test_duplicate_tab_page_renders_template(monkeypatch):
     template_response = MagicMock()
+    monkeypatch.setattr(
+        ui,
+        "_get_shell_context",
+        lambda: {
+            "shell_title": "Conversation Trainer",
+            "module_title": "Interview Practice",
+            "module_display_name": "Interview Practice",
+            "logo_url": "/public/aimsbot.png",
+        },
+    )
     monkeypatch.setattr(ui.templates, "TemplateResponse", MagicMock(return_value=template_response))
 
     response = await ui.duplicate_tab_page(_request())
 
     assert response is template_response
+    call = ui.templates.TemplateResponse.call_args.kwargs
+    assert call["context"]["shell_title"] == "Conversation Trainer"
+    assert call["context"]["module_title"] == "Interview Practice"
 
 
 @pytest.mark.asyncio

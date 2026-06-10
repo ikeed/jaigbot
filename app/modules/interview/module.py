@@ -216,6 +216,7 @@ def create_interview_training_module(*, settings: Any) -> InterviewTrainingModul
             supports_feedback=False,
             supports_summary=False,
             frontend_js_bundles=("/public/js/modules/interview/module-ui.js",),
+            frontend_css="/public/aimsbot.css",
             branding=BrandingSpec(
                 app_title="Interview Practice",
                 avatar_name="Interviewer",

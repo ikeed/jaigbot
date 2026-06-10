@@ -100,6 +100,20 @@ None currently.
   `participantContext`, `state`, and plural `artifacts`, but the Chainlit shell
   still treats the first artifact as the one renderable startup surface. That
   is good enough for the current shell, not a finished multi-artifact UI model.
+
+## Phase 10
+
 - Role-label metadata is now exposed in module dialogue roles and `/config`, but
-  the frontend does not consume it yet. Phase 9 fixed the backend seam; Phase
-  10 still owns the visible presentation cleanup.
+  the frontend still does not consume it for visible message presentation.
+  Phase 10 cleaned up shell branding, not message rendering semantics.
+- The shell title is now generic, but the shared logo asset path remains
+  `/public/aimsbot.png` and several internal static asset names still use the
+  old AIMSBot naming. That is acceptable for now, but it is still branding
+  debt.
+- CSS is still served through one deployment-level stylesheet entrypoint.
+  `frontendCss` is exposed in module manifests and `/config`, but the browser
+  shell does not yet switch or compose stylesheets per module.
+- Generic product docs and `AGENTS.md` were updated, but AIMS-specific docs
+  still intentionally dominate the repo. That is correct while AIMS remains the
+  primary shipped module, but a future broader module rollout will need another
+  documentation pass.

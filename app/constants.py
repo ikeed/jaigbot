@@ -1,5 +1,5 @@
 """
-Centralized constants for the AIMSBot application.
+Centralized constants for the training-platform shell and default modules.
 """
 
 # Environment Variable Names
@@ -11,7 +11,7 @@ ENV_HOST = "HOST"
 ENV_PORT = "PORT"
 
 # App Metadata
-APP_TITLE = "AIMSBot (Gemini Enterprise)"
+APP_TITLE = "Conversation Trainer"
 APP_VERSION = "0.3.0"
 
 # Mounting Paths

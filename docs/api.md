@@ -1,8 +1,9 @@
 # API reference
 
-This document describes the FastAPI endpoints exposed by AIMSBot. See the root
-README for run instructions and Swagger UI at `/docs` when the API-only backend
-is running.
+This document describes the FastAPI endpoints exposed by the training-platform
+backend. The default shipped module is AIMS, so many examples still use AIMS
+payloads. See the root README for run instructions and Swagger UI at `/docs`
+when the API-only backend is running.
 
 Local base URLs:
 
@@ -16,8 +17,8 @@ Local base URLs:
 - Backward-compatible aliases such as `text`, `modelId`, and `latency_ms` may
   also be present.
 - AIMS coaching output is returned when `AIMS_COACHING_ENABLED=true` and the
-  request opts in with `coach: true`, or when the server is configured to force
-  coaching by default.
+  active module is AIMS and the request opts in with `coach: true`, or when the
+  server is configured to force coaching by default.
 - Session state is stored in memory or Redis. See `docs/memory-and-persona.md`.
 
 ## POST /chat
@@ -176,8 +177,9 @@ Important request fields:
 - `scene`: optional
 - `userInfo`: optional
 
-The response includes the effective session id and any available recovered
-history/persona information.
+The response includes the effective session id plus a generic module bootstrap
+block. Compatibility aliases such as `character`, `scene`, and `initialCard`
+may also be present for current shell consumers.
 
 ## POST /session/deregister
 

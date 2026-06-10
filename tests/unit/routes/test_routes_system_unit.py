@@ -67,6 +67,7 @@ def _client(*, settings=None, store=None, model_check=None, logger=None):
                 "/public/js/modules/aims/message-roles.js",
                 "/public/js/modules/aims/module-ui.js",
             ),
+            frontend_css="/public/aimsbot.css",
             branding=BrandingSpec(app_title="AIMSBot (Gemini Enterprise)"),
         )
     )
@@ -83,6 +84,7 @@ def _client(*, settings=None, store=None, model_check=None, logger=None):
                     dialogue_roles=DialogueRoles(participant_roles=("candidate", "interviewer")),
                     supports_summary=False,
                     frontend_js_bundles=("/public/js/modules/interview/module-ui.js",),
+                    frontend_css="/public/aimsbot.css",
                     branding=BrandingSpec(app_title="Interview Practice"),
                 )
             ),
@@ -175,6 +177,7 @@ def test_config_modelcheck_and_diagnostics_use_injected_dependencies():
         "/public/js/modules/aims/message-roles.js",
         "/public/js/modules/aims/module-ui.js",
     ]
+    assert config["activeModule"]["frontendCss"] == "/public/aimsbot.css"
     assert config["activeModule"]["branding"]["appTitle"] == "AIMSBot (Gemini Enterprise)"
     assert [module["id"] for module in config["availableModules"]] == ["aims", "interview"]
     assert config["availableModules"][1]["supportsSummary"] is False

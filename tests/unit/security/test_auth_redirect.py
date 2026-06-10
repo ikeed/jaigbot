@@ -74,7 +74,7 @@ def test_login_page_redirects_authenticated_user_to_current_thread(monkeypatch):
         "authenticated_user_identifier",
         lambda request: "clinician@example.com",
     )
-    monkeypatch.setattr(ui, "get_current_thread_id", lambda user_id: "existing-thread")
+    monkeypatch.setattr(ui, "get_current_thread_id", lambda user_id, active_module_id=None: "existing-thread")
 
     app = FastAPI()
     app.include_router(ui.router)

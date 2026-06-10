@@ -1,4 +1,4 @@
-# AIMSBot Chainlit UI Modules
+# Training UI Chainlit Modules
 
 `/public/aimsbot-ui.js` is the single Chainlit `custom_js` entry point. It only
 loads these modules in dependency order.

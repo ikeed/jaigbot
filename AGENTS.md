@@ -1,8 +1,11 @@
-# AIMSBot Agent Guide
+# Training Platform Agent Guide
 
 ## Purpose
 
-Use this file as the default working context for AIMSBot. Keep investigation
+Use this file as the default working context for the training platform repo.
+The default shipped module is still AIMS, but the core runtime now includes a
+module registry, generic core package, and a second built-in proof module for
+interview practice. Keep investigation
 narrow: read the relevant entry points first, follow nearby patterns, and open
 deeper docs only when the task touches that area.
 
@@ -13,6 +16,8 @@ deeper docs only when the task touches that area.
 - Gemini on Vertex AI for simulated patient replies and AIMS classification.
 - Local or Redis-backed session memory; optional GCS archive/report storage.
 - Unified local app: `run_app.py`.
+- Default active module: `aims`
+- Built-in proof module: `interview`
 
 Runtime shapes:
 
@@ -21,6 +26,10 @@ Runtime shapes:
 - Separate Chainlit UI: `BACKEND_URL=http://localhost:8080/chat .venv/bin/chainlit run chainlit_app.py`
 
 ## Read First By Task
+
+- Generic module/runtime work: `app/core/`, `app/modules/`, `app/main.py`,
+  `docs/generify_plan/`, then the specific module implementation you are
+  touching.
 
 - Chat API behavior: `app/services/chat_orchestrator.py`, then
   `app/services/aims_coaching_handler.py` or
@@ -72,6 +81,8 @@ Open them only when they are relevant to the requested behavior.
 - Preserve API response shapes and stored-history role semantics.
 - Keep state and persistence changes backward-compatible with existing local
   memory and Redis data where practical.
+- Do not reintroduce AIMS-specific semantics into `app/core/` or generic shell
+  routes when a module-owned seam already exists.
 - Do not log secrets, full persona prompts, scene text, or unredacted request
   payloads.
 - Keep Chainlit compatibility aligned with the pinned dependency in
