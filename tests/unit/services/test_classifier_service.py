@@ -242,7 +242,7 @@ async def test_classify_turn_caps_tips_and_preserves_null_person_topic(
 
 
 def test_get_deterministic_fallback_defaults_score_and_appends_fallback(classifier_service):
-    with patch("app.services.classifier_service.evaluate_turn") as evaluate_turn:
+    with patch("app.modules.aims.services.classifier_service.evaluate_turn") as evaluate_turn:
         evaluate_turn.return_value = {
             "step": "Mirror",
             "reasons": ["Reflected concern"],
@@ -262,7 +262,7 @@ def test_get_deterministic_fallback_defaults_score_and_appends_fallback(classifi
 
 
 def test_get_deterministic_fallback_does_not_duplicate_fallback_reason(classifier_service):
-    with patch("app.services.classifier_service.evaluate_turn") as evaluate_turn:
+    with patch("app.modules.aims.services.classifier_service.evaluate_turn") as evaluate_turn:
         evaluate_turn.return_value = {
             "step": "Announce",
             "score": 3,

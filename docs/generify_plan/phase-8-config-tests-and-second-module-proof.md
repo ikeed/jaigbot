@@ -24,7 +24,7 @@ AIMS-shaped even if the code looks modular.
 
 ## Step-By-Step Plan
 
-## Actual Starting Point After Phase 6
+## Actual Starting Point After Phase 7
 
 The repo already has:
 
@@ -35,6 +35,10 @@ The repo already has:
 - core frontend/backend lifecycle events that are no longer AIMS-prefixed
 - compatibility layers that still preserve AIMS-first payloads for current
   callers
+- AIMS engine/prompt ownership and several generic-named AIMS services
+  physically relocated under `app/modules/aims/`
+- an intentionally deferred AIMS-prefixed orchestration/state cluster that
+  still lives under `app/services/`
 
 Implication:
 
@@ -94,6 +98,21 @@ Explicitly test for things that often remain hidden:
 
 Only after the second-module proof should you decide whether some legacy AIMS
 aliases or core-side compatibility paths can be removed.
+
+### Step 6: Decide whether the deferred AIMS-prefixed service cluster should move at all
+
+By this point the architecture proof should be strong enough to judge whether:
+
+- `aims_coaching_handler.py`
+- `aims_dependencies.py`
+- `aims_endgame_service.py`
+- `aims_state_service.py`
+- `aims_turn_coordinator.py`
+- `aims_turn_telemetry.py`
+
+gain anything from relocation, or whether they can remain where they are until
+the AIMS module itself is split more aggressively. Do not move them merely for
+symmetry.
 
 ## Foreseen Problems And Mitigations
 

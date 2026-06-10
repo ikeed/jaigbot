@@ -66,7 +66,7 @@ def test_aims_module_initialize_session_serializes_generic_bootstrap(monkeypatch
     logger = MagicMock()
 
     monkeypatch.setattr(
-        "app.services.session_initializer.initialize_session",
+        "app.modules.aims.services.session_initializer.initialize_session",
         lambda body, memory_store, memory_enabled, logger, module_id=None: {
             "status": "ok",
             "moduleId": module_id,
@@ -140,7 +140,10 @@ async def test_aims_module_handle_turn_routes_to_coaching_when_enabled(monkeypat
         async def handle(req, body, ctx):
             return {"reply": "patient", "model": "m", "latency_ms": 1}
 
-    monkeypatch.setattr("app.services.aims_coaching_handler.AimsCoachingHandler", FakeAimsHandler)
+    monkeypatch.setattr(
+        "app.services.aims_coaching_handler.AimsCoachingHandler",
+        FakeAimsHandler,
+    )
 
     result = await module.handle_turn(
         req=object(),
@@ -234,7 +237,7 @@ async def test_aims_module_build_summary_delegates_to_summary_service(monkeypatc
         assert kwargs["session_id"] == "sid"
         return fake_summary
 
-    monkeypatch.setattr("app.services.summary_service.build_summary", fake_build_summary)
+    monkeypatch.setattr("app.modules.aims.services.summary_service.build_summary", fake_build_summary)
 
     result = await module.build_summary(
         session_id="sid",

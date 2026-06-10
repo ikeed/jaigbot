@@ -48,7 +48,9 @@ class AimsTrainingModule:
 
     # Future-facing methods. These will acquire real behavior in later phases.
     def initialize_session(self, **kwargs: Any) -> Mapping[str, Any]:
-        from app.services.session_initializer import initialize_session as initialize_aims_session
+        from app.modules.aims.services.session_initializer import (
+            initialize_session as initialize_aims_session,
+        )
 
         raw = initialize_aims_session(
             kwargs["body"],
@@ -158,7 +160,7 @@ class AimsTrainingModule:
         raise NotImplementedError("History projection is not routed through TrainingModule yet.")
 
     async def build_summary(self, **kwargs: Any) -> Mapping[str, Any]:
-        from app.services.summary_service import build_summary as build_aims_summary
+        from app.modules.aims.services.summary_service import build_summary as build_aims_summary
 
         return await build_aims_summary(
             session_id=kwargs.get("session_id"),
@@ -366,7 +368,7 @@ def create_aims_training_module(*, settings: Any) -> AimsTrainingModule:
         supports_feedback=True,
         supports_summary=True,
         frontend_js_bundles=(
-            "/public/js/aimsbot/message-roles.js",
+            "/public/js/modules/aims/message-roles.js",
             "/public/js/modules/aims/module-ui.js",
         ),
         frontend_css="/public/aimsbot.css",

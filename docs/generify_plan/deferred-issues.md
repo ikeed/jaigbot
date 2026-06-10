@@ -45,12 +45,27 @@ None currently.
   deployment-level `custom_css` entrypoint. Phase 8 should decide whether CSS
   remains one shell asset with module sections or becomes manifest-driven like
   JS bundles.
-- The AIMS message-role renderer is now module-owned logically, but it still
-  lives at `public/js/aimsbot/message-roles.js`. Phase 7 should relocate that
-  file under an AIMS-owned frontend path so the physical layout matches the
-  ownership boundary.
 - Browser-based local verification could not be completed in this environment:
   the in-app browser runtime had no active `iab` instance, and fallback
   Playwright verification could not launch because the required local browser
   runtime was unavailable here. Re-run a real browser sanity check in a normal
   local developer session before treating Phase 6 as fully field-verified.
+
+## Phase 7
+
+- The AIMS-prefixed orchestration/state cluster still lives under
+  `app/services/`:
+  - `aims_coaching_handler.py`
+  - `aims_dependencies.py`
+  - `aims_endgame_service.py`
+  - `aims_state_service.py`
+  - `aims_turn_coordinator.py`
+  - `aims_turn_telemetry.py`
+  This is intentional. Moving that cluster now would enlarge the touched
+  surface without improving any already-proven seam. Revisit it only if a later
+  phase needs stricter physical ownership or if a second module demonstrates a
+  real collision.
+- Compatibility shims still exist at the old import paths for the moved AIMS
+  engine, prompt module, and several generic-named services. Keep them until
+  Phase 8 proves that test ownership, docs, and downstream imports can be
+  cleaned up without breaking consumers unexpectedly.

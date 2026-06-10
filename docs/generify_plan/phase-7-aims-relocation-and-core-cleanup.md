@@ -7,7 +7,8 @@ residual AIMS-specific imports and assumptions from core.
 
 At the end of Phase 7:
 
-- AIMS implementation files live under `app/modules/aims/` or clearly module-owned paths
+- AIMS implementation files that benefit from relocation live under
+  `app/modules/aims/` or clearly module-owned paths
 - core no longer imports AIMS services directly
 - shared utilities that remain in core are genuinely generic
 
@@ -57,12 +58,14 @@ For each remaining AIMS-adjacent file, decide whether it is:
 
 Relocate:
 
-- AIMS handlers
-- AIMS services
+- AIMS engine and prompts
+- generic-named AIMS services that already sit behind proven module seams
 - AIMS prompts
 - AIMS summary/analytics logic
 
 Do not batch everything into one giant rename if smaller moves preserve sanity.
+Leave the larger AIMS-prefixed orchestration/state cluster in place if moving it
+would mostly create diff noise and coverage drag.
 
 ### Step 3: Remove residual core imports
 
@@ -106,9 +109,20 @@ Mitigation:
 - move incrementally
 - keep behavior changes separate from file moves where possible
 
+### Problem 3: Coverage drops because moved files were previously under-tested
+
+Mitigation:
+
+- move the best-covered AIMS-owned files first
+- add focused regression tests for any file whose coverage would otherwise fall
+  below the project bar
+- defer low-value moves of large AIMS-prefixed service clusters until a later
+  phase actually needs them
+
 ## Acceptance Criteria
 
-1. AIMS runtime logic is physically module-owned
-2. core no longer imports AIMS implementation directly
-3. remaining shared helpers are demonstrably generic
+1. AIMS engine, prompts, and module-owned generic-named services are
+   physically module-owned
+2. core no longer imports moved AIMS implementation directly
+3. remaining shared helpers are demonstrably generic or explicitly deferred
 4. runtime behavior remains unchanged

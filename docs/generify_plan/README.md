@@ -173,6 +173,39 @@ Implication for later phases:
 - Phase 8 should finish CSS ownership, because JS is now manifest-driven but
   CSS is still served through one deployment-level Chainlit entrypoint
 
+### Phase 7
+
+Implemented.
+
+Actual artifacts now present in the repo:
+
+- AIMS engine now lives at `app/modules/aims/engine.py`
+- AIMS prompt ownership now lives under `app/modules/aims/prompts/`
+- the following AIMS-owned generic-named services now live under
+  `app/modules/aims/services/`:
+  - `classifier_service.py`
+  - `patient_reply_service.py`
+  - `prompt_builders.py`
+  - `session_initializer.py`
+  - `summary_service.py`
+  - `aims_feedback_service.py`
+  - `aims_handler_config.py`
+  - `aims_metrics_service.py`
+- the AIMS message-role renderer now lives at
+  `public/js/modules/aims/message-roles.js`
+- compatibility shims remain at the old import paths for the moved files so the
+  runtime and tests can migrate without a flag day
+- a real session bootstrap bug was fixed during the move:
+  existing memory with `history=None` / `full_history=None` is now repaired
+  before scenario-card replay appends into those collections
+
+Implication for later phases:
+
+- Phase 8 should treat the remaining AIMS-prefixed orchestration/state cluster
+  as an intentional deferral, not an unfinished accidental omission
+- Phase 8 should decide which compatibility shims can be retired after the
+  second-module proof and test ownership cleanup
+
 ## Cross-Phase Rules
 
 These rules apply across all remaining phases.
