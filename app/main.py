@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
+from .core.registry import build_builtin_registry
 from .http_handlers import get_request_id as _get_request_id, install_http_handlers
 from .vertex import VertexClient
 from .runtime import VertexClientCache, create_memory_store, get_logging_config
@@ -28,6 +29,15 @@ async def _lifespan(application: FastAPI):
     """Application lifespan: run startup tasks before yielding, cleanup after."""
     application.state.memory_store = MEMORY_STORE
     application.state.vertex_client_cache = _VERTEX_CLIENT_CACHE
+    module_registry = build_builtin_registry(settings=settings)
+    active_module = module_registry.get_active_module(active_module=settings.ACTIVE_MODULE)
+    application.state.module_registry = module_registry
+    application.state.active_module = active_module
+    logger.info(
+        "Active training module resolved: id=%s display_name=%s",
+        active_module.module_id,
+        active_module.display_name,
+    )
     await _model_preflight(application)
     yield
 
@@ -41,6 +51,14 @@ def get_memory_store(request: Request):
 
 def get_model_check(request: Request) -> dict:
     return getattr(request.app.state, "model_check", {"available": "unknown"})
+
+
+def get_active_module(request: Request):
+    active_module = getattr(request.app.state, "active_module", None)
+    if active_module is not None:
+        return active_module
+    module_registry = build_builtin_registry(settings=settings)
+    return module_registry.get_active_module(active_module=settings.ACTIVE_MODULE)
 
 # Optional CORS
 if settings.ALLOWED_ORIGINS:
@@ -70,6 +88,7 @@ app.include_router(create_system_router(
     logger=logger,
     get_memory_store=get_memory_store,
     get_model_check=get_model_check,
+    get_active_module=get_active_module,
     get_request_id=_get_request_id,
 ))
 app.include_router(create_summary_router(

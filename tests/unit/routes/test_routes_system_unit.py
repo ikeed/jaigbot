@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.core.module_types import BrandingSpec, DialogueRoles, ModuleManifest
 from app.routes.system import create_system_router
 
 
@@ -53,12 +54,24 @@ def _settings(**overrides):
 def _client(*, settings=None, store=None, model_check=None, logger=None):
     app = FastAPI()
     memory_store = {} if store is None else store
+    active_module = SimpleNamespace(
+        manifest=ModuleManifest(
+            id="aims",
+            display_name="AIMS",
+            chat_profile_name="AIMSBot",
+            archive_schema_version="aims-v1",
+            storage_prefix="aims:local:session:",
+            dialogue_roles=DialogueRoles(participant_roles=("user", "assistant")),
+            branding=BrandingSpec(app_title="AIMSBot (Gemini Enterprise)"),
+        )
+    )
     app.include_router(
         create_system_router(
             settings=settings or _settings(),
             logger=logger or logging.getLogger("test.routes.system"),
             get_memory_store=lambda: memory_store,
             get_model_check=lambda: model_check or {"available": True},
+            get_active_module=lambda: active_module,
             get_request_id=lambda request: request.headers.get("x-request-id"),
         )
     )
@@ -131,6 +144,7 @@ def test_config_modelcheck_and_diagnostics_use_injected_dependencies():
     assert config["modelAvailable"] is False
     assert config["modelCheck"]["reason"] == "missing"
     assert config["memoryStoreSize"] == 2
+    assert config["activeModule"]["id"] == "aims"
 
     modelcheck = client.get("/modelcheck").json()
     assert modelcheck["modelId"] == "gemini-test"
@@ -139,6 +153,7 @@ def test_config_modelcheck_and_diagnostics_use_injected_dependencies():
     diagnostics = client.get("/diagnostics").json()
     assert diagnostics["memory"]["storeSize"] == 2
     assert diagnostics["environment"]["gcsObjectPrefix"] == "env=local"
+    assert diagnostics["environment"]["activeModuleId"] == "aims"
 
 
 def test_models_success_uses_global_vertex_host(monkeypatch):

@@ -25,6 +25,7 @@ def create_system_router(
     logger: logging.Logger,
     get_memory_store: Callable[..., Any],
     get_model_check: Callable[..., dict],
+    get_active_module: Callable[..., Any],
     get_request_id: Callable[[Request], str | None],
 ) -> APIRouter:
     router = APIRouter()
@@ -71,7 +72,9 @@ def create_system_router(
     async def config(
         memory_store=Depends(get_memory_store),
         model_check: dict = Depends(get_model_check),
+        active_module=Depends(get_active_module),
     ):
+        active_module_manifest = getattr(active_module, "manifest", None)
         return {
             "projectId": settings.PROJECT_ID,
             "region": settings.REGION,
@@ -115,6 +118,17 @@ def create_system_router(
                 "sameSite": settings.SESSION_COOKIE_SAMESITE,
                 "maxAge": settings.SESSION_COOKIE_MAX_AGE,
             },
+            "activeModule": (
+                {
+                    "id": active_module_manifest.id,
+                    "displayName": active_module_manifest.display_name,
+                    "chatProfileName": active_module_manifest.chat_profile_name,
+                    "storagePrefix": active_module_manifest.storage_prefix,
+                    "archiveSchemaVersion": active_module_manifest.archive_schema_version,
+                }
+                if active_module_manifest
+                else None
+            ),
         }
 
     @router.get(ENDPOINT_MODELCHECK)
@@ -122,8 +136,9 @@ def create_system_router(
         return {"modelId": settings.MODEL_ID, "region": settings.VERTEX_LOCATION, **model_check}
 
     @router.get(ENDPOINT_DIAGNOSTICS)
-    async def diagnostics(memory_store=Depends(get_memory_store)):
+    async def diagnostics(memory_store=Depends(get_memory_store), active_module=Depends(get_active_module)):
         """Expose effective generation settings to help root-cause truncation issues."""
+        active_module_manifest = getattr(active_module, "manifest", None)
         return {
             "transport": "rest" if settings.USE_VERTEX_REST else "sdk",
             "generationConfig": {
@@ -149,6 +164,7 @@ def create_system_router(
             "environment": {
                 "appEnv": settings.APP_ENV,
                 "gcsObjectPrefix": settings.gcs_object_prefix,
+                "activeModuleId": (active_module_manifest.id if active_module_manifest else None),
             },
         }
 

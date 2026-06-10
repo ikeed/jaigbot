@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     DEBUG_MODE: bool = False
     ALLOWED_ORIGINS: List[str] = []
+    ACTIVE_MODULE: str = "aims"
     
     # Logging configuration
     LOG_REQUEST_BODY_MAX: int = 1024
@@ -207,6 +208,14 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return v.upper()
         return v or "INFO"
+
+    @field_validator("ACTIVE_MODULE", mode="before")
+    @classmethod
+    def validate_active_module(cls, v):
+        if isinstance(v, str):
+            module_id = v.strip().lower()
+            return module_id or "aims"
+        return "aims"
 
     @field_validator("SESSION_COOKIE_MAX_AGE", mode="before")
     @classmethod

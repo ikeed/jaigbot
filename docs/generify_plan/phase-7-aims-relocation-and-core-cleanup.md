@@ -1,0 +1,95 @@
+# Phase 7: AIMS Relocation And Core Cleanup
+
+## Goal
+
+Move AIMS implementation physically behind module-owned boundaries and remove
+residual AIMS-specific imports and assumptions from core.
+
+At the end of Phase 7:
+
+- AIMS implementation files live under `app/modules/aims/` or clearly module-owned paths
+- core no longer imports AIMS services directly
+- shared utilities that remain in core are genuinely generic
+
+## Why This Phase Comes Late
+
+Physical relocation should be the result of proven runtime seams, not the
+mechanism for creating them. Doing it earlier makes every later phase noisier
+and harder to verify.
+
+## Out Of Scope
+
+- major prompt redesign
+- new product behavior
+- second-module proof work beyond what is needed for cleanup confidence
+
+## Step-By-Step Plan
+
+### Step 1: Classify files by true ownership
+
+For each remaining AIMS-adjacent file, decide whether it is:
+
+- truly core
+- truly AIMS-specific
+- split between the two and needs extraction
+
+### Step 2: Move module-owned files incrementally
+
+Relocate:
+
+- AIMS handlers
+- AIMS services
+- AIMS prompts
+- AIMS summary/analytics logic
+
+Do not batch everything into one giant rename if smaller moves preserve sanity.
+
+### Step 3: Remove residual core imports
+
+Core should stop importing:
+
+- AIMS services
+- AIMS prompts
+- AIMS-only helper functions
+
+### Step 4: Re-home split helpers
+
+Some helpers will need to be:
+
+- kept in core if truly generic
+- duplicated temporarily
+- or moved into AIMS if they are actually domain-specific
+
+Examples to watch for:
+
+- prompt builders
+- concern extraction helpers
+- AIMS fallback copy
+
+### Step 5: Clean dead compatibility shims
+
+Only after runtime is proven should obviously obsolete direct AIMS hooks in
+core be removed.
+
+## Foreseen Problems And Mitigations
+
+### Problem 1: Utility files look generic but are semantically AIMS-specific
+
+Mitigation:
+
+- judge by behavior ownership, not filename
+
+### Problem 2: Relocation creates massive diff noise
+
+Mitigation:
+
+- move incrementally
+- keep behavior changes separate from file moves where possible
+
+## Acceptance Criteria
+
+1. AIMS runtime logic is physically module-owned
+2. core no longer imports AIMS implementation directly
+3. remaining shared helpers are demonstrably generic
+4. runtime behavior remains unchanged
+

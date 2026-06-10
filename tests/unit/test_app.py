@@ -30,6 +30,7 @@ def test_config_basic_shape():
         "allowedOrigins",
         "exposeUpstreamError",
         "modelFallbacks",
+        "activeModule",
     ]:
         assert key in cfg, f"missing key {key} in /config response"
 
@@ -43,3 +44,5 @@ def test_config_basic_shape():
     assert isinstance(cfg["allowedOrigins"], list)
     assert isinstance(cfg["exposeUpstreamError"], bool)
     assert isinstance(cfg["modelFallbacks"], list)
+    assert isinstance(cfg["activeModule"], dict)
+    assert cfg["activeModule"]["id"] == "aims"
