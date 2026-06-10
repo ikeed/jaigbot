@@ -42,6 +42,24 @@ runtime truth.
 It must come after Phase 2 because dispatch should target generic module
 responses, not today's AIMS-shaped result dictionaries.
 
+## Actual Implementation Notes
+
+Phase 3 landed with the following concrete seams:
+
+- `ChatOrchestrator` now routes chat turns through `_handle_module_turn(...)`
+- `AimsTrainingModule.handle_turn(...)` owns the coaching-vs-legacy decision
+  and delegates to the existing `AimsCoachingHandler` / `LegacyChatHandler`
+- module-owned archive shaping now exists via `build_archive_payload(...)`
+- response compatibility shaping still stays in
+  `format_module_response(...)`
+
+Two transitional compromises remain intentionally:
+
+- direct `ChatOrchestrator` construction still has a defensive
+  registry/settings fallback
+- legacy chat behavior is wrapped inside the AIMS module rather than modeled
+  as its own compatibility module yet
+
 ## Step-By-Step Plan
 
 ### Step 1: Introduce a module-facing orchestration seam

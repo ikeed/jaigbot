@@ -74,6 +74,29 @@ Implication for later phases:
   `ChatOrchestrator.__init__`; Phase 3 should consolidate resolution ownership
   and remove duplicate fallback logic where safe
 
+### Phase 3
+
+Implemented.
+
+Actual artifacts now present in the repo:
+
+- `ChatOrchestrator.handle_chat(...)` dispatches through one module turn path
+- `AimsTrainingModule.handle_turn(...)` owns the coaching-vs-legacy execution
+  choice for the active AIMS module
+- module-owned archive shaping via `build_archive_payload(...)` is now the seam
+  between domain endgame state and core background uploads
+- outward response shaping remains centralized in
+  `format_module_response(...)`
+
+Implication for later phases:
+
+- session/bootstrap/resume work in Phase 4 can extend the same AIMS adapter
+  that now owns runtime turn handling
+- storage work in Phase 5 should build on `build_archive_payload(...)` instead
+  of reintroducing AIMS-specific archive assembly in core
+- one intentional transitional compromise remains: legacy chat behavior is
+  hidden behind the AIMS module rather than modeled as a separate module
+
 ## Cross-Phase Rules
 
 These rules apply across all remaining phases.
@@ -165,6 +188,7 @@ Phase 4 may assume:
 
 - core chat dispatch already routes through the active module
 - module adapters can now own startup/resume/session semantics incrementally
+- module-owned archive shaping already exists for AIMS endgame exports
 
 Phase 4 must still avoid:
 
@@ -178,6 +202,7 @@ Phase 5 may assume:
 
 - session and resume semantics have a module-owned seam
 - `module_id` handling rules are explicit for runtime memory and thread state
+- AIMS endgame archive payload shaping already lives behind a module hook
 
 ### Phase 5 -> Phase 6
 

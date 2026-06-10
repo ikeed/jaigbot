@@ -24,6 +24,21 @@ migrations.
 - physical relocation of AIMS files
 - removing old archive readers
 
+## Actual Starting Point After Phase 3
+
+The repo already has:
+
+- module-owned archive shaping for AIMS endgame exports via
+  `build_archive_payload(...)`
+- module-owned turn dispatch and response shaping
+- core background upload mechanics still housed in `ChatOrchestrator` and
+  `storage_service`
+
+Implication:
+
+- Phase 5 should extend the existing archive hook into a real module-aware
+  persistence envelope instead of moving archive assembly back into core
+
 ## Step-By-Step Plan
 
 ### Step 1: Inventory persisted shapes precisely
@@ -136,4 +151,3 @@ Mitigation:
 3. summary generation is a module capability
 4. old AIMS archives remain readable
 5. key-prefix migration is prepared but not conflated with unrelated storage work
-

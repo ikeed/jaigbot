@@ -26,7 +26,7 @@ adapter that owns turn handling can start owning startup/resume semantics.
 - frontend asset-bundle splitting
 - relocating AIMS files
 
-## Actual Starting Point After Phase 1
+## Actual Starting Point After Phases 1-3
 
 The repo already has:
 
@@ -34,6 +34,9 @@ The repo already has:
 - startup-time active-module resolution
 - `resume_validation(...)` on the module contract
 - `dialogue_roles(...)` metadata
+- module-owned turn handling via `handle_turn(...)`
+- module-owned response shaping via `format_module_response(...)`
+- module-owned archive shaping via `build_archive_payload(...)`
 
 But runtime still has AIMS-shaped assumptions in places like:
 
@@ -42,6 +45,11 @@ But runtime still has AIMS-shaped assumptions in places like:
 - `app/services/chat_helpers.py`
 - `app/chainlit_thread_state.py`
 - `app/services/chainlit/orchestrator.py`
+
+And one transitional runtime compromise still exists:
+
+- legacy chat behavior is wrapped inside `AimsTrainingModule` rather than being
+  modeled as a separate compatibility module
 
 ## Step-By-Step Plan
 
@@ -177,4 +185,3 @@ Mitigation:
 3. resume validation consults module-aware rules
 4. stale-thread handling no longer assumes AIMS-only semantics in core
 5. current user-visible AIMS behavior remains equivalent
-

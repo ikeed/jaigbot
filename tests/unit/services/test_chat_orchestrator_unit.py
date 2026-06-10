@@ -1,6 +1,6 @@
 import json
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import HTTPException
@@ -83,27 +83,41 @@ def test_validate_request_rejects_invalid_encoding_and_oversized_message():
 
 
 @pytest.mark.asyncio
-async def test_handle_chat_routes_to_coaching_when_enabled(monkeypatch):
-    orchestrator = _orchestrator(memory_store={"sid": {"history": [], "user_info": {}}})
+async def test_handle_chat_dispatches_through_active_module_and_queues_archive():
+    active_module = MagicMock()
+    active_module.module_id = "aims"
+    active_module.display_name = "AIMS"
+    active_module.handle_turn = AsyncMock(return_value={
+        "reply": "patient",
+        "model": "model",
+        "latency_ms": 12,
+        "coaching": {"step": "Announce"},
+        "session": {"totalTurns": 1},
+        "coach_post": {"title": "Done", "lines": ["Good"]},
+    })
+    active_module.format_module_response.return_value = {
+        "reply": "patient",
+        "model": "model",
+        "latencyMs": 12,
+        "text": "patient",
+        "modelId": "model",
+        "latency_ms": 12,
+        "sessionId": "sid",
+        "coachPost": {"title": "Done", "lines": ["Good"]},
+        "gameOver": True,
+    }
+    active_module.build_archive_payload.return_value = {
+        "session_id": "sid",
+        "user_id": "doctor@example.com",
+        "game_over": True,
+        "coach_post": {"title": "Done", "lines": ["Good"]},
+    }
+    orchestrator = _orchestrator(
+        memory_store={"sid": {"history": [], "user_info": {}}},
+        active_module=active_module,
+    )
     ctx = _ctx(user_info={"identifier": "doctor@example.com"})
     orchestrator.context_builder.build = MagicMock(return_value=ctx)
-
-    class FakeAimsHandler:
-        def __init__(self, **kwargs):
-            self.kwargs = kwargs
-
-        @staticmethod
-        async def handle(req, body, ctx):
-            return {
-                "reply": "patient",
-                "model": "model",
-                "latency_ms": 12,
-                "coaching": {"step": "Announce"},
-                "session": {"totalTurns": 1},
-                "coach_post": {"title": "Done", "lines": ["Good"]},
-            }
-
-    monkeypatch.setattr("app.services.aims_coaching_handler.AimsCoachingHandler", FakeAimsHandler)
     background = MagicMock()
 
     response = await orchestrator.handle_chat(
@@ -117,31 +131,41 @@ async def test_handle_chat_routes_to_coaching_when_enabled(monkeypatch):
     assert payload["coachPost"] == {"title": "Done", "lines": ["Good"]}
     assert payload["gameOver"] is True
     assert payload["sessionId"] == "sid"
+    active_module.handle_turn.assert_awaited_once()
+    active_module.format_module_response.assert_called_once()
+    active_module.build_archive_payload.assert_called_once()
     background.add_task.assert_called_once()
-    assert orchestrator.memory_store["sid"]["session_ended"]
 
 
 @pytest.mark.asyncio
-async def test_handle_chat_routes_to_legacy_and_includes_optional_fields(monkeypatch):
-    orchestrator = _orchestrator(aims_config={"enabled": False, "force_default": False})
+async def test_handle_chat_preserves_optional_fields_from_module_response():
+    active_module = MagicMock()
+    active_module.module_id = "aims"
+    active_module.display_name = "AIMS"
+    active_module.handle_turn = AsyncMock(return_value={
+        "reply": "legacy",
+        "model": "model",
+        "latency_ms": 9,
+        "coaching": {"step": None},
+        "session": {"totalTurns": 1},
+    })
+    active_module.format_module_response.return_value = {
+        "reply": "legacy",
+        "model": "model",
+        "latencyMs": 9,
+        "text": "legacy",
+        "modelId": "model",
+        "latency_ms": 9,
+        "coaching": {"step": None},
+        "session": {"totalTurns": 1},
+    }
+    active_module.build_archive_payload.return_value = None
+    orchestrator = _orchestrator(
+        aims_config={"enabled": False, "force_default": False},
+        active_module=active_module,
+    )
     orchestrator.context_builder.build = MagicMock(return_value=_ctx())
     orchestrator.session_service.apply_cookie = MagicMock(side_effect=RuntimeError("cookie failed"))
-
-    class FakeLegacyHandler:
-        def __init__(self, **kwargs):
-            pass
-
-        @staticmethod
-        async def handle(req, body, ctx):
-            return {
-                "reply": "legacy",
-                "model": "model",
-                "latency_ms": 9,
-                "coaching": {"step": None},
-                "session": {"totalTurns": 1},
-            }
-
-    monkeypatch.setattr("app.services.legacy_chat_handler.LegacyChatHandler", FakeLegacyHandler)
 
     response = await orchestrator.handle_chat(_request(), ChatRequest(message="hello"))
 
@@ -149,7 +173,23 @@ async def test_handle_chat_routes_to_legacy_and_includes_optional_fields(monkeyp
     assert payload["reply"] == "legacy"
     assert payload["coaching"] == {"step": None}
     assert payload["session"] == {"totalTurns": 1}
+    active_module.build_archive_payload.assert_not_called()
     orchestrator.logger.debug.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_handle_chat_normalizes_vertex_error_from_module():
+    active_module = MagicMock()
+    active_module.module_id = "aims"
+    active_module.display_name = "AIMS"
+    active_module.handle_turn = AsyncMock(side_effect=VertexAIError("missing model", status_code=404))
+    orchestrator = _orchestrator(active_module=active_module)
+    orchestrator.context_builder.build = MagicMock(return_value=_ctx())
+
+    response = await orchestrator.handle_chat(_request(), ChatRequest(message="hello"))
+
+    assert response.status_code == 404
+    assert _body(response)["error"]["upstream"] == "missing model"
 
 
 @pytest.mark.asyncio

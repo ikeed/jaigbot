@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any, Mapping, cast
 
 from app.chat_roles import ROLE_ASSISTANT, ROLE_COACH, ROLE_SYSTEM, ROLE_USER
 from app.constants import APP_TITLE
@@ -51,8 +52,44 @@ class AimsTrainingModule:
     def build_startup_artifacts(self, **kwargs: Any) -> list[Mapping[str, Any]]:
         raise NotImplementedError("Startup artifacts are not routed through TrainingModule in Phase 1.")
 
-    def handle_turn(self, **kwargs: Any) -> Mapping[str, Any]:
-        raise NotImplementedError("Turn handling is not routed through TrainingModule in Phase 1.")
+    async def handle_turn(self, **kwargs: Any) -> Mapping[str, Any]:
+        req = kwargs["req"]
+        body = kwargs["body"]
+        ctx = kwargs["ctx"]
+        memory_store = kwargs["memory_store"]
+        vertex_config = dict(kwargs["vertex_config"])
+        memory_config = dict(kwargs["memory_config"])
+        aims_config = dict(kwargs["aims_config"])
+        logger = kwargs["logger"]
+
+        coaching_enabled = bool(aims_config.get("enabled", False))
+        force_default = bool(aims_config.get("force_default", False))
+        should_use_coaching = coaching_enabled and (bool(getattr(body, "coach", False)) or force_default)
+
+        if should_use_coaching:
+            from app.services.aims_coaching_handler import AimsCoachingHandler
+
+            logger.debug("Module dispatch: module=%s route=coaching", self.module_id)
+            handler = AimsCoachingHandler(
+                memory_store=memory_store,
+                vertex_config=vertex_config,
+                memory_config=memory_config,
+                logger=logger,
+            )
+            result = cast(Mapping[str, Any], await handler.handle(req, body, ctx))
+            return {"_dispatch_path": "coaching", **result}
+
+        from app.services.legacy_chat_handler import LegacyChatHandler
+
+        logger.debug("Module dispatch: module=%s route=legacy", self.module_id)
+        legacy_handler = LegacyChatHandler(
+            memory_store=memory_store,
+            vertex_config=vertex_config,
+            memory_config=memory_config,
+            logger=logger,
+        )
+        result = cast(Mapping[str, Any], await legacy_handler.handle(req, body, ctx))
+        return {"_dispatch_path": "legacy", **result}
 
     def format_module_response(self, **kwargs: Any) -> Mapping[str, Any]:
         result = kwargs.get("result") or {}
@@ -88,8 +125,31 @@ class AimsTrainingModule:
     def build_summary(self, **kwargs: Any) -> Mapping[str, Any]:
         raise NotImplementedError("Summary generation is not routed through TrainingModule in Phase 1.")
 
-    def build_archive_payload(self, **kwargs: Any) -> Mapping[str, Any]:
-        raise NotImplementedError("Archive shaping is not routed through TrainingModule in Phase 1.")
+    def build_archive_payload(self, **kwargs: Any) -> Mapping[str, Any] | None:
+        result = kwargs.get("result") or {}
+        ctx = kwargs["ctx"]
+        session_service = kwargs["session_service"]
+        memory_store = kwargs["memory_store"]
+
+        coach_post = result.get("coach_post")
+        if not coach_post:
+            return None
+
+        mem = session_service.get_mem(ctx.session_id)
+        user_id = ctx.user_info.get("identifier") if ctx.user_info else None
+        if not user_id:
+            user_id = "anonymous"
+
+        mem["session_ended"] = time.time()
+        memory_store[ctx.session_id] = mem
+        return {
+            **mem,
+            "session_id": ctx.session_id,
+            "user_id": user_id,
+            "game_over": True,
+            "coach_post": coach_post,
+            "exported_via": "endgame",
+        }
 
     def build_jailbreak_fallback(self, **kwargs: Any) -> str:
         raise NotImplementedError("Fallback copy is not routed through TrainingModule in Phase 1.")

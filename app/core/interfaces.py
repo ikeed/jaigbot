@@ -49,7 +49,7 @@ class TrainingModule(Protocol):
     def build_startup_artifacts(self, **kwargs: Any) -> list[Mapping[str, Any]]:
         ...  # pragma: no cover
 
-    def handle_turn(self, **kwargs: Any) -> Mapping[str, Any]:
+    async def handle_turn(self, **kwargs: Any) -> Mapping[str, Any]:
         ...  # pragma: no cover
 
     def format_module_response(self, **kwargs: Any) -> Mapping[str, Any]:
@@ -64,7 +64,7 @@ class TrainingModule(Protocol):
     def build_summary(self, **kwargs: Any) -> Mapping[str, Any]:
         ...  # pragma: no cover
 
-    def build_archive_payload(self, **kwargs: Any) -> Mapping[str, Any]:
+    def build_archive_payload(self, **kwargs: Any) -> Mapping[str, Any] | None:
         ...  # pragma: no cover
 
     def build_jailbreak_fallback(self, **kwargs: Any) -> str:
