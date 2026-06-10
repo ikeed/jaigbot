@@ -206,6 +206,34 @@ Implication for later phases:
 - Phase 8 should decide which compatibility shims can be retired after the
   second-module proof and test ownership cleanup
 
+### Phase 8
+
+Implemented.
+
+Actual artifacts now present in the repo:
+
+- a second built-in module now exists at `app/modules/interview/`
+- `build_builtin_registry(...)` now registers both `aims` and `interview`
+- active Redis namespace selection is now module-aware:
+  - `Settings.module_redis_key_prefix(...)`
+  - `Settings.module_redis_fallback_prefixes(...)`
+- AIMS no longer derives its storage prefix from the deployment's active
+  module; it resolves its own prefix explicitly
+- `/config` now exposes:
+  - richer active-module capability metadata
+  - `availableModules` for all built-in modules
+- `/summary` now returns a clean disabled payload when the active module does
+  not support summaries instead of forcing every module to fake one
+- the interview stub module proves:
+  - distinct role names (`candidate`, `interviewer`)
+  - a different startup artifact shape (`interview_brief`)
+  - a different branding/chat-profile identity
+  - no summary capability
+  - selection and bootstrap through the existing core routes without core edits
+
+Residual gaps are now recorded in `deferred-issues.md` rather than hidden in
+the phase plans.
+
 ## Cross-Phase Rules
 
 These rules apply across all remaining phases.

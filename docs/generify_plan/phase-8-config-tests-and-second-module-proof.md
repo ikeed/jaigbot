@@ -12,6 +12,22 @@ At the end of Phase 8:
 - AIMS tests are module-local
 - a second stub module can be selected end to end without editing core files
 
+## Actual Result
+
+Phase 8 delivered the following:
+
+- a second built-in `interview` module with distinct roles, startup artifact,
+  branding, and no summary capability
+- module-aware Redis namespace selection so the deployment's active module no
+  longer forces every registered module to share one storage prefix
+- `/config` exposure of both the active module and all available built-in
+  modules
+- `/summary` fallback behavior for modules that do not support summaries
+- targeted tests proving registry resolution, active-module bootstrap, summary
+  disabling, and system-config exposure for the second module
+
+What it did not finish is recorded in `deferred-issues.md`.
+
 ## Why This Phase Matters
 
 Without a second-module proof, the architecture can still be accidentally

@@ -26,6 +26,7 @@ def create_system_router(
     get_memory_store: Callable[..., Any],
     get_model_check: Callable[..., dict],
     get_active_module: Callable[..., Any],
+    get_module_registry: Callable[..., Any],
     get_request_id: Callable[[Request], str | None],
 ) -> APIRouter:
     router = APIRouter()
@@ -73,8 +74,37 @@ def create_system_router(
         memory_store=Depends(get_memory_store),
         model_check: dict = Depends(get_model_check),
         active_module=Depends(get_active_module),
+        module_registry=Depends(get_module_registry),
     ):
         active_module_manifest = getattr(active_module, "manifest", None)
+        available_modules = []
+        for module in module_registry.list_modules():
+            manifest = getattr(module, "manifest", None)
+            if manifest is None:
+                continue
+            available_modules.append(
+                {
+                    "id": manifest.id,
+                    "displayName": manifest.display_name,
+                    "chatProfileName": manifest.chat_profile_name,
+                    "supportsIntro": manifest.supports_intro,
+                    "supportsFeedback": manifest.supports_feedback,
+                    "supportsSummary": manifest.supports_summary,
+                    "storagePrefix": manifest.storage_prefix,
+                    "frontendJsBundles": list(manifest.frontend_js_bundles),
+                    "frontendCss": manifest.frontend_css,
+                    "branding": (
+                        {
+                            "appTitle": manifest.branding.app_title,
+                            "avatarName": manifest.branding.avatar_name,
+                            "logoAsset": manifest.branding.logo_asset,
+                            "loadingText": manifest.branding.loading_text,
+                        }
+                        if manifest.branding
+                        else None
+                    ),
+                }
+            )
         return {
             "projectId": settings.PROJECT_ID,
             "region": settings.REGION,
@@ -125,6 +155,9 @@ def create_system_router(
                     "chatProfileName": active_module_manifest.chat_profile_name,
                     "storagePrefix": active_module_manifest.storage_prefix,
                     "archiveSchemaVersion": active_module_manifest.archive_schema_version,
+                    "supportsIntro": active_module_manifest.supports_intro,
+                    "supportsFeedback": active_module_manifest.supports_feedback,
+                    "supportsSummary": active_module_manifest.supports_summary,
                     "frontendJsBundles": list(active_module_manifest.frontend_js_bundles),
                     "frontendCss": active_module_manifest.frontend_css,
                     "branding": (
@@ -141,6 +174,7 @@ def create_system_router(
                 if active_module_manifest
                 else None
             ),
+            "availableModules": available_modules,
         }
 
     @router.get(ENDPOINT_MODELCHECK)

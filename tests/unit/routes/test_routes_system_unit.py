@@ -62,12 +62,31 @@ def _client(*, settings=None, store=None, model_check=None, logger=None):
             archive_schema_version="aims-v1",
             storage_prefix="aims:local:session:",
             dialogue_roles=DialogueRoles(participant_roles=("user", "assistant")),
+            supports_summary=True,
             frontend_js_bundles=(
                 "/public/js/modules/aims/message-roles.js",
                 "/public/js/modules/aims/module-ui.js",
             ),
             branding=BrandingSpec(app_title="AIMSBot (Gemini Enterprise)"),
         )
+    )
+    module_registry = SimpleNamespace(
+        list_modules=lambda: [
+            active_module,
+            SimpleNamespace(
+                manifest=ModuleManifest(
+                    id="interview",
+                    display_name="Interview Practice",
+                    chat_profile_name="Interview Coach",
+                    archive_schema_version="interview-v1",
+                    storage_prefix="interview:local:session:",
+                    dialogue_roles=DialogueRoles(participant_roles=("candidate", "interviewer")),
+                    supports_summary=False,
+                    frontend_js_bundles=("/public/js/modules/interview/module-ui.js",),
+                    branding=BrandingSpec(app_title="Interview Practice"),
+                )
+            ),
+        ]
     )
     app.include_router(
         create_system_router(
@@ -76,6 +95,7 @@ def _client(*, settings=None, store=None, model_check=None, logger=None):
             get_memory_store=lambda: memory_store,
             get_model_check=lambda: model_check or {"available": True},
             get_active_module=lambda: active_module,
+            get_module_registry=lambda: module_registry,
             get_request_id=lambda request: request.headers.get("x-request-id"),
         )
     )
@@ -149,11 +169,14 @@ def test_config_modelcheck_and_diagnostics_use_injected_dependencies():
     assert config["modelCheck"]["reason"] == "missing"
     assert config["memoryStoreSize"] == 2
     assert config["activeModule"]["id"] == "aims"
+    assert config["activeModule"]["supportsSummary"] is True
     assert config["activeModule"]["frontendJsBundles"] == [
         "/public/js/modules/aims/message-roles.js",
         "/public/js/modules/aims/module-ui.js",
     ]
     assert config["activeModule"]["branding"]["appTitle"] == "AIMSBot (Gemini Enterprise)"
+    assert [module["id"] for module in config["availableModules"]] == ["aims", "interview"]
+    assert config["availableModules"][1]["supportsSummary"] is False
 
     modelcheck = client.get("/modelcheck").json()
     assert modelcheck["modelId"] == "gemini-test"

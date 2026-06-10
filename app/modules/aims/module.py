@@ -351,7 +351,10 @@ class AimsTrainingModule:
 def create_aims_training_module(*, settings: Any) -> AimsTrainingModule:
     chat_profile_name = "AIMSBot"
     loading_text = "Loading your scenario..."
-    storage_prefix = getattr(settings, "redis_key_prefix", "aims:local:session:")
+    if hasattr(settings, "module_redis_key_prefix"):
+        storage_prefix = settings.module_redis_key_prefix("aims")
+    else:
+        storage_prefix = getattr(settings, "redis_key_prefix", "aims:local:session:")
     manifest = ModuleManifest(
         id="aims",
         display_name="AIMS",

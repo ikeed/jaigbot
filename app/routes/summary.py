@@ -27,6 +27,9 @@ def create_summary_router(
         active_module=Depends(get_active_module),
     ):
         """Return an aggregated module-owned summary for a session."""
+        manifest = getattr(active_module, "manifest", None)
+        if manifest is not None and not getattr(manifest, "supports_summary", False):
+            return {"moduleId": getattr(active_module, "module_id", None), "supported": False}
         return await active_module.build_summary(
             session_id=sessionId,
             analysis=bool(analysis),

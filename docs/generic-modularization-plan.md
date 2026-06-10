@@ -23,8 +23,9 @@ Detailed implementation planning now lives under:
 
 Current implementation status:
 
-- Phase 1 is implemented
-- Phases 2-8 are planned and updated based on the actual Phase 1 scaffolding
+- Phases 1-8 are implemented
+- remaining gaps and cleanup candidates are tracked in
+  `docs/generify_plan/deferred-issues.md`
 
 ## Definition Of Done
 

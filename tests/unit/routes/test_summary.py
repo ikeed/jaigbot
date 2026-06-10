@@ -112,3 +112,20 @@ def test_summary_route_delegates_to_active_module():
     fake_module.build_summary.assert_awaited_once()
     assert fake_module.build_summary.await_args.kwargs["session_id"] == "stub-session"
     assert fake_module.build_summary.await_args.kwargs["analysis"] is True
+
+
+def test_summary_route_returns_disabled_payload_when_module_does_not_support_summary():
+    fake_module = SimpleNamespace(
+        module_id="interview",
+        manifest=SimpleNamespace(supports_summary=False),
+        build_summary=AsyncMock(),
+    )
+    app.dependency_overrides[m.get_active_module] = lambda: fake_module
+    try:
+        response = client.get("/summary", params={"sessionId": "stub-session", "analysis": "true"})
+    finally:
+        app.dependency_overrides.pop(m.get_active_module, None)
+
+    assert response.status_code == 200
+    assert response.json() == {"moduleId": "interview", "supported": False}
+    fake_module.build_summary.assert_not_awaited()

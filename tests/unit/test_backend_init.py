@@ -1,7 +1,9 @@
 from fastapi.testclient import TestClient
 
 from app.chat_roles import ROLE_SYSTEM
+import app.main as m
 from app.main import app, MEMORY_STORE
+from app.modules.interview.module import create_interview_training_module
 from app.services.persona_service import persona_counted_key, persona_counts_key
 
 client = TestClient(app)
@@ -128,3 +130,21 @@ def test_init_session_already_active():
     resp3 = client.post("/session", json={"sessionId": sid, "connectionId": conn1})
     assert resp3.status_code == 200
     assert resp3.json()["alreadyActive"] is False
+
+
+def test_init_session_can_bootstrap_non_aims_module():
+    sid = "test-sid-interview-module"
+    MEMORY_STORE.pop(sid, None)
+    interview_module = create_interview_training_module(settings=m.settings)
+    app.dependency_overrides[m.get_active_module] = lambda: interview_module
+    try:
+        response = client.post("/session", json={"sessionId": sid})
+    finally:
+        app.dependency_overrides.pop(m.get_active_module, None)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["moduleId"] == "interview"
+    assert data["personaName"] == "Hiring Manager"
+    assert data["transport"]["artifactKind"] == "interview_brief"
+    assert MEMORY_STORE[sid]["module_id"] == "interview"

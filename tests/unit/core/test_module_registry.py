@@ -133,6 +133,7 @@ def test_registry_rejects_invalid_manifest():
 def test_registry_resolves_active_module_from_settings():
     settings = SimpleNamespace(
         ACTIVE_MODULE="aims",
+        APP_ENV="local",
         redis_key_prefix="aims:local:session:",
     )
 
@@ -142,6 +143,21 @@ def test_registry_resolves_active_module_from_settings():
 
     assert active.module_id == "aims"
     assert registry.get_active_module_id(active_module="aims") == "aims"
+
+
+def test_registry_registers_second_builtin_module_and_resolves_it():
+    settings = SimpleNamespace(
+        ACTIVE_MODULE="interview",
+        APP_ENV="local",
+        redis_key_prefix="interview:local:session:",
+    )
+
+    registry = build_builtin_registry(settings=settings)
+
+    module_ids = [module.module_id for module in registry.list_modules()]
+
+    assert module_ids == ["aims", "interview"]
+    assert registry.get_active_module(active_module="interview").module_id == "interview"
 
 
 def test_registry_rejects_blank_active_module_id():

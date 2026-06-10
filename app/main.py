@@ -60,6 +60,13 @@ def get_active_module(request: Request):
     module_registry = build_builtin_registry(settings=settings)
     return module_registry.get_active_module(active_module=settings.ACTIVE_MODULE)
 
+
+def get_module_registry(request: Request):
+    module_registry = getattr(request.app.state, "module_registry", None)
+    if module_registry is not None:
+        return module_registry
+    return build_builtin_registry(settings=settings)
+
 # Optional CORS
 if settings.ALLOWED_ORIGINS:
     app.add_middleware(
@@ -89,6 +96,7 @@ app.include_router(create_system_router(
     get_memory_store=get_memory_store,
     get_model_check=get_model_check,
     get_active_module=get_active_module,
+    get_module_registry=get_module_registry,
     get_request_id=_get_request_id,
 ))
 app.include_router(create_summary_router(

@@ -34,17 +34,17 @@ None currently.
   buckets or cross-deployment archive readers will need an explicit legacy
   adapter strategy before multiple modules write into the same archive space.
 - Summary capability is now module-owned, but there is still only one concrete
-  summary payload shape in the repo. Phase 8 should prove the "no summary
-  capability" path with a second stub module rather than assuming the seam is
-  complete because AIMS works.
+  rich summary payload shape in the repo. Phase 8 proved that the "no summary
+  capability" path works, but it did not add a second fully featured summary
+  schema to exercise cross-module reporting semantics.
 
 ## Phase 6
 
 - Module-owned frontend CSS is not actually loaded through the manifest yet.
   `frontendCss` is exposed via `/config`, but Chainlit still serves one
-  deployment-level `custom_css` entrypoint. Phase 8 should decide whether CSS
-  remains one shell asset with module sections or becomes manifest-driven like
-  JS bundles.
+  deployment-level `custom_css` entrypoint. Phase 8 left that unresolved:
+  decide later whether CSS remains one shell asset with module sections or
+  becomes manifest-driven like JS bundles.
 - Browser-based local verification could not be completed in this environment:
   the in-app browser runtime had no active `iab` instance, and fallback
   Playwright verification could not launch because the required local browser
@@ -66,6 +66,27 @@ None currently.
   phase needs stricter physical ownership or if a second module demonstrates a
   real collision.
 - Compatibility shims still exist at the old import paths for the moved AIMS
-  engine, prompt module, and several generic-named services. Keep them until
-  Phase 8 proves that test ownership, docs, and downstream imports can be
-  cleaned up without breaking consumers unexpectedly.
+  engine, prompt module, and several generic-named services. Phase 8 proved the
+  architecture without removing them; they should be retired only when
+  downstream imports, test ownership, and docs are cleaned up deliberately.
+
+## Phase 8
+
+- `ChatContextBuilder` still computes `person_last` only from the `assistant`
+  role. The interview proof module does not need that field, but a future
+  richer non-AIMS module may. Generalize that helper only when a real module
+  requires it; otherwise it is churn.
+- UI author/label mapping is still largely AIMS-first. Core frontend code can
+  load different module bundles now, but `app/chat_roles.py` and the generic
+  history-format helpers still assume the default `user`/`assistant`/`coach`
+  set. The interview stub proves routing and bootstrap, not polished multi-role
+  rendering.
+- Session bootstrap transport is still compatibility-shaped around
+  `character`, `scene`, `personaName`, and `initialCard`. The generic
+  `SessionBootstrapPayload` exists, but the outward JSON contract still favors
+  the AIMS shell.
+- Deployment-level branding is still partially AIMS-specific:
+  FastAPI `APP_TITLE`, login/duplicate templates, avatar asset titles, and some
+  docs continue to say `AIMSBot`. The active module now controls Chainlit
+  profile/loading branding, but shell-level branding cleanup remains a separate
+  product decision.

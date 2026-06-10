@@ -80,8 +80,9 @@ class ModuleRegistry:
 def build_builtin_registry(*, settings: Any) -> ModuleRegistry:
     """Register built-in modules explicitly from one known place."""
     from app.modules.aims.module import create_aims_training_module
+    from app.modules.interview.module import create_interview_training_module
 
     registry = ModuleRegistry()
     registry.register(create_aims_training_module(settings=settings))
+    registry.register(create_interview_training_module(settings=settings))
     return registry
-
