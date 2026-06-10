@@ -19,6 +19,9 @@ Before starting Phase 3, the repo should already have:
 - explicit active-module resolution from Phase 1
 - a generic response envelope and compatibility serializer from Phase 2
 - an AIMS adapter that is ready to gain behavior, not just metadata
+- response formatting already routed through `active_module.format_module_response(...)`
+- temporary constructor-level registry fallback in `ChatOrchestrator` for
+  non-app-state call paths
 
 ## Out Of Scope
 
@@ -94,6 +97,16 @@ But the orchestrator code should be structured so that later phases can supply:
 - request-level override policies
 
 without rewriting dispatch again.
+
+Specific Phase 2 handoff concern:
+
+- `app.main` already injects the resolved active module into
+  `ChatOrchestrator`
+- `ChatOrchestrator.__init__` still contains a defensive registry/settings
+  fallback
+
+Phase 3 should avoid creating a third resolution path. Consolidate around one
+authoritative resolver story and keep any fallback clearly transitional.
 
 ### Step 4: Replace hardcoded AIMS branching in `ChatOrchestrator`
 
@@ -218,6 +231,14 @@ Mitigation:
 - keep one resolver path for active-module selection
 - do not let `ChatOrchestrator`, routes, and helper functions each invent
   their own fallback rules
+
+### Problem 7: Phase 3 accidentally reimplements response formatting inside dispatch
+
+Mitigation:
+
+- preserve `format_module_response(...)` as the only response-shaping seam
+- let `handle_turn(...)` return a module-neutral result or envelope
+- do not move compatibility alias logic back into `ChatOrchestrator`
 
 ## Acceptance Criteria
 

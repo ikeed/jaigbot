@@ -115,6 +115,14 @@ class ChatRequest(BaseModel):
         default=False,
         description="Enable AIMS coaching fields in response when supported",
     )
+    moduleId: Optional[str] = Field(
+        default=None,
+        description="Optional explicit module override for future multi-module routing.",
+    )
+    moduleOptions: Optional[dict] = Field(
+        default=None,
+        description="Optional module-directed request metadata for future generic routing.",
+    )
 
 
 class ReportRequest(BaseModel):

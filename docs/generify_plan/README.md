@@ -50,6 +50,30 @@ Implication for later phases:
 - the AIMS adapter exists, but is still metadata-first
 - later phases should extend that adapter rather than bypass it
 
+### Phase 2
+
+Implemented.
+
+Actual artifacts now present in the repo:
+
+- `app/core/response_types.py`
+- `app/core/response_serialization.py`
+- additive `moduleId` and `moduleOptions` request fields in `app/models.py`
+- module-owned response shaping in `app/modules/aims/module.py`
+- `ChatOrchestrator` response construction routed through
+  `active_module.format_module_response(...)`
+- `app/main.py` passes the resolved active module into the orchestrator
+
+Implication for later phases:
+
+- a generic internal response envelope now exists
+- outward API compatibility aliases still come from one serializer layer
+- Phase 3 should move turn execution through the module contract, not invent a
+  second response abstraction
+- there is still a temporary registry/settings fallback in
+  `ChatOrchestrator.__init__`; Phase 3 should consolidate resolution ownership
+  and remove duplicate fallback logic where safe
+
 ## Cross-Phase Rules
 
 These rules apply across all remaining phases.
@@ -127,6 +151,7 @@ Phase 3 may assume:
 - AIMS has a module adapter and a clear place to add turn-handling behavior
   without moving all files
 - active-module resolution is already explicit
+- response formatting already flows through `active_module.format_module_response(...)`
 
 Phase 3 must still avoid:
 

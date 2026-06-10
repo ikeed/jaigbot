@@ -88,6 +88,18 @@ def test_registry_registers_and_lists_modules():
     assert registry.get("stub") is module
     assert registry.require("stub") is module
     assert registry.list_modules() == [module]
+    assert module.dialogue_roles().all_roles() == ("user", "assistant")
+
+
+def test_dialogue_roles_all_roles_deduplicates_in_order():
+    roles = DialogueRoles(
+        participant_roles=("candidate", "interviewer"),
+        feedback_roles=("observer",),
+        metadata_roles=("system", "observer"),
+        counted_roles=("candidate", "interviewer"),
+    )
+
+    assert roles.all_roles() == ("candidate", "interviewer", "observer", "system")
 
 
 def test_registry_rejects_duplicate_ids():
@@ -103,6 +115,8 @@ def test_registry_rejects_unknown_module_lookup():
 
     with pytest.raises(ModuleNotRegisteredError):
         registry.require("missing")
+
+    assert registry.get("missing") is None
 
 
 def test_registry_rejects_invalid_manifest():
@@ -127,9 +141,16 @@ def test_registry_resolves_active_module_from_settings():
     assert registry.get_active_module_id(active_module="aims") == "aims"
 
 
+def test_registry_rejects_blank_active_module_id():
+    registry = ModuleRegistry()
+    registry.register(_StubModule(module_id="aims"))
+
+    with pytest.raises(ModuleNotRegisteredError):
+        registry.get_active_module_id(active_module="   ", default_module="")
+
+
 def test_aims_module_conforms_to_training_module_protocol():
     settings = SimpleNamespace(redis_key_prefix="aims:local:session:")
     module = create_aims_training_module(settings=settings)
 
     assert isinstance(module, TrainingModule)
-

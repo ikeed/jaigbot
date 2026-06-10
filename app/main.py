@@ -149,7 +149,7 @@ def _debug_config() -> dict:
     }
 
 
-def _chat_orchestrator(memory_store=None):
+def _chat_orchestrator(memory_store=None, active_module=None):
     from .services.chat_orchestrator import ChatOrchestrator
 
     return ChatOrchestrator(
@@ -160,11 +160,14 @@ def _chat_orchestrator(memory_store=None):
         vertex_config=_vertex_config(),
         debug_config=_debug_config(),
         logger=logger,
+        active_module=active_module or build_builtin_registry(settings=settings).get_active_module(
+            active_module=settings.ACTIVE_MODULE
+        ),
     )
 
 
-def get_chat_orchestrator(memory_store=Depends(get_memory_store)):
-    return _chat_orchestrator(memory_store=memory_store)
+def get_chat_orchestrator(memory_store=Depends(get_memory_store), active_module=Depends(get_active_module)):
+    return _chat_orchestrator(memory_store=memory_store, active_module=active_module)
 
 
 app.include_router(create_chat_router(

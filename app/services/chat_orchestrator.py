@@ -20,6 +20,8 @@ from typing import Any, Optional
 from fastapi import HTTPException, Request, BackgroundTasks
 from fastapi.responses import JSONResponse
 
+from app.config import settings
+from app.core.registry import build_builtin_registry
 from app.models import ChatRequest, ReportRequest
 from app.services.chat_context import ChatContextBuilder, ChatContext
 from app.services.session_service import SessionService, CookieSettings
@@ -40,6 +42,7 @@ class ChatOrchestrator:
         vertex_config: dict[str, Any],
         debug_config: dict[str, Any],
         logger: Any,
+        active_module: Any | None = None,
     ):
         self.background_tasks: Optional[BackgroundTasks] = None
         self.memory_store = memory_store
@@ -63,6 +66,9 @@ class ChatOrchestrator:
         self.client_cls = vertex_config.get("client_cls")
         self.expose_upstream_error = debug_config.get("expose_upstream_error", False)
         self.log_response_preview_max = debug_config.get("log_response_preview_max", 100)
+        self.active_module = active_module or build_builtin_registry(settings=settings).get_active_module(
+            active_module=settings.ACTIVE_MODULE
+        )
         
         # Initialize session service
         self.session_service = SessionService(
@@ -159,32 +165,12 @@ class ChatOrchestrator:
         
         try:
             result = await handler.handle(req, body, ctx)
-            
-            # Build response with coaching data
-            response_payload = {
-                "reply": result["reply"],
-                "model": result["model"],
-                "latencyMs": result["latency_ms"],
-                "coaching": result["coaching"],
-                "session": result["session"],
-                # Backward-compatible aliases for older clients
-                "text": result["reply"],
-                "modelId": result["model"],
-                "latency_ms": result["latency_ms"],
-            }
-
-            # Always include the sessionId for clients that track by id
-            try:
-                response_payload["sessionId"] = ctx.session_id
-            except Exception as e:
-                self.logger.debug(f"Failed to set sessionId in response (non-fatal): {e}")
-                pass
+            response_payload = dict(
+                self.active_module.format_module_response(result=result, session_id=ctx.session_id)
+            )
             
             # Add optional coach post for end-game scenarios
             if result.get("coach_post"):
-                response_payload["coachPost"] = result["coach_post"]
-                response_payload["gameOver"] = True
-                
                 # Trigger background archive to GCS
                 if self.background_tasks:
                     try:
@@ -255,30 +241,9 @@ class ChatOrchestrator:
         
         try:
             result = await handler.handle(req, body, ctx)
-            
-            # Build response
-            response_payload = {
-                "reply": result["reply"],
-                "model": result["model"],
-                "latencyMs": result["latency_ms"],
-                # Backward-compatible aliases for older clients
-                "text": result["reply"],
-                "modelId": result["model"],
-                "latency_ms": result["latency_ms"],
-            }
-
-            # Always include the sessionId for clients that track by id
-            try:
-                response_payload["sessionId"] = ctx.session_id
-            except Exception as e:
-                self.logger.debug(f"Failed to set sessionId in legacy response (non-fatal): {e}")
-                pass
-            
-            # Add optional coaching/session if enabled and requested
-            if result.get("coaching"):
-                response_payload["coaching"] = result["coaching"]
-            if result.get("session"):
-                response_payload["session"] = result["session"]
+            response_payload = dict(
+                self.active_module.format_module_response(result=result, session_id=ctx.session_id)
+            )
             
             resp = JSONResponse(status_code=200, content=response_payload)
             

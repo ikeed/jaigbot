@@ -5,6 +5,8 @@ from typing import Any, Mapping
 
 from app.chat_roles import ROLE_ASSISTANT, ROLE_COACH, ROLE_SYSTEM, ROLE_USER
 from app.constants import APP_TITLE
+from app.core.response_serialization import game_over_completion, serialize_response_envelope
+from app.core.response_types import ModuleResponseEnvelope
 from app.core.module_types import BrandingSpec, DialogueRoles, ModuleManifest, ResumeValidationResult
 
 
@@ -53,7 +55,29 @@ class AimsTrainingModule:
         raise NotImplementedError("Turn handling is not routed through TrainingModule in Phase 1.")
 
     def format_module_response(self, **kwargs: Any) -> Mapping[str, Any]:
-        raise NotImplementedError("Response formatting is not routed through TrainingModule in Phase 1.")
+        result = kwargs.get("result") or {}
+        session_id = kwargs.get("session_id")
+
+        envelope = ModuleResponseEnvelope(
+            module_id=self.module_id,
+            reply=str(result.get("reply") or ""),
+            model=str(result.get("model") or ""),
+            latency_ms=int(result.get("latency_ms") or 0),
+            session=dict(result.get("session") or {}),
+            feedback=dict(result.get("coaching") or {}) if result.get("coaching") is not None else None,
+            summary=dict(result.get("summary") or {}) if result.get("summary") is not None else None,
+            completion=(
+                game_over_completion(dict(result["coach_post"]))
+                if result.get("coach_post")
+                else None
+            ),
+        )
+        compatibility: dict[str, Any] = {}
+        if envelope.feedback is not None:
+            compatibility["coaching"] = dict(envelope.feedback)
+        if result.get("coach_post"):
+            compatibility["coachPost"] = result["coach_post"]
+        return serialize_response_envelope(envelope, session_id=session_id, compatibility_overrides=compatibility)
 
     def build_system_instruction(self, **kwargs: Any) -> str | None:
         raise NotImplementedError("Prompt construction is not routed through TrainingModule in Phase 1.")

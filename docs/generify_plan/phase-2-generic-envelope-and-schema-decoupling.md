@@ -49,6 +49,23 @@ new names.
 
 Phase 2 exists to prevent that mistake.
 
+## Actual Implementation Notes
+
+Phase 2 landed with the following concrete seams:
+
+- `ModuleResponseEnvelope` and `ModuleCompletion` in
+  `app/core/response_types.py`
+- compatibility serialization in `app/core/response_serialization.py`
+- additive request-side extension points via `ChatRequest.moduleId` and
+  `ChatRequest.moduleOptions`
+- AIMS response shaping implemented in `AimsTrainingModule.format_module_response(...)`
+- `ChatOrchestrator` now delegates response payload construction through the
+  active module instead of assembling AIMS-shaped payloads inline
+
+This means Phase 3 does not need to solve response serialization again. It
+needs to switch execution dispatch to the module path while keeping this
+serializer boundary intact.
+
 ## Step-By-Step Plan
 
 ### Step 1: Inventory the current request/response shapes
