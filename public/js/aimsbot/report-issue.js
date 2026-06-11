@@ -24,4 +24,37 @@
         if (input) input.focus();
     }, 100);
   };
+
+  function makeHeaderButton(id, title, html, onClick) {
+    const button = document.createElement("button");
+    button.id = id;
+    button.type = "button";
+    button.className = app.chainlitIconButtonClass;
+    button.title = title;
+    button.innerHTML = html;
+    button.addEventListener("click", onClick);
+    return button;
+  }
+
+  function injectReportIssueButton() {
+    const rightContainer = app.findHeaderActions && app.findHeaderActions();
+    if (!rightContainer || document.getElementById("sidebar-report-button")) return;
+
+    rightContainer.insertBefore(
+      makeHeaderButton(
+        "sidebar-report-button",
+        "Report Issue",
+        '<span aria-hidden="true" style="font-size:18px">🪲</span>',
+        app.showReportIssueModal
+      ),
+      rightContainer.firstChild
+    );
+  }
+
+  injectReportIssueButton();
+  if (typeof app.observeDomTask === "function") {
+    app.observeDomTask("reportIssueHeaderButton", injectReportIssueButton, { debounceMs: 100 });
+  } else {
+    window.setInterval(injectReportIssueButton, 1000);
+  }
 })(window, document);

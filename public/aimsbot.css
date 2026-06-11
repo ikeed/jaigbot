@@ -309,6 +309,7 @@ body.aimsbot-shell .aims-message-enter {
   color: var(--doctor-text) !important;
 }
 
+.ai-message[data-training-role="counterpart"] .aims-message-bubble,
 .ai-message[data-aims-role="Assistant"] .aims-message-bubble {
   width: calc(100% - 28px) !important;
   max-width: calc(100% - 28px) !important;
@@ -319,6 +320,7 @@ body.aimsbot-shell .aims-message-enter {
   margin-left: 0 !important;
 }
 
+.ai-message[data-training-role="feedback"] .aims-message-bubble,
 .ai-message[data-aims-role="Coach"] .aims-message-bubble {
   width: calc(100% - 28px) !important;
   max-width: calc(100% - 28px) !important;
@@ -329,6 +331,7 @@ body.aimsbot-shell .aims-message-enter {
   margin-left: 0 !important;
 }
 
+.ai-message[data-training-role="system"] .aims-message-bubble,
 .ai-message[data-aims-role="System"] .aims-message-bubble {
   width: calc(100% - 28px) !important;
   max-width: calc(100% - 28px) !important;
@@ -341,6 +344,9 @@ body.aimsbot-shell .aims-message-enter {
 
 /* Match the right edge of non-user bubbles to Doctor bubbles, which reserve
    space for the injected Doctor avatar on the right. */
+.ai-message[data-training-role="counterpart"],
+.ai-message[data-training-role="feedback"],
+.ai-message[data-training-role="system"],
 .ai-message[data-aims-role="Assistant"],
 .ai-message[data-aims-role="Coach"],
 .ai-message[data-aims-role="System"] {
@@ -348,6 +354,9 @@ body.aimsbot-shell .aims-message-enter {
   box-sizing: border-box !important;
 }
 
+.ai-message[data-training-role="counterpart"] .message-content,
+.ai-message[data-training-role="feedback"] .message-content,
+.ai-message[data-training-role="system"] .message-content,
 .ai-message[data-aims-role="Assistant"] .message-content,
 .ai-message[data-aims-role="Coach"] .message-content,
 .ai-message[data-aims-role="System"] .message-content {
@@ -357,6 +366,7 @@ body.aimsbot-shell .aims-message-enter {
 /* Older sessions may contain an inline-styled scenario card inside the System
    message. Flatten that legacy inner frame so it does not render as a
    bubble-within-a-bubble. */
+.ai-message[data-training-role="system"] .aims-message-bubble .prose > div[style*="background"],
 .ai-message[data-aims-role="System"] .aims-message-bubble .prose > div[style*="background"] {
   background: transparent !important;
   border: 0 !important;
