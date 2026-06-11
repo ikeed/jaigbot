@@ -210,20 +210,15 @@
     document.querySelectorAll('[data-step-type="user_message"]').forEach(tagDoctorMessage);
   }
 
-    let debounce = null;
+  if (typeof app.observeDomTask === "function") {
+    app.observeDomTask("messageRoleDecoration", injectDataAuthors, { debounceMs: 100 });
+  } else if (document.body) {
     const observer = new MutationObserver(function () {
-        if (debounce) return;
-        debounce = window.setTimeout(function () {
-            debounce = null;
-            injectDataAuthors();
-        }, 100);
+      injectDataAuthors();
     });
-
     observer.observe(document.body, { childList: true, subtree: true });
+  }
   injectDataAuthors();
-  window.setTimeout(injectDataAuthors, 300);
-  window.setTimeout(injectDataAuthors, 1000);
-  window.setTimeout(injectDataAuthors, 3000);
 
   app.messageRoles = {
     injectDataAuthors: injectDataAuthors

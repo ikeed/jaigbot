@@ -97,6 +97,33 @@
     return header.querySelector("div.flex.items-center.gap-1") || header.lastElementChild;
   };
 
+  app.observeDomTask = function (key, callback, options) {
+    if (!key || typeof callback !== "function") return null;
+    const settings = options || {};
+    const observerKey = "_observer:" + key;
+    const debounceKey = "_observerDebounce:" + key;
+    if (app.state[observerKey]) return app.state[observerKey];
+
+    const root = settings.root || document.body || document.documentElement;
+    if (!root) return null;
+
+    const debounceMs = typeof settings.debounceMs === "number" ? settings.debounceMs : 100;
+    const observer = new MutationObserver(function () {
+      if (app.state[debounceKey]) return;
+      app.state[debounceKey] = window.setTimeout(function () {
+        app.state[debounceKey] = null;
+        callback();
+      }, debounceMs);
+    });
+
+    observer.observe(root, {
+      childList: settings.childList !== false,
+      subtree: settings.subtree !== false
+    });
+    app.state[observerKey] = observer;
+    return observer;
+  };
+
   app.decorateShell = function () {
     document.documentElement.classList.add("aimsbot-shell-root");
     document.body.classList.add("aimsbot-shell");
@@ -192,7 +219,5 @@
   app.decorateShell();
   app.decorateNativeDialogs();
   app.observeNativeDialogs();
-  window.setTimeout(app.decorateShell, 300);
-  window.setTimeout(app.decorateShell, 1000);
-  window.setTimeout(app.decorateShell, 2500);
+  app.observeDomTask("decorateShell", app.decorateShell, { debounceMs: 100 });
 })(window, document);

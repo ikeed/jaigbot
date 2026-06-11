@@ -49,9 +49,14 @@
   }
 
   tweakSplash();
-  window.setTimeout(tweakSplash, 300);
-  window.setTimeout(tweakSplash, 800);
-  window.setTimeout(tweakSplash, 1500);
+  if (typeof app.observeDomTask === "function") {
+    app.observeDomTask("splashTweaks", tweakSplash, { debounceMs: 100 });
+  } else if (document.body) {
+    const observer = new MutationObserver(function () {
+      tweakSplash();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
 
   app.splash = {
     tweak: tweakSplash

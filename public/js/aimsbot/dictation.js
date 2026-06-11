@@ -279,24 +279,20 @@
     }
   }
 
-  let debounce = null;
-  const observer = new MutationObserver(function () {
-    if (debounce) return;
-    debounce = window.setTimeout(function () {
-      debounce = null;
+  if (typeof app.observeDomTask === "function") {
+    app.observeDomTask("dictationComposerControls", function () {
       injectComposerControls();
       ensureActiveTextareaStillMounted();
-    }, 100);
-  });
-
-  if (document.body) {
+    }, { debounceMs: 100 });
+  } else if (document.body) {
+    const observer = new MutationObserver(function () {
+      injectComposerControls();
+      ensureActiveTextareaStillMounted();
+    });
     observer.observe(document.body, { childList: true, subtree: true });
   }
 
   injectComposerControls();
-  window.setTimeout(injectComposerControls, 300);
-  window.setTimeout(injectComposerControls, 1000);
-  window.setTimeout(injectComposerControls, 3000);
 
   dictation.injectComposerControls = injectComposerControls;
   dictation.stopRecognition = stopRecognition;
