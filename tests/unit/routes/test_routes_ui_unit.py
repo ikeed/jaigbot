@@ -38,7 +38,7 @@ async def test_custom_login_page_renders_template_for_unauthenticated_user(monke
         ui,
         "_get_shell_context",
         lambda request: {
-            "shell_title": "Conversation Trainer",
+            "shell_title": "AIMSBot (Gemini Enterprise)",
             "module_title": "AIMSBot (Gemini Enterprise)",
             "module_display_name": "AIMS",
             "logo_url": "/public/training-platform.png",
@@ -52,7 +52,7 @@ async def test_custom_login_page_renders_template_for_unauthenticated_user(monke
     call = ui.templates.TemplateResponse.call_args.kwargs
     assert call["context"]["providers"] == [{"id": "google"}]
     assert call["context"]["auth_secret_set"] is True
-    assert call["context"]["shell_title"] == "Conversation Trainer"
+    assert call["context"]["shell_title"] == "AIMSBot (Gemini Enterprise)"
     assert call["context"]["module_title"] == "AIMSBot (Gemini Enterprise)"
 
 
@@ -63,7 +63,7 @@ async def test_duplicate_tab_page_renders_template(monkeypatch):
         ui,
         "_get_shell_context",
         lambda request: {
-            "shell_title": "Conversation Trainer",
+            "shell_title": "Interview Practice",
             "module_title": "Interview Practice",
             "module_display_name": "Interview Practice",
             "logo_url": "/public/training-platform.png",
@@ -75,7 +75,7 @@ async def test_duplicate_tab_page_renders_template(monkeypatch):
 
     assert response is template_response
     call = ui.templates.TemplateResponse.call_args.kwargs
-    assert call["context"]["shell_title"] == "Conversation Trainer"
+    assert call["context"]["shell_title"] == "Interview Practice"
     assert call["context"]["module_title"] == "Interview Practice"
 
 

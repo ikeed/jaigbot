@@ -9,7 +9,6 @@ from app.chainlit_thread_state import get_current_thread_id
 from app.config import settings
 from app.core.module_runtime import get_builtin_active_module
 from app.constants import (
-    APP_TITLE,
     TEMPLATE_LOGIN,
     TEMPLATE_DUPLICATE,
     ROUTE_ROOT,
@@ -34,7 +33,7 @@ def _get_shell_context(request: Request) -> dict[str, str]:
     branding = manifest.branding
     module_title = branding.app_title if branding and branding.app_title else manifest.display_name
     return {
-        "shell_title": APP_TITLE,
+        "shell_title": module_title,
         "module_title": module_title,
         "module_display_name": manifest.display_name,
         "logo_url": "/public/training-platform.png",
