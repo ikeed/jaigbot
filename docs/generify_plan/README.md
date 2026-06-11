@@ -320,16 +320,31 @@ Still deferred:
 
 ### Phase 12
 
-Planned.
+Implemented.
 
-Focus:
+What landed:
 
-- make the browser shell consume module role labels for visible message
-  presentation
-- replace the “first artifact wins” startup assumption with an explicit
-  multi-artifact presentation model
-- decide whether stylesheet loading remains one shell asset or becomes
-  manifest-driven per module
+- the browser shell now consumes module dialogue-role metadata for visible
+  message presentation through `public/js/aimsbot/message-presentation.js`
+- active-module CSS is now loaded explicitly from the manifest by
+  `public/aimsbot-ui.js`
+- Chainlit startup now renders:
+  - one explicit primary startup artifact
+  - zero or more inline startup artifacts
+  - passive artifacts are ignored unless a later shell feature claims them
+- AIMS no longer relies on a module-specific message-role frontend bundle just
+  to label messages
+- the interview module now proves multi-artifact startup rendering with a
+  primary brief plus inline response guidance
+
+Still deferred:
+
+- browser verification here reached the served config/bootstrap assets, but a
+  full Playwright interaction pass could not be completed because the local
+  browser runtime was unavailable in this environment
+- startup-artifact presentation is now explicit, but it is still one primary
+  surface plus inline cards rather than an arbitrary layout system
+- avatar asset ownership is still shared and AIMS-named at the file-path layer
 
 ### Phase 13
 

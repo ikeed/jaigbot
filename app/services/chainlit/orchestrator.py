@@ -12,6 +12,7 @@ from app.chat_roles import (
     ROLE_COACH,
     ROLE_SYSTEM,
     ROLE_USER,
+    author_label_for_role,
     is_scenario_card
 )
 from app.config import settings
@@ -46,6 +47,13 @@ class ChainlitOrchestrator:
         self.ui = ui_handler
         self.session = session_manager
         self.active_module = active_module or get_builtin_active_module()
+        self.dialogue_roles = self.active_module.dialogue_roles()
+        self.role_labels = dict(getattr(self.dialogue_roles, "display_names", {}) or {})
+        self.user_role = next(iter(getattr(self.dialogue_roles, "user_roles", ()) or (ROLE_USER,)), ROLE_USER)
+        self.counterpart_role = next(
+            iter(getattr(self.dialogue_roles, "counterpart_roles", ()) or (ROLE_ASSISTANT,)),
+            ROLE_ASSISTANT,
+        )
 
     async def handle_chat_start(self):
         """Main entry point for starting or resuming a chat session."""
@@ -88,7 +96,11 @@ class ChainlitOrchestrator:
             return
 
         # Update UI for user message
-        await self.ui.send_user_message_update(message)
+        await self.ui.send_user_message_update(
+            message,
+            author_name=author_label_for_role(self.user_role, self.role_labels),
+            role_labels=self.role_labels,
+        )
 
         # Update local history
         history = self.session.history
@@ -272,6 +284,7 @@ class ChainlitOrchestrator:
         participant_context = self._get_bootstrap_participant_context(session_data)
         module_state = self._get_bootstrap_module_state(session_data)
         startup_artifacts = self._get_bootstrap_artifacts(session_data)
+        primary_artifact, inline_artifacts = self._partition_startup_artifacts(startup_artifacts)
 
         self.session.character = participant_context.get("character") or session_data.get("character")
         self.session.scene = participant_context.get("scene") or session_data.get("scene")
@@ -282,10 +295,13 @@ class ChainlitOrchestrator:
         )
         if isinstance(persona_name, str) and persona_name.strip():
             self.session.persona_name = persona_name.strip()
-        user_card = (
-            next((artifact.get("content") for artifact in startup_artifacts if artifact.get("content")), None)
-            or session_data.get("initialCard")
-        )
+        primary_content = (
+            primary_artifact.get("content")
+            if isinstance(primary_artifact.get("content"), str)
+            else None
+        ) if primary_artifact else None
+        user_card = primary_content or session_data.get("initialCard")
+        startup_scene_text = self._startup_scene_text(primary_artifact, inline_artifacts, user_card)
 
         await self._send_persona_name(persona_name)
 
@@ -294,13 +310,21 @@ class ChainlitOrchestrator:
 
         if history:
             logger.info("Injecting scenario into scene from history")
-            self._inject_scenario_into_scene(history, user_card)
+            self._inject_scenario_into_scene(history, startup_scene_text)
         else:
             logger.info("Presenting scenario card to UI")
-            await self.ui.present_scenario_card(user_card)
-            new_history = [{"role": ROLE_SYSTEM, "content": user_card}]
+            if primary_artifact:
+                await self.ui.present_startup_artifact(dict(primary_artifact))
+            elif user_card:
+                await self.ui.present_scenario_card(user_card)
+            for artifact in inline_artifacts:
+                await self.ui.present_startup_artifact(dict(artifact))
+            new_history = [
+                {"role": ROLE_SYSTEM, "content": content}
+                for content in self._display_artifact_contents(primary_artifact, inline_artifacts, user_card)
+            ]
             self.session.history = new_history
-            self._inject_scenario_into_scene(new_history, user_card)
+            self._inject_scenario_into_scene(new_history, startup_scene_text)
             await self._send_persona_name(persona_name)
 
         logger.info("Running preflight checks")
@@ -444,7 +468,11 @@ class ChainlitOrchestrator:
         reply = data.get("reply")
         if reply:
             history.append({"role": ROLE_ASSISTANT, "content": reply})
-            await self.ui.send_assistant_reply(reply, author_name=self.session.persona_name)
+            await self.ui.send_assistant_reply(
+                reply,
+                author_name=self.session.persona_name or author_label_for_role(self.counterpart_role, self.role_labels),
+                role_labels=self.role_labels,
+            )
 
         # 3. Coach Post (Game Over)
         coach_post = data.get("coachPost")
@@ -519,3 +547,63 @@ class ChainlitOrchestrator:
         if not isinstance(artifacts, list):
             return []
         return [artifact for artifact in artifacts if isinstance(artifact, Mapping)]
+
+    @staticmethod
+    def _artifact_presentation(artifact: Mapping[str, Any]) -> str:
+        metadata = artifact.get("metadata")
+        if not isinstance(metadata, Mapping):
+            return ""
+        presentation = metadata.get("presentation")
+        return presentation.strip().lower() if isinstance(presentation, str) else ""
+
+    def _partition_startup_artifacts(
+        self,
+        artifacts: list[Mapping[str, Any]],
+    ) -> tuple[Optional[Mapping[str, Any]], list[Mapping[str, Any]]]:
+        def has_text_content(artifact: Mapping[str, Any]) -> bool:
+            content = artifact.get("content")
+            return isinstance(content, str) and bool(content.strip())
+
+        primary = next((artifact for artifact in artifacts if self._artifact_presentation(artifact) == "primary"), None)
+        if primary is None:
+            primary = next(
+                (
+                    artifact
+                    for artifact in artifacts
+                    if has_text_content(artifact)
+                ),
+                None,
+            )
+        inline = [
+            artifact for artifact in artifacts
+            if artifact is not primary and self._artifact_presentation(artifact) != "passive"
+            and has_text_content(artifact)
+        ]
+        return primary, inline
+
+    @staticmethod
+    def _display_artifact_contents(
+        primary_artifact: Optional[Mapping[str, Any]],
+        inline_artifacts: list[Mapping[str, Any]],
+        fallback_content: str | None,
+    ) -> list[str]:
+        contents: list[str] = []
+        if primary_artifact:
+            primary_content = primary_artifact.get("content")
+            if isinstance(primary_content, str) and primary_content.strip():
+                contents.append(primary_content.strip())
+        elif isinstance(fallback_content, str) and fallback_content.strip():
+            contents.append(fallback_content.strip())
+        for artifact in inline_artifacts:
+            content = artifact.get("content")
+            if isinstance(content, str) and content.strip():
+                contents.append(content.strip())
+        return contents
+
+    def _startup_scene_text(
+        self,
+        primary_artifact: Optional[Mapping[str, Any]],
+        inline_artifacts: list[Mapping[str, Any]],
+        fallback_content: str | None,
+    ) -> str:
+        return "\n\n".join(self._display_artifact_contents(primary_artifact, inline_artifacts, fallback_content))

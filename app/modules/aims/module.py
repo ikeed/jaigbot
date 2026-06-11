@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import Any, Mapping, cast
 
 from app.chat_roles import ROLE_ASSISTANT, ROLE_COACH, ROLE_SYSTEM, ROLE_USER
-from app.constants import APP_TITLE
 from app.core.archive_types import ArchiveCompatibilityPayload, ModuleArchiveEnvelope
 from app.core.session_serialization import serialize_session_bootstrap_payload
 from app.core.session_types import SessionBootstrapPayload, StartupArtifact
@@ -381,12 +380,11 @@ def create_aims_training_module(*, settings: Any) -> AimsTrainingModule:
         supports_feedback=True,
         supports_summary=True,
         frontend_js_bundles=(
-            "/public/js/modules/aims/message-roles.js",
             "/public/js/modules/aims/module-ui.js",
         ),
         frontend_css="/public/aimsbot.css",
         branding=BrandingSpec(
-            app_title=APP_TITLE,
+            app_title="AIMSBot",
             avatar_name=chat_profile_name,
             logo_asset="/public/logo_light.png",
             loading_text=loading_text,

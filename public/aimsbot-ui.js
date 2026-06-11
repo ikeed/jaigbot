@@ -29,6 +29,7 @@
 
   const platformModules = [
         "/public/js/aimsbot/core.js?v=" + assetVersion,
+        "/public/js/aimsbot/message-presentation.js?v=" + assetVersion,
         "/public/js/aimsbot/modal.js?v=" + assetVersion,
         "/public/js/aimsbot/report-issue.js?v=" + assetVersion,
         "/public/js/aimsbot/session-controls.js?v=" + assetVersion,
@@ -39,6 +40,24 @@
 
   function withVersion(path) {
     return path.indexOf("?") === -1 ? path + "?v=" + assetVersion : path + "&v=" + assetVersion;
+  }
+
+  function normalizeAssetPath(path) {
+    return String(path || "").split("?")[0];
+  }
+
+  function ensureStylesheet(path) {
+    const normalizedPath = normalizeAssetPath(path);
+    if (!normalizedPath) return;
+    const existing = Array.from(document.querySelectorAll('link[rel="stylesheet"]')).some(function (link) {
+      return normalizeAssetPath(link.getAttribute("href")) === normalizedPath;
+    });
+    if (existing) return;
+
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = path;
+    document.head.appendChild(link);
   }
 
   function loadSequentially(modules, done) {
@@ -63,13 +82,26 @@
     loadNext(0);
   }
 
+  function fetchModuleConfig() {
+    const configPaths = ["/api/config", "/config"];
+
+    function fetchNext(index) {
+      if (index >= configPaths.length) return Promise.resolve(null);
+      return window.fetch(window.location.origin + configPaths[index], { credentials: "same-origin" })
+        .then(function (response) {
+          if (!response.ok) return fetchNext(index + 1);
+          return response.json();
+        })
+        .catch(function () {
+          return fetchNext(index + 1);
+        });
+    }
+
+    return fetchNext(0);
+  }
+
   function loadModuleAssets() {
-    const configUrl = window.location.origin + "/config";
-    return window.fetch(configUrl, { credentials: "same-origin" })
-      .then(function (response) {
-        if (!response.ok) return null;
-        return response.json();
-      })
+    return fetchModuleConfig()
       .then(function (config) {
         const activeModule = config && config.activeModule ? config.activeModule : null;
         const bundles = activeModule && Array.isArray(activeModule.frontendJsBundles)
@@ -79,11 +111,18 @@
           window.TrainingUI.activeModule = activeModule;
           window.TrainingUI.branding = activeModule.branding;
         }
+        if (activeModule) {
+          window.TrainingUI.activeModule = activeModule;
+          window.TrainingUI.stylesheetStrategy = "manifest-driven";
+          if (activeModule.frontendCss) {
+            ensureStylesheet(withVersion(activeModule.frontendCss));
+          }
+          if (window.TrainingUI.messagePresentation && window.TrainingUI.messagePresentation.decorateMessages) {
+            window.TrainingUI.messagePresentation.decorateMessages();
+          }
+        }
         if (!bundles.length) return;
         loadSequentially(bundles, function () {});
-      })
-      .catch(function () {
-        // Keep the chat shell usable even if config lookup fails.
       });
   }
 

@@ -79,16 +79,10 @@ None currently.
 
 ## Phase 10
 
-- Role-label metadata is now exposed in module dialogue roles and `/config`, but
-  the frontend still does not consume it for visible message presentation.
-  Phase 10 cleaned up shell branding, not message rendering semantics.
 - The shell title is now generic, but the shared logo asset path remains
   `/public/aimsbot.png` and several internal static asset names still use the
   old AIMSBot naming. That is acceptable for now, but it is still branding
   debt.
-- CSS is still served through one deployment-level stylesheet entrypoint.
-  `frontendCss` is exposed in module manifests and `/config`, but the browser
-  shell does not yet switch or compose stylesheets per module.
 - Generic product docs and `AGENTS.md` were updated, but AIMS-specific docs
   still intentionally dominate the repo. That is correct while AIMS remains the
   primary shipped module, but a future broader module rollout will need another
@@ -106,3 +100,17 @@ None currently.
 - Legacy-module inference is now explicit, but it only recognizes historical
   AIMS data families. That is the right move for this repo today, but it is not
   a general cross-module migration system.
+
+## Phase 12
+
+- Startup-artifact presentation is now explicit and multi-artifact aware, but
+  the shell model is still intentionally narrow: one primary artifact plus
+  inline cards, with passive artifacts ignored until a later module needs a
+  richer layout contract.
+- Local frontend verification here reached the served `/api/config` payload and
+  the `/chat` bootstrap asset wiring, but a full Playwright-driven browser pass
+  could not run because the required local browser runtime was unavailable in
+  this environment.
+- Shared avatar and logo asset ownership is still shell-level, and several
+  asset filenames remain AIMS-named even though the browser role-label logic is
+  now generic.

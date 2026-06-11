@@ -34,6 +34,11 @@ def mock_services():
 def orchestrator(mock_services):
     active_module = MagicMock()
     active_module.module_id = "aims"
+    active_module.dialogue_roles.return_value = SimpleNamespace(
+        display_names={"user": "Doctor", "assistant": "Assistant", "coach": "Coach", "system": "System"},
+        user_roles=("user",),
+        counterpart_roles=("assistant",),
+    )
     active_module.resume_validation.return_value = SimpleNamespace(is_resumable=True, reason=None)
     return ChainlitOrchestrator(
         backend_client=mock_services["backend"],
@@ -122,13 +127,19 @@ async def test_start_scenario_flow_prefers_generic_bootstrap_fields(orchestrator
                         "kind": "interview_brief",
                         "title": "Interview Setup",
                         "content": "Discuss one project in depth",
-                        "metadata": {},
+                        "metadata": {"presentation": "primary"},
+                    },
+                    {
+                        "kind": "interview_guidance",
+                        "title": "Response Guidance",
+                        "content": "Use STAR and quantify the outcome",
+                        "metadata": {"presentation": "inline"},
                     }
                 ],
             },
         }
     )
-    mock_services["ui"].present_scenario_card = AsyncMock()
+    mock_services["ui"].present_startup_artifact = AsyncMock()
     mock_services["ui"].send_window_message = AsyncMock()
     orchestrator._bind_thread = AsyncMock()
     orchestrator._run_preflight_checks = AsyncMock()
@@ -140,8 +151,9 @@ async def test_start_scenario_flow_prefers_generic_bootstrap_fields(orchestrator
     assert mock_services["session"].character == "Generic interviewer"
     assert mock_services["session"].scene.startswith("Generic interview scene")
     assert "Discuss one project in depth" in mock_services["session"].scene
+    assert "Use STAR and quantify the outcome" in mock_services["session"].scene
     assert mock_services["session"].persona_name == "Hiring Manager"
-    mock_services["ui"].present_scenario_card.assert_awaited_once_with("Discuss one project in depth")
+    assert mock_services["ui"].present_startup_artifact.await_count == 2
 
 def test_reconnect_redirect_does_not_hijack_explicit_new_chat(
     orchestrator, mock_services, monkeypatch
@@ -233,9 +245,17 @@ async def test_handle_user_message_success(orchestrator, mock_services):
 
     await orchestrator.handle_user_message(message)
     
-    mock_services["ui"].send_user_message_update.assert_called_with(message)
+    mock_services["ui"].send_user_message_update.assert_called_with(
+        message,
+        author_name="Doctor",
+        role_labels={"user": "Doctor", "assistant": "Assistant", "coach": "Coach", "system": "System"},
+    )
     mock_services["backend"].send_chat_message.assert_called()
-    mock_services["ui"].send_assistant_reply.assert_called_with("pong", author_name="Sarah")
+    mock_services["ui"].send_assistant_reply.assert_called_with(
+        "pong",
+        author_name="Sarah",
+        role_labels={"user": "Doctor", "assistant": "Assistant", "coach": "Coach", "system": "System"},
+    )
     assert len(mock_services["session"].history) == 2 # user + assistant
 
 
@@ -468,7 +488,14 @@ async def test_process_backend_response_dispatches_coaching_reply_and_coach_post
         "Scenario complete\nOutcome: accepted literature"
     )
     mock_services["ui"].send_assistant_reply.assert_awaited_once_with(
-        "I need to understand more.", author_name="Sarah"
+        "I need to understand more.",
+        author_name="Sarah",
+        role_labels={
+            "user": "Doctor",
+            "assistant": "Assistant",
+            "coach": "Coach",
+            "system": "System",
+        },
     )
 
 

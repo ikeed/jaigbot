@@ -33,8 +33,8 @@
       if (!participantName) return;
       app.state = app.state || {};
       app.state.participantName = String(participantName).trim();
-      if (app.messageRoles && app.messageRoles.injectDataAuthors) {
-        app.messageRoles.injectDataAuthors();
+      if (app.messagePresentation && app.messagePresentation.decorateMessages) {
+        app.messagePresentation.decorateMessages();
       }
     }
   }

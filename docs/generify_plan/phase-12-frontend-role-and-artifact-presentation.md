@@ -1,5 +1,9 @@
 # Phase 12: Frontend Role And Artifact Presentation
 
+## Status
+
+Implemented.
+
 ## Objective
 
 Finish the browser-shell side of the modular seams introduced in Phases 9-11.
@@ -124,9 +128,29 @@ Mitigation:
 - browser-based verification of local `/chat` flows
 - full non-integration suite if backend-facing message/bootstrap contracts move
 
-## Done Means
+## What Landed
 
-- frontend message labels follow module metadata
-- startup artifact handling is explicit and no longer “first artifact wins”
-- stylesheet ownership is an explicit architectural choice, not an accidental
-  hybrid
+- added generic browser-side message rendering in
+  `public/js/aimsbot/message-presentation.js`
+- switched frontend role/author decoration from the old AIMS-only path to
+  module dialogue-role metadata from `/api/config`
+- added manifest-driven CSS loading in `public/aimsbot-ui.js`
+- updated Chainlit startup flow to:
+  - choose a primary startup artifact explicitly
+  - render additional inline artifacts separately
+  - ignore passive artifacts for now
+- removed the AIMS-only `message-roles.js` bundle from the AIMS module
+  manifest
+- expanded the interview module to prove a multi-artifact startup flow
+
+## Residual Issues
+
+- local browser verification was only partial in this environment: the unified
+  app and config/bootstrap assets were verified, but a full Playwright-driven
+  `/chat` interaction pass could not run because the local browser runtime was
+  unavailable
+- startup-artifact presentation is still constrained to one primary artifact
+  plus inline cards, which is enough for current modules but not a general
+  layout system
+- shared avatar asset ownership remains shell-level and AIMS-named at the
+  file-path layer

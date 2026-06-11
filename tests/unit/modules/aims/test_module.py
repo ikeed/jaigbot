@@ -20,6 +20,7 @@ def test_aims_module_manifest_exposes_expected_phase1_metadata():
     assert manifest.supports_intro is True
     assert manifest.supports_feedback is True
     assert manifest.supports_summary is True
+    assert manifest.frontend_js_bundles == ("/public/js/modules/aims/module-ui.js",)
     assert manifest.dialogue_roles.participant_roles == ("user", "assistant")
     assert manifest.dialogue_roles.feedback_roles == ("coach",)
     assert manifest.dialogue_roles.metadata_roles == ("system",)
@@ -27,6 +28,8 @@ def test_aims_module_manifest_exposes_expected_phase1_metadata():
     assert manifest.dialogue_roles.user_roles == ("user",)
     assert manifest.dialogue_roles.counterpart_roles == ("assistant",)
     assert manifest.dialogue_roles.display_names["user"] == "Doctor"
+    assert manifest.branding is not None
+    assert manifest.branding.app_title == "AIMSBot"
     assert module.module_id == "aims"
     assert module.display_name == "AIMS"
     assert module.storage_prefix() == "aims:prod:session:"

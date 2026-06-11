@@ -132,6 +132,20 @@ def test_ui_handler_render_scenario_card_html_labels_and_notes():
     assert '<div class="aims-scenario-note">Remember to speak slowly</div>' in html
 
 
+def test_ui_handler_render_startup_artifact_html_uses_artifact_title():
+    ui = UIHandler()
+
+    html = ui.render_startup_artifact_html(
+        {
+            "title": "Interview Setup",
+            "content": "Role: Hiring Manager\nFocus: Explain one project",
+        }
+    )
+
+    assert 'class="aims-scenario-title">Interview Setup<' in html
+    assert '<span class="aims-scenario-label">Role:</span> Hiring Manager' in html
+
+
 @pytest.mark.asyncio
 async def test_ui_handler_send_helpers_use_expected_chainlit_calls():
     ui = UIHandler()
@@ -143,16 +157,18 @@ async def test_ui_handler_send_helpers_use_expected_chainlit_calls():
         mock_msg_instance.send = AsyncMock()
 
         await ui.present_scenario_card("Person: Zia")
+        await ui.present_startup_artifact({"title": "Interview Setup", "content": "Role: Hiring Manager"})
         await ui.show_error("Problem")
         await ui.send_assistant_reply("Hello")
         await ui.send_coach_message("Detected step: Announce")
         await ui.send_window_message({"type": "x"})
 
-    assert mock_msg_cls.call_count == 4
+    assert mock_msg_cls.call_count == 5
     assert "aims-scenario-briefing" in mock_msg_cls.call_args_list[0].kwargs["content"]
-    assert mock_msg_cls.call_args_list[1].args == ("Problem",)
-    assert mock_msg_cls.call_args_list[2].args == ("Hello",)
-    assert "**Coaching**" in mock_msg_cls.call_args_list[3].kwargs["content"]
+    assert "Interview Setup" in mock_msg_cls.call_args_list[1].kwargs["content"]
+    assert mock_msg_cls.call_args_list[2].args == ("Problem",)
+    assert mock_msg_cls.call_args_list[3].args == ("Hello",)
+    assert "**Coaching**" in mock_msg_cls.call_args_list[4].kwargs["content"]
     send_window.assert_awaited_once_with({"type": "x"})
 
 
@@ -167,6 +183,18 @@ async def test_ui_handler_send_user_message_update_sets_role_attributes():
     assert message.author == "Doctor"
     assert message.type == "user_message"
     message.update.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_ui_handler_send_user_message_update_accepts_custom_author():
+    ui = UIHandler()
+    message = MagicMock()
+    message.update = AsyncMock()
+
+    await ui.send_user_message_update(message, author_name="Candidate", role_labels={"user": "Candidate"})
+
+    assert message.author == "Candidate"
+    assert message.type == "user_message"
 
 
 @pytest.mark.asyncio

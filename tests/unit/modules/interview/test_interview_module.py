@@ -80,6 +80,8 @@ def test_interview_module_initialize_session_serializes_bootstrap_and_persists_m
     assert payload["personaName"] == "Hiring Manager"
     assert payload["transport"]["artifactKind"] == "interview_brief"
     assert "Interview Setup" in payload["initialCard"]
+    assert len(payload["module"]["artifacts"]) == 2
+    assert payload["module"]["artifacts"][1]["title"] == "Response Guidance"
     assert memory_store["interview-sid"]["module_id"] == "interview"
     assert memory_store["interview-sid"]["history"][0]["role"] == "system"
 
