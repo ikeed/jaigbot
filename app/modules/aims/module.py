@@ -159,7 +159,8 @@ class AimsTrainingModule:
     def build_history_projection(self, **kwargs: Any) -> Mapping[str, Any]:
         raise NotImplementedError("History projection is not routed through TrainingModule yet.")
 
-    async def build_summary(self, **kwargs: Any) -> Mapping[str, Any]:
+    @staticmethod
+    async def build_summary(**kwargs: Any) -> Mapping[str, Any]:
         from app.modules.aims.services.summary_service import build_summary as build_aims_summary
 
         return await build_aims_summary(
@@ -173,7 +174,8 @@ class AimsTrainingModule:
             vertex_client_cls=kwargs["vertex_client_cls"],
         )
 
-    def build_archive_payload(self, **kwargs: Any) -> Mapping[str, Any] | None:
+    @staticmethod
+    def build_archive_payload(**kwargs: Any) -> Mapping[str, Any] | None:
         result = kwargs.get("result") or {}
         ctx = kwargs["ctx"]
         session_service = kwargs["session_service"]

@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 from app.services.session_initializer import (
     deregister_session_connection,
     initialize_session,
-    _scenario_card_from_character,
+    scenario_card_from_character,
 )
 
 
@@ -170,7 +170,7 @@ def test_deregister_session_connection_removes_connection_and_touches_memory():
 
 
 def test_scenario_card_from_character_extracts_named_persona():
-    assert _scenario_card_from_character("Specific Persona: Jasmine\nNotes: test") == (
+    assert scenario_card_from_character("Specific Persona: Jasmine\nNotes: test") == (
         "Person: Jasmine\n(Scenario initialized)"
     )
 

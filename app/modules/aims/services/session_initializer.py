@@ -107,7 +107,7 @@ def initialize_session(
             record_persona_interaction_once(user_info.get("identifier"), sid, selected_persona, memory_store)
 
         if character:
-            card_content = initial_card or _scenario_card_from_character(character)
+            card_content = initial_card or scenario_card_from_character(character)
             history = mem.get("history")
             if not isinstance(history, list):
                 history = []
@@ -135,7 +135,7 @@ def initialize_session(
 
         if not mem.get("history") and character:
             if not mem.get("full_history"):
-                card_content = initial_card or _scenario_card_from_character(character)
+                card_content = initial_card or scenario_card_from_character(character)
                 history = mem.get("history")
                 if not isinstance(history, list):
                     history = []
@@ -181,7 +181,7 @@ def deregister_session_connection(
     return {"status": "ok"}
 
 
-def _scenario_card_from_character(character: str) -> str:
+def scenario_card_from_character(character: str) -> str:
     persona_name = "Person"
     for line in character.splitlines():
         if "Specific Persona:" in line:

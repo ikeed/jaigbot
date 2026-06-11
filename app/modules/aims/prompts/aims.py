@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import List
 
-from app.prompts.loader import _load_text, load_and_render
+from app.prompts.loader import load_text, load_and_render
 
 
 def build_patient_reply_prompt(
@@ -48,7 +48,7 @@ def get_classify_system_instruction() -> str:
     implicit context caching by the Gemini platform.  The instruction is
     loaded once and cached in-process via the loader's lru_cache.
     """
-    return _load_text("app.modules.aims.prompts", "aims_system_instruction.txt")
+    return load_text("app.modules.aims.prompts", "aims_system_instruction.txt")
 
 
 def build_classify_turn_prompt(

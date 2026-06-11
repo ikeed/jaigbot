@@ -144,9 +144,8 @@
       return;
     }
 
-      const avatarBase = window.location.pathname.indexOf("/chat") === 0 ? "/chat" : "";
-      const avatar = document.createElement("span");
-      avatar.className = "aims-doctor-avatar";
+    const avatar = document.createElement("span");
+    avatar.className = "aims-doctor-avatar";
     avatar.setAttribute("data-state", "closed");
     avatar.innerHTML = '<img alt="Avatar for Doctor" src="' + avatarSrcForRole("Doctor") + '" />';
     row.appendChild(avatar);

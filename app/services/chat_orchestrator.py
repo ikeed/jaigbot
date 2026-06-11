@@ -179,7 +179,6 @@ class ChatOrchestrator:
                 self.active_module.format_module_response(result=result, session_id=ctx.session_id)
             )
 
-            archive_data = None
             if self.background_tasks:
                 try:
                     archive_data = self.active_module.build_archive_payload(

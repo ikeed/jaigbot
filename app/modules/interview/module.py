@@ -161,7 +161,8 @@ class InterviewTrainingModule:
     async def build_summary(self, **kwargs: Any) -> Mapping[str, Any]:
         return {"moduleId": self.module_id, "supported": False}
 
-    def build_archive_payload(self, **kwargs: Any) -> Mapping[str, Any] | None:
+    @staticmethod
+    def build_archive_payload(**kwargs: Any) -> Mapping[str, Any] | None:
         return None
 
     def build_archive_envelope(self, **kwargs: Any) -> ModuleArchiveEnvelope:
@@ -180,7 +181,8 @@ class InterviewTrainingModule:
             compatibility=ArchiveCompatibilityPayload(),
         )
 
-    def build_jailbreak_fallback(self, **kwargs: Any) -> str:
+    @staticmethod
+    def build_jailbreak_fallback(**kwargs: Any) -> str:
         return "Let's stay focused on the interview scenario."
 
 
