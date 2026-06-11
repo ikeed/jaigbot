@@ -5,7 +5,11 @@ from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
-from .core.module_runtime import get_builtin_active_module, get_builtin_module_registry
+from .core.module_runtime import (
+    get_builtin_active_module,
+    get_builtin_module_registry,
+    initialize_app_module_runtime,
+)
 from .http_handlers import get_request_id as _get_request_id, install_http_handlers
 from .vertex import VertexClient
 from .runtime import VertexClientCache, create_memory_store, get_logging_config
@@ -29,10 +33,7 @@ async def _lifespan(application: FastAPI):
     """Application lifespan: run startup tasks before yielding, cleanup after."""
     application.state.memory_store = MEMORY_STORE
     application.state.vertex_client_cache = _VERTEX_CLIENT_CACHE
-    module_registry = get_builtin_module_registry()
-    active_module = get_builtin_active_module()
-    application.state.module_registry = module_registry
-    application.state.active_module = active_module
+    active_module = initialize_app_module_runtime(application)
     logger.info(
         "Active training module resolved: id=%s display_name=%s",
         active_module.module_id,

@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
+from app.core.module_runtime import initialize_app_module_runtime
 from app.constants import (
     DEFAULT_CHAT_TARGET,
     DEFAULT_HOST,
@@ -32,6 +33,7 @@ from app.routes.ui import router as ui_router
 from app.security.oauth import is_valid_env_val
 
 app = FastAPI()
+initialize_app_module_runtime(app)
 
 # 1. Update BACKEND_URL for this unified process
 port = settings.PORT
