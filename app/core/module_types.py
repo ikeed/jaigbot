@@ -12,6 +12,7 @@ class BrandingSpec:
     avatar_name: Optional[str] = None
     logo_asset: Optional[str] = None
     loading_text: Optional[str] = None
+    avatar_assets: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

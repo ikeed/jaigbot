@@ -229,6 +229,9 @@ def create_interview_training_module(*, settings: Any) -> InterviewTrainingModul
                 app_title="Interview Practice",
                 avatar_name="Interviewer",
                 loading_text="Loading your interview...",
+                avatar_assets={
+                    "counterpart": "/public/avatars/briefing.svg?v=3",
+                },
             ),
         )
     )

@@ -67,7 +67,10 @@ def _client(*, settings=None, store=None, model_check=None, logger=None):
                 "/public/js/modules/aims/module-ui.js",
             ),
             frontend_css="/public/aimsbot.css",
-            branding=BrandingSpec(app_title="AIMSBot"),
+            branding=BrandingSpec(
+                app_title="AIMSBot",
+                avatar_assets={"counterpart": "/public/avatars/assistant.svg?v=3"},
+            ),
         )
     )
     module_registry = SimpleNamespace(
@@ -84,7 +87,10 @@ def _client(*, settings=None, store=None, model_check=None, logger=None):
                     supports_summary=False,
                     frontend_js_bundles=("/public/js/modules/interview/module-ui.js",),
                     frontend_css="/public/aimsbot.css",
-                    branding=BrandingSpec(app_title="Interview Practice"),
+                    branding=BrandingSpec(
+                        app_title="Interview Practice",
+                        avatar_assets={"counterpart": "/public/avatars/briefing.svg?v=3"},
+                    ),
                 )
             ),
         ]
@@ -177,9 +183,11 @@ def test_config_modelcheck_and_diagnostics_use_injected_dependencies():
     ]
     assert config["activeModule"]["frontendCss"] == "/public/aimsbot.css"
     assert config["activeModule"]["branding"]["appTitle"] == "AIMSBot"
+    assert config["activeModule"]["branding"]["avatarAssets"]["counterpart"] == "/public/avatars/assistant.svg?v=3"
     assert [module["id"] for module in config["availableModules"]] == ["aims", "interview"]
     assert config["availableModules"][1]["supportsSummary"] is False
     assert config["availableModules"][1]["dialogueRoles"]["participantRoles"] == ["candidate", "interviewer"]
+    assert config["availableModules"][1]["branding"]["avatarAssets"]["counterpart"] == "/public/avatars/briefing.svg?v=3"
 
     modelcheck = client.get("/modelcheck").json()
     assert modelcheck["modelId"] == "gemini-test"

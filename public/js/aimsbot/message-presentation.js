@@ -63,6 +63,9 @@
   }
 
   function avatarSrcForRole(role) {
+    const branding = app.activeModule && app.activeModule.branding;
+    const configured = branding && branding.avatarAssets && branding.avatarAssets[role];
+    if (typeof configured === "string" && configured.trim()) return configured.trim();
     if (role === "user") return "/public/avatars/doctor.svg?v=3";
     if (role === "counterpart") return "/public/avatars/assistant.svg?v=3";
     if (role === "feedback") return "/public/avatars/coach.svg?v=3";

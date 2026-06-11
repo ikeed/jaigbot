@@ -113,6 +113,7 @@ def create_system_router(
                             "avatarName": manifest.branding.avatar_name,
                             "logoAsset": manifest.branding.logo_asset,
                             "loadingText": manifest.branding.loading_text,
+                            "avatarAssets": dict(manifest.branding.avatar_assets),
                         }
                         if manifest.branding
                         else None
@@ -181,6 +182,7 @@ def create_system_router(
                             "avatarName": active_module_manifest.branding.avatar_name,
                             "logoAsset": active_module_manifest.branding.logo_asset,
                             "loadingText": active_module_manifest.branding.loading_text,
+                            "avatarAssets": dict(active_module_manifest.branding.avatar_assets),
                         }
                         if active_module_manifest.branding
                         else None
