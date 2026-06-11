@@ -7,7 +7,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.chainlit_thread_state import get_current_thread_id
 from app.config import settings
-from app.core.module_runtime import get_builtin_active_module
+from app.core.interfaces import TrainingModule
 from app.constants import (
     TEMPLATE_LOGIN,
     TEMPLATE_DUPLICATE,
@@ -27,8 +27,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 
+def _get_active_module(request: Request) -> TrainingModule:
+    active_module = getattr(request.app.state, "active_module", None)
+    if active_module is None:
+        raise RuntimeError("Active module must be initialized on app.state before rendering UI routes.")
+    return active_module
+
+
 def _get_shell_context(request: Request) -> dict[str, str]:
-    active_module = getattr(request.app.state, "active_module", None) or get_builtin_active_module()
+    active_module = _get_active_module(request)
     manifest = active_module.get_ui_manifest()
     branding = manifest.branding
     module_title = branding.app_title if branding and branding.app_title else manifest.display_name
@@ -44,7 +51,8 @@ async def custom_login_page(request: Request):
     """Render the custom SSO landing page."""
     user_id = authenticated_user_identifier(request)
     if user_id:
-        thread_id = get_current_thread_id(user_id, active_module_id=settings.ACTIVE_MODULE)
+        active_module = _get_active_module(request)
+        thread_id = get_current_thread_id(user_id, active_module_id=active_module.module_id)
         target_url = f"{PATH_CHAT}/thread/{thread_id}" if thread_id else PATH_CHAT
         return RedirectResponse(url=target_url)
 
