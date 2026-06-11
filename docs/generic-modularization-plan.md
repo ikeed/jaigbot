@@ -832,12 +832,15 @@ Mitigation:
 
 Risk:
 
-- `persona_service` stays in core but really belongs to modules
+- persona/scenario handling can drift back into core if new module work does not
+  keep it under module ownership
 
 Mitigation:
 
-- separate generic participant-profile loading from AIMS persona selection
-- likely move persona selection into modules, while keeping profile-loading utilities generic if useful
+- keep persona selection and persona-specific archive extraction in module-owned
+  services
+- extract truly generic participant-profile utilities only if another module
+  needs them
 
 ### 9. Bucket / prefix collisions
 

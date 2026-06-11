@@ -13,7 +13,7 @@ import pytest
 
 from app.config import settings
 from app.modules.aims.services.patient_reply_service import PatientReplyService
-from app.services.persona_service import build_persona_session_fields, find_persona
+from app.modules.aims.services.persona_service import build_persona_session_fields, find_persona
 from app.services.vertex_helpers import avertex_call_with_fallback_json
 
 

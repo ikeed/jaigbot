@@ -275,7 +275,7 @@ def test_storage_service_count_personas_handles_blob_parse_errors_and_cap(monkey
     client.list_blobs.return_value = [bad_blob, ignored_blob, good_blob]
     service._client = client
     monkeypatch.setattr(
-        "app.services.persona_service.extract_persona_name_from_archive",
+        "app.modules.aims.services.persona_service.extract_persona_name_from_archive",
         lambda data: data.get("persona", {}).get("name"),
     )
 

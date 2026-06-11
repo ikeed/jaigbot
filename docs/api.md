@@ -30,9 +30,14 @@ Request body:
 - `message`: string, required, non-empty, max 2 KiB after UTF-8 encoding
 - `sessionId`: string, optional; if omitted the server uses a cookie or issues a
   new session id
+- `moduleId`: string, optional explicit module override when a deployment
+  supports it
+- `moduleOptions`: object, optional module-directed request metadata
 - `character`: string, optional compatibility participant override
 - `scene`: string, optional compatibility scene/objective override
 - `userInfo`: object, optional user metadata for session association/audit
+- `coach`: boolean, optional legacy compatibility alias retained for the AIMS
+  module
 
 Example:
 

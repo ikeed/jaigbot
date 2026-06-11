@@ -182,7 +182,7 @@ class StorageService:
             prefixes.append(f"sessions/v1/user_id={user_id}/")
 
         try:
-            from app.services.persona_service import extract_persona_name_from_archive
+            from app.modules.aims.services.persona_service import extract_persona_name_from_archive
 
             logger.info("Starting GCS persona count for user %s", user_id)
             count = 0

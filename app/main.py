@@ -144,11 +144,13 @@ def _session_cookie_settings() -> dict:
     }
 
 
-def _aims_config() -> dict:
-    return {
-        "enabled": settings.AIMS_COACHING_ENABLED,
-        "force_default": settings.AIMS_COACHING_DEFAULT,
-    }
+def _module_runtime_config(active_module) -> dict:
+    if getattr(active_module, "module_id", None) == "aims":
+        return {
+            "enabled": settings.AIMS_COACHING_ENABLED,
+            "force_default": settings.AIMS_COACHING_DEFAULT,
+        }
+    return {}
 
 
 def _debug_config() -> dict:
@@ -168,7 +170,7 @@ def _chat_orchestrator(memory_store=None, active_module=None):
         memory_store=memory_store or MEMORY_STORE,
         session_cookie_settings=_session_cookie_settings(),
         memory_config=_memory_config(),
-        aims_config=_aims_config(),
+        module_runtime_config=_module_runtime_config(active_module),
         vertex_config=_vertex_config(),
         debug_config=_debug_config(),
         logger=logger,

@@ -14,6 +14,15 @@ from app.core.response_types import ModuleResponseEnvelope
 from app.core.module_types import BrandingSpec, DialogueRoles, ModuleManifest, ResumeValidationResult
 
 
+def _feedback_requested(body: Any) -> bool:
+    module_options = getattr(body, "moduleOptions", None)
+    if isinstance(module_options, Mapping):
+        feedback_enabled = module_options.get("feedbackEnabled")
+        if feedback_enabled is not None:
+            return bool(feedback_enabled)
+    return bool(getattr(body, "coach", False))
+
+
 @dataclass(frozen=True)
 class AimsTrainingModule:
     """AIMS implementation of the generic training-module contract."""
@@ -95,12 +104,12 @@ class AimsTrainingModule:
         memory_store = kwargs["memory_store"]
         vertex_config = dict(kwargs["vertex_config"])
         memory_config = dict(kwargs["memory_config"])
-        aims_config = dict(kwargs["aims_config"])
+        module_runtime_config = dict(kwargs["module_runtime_config"])
         logger = kwargs["logger"]
 
-        coaching_enabled = bool(aims_config.get("enabled", False))
-        force_default = bool(aims_config.get("force_default", False))
-        should_use_coaching = coaching_enabled and (bool(getattr(body, "coach", False)) or force_default)
+        coaching_enabled = bool(module_runtime_config.get("enabled", False))
+        force_default = bool(module_runtime_config.get("force_default", False))
+        should_use_coaching = coaching_enabled and (_feedback_requested(body) or force_default)
 
         if should_use_coaching:
             from app.modules.aims.services.aims_coaching_handler import AimsCoachingHandler

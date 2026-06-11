@@ -9,7 +9,8 @@ the AIMS-specific request options and response payloads.
 When the active module is `aims`, coaching output is returned when:
 
 - `AIMS_COACHING_ENABLED=true`, and
-- the request sets `coach: true`, or
+- the request sets `moduleOptions.feedbackEnabled: true`, or
+- the request sets `coach: true` as a legacy compatibility alias, or
 - `AIMS_COACHING_DEFAULT=true` forces coaching by default
 
 ## AIMS request options
@@ -17,7 +18,8 @@ When the active module is `aims`, coaching output is returned when:
 `POST /chat` accepts the generic platform fields documented in `docs/api.md`.
 The current AIMS module also uses:
 
-- `coach`: boolean, optional
+- `moduleOptions.feedbackEnabled`: boolean, preferred
+- `coach`: boolean, optional legacy alias
 - `character`: string, optional compatibility override
 - `scene`: string, optional compatibility override
 
@@ -27,7 +29,9 @@ Example:
 {
   "message": "What concerns do you have about the MMR vaccine for Layla?",
   "sessionId": "abc-123",
-  "coach": true
+  "moduleOptions": {
+    "feedbackEnabled": true
+  }
 }
 ```
 

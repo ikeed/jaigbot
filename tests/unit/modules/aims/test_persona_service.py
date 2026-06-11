@@ -1,14 +1,14 @@
 from unittest.mock import patch
 
 from app.memory_store import InMemoryStore
-from app.services import persona_service
+from app.modules.aims.services import persona_service
 
 
 def test_weighted_selection_uses_inverse_interaction_counts():
     personas = [{"name": "A"}, {"name": "B"}, {"name": "C"}]
     counts = {"A": 0, "B": 1, "C": 4}
 
-    with patch("app.services.persona_service.random.choices") as choices:
+    with patch("app.modules.aims.services.persona_service.random.choices") as choices:
         choices.return_value = [personas[0]]
         selected = persona_service.choose_weighted_persona(personas, counts)
 
@@ -144,6 +144,18 @@ def test_load_personas_falls_back_when_persona_file_is_unreadable(monkeypatch):
     monkeypatch.setattr(persona_service, "_personas_path", lambda: MissingPath())
 
     assert persona_service.load_personas() == [persona_service.FALLBACK_PERSONA]
+
+    persona_service._load_personas_cached.cache_clear()
+
+
+def test_load_personas_reads_real_persona_file_after_module_move():
+    persona_service._load_personas_cached.cache_clear()
+
+    personas = persona_service.load_personas()
+    jasmine = next(persona for persona in personas if persona.get("name") == "Jasmine")
+
+    assert jasmine["brief"].startswith("Jasmine is a 29-year-old first-time parent")
+    assert jasmine["scenario"]["user_sketch"] == "Jasmine is at the clinic for Sophia's 2-month well-baby checkup."
 
     persona_service._load_personas_cached.cache_clear()
 

@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.modules.aims.services.classifier_service import ClassifierService
-from app.models import ClassifierResult
+from app.modules.aims.models import ClassifierResult
 
 @pytest.fixture
 def mock_vertex_client():

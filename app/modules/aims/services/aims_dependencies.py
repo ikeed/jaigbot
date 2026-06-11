@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from app.models import ClassifierResult
+from app.modules.aims.models import ClassifierResult
 from app.modules.aims.services.aims_turn_coordinator import AimsTurnResult
 
 

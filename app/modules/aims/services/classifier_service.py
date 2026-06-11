@@ -5,7 +5,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from app.modules.aims.engine import evaluate_turn
-from app.models import ClassifierResult, Coaching, StepFeedback
+from app.modules.aims.models import ClassifierResult, Coaching, StepFeedback
 from app.services.chat_helpers import recent_context as build_recent_context
 from app.modules.aims.services.prompt_builders import AimsPromptBuilder
 from app.vertex import VertexClient

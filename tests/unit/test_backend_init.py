@@ -4,7 +4,7 @@ from app.chat_roles import ROLE_SYSTEM
 import app.main as m
 from app.main import app, MEMORY_STORE
 from app.modules.interview.module import create_interview_training_module
-from app.services.persona_service import persona_counted_key, persona_counts_key
+from app.modules.aims.services.persona_service import persona_counted_key, persona_counts_key
 
 client = TestClient(app)
 

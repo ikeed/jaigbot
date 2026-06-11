@@ -33,7 +33,7 @@ def _orchestrator(**overrides):
             "max_age": 3600,
         },
         "memory_config": {"enabled": True, "max_turns": 8, "ttl_seconds": 3600},
-        "aims_config": {"enabled": True, "force_default": False},
+        "module_runtime_config": {"enabled": True, "force_default": False},
         "vertex_config": {
             "project_id": "project",
             "region": "us-west4",
@@ -101,7 +101,7 @@ def test_chat_orchestrator_requires_active_module():
             memory_store={},
             session_cookie_settings={"name": "sid", "secure": False, "samesite": "lax", "max_age": 3600},
             memory_config={"enabled": True, "max_turns": 8, "ttl_seconds": 3600},
-            aims_config={"enabled": True, "force_default": False},
+            module_runtime_config={"enabled": True, "force_default": False},
             vertex_config={
                 "project_id": "project",
                 "region": "us-west4",
@@ -196,7 +196,7 @@ async def test_handle_chat_preserves_optional_fields_from_module_response():
     }
     active_module.build_archive_payload.return_value = None
     orchestrator = _orchestrator(
-        aims_config={"enabled": False, "force_default": False},
+        module_runtime_config={"enabled": False, "force_default": False},
         active_module=active_module,
     )
     orchestrator.context_builder.build = MagicMock(return_value=_ctx())

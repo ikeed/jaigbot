@@ -5,7 +5,7 @@ import time
 from typing import Any
 
 from app.chat_roles import ROLE_ASSISTANT, ROLE_SYSTEM, is_scenario_card
-from app.services.persona_service import (
+from app.modules.aims.services.persona_service import (
     build_persona_session_fields,
     extract_persona_name_from_text,
     find_persona,

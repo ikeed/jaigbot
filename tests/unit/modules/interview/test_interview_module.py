@@ -153,7 +153,7 @@ async def test_interview_module_handle_turn_updates_memory_with_non_aims_roles()
         memory_store=memory_store,
         vertex_config={},
         memory_config={},
-        aims_config={},
+        module_runtime_config={},
         logger=MagicMock(),
     )
 

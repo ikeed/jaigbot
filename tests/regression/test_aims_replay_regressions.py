@@ -7,7 +7,8 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from app.constants import KEY_AIMS_STATE, KEY_COACH_POST, KEY_GAME_OVER, KEY_UPDATED, SESSION_HISTORY
-from app.models import ChatRequest, ClassifierResult, Coaching
+from app.models import ChatRequest
+from app.modules.aims.models import ClassifierResult, Coaching
 from app.modules.aims.services.aims_coaching_handler import AimsCoachingHandler
 from app.modules.aims.services.aims_endgame_service import AimsEndgameService
 from app.modules.aims.services.aims_turn_coordinator import AimsTurnResult

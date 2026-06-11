@@ -158,7 +158,7 @@ async def test_aims_module_handle_turn_routes_to_coaching_when_enabled(monkeypat
         memory_store={},
         vertex_config={"model_id": "m"},
         memory_config={"enabled": True, "max_turns": 8},
-        aims_config={"enabled": True, "force_default": False},
+        module_runtime_config={"enabled": True, "force_default": False},
         logger=MagicMock(),
     )
 
@@ -191,12 +191,45 @@ async def test_aims_module_handle_turn_routes_to_legacy_when_coaching_not_select
         memory_store={},
         vertex_config={"model_id": "m"},
         memory_config={"enabled": True, "max_turns": 8},
-        aims_config={"enabled": False, "force_default": False},
+        module_runtime_config={"enabled": False, "force_default": False},
         logger=MagicMock(),
     )
 
     assert result["reply"] == "legacy"
     assert result["_dispatch_path"] == "legacy"
+
+
+@pytest.mark.asyncio
+async def test_aims_module_handle_turn_prefers_module_options_feedback_flag(monkeypatch):
+    settings = SimpleNamespace(redis_key_prefix="aims:local:session:")
+    module = create_aims_training_module(settings=settings)
+
+    class FakeAimsHandler:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        @staticmethod
+        async def handle(req, body, ctx):
+            return {"reply": "patient", "model": "m", "latency_ms": 1}
+
+    monkeypatch.setattr(
+        "app.modules.aims.services.aims_coaching_handler.AimsCoachingHandler",
+        FakeAimsHandler,
+    )
+
+    result = await module.handle_turn(
+        req=object(),
+        body=SimpleNamespace(coach=False, moduleOptions={"feedbackEnabled": True}),
+        ctx=object(),
+        memory_store={},
+        vertex_config={"model_id": "m"},
+        memory_config={"enabled": True, "max_turns": 8},
+        module_runtime_config={"enabled": True, "force_default": False},
+        logger=MagicMock(),
+    )
+
+    assert result["reply"] == "patient"
+    assert result["_dispatch_path"] == "coaching"
 
 
 def test_aims_module_build_archive_payload_returns_endgame_archive_and_updates_memory():

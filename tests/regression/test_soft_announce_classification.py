@@ -15,7 +15,7 @@ Per the AIMS framework:
 - A trailing status question after a vaccine introduction stays as Announce.
 """
 
-from app.models import Coaching, ClassifierResult
+from app.modules.aims.models import Coaching, ClassifierResult
 from app.modules.aims.services.classifier_service import ClassifierService
 
 

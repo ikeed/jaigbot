@@ -34,7 +34,7 @@ FALLBACK_PERSONA = {
 
 
 def _personas_path() -> Path:
-    root = Path(__file__).resolve().parents[1]
+    root = Path(__file__).resolve().parents[3]
     return root / "prompts" / "personas.json"
 
 

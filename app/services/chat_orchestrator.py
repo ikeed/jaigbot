@@ -29,7 +29,7 @@ from app.vertex import VertexAIError
 
 
 class ChatOrchestrator:
-    """Main orchestrator for chat requests - delegates to coaching or legacy paths."""
+    """Main orchestrator for chat requests that delegates turn handling to the active module."""
     
     def __init__(
         self,
@@ -37,7 +37,7 @@ class ChatOrchestrator:
         memory_store: Any,
         session_cookie_settings: dict[str, Any],
         memory_config: dict[str, Any],
-        aims_config: dict[str, Any],
+        module_runtime_config: dict[str, Any],
         vertex_config: dict[str, Any],
         debug_config: dict[str, Any],
         logger: Any,
@@ -51,9 +51,7 @@ class ChatOrchestrator:
         self.memory_enabled = memory_config.get("enabled", True)
         self.memory_max_turns = memory_config.get("max_turns", 10)
         self.memory_ttl_seconds = memory_config.get("ttl_seconds", 3600)
-        
-        self.aims_coaching_enabled = aims_config.get("enabled", False)
-        self.force_coach_default = bool(aims_config.get("force_default", False))
+        self.module_runtime_config = dict(module_runtime_config)
         
         self.project_id = vertex_config.get("project_id")
         self.region = vertex_config.get("region", "us-central1")
@@ -169,10 +167,7 @@ class ChatOrchestrator:
                     "enabled": self.memory_enabled,
                     "max_turns": self.memory_max_turns,
                 },
-                aims_config={
-                    "enabled": self.aims_coaching_enabled,
-                    "force_default": self.force_coach_default,
-                },
+                module_runtime_config=dict(self.module_runtime_config),
                 logger=self.logger,
             )
             response_payload = dict(
