@@ -20,7 +20,7 @@ from typing import Any, Optional, cast
 from fastapi import HTTPException, Request, BackgroundTasks
 from fastapi.responses import JSONResponse
 
-from app.core.module_runtime import get_builtin_active_module
+from app.core.interfaces import TrainingModule
 from app.models import ChatRequest, ReportRequest
 from app.services.chat_context import ChatContextBuilder, ChatContext
 from app.services.session_service import SessionService, CookieSettings
@@ -41,7 +41,7 @@ class ChatOrchestrator:
         vertex_config: dict[str, Any],
         debug_config: dict[str, Any],
         logger: Any,
-        active_module: Any | None = None,
+        active_module: TrainingModule,
     ):
         self.background_tasks: Optional[BackgroundTasks] = None
         self.memory_store = memory_store
@@ -65,7 +65,7 @@ class ChatOrchestrator:
         self.client_cls = vertex_config.get("client_cls")
         self.expose_upstream_error = debug_config.get("expose_upstream_error", False)
         self.log_response_preview_max = debug_config.get("log_response_preview_max", 100)
-        self.active_module = active_module or get_builtin_active_module()
+        self.active_module = active_module
         dialogue_roles = self.active_module.dialogue_roles()
         self.counted_roles = dialogue_roles.counted_roles
         self.counterpart_roles = dialogue_roles.counterpart_roles or ("assistant",)

@@ -11,6 +11,18 @@ from app.services.chat_orchestrator import ChatOrchestrator
 from app.vertex import VertexAIError
 
 
+def _active_module():
+    active_module = MagicMock()
+    active_module.module_id = "aims"
+    active_module.display_name = "AIMS"
+    active_module.dialogue_roles.return_value = SimpleNamespace(
+        counted_roles=("user", "assistant"),
+        counterpart_roles=("assistant",),
+        display_names={"user": "Doctor", "assistant": "Assistant"},
+    )
+    return active_module
+
+
 def _orchestrator(**overrides):
     config = {
         "memory_store": {},
@@ -34,6 +46,7 @@ def _orchestrator(**overrides):
         },
         "debug_config": {"expose_upstream_error": True, "log_response_preview_max": 256},
         "logger": MagicMock(),
+        "active_module": _active_module(),
     }
     config.update(overrides)
     return ChatOrchestrator(**config)
@@ -80,6 +93,28 @@ def test_validate_request_rejects_invalid_encoding_and_oversized_message():
         orchestrator._validate_request(ChatRequest(message="x" * 2049))
     assert oversized.value.status_code == 400
     assert oversized.value.detail["error"]["message"] == "Message too large (max 2 KiB)"
+
+
+def test_chat_orchestrator_requires_active_module():
+    with pytest.raises(TypeError):
+        ChatOrchestrator(
+            memory_store={},
+            session_cookie_settings={"name": "sid", "secure": False, "samesite": "lax", "max_age": 3600},
+            memory_config={"enabled": True, "max_turns": 8, "ttl_seconds": 3600},
+            aims_config={"enabled": True, "force_default": False},
+            vertex_config={
+                "project_id": "project",
+                "region": "us-west4",
+                "vertex_location": "us-west4",
+                "model_id": "gemini-test",
+                "model_fallbacks": [],
+                "temperature": 0.0,
+                "max_tokens": 128,
+                "client_cls": object,
+            },
+            debug_config={"expose_upstream_error": True, "log_response_preview_max": 256},
+            logger=MagicMock(),
+        )
 
 
 @pytest.mark.asyncio

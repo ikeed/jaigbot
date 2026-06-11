@@ -17,7 +17,7 @@ from app.chat_roles import (
 )
 from app.config import settings
 from app.core.legacy_module_resolution import resolve_thread_metadata_module_id
-from app.core.module_runtime import get_builtin_active_module
+from app.core.interfaces import TrainingModule
 from app.constants import (
     LEGACY_QUERY_NEW_CHAT,
     MSG_INTRO_REQUIRED,
@@ -41,12 +41,12 @@ class ChainlitOrchestrator:
         backend_client: BackendClient,
         ui_handler: UIHandler,
         session_manager: SessionManager,
-        active_module: Any | None = None,
+        active_module: TrainingModule,
     ):
         self.backend = backend_client
         self.ui = ui_handler
         self.session = session_manager
-        self.active_module = active_module or get_builtin_active_module()
+        self.active_module = active_module
         self.dialogue_roles = self.active_module.dialogue_roles()
         self.role_labels = dict(getattr(self.dialogue_roles, "display_names", {}) or {})
         self.user_role = next(iter(getattr(self.dialogue_roles, "user_roles", ()) or (ROLE_USER,)), ROLE_USER)

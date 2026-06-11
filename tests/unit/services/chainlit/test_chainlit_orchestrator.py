@@ -48,6 +48,15 @@ def orchestrator(mock_services):
     )
 
 
+def test_chainlit_orchestrator_requires_active_module(mock_services):
+    with pytest.raises(TypeError):
+        ChainlitOrchestrator(
+            backend_client=mock_services["backend"],
+            ui_handler=mock_services["ui"],
+            session_manager=mock_services["session"],
+        )
+
+
 @pytest.fixture(autouse=True)
 def isolated_orchestrator_state(monkeypatch):
     monkeypatch.setattr("app.main.MEMORY_STORE", {})

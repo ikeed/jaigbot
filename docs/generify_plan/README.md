@@ -402,6 +402,27 @@ Still deferred:
   - direct-construction/runtime fallback cleanup
   - limited legacy-module inference semantics
   - AIMS-era asset naming and broader documentation finish work
+
+### Phase 15
+
+Implemented.
+
+What landed:
+
+- `ChatOrchestrator` now requires an explicit `active_module`
+- `ChainlitOrchestrator` now requires an explicit `active_module`
+- the app-level chat-orchestrator factory now rejects missing active-module
+  injection instead of silently resolving the built-in module itself
+- `legacy_module_resolution.py` now documents its intentionally narrow scope:
+  legacy inference is bounded and AIMS-specific
+- `LegacyChatHandler` remains as an AIMS-owned compatibility path, now labeled
+  as such directly in its module and class docs
+
+Still deferred:
+
+- some UI/shell contexts still use low-risk app-state fallbacks for active
+  module resolution
+- the remaining cleanup work is now mostly branding/assets/docs finish work
 ## Cross-Phase Rules
 
 These rules apply across all remaining phases.

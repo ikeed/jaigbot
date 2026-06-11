@@ -71,9 +71,6 @@ None currently.
 
 ## Phase 11
 
-- Direct construction still falls back to the cached built-in runtime when an
-  explicit `active_module` is not supplied. That is a bounded fallback now, not
-  a registry rebuild path, but it is still transitional.
 - Legacy-module inference is now explicit, but it only recognizes historical
   AIMS data families. That is the right move for this repo today, but it is not
   a general cross-module migration system.
@@ -108,3 +105,10 @@ None currently.
   - `/public/aimsbot.png`
   - several avatar file names
   - some internal JS/CSS naming
+
+## Phase 15
+
+- The UI layer still uses a few low-risk app-state fallbacks for active-module
+  lookup in shell contexts. That is much narrower than the old orchestrator
+  self-resolution seam, but it is still a convenience pattern rather than pure
+  dependency injection.

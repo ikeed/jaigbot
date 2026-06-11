@@ -1,6 +1,8 @@
 from fastapi.testclient import TestClient
 
-from app.main import app
+import pytest
+
+from app.main import app, _chat_orchestrator
 
 client = TestClient(app)
 
@@ -46,3 +48,8 @@ def test_config_basic_shape():
     assert isinstance(cfg["modelFallbacks"], list)
     assert isinstance(cfg["activeModule"], dict)
     assert cfg["activeModule"]["id"] == "aims"
+
+
+def test_chat_orchestrator_factory_requires_explicit_active_module():
+    with pytest.raises(RuntimeError, match="explicit active_module"):
+        _chat_orchestrator(memory_store={})

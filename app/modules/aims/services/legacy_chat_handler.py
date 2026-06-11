@@ -1,5 +1,5 @@
 """
-Legacy chat handler for non-coaching requests.
+Compatibility chat handler for the non-coaching AIMS path.
 
 This service handles the traditional chat flow:
 1. Direct LLM generation with existing system prompt
@@ -24,7 +24,7 @@ from app.vertex import VertexClient
 
 
 class LegacyChatHandler:
-    """Handles the traditional non-coaching chat flow."""
+    """Handles the compatibility non-coaching AIMS chat flow."""
     
     def __init__(
         self,

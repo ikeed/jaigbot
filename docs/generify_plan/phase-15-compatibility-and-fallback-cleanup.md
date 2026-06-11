@@ -2,7 +2,7 @@
 
 ## Status
 
-Planned.
+Implemented.
 
 ## Objective
 
@@ -73,3 +73,23 @@ service family.
 - focused unit tests around construction and module resolution
 - full non-integration suite
 
+## What Landed
+
+- `ChatOrchestrator` now requires an explicit `active_module` instead of
+  silently resolving the built-in active module internally
+- `ChainlitOrchestrator` now requires an explicit `active_module` as well
+- the app-level chat-orchestrator factory now raises if it is called without an
+  explicit active module, keeping the dependency boundary honest
+- `legacy_module_resolution.py` now documents its deliberate scope clearly:
+  legacy inference is intentionally narrow and AIMS-specific, and unknown
+  legacy shapes must return `None`
+- `LegacyChatHandler` was kept as an AIMS-owned compatibility path and its
+  module/class documentation now says so directly
+
+## Residual Issues
+
+- `LegacyChatHandler` is still a compatibility-oriented AIMS path rather than a
+  renamed fallback family with more explicit product semantics
+- the UI layer still uses a few app-state fallbacks for resolving the active
+  module in low-risk shell contexts; those are not the same risk as the old
+  orchestrator self-resolution path, but they remain convenience seams

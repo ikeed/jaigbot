@@ -161,6 +161,9 @@ def _debug_config() -> dict:
 def _chat_orchestrator(memory_store=None, active_module=None):
     from .services.chat_orchestrator import ChatOrchestrator
 
+    if active_module is None:
+        raise RuntimeError("_chat_orchestrator requires an explicit active_module")
+
     return ChatOrchestrator(
         memory_store=memory_store or MEMORY_STORE,
         session_cookie_settings=_session_cookie_settings(),
@@ -169,7 +172,7 @@ def _chat_orchestrator(memory_store=None, active_module=None):
         vertex_config=_vertex_config(),
         debug_config=_debug_config(),
         logger=logger,
-        active_module=active_module or get_builtin_active_module(),
+        active_module=active_module,
     )
 
 

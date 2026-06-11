@@ -14,7 +14,12 @@ def normalize_module_id(value: Any) -> str | None:
 
 
 def resolve_archive_module_id(data: Mapping[str, Any]) -> str | None:
-    """Resolve a persisted archive/session payload to a module id."""
+    """Resolve a persisted archive/session payload to a module id.
+
+    Legacy inference is intentionally narrow and AIMS-specific. Unknown legacy
+    payload families must return ``None`` so callers can make an explicit
+    fallback choice instead of silently guessing a module family.
+    """
     explicit_id = (
         normalize_module_id(data.get("module_id"))
         or normalize_module_id((data.get("metadata") or {}).get("moduleId") if isinstance(data.get("metadata"), Mapping) else None)
@@ -30,7 +35,11 @@ def resolve_archive_module_id(data: Mapping[str, Any]) -> str | None:
 
 
 def resolve_thread_metadata_module_id(metadata: Mapping[str, Any]) -> str | None:
-    """Resolve persisted Chainlit thread metadata to a module id."""
+    """Resolve persisted Chainlit thread metadata to a module id.
+
+    Legacy inference is intentionally narrow and AIMS-specific. Unknown legacy
+    thread families must return ``None`` so resume behavior stays explicit.
+    """
     explicit_id = (
         normalize_module_id(metadata.get("module_id"))
         or normalize_module_id((metadata.get("module") or {}).get("id") if isinstance(metadata.get("module"), Mapping) else None)
