@@ -114,3 +114,18 @@ None currently.
 - Shared avatar and logo asset ownership is still shell-level, and several
   asset filenames remain AIMS-named even though the browser role-label logic is
   now generic.
+
+## Phase 13
+
+- Several AIMS-owned runtime services still physically live under
+  `app/services/` by design:
+  - `aims_coaching_handler.py`
+  - `aims_state_service.py`
+  - `aims_turn_coordinator.py`
+  - `aims_turn_telemetry.py`
+  - `aims_endgame_service.py`
+  That is no longer a shim problem, but it is still an ownership cleanup
+  decision for any future “all AIMS code under app/modules/aims” effort.
+- Historical planning and cleanup docs still mention some pre-move file paths
+  intentionally as transition context. Those references are now marked
+  historical, but the repo still carries that historical narrative in docs.

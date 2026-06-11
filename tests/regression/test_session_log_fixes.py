@@ -14,7 +14,7 @@ import asyncio
 import logging
 
 from app.models import Coaching, ClassifierResult
-from app.services.classifier_service import ClassifierService
+from app.modules.aims.services.classifier_service import ClassifierService
 from app.services.aims_coaching_handler import AimsCoachingHandler
 from app.services.conversation_service import maybe_add_person_concern
 

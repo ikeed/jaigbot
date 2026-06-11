@@ -36,14 +36,18 @@ Runtime shapes:
   `app/services/legacy_chat_handler.py`.
 - AIMS coaching internals: start with `docs/aims/README.md` for the service
   map, then open only the owned service you are changing:
-  `classifier_service.py`, `aims_turn_coordinator.py`,
-  `patient_reply_service.py`, `aims_state_service.py`,
-  `aims_metrics_service.py`, `coach_feedback_history_service.py`,
+  `app/modules/aims/services/classifier_service.py`,
+  `app/services/aims_turn_coordinator.py`,
+  `app/modules/aims/services/patient_reply_service.py`,
+  `app/services/aims_state_service.py`,
+  `app/modules/aims/services/aims_metrics_service.py`,
+  `app/services/coach_feedback_history_service.py`,
   `aims_endgame_service.py`, or `aims_turn_telemetry.py`.
 - Chainlit startup, replay, or avatar UI: `chainlit_app.py`,
   `app/services/chainlit/orchestrator.py`,
   `app/services/chainlit/ui_handler.py`, and `public/`.
-- Session, history, or duplicate-tab behavior: `app/services/session_initializer.py`,
+- Session, history, or duplicate-tab behavior:
+  `app/modules/aims/services/session_initializer.py`,
   `app/services/session_service.py`, `app/memory_store.py`, and
   `app/routes/session.py`.
 - Model and fallback behavior: `app/vertex.py`,

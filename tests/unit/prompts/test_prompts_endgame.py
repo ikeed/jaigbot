@@ -1,6 +1,6 @@
 from unittest.mock import patch
 
-from app.prompts.aims import (
+from app.modules.aims.prompts.aims import (
     build_endgame_detector_prompt,
     build_patient_reply_prompt,
     build_summary_analysis_prompt,

@@ -293,7 +293,7 @@ def setup_env(monkeypatch):
     monkeypatch.setattr(settings, "PROJECT_ID", "p", raising=False)
     monkeypatch.setattr(settings, "REGION", "us-central1", raising=False)
     monkeypatch.setattr(m, "VERTEX_LOCATION", "us-central1", raising=False)
-    with patch("app.aims_engine.load_mapping", return_value=MOCK_MAPPING):
+    with patch("app.modules.aims.engine.load_mapping", return_value=MOCK_MAPPING):
         yield
 
 

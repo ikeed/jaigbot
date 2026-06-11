@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.classifier_service import ClassifierService
+from app.modules.aims.services.classifier_service import ClassifierService
 from app.models import ClassifierResult
 
 @pytest.fixture

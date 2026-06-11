@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.aims_engine import (
+from app.modules.aims.engine import (
     load_mapping, classify_step, score_step, evaluate_turn,
     stem_match, starts_with_any, introduces_new_info
 )

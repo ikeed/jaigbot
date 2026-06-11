@@ -1,6 +1,6 @@
 import pytest
 
-from app.aims_engine import classify_step, evaluate_turn, load_mapping
+from app.modules.aims.engine import classify_step, evaluate_turn, load_mapping
 from app.services.aims_state_service import AimsStateService
 
 

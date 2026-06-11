@@ -1,5 +1,10 @@
 # Unused App Methods Cleanup
 
+Note: the path names in the removal table reflect the ownership layout at the
+time that cleanup landed. AIMS-owned code has since moved under
+`app/modules/aims/`, so some historical entries now refer to paths that no
+longer exist as runtime modules.
+
 This cleanup removed Python functions and class methods under `app/` that had
 no known production references from `app/`, `run_app.py`, or `chainlit_app.py`.
 Direct tests for those orphaned APIs were removed as part of the same change.

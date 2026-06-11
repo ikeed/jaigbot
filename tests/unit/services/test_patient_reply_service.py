@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from app.services.patient_reply_service import PatientReplyService
+from app.modules.aims.services.patient_reply_service import PatientReplyService
 
 
 class DummyLogger:

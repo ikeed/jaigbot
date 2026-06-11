@@ -1,5 +1,11 @@
 # Master Plan: Generic Conversation-Training Platform
 
+Note: this document began as the pre-implementation master plan. The
+authoritative current status now lives in `docs/generify_plan/README.md`.
+References in early assessment sections to paths such as `app/aims_engine.py`
+or `app/services/classifier_service.py` are historical context for the
+transition, not the current ownership model.
+
 ## Purpose
 
 Refactor the application so the core platform is generic conversation-training infrastructure and AIMS becomes one module implemented on top of it.

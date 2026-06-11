@@ -1,5 +1,5 @@
 from app.constants import KEY_AIMS_METRICS
-from app.services.aims_metrics_service import AimsMetricsService
+from app.modules.aims.services.aims_metrics_service import AimsMetricsService
 
 
 class DummyLogger:

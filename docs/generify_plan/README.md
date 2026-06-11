@@ -348,15 +348,35 @@ Still deferred:
 
 ### Phase 13
 
-Planned.
+Implemented.
 
-Focus:
+What landed:
 
-- retire old import-path compatibility shims in controlled batches
-- do a broader documentation pass once the core shell behavior is no longer
-  AIMS-first in the browser
-- update contributor guidance again, including `AGENTS.md`, to reflect the
-  post-shim ownership model
+- retired the remaining import-path shims for:
+  - `app/aims_engine.py`
+  - `app/prompts/aims.py`
+  - the thin AIMS service re-export modules under `app/services/`
+- updated remaining app imports to use owned module paths directly
+- updated unit/regression/integration imports and patch targets to the owned
+  module paths
+- refreshed contributor-facing docs including:
+  - `AGENTS.md`
+  - `public/js/aimsbot/README.md`
+  - historical plan/cleanup docs with notes clarifying which path references
+    are historical
+
+Still deferred:
+
+- several remaining AIMS-owned runtime services still physically live under
+  `app/services/` by design:
+  - `aims_coaching_handler.py`
+  - `aims_state_service.py`
+  - `aims_turn_coordinator.py`
+  - `aims_turn_telemetry.py`
+  - `aims_endgame_service.py`
+  That is no longer a shim problem; it is a future physical-relocation choice.
+- a few historical planning docs still mention pre-move paths intentionally as
+  transition context
 ## Cross-Phase Rules
 
 These rules apply across all remaining phases.

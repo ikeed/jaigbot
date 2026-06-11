@@ -17,7 +17,7 @@ from app.constants import (
     STEP_SECURE,
     STEP_SECURE_INQUIRE,
 )
-from app.services.aims_metrics_service import AimsMetricsService
+from app.modules.aims.services.aims_metrics_service import AimsMetricsService
 from app.services.conversation_service import (
     mark_mirrored_multi,
     mark_secured_by_topic,

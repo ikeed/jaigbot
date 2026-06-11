@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from app.services.session_initializer import (
+from app.modules.aims.services.session_initializer import (
     deregister_session_connection,
     initialize_session,
     scenario_card_from_character,

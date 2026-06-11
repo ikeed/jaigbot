@@ -1,4 +1,4 @@
-from app.aims_engine import evaluate_turn
+from app.modules.aims.engine import evaluate_turn
 
 
 def test_do_you_have_any_questions_scores_as_weak_inquire():

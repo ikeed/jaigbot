@@ -16,7 +16,7 @@ Per the AIMS framework:
 """
 
 from app.models import Coaching, ClassifierResult
-from app.services.classifier_service import ClassifierService
+from app.modules.aims.services.classifier_service import ClassifierService
 
 
 # ---------------------------------------------------------------------------
@@ -90,7 +90,7 @@ class TestDeterministicSoftAnnounce:
     def test_soft_announce_with_status_q_not_inquire(self):
         """Even the deterministic engine must not classify the soft announce message
         as a pure Inquire — at minimum it must be Announce or a mixed step."""
-        from app.aims_engine import evaluate_turn
+        from app.modules.aims.engine import evaluate_turn
         mapping = self._mapping()
         result = evaluate_turn(SOFT_ANNOUNCE_WITH_STATUS_Q, mapping)
         # The deterministic engine may return Announce or Inquire depending on
@@ -104,7 +104,7 @@ class TestDeterministicSoftAnnounce:
     def test_announce_tip_contains_presumptive_example(self):
         """When Announce is scored low (no presumptive phrasing), the tip must
         include a concrete example of presumptive framing."""
-        from app.aims_engine import evaluate_turn
+        from app.modules.aims.engine import evaluate_turn
         mapping = self._mapping()
         # A soft intro with no presumptive phrasing
         msg = "One thing I want to mention today is vaccines — can I ask about Emily's status?"

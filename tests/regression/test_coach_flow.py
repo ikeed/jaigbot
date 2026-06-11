@@ -284,7 +284,7 @@ def test_coach_path_model_not_found_maps_to_404(monkeypatch):
     
     # Use pytest's mock.patch to ensure proper cleanup and isolation
     from unittest.mock import patch
-    with patch("app.aims_engine.evaluate_turn", side_effect=fake_evaluate_turn):
+    with patch("app.modules.aims.engine.evaluate_turn", side_effect=fake_evaluate_turn):
         r = client.post("/chat", json={"message": "hi", "coach": True, "sessionId": "s404"})
         assert r.status_code == 404
         data = r.json()

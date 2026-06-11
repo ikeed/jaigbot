@@ -1,5 +1,9 @@
 # Phase 13: Shim Retirement And Documentation Cleanup
 
+## Status
+
+Implemented.
+
 ## Objective
 
 Retire the remaining import-path compatibility shims in deliberate batches and
@@ -105,8 +109,25 @@ Mitigation:
 - full non-integration suite
 - grep checks confirming shim references are gone where intended
 
-## Done Means
+## What Landed
 
-- the main compatibility shims are gone or reduced to narrowly justified cases
-- app/test imports point at their real ownership paths
-- `AGENTS.md` and platform docs reflect the post-transition module layout
+- removed the remaining runtime shim files:
+  - `app/aims_engine.py`
+  - `app/prompts/aims.py`
+  - the AIMS service re-export stubs under `app/services/`
+- rewired remaining app imports to their owned module paths
+- rewired unit, regression, and integration imports plus patch targets to the
+  owned module paths
+- updated contributor-facing docs:
+  - `AGENTS.md`
+  - `public/js/aimsbot/README.md`
+  - historical plan/cleanup docs now explicitly mark old path references as
+    historical context
+
+## Residual Issues
+
+- several AIMS-owned runtime services still physically live under
+  `app/services/` by design, which is now an ownership/relocation choice
+  rather than a shim-compatibility issue
+- some planning docs still intentionally mention pre-move paths as transition
+  history; that is now documented instead of silently stale

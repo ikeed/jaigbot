@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 
 from app.config import settings
-from app.services.classifier_service import ClassifierService
+from app.modules.aims.services.classifier_service import ClassifierService
 from base import LiveClassifyClient
 
 

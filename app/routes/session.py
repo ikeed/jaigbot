@@ -6,8 +6,8 @@ from typing import Any, Callable, Optional
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from app.services.session_initializer import deregister_session_connection
 from app.constants import ENDPOINT_SESSION, ENDPOINT_DEREGISTER
+from app.modules.aims.services.session_initializer import deregister_session_connection
 
 
 class SessionInitRequest(BaseModel):

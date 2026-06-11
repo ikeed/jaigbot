@@ -21,7 +21,6 @@ from typing import Any, Dict, Optional
 
 from fastapi import Request
 
-from app.aims_engine import load_mapping
 from app.chat_roles import ROLE_USER, ROLE_ASSISTANT
 from app.config import settings
 from app.constants import (
@@ -37,9 +36,15 @@ from app.constants import (
     DEFAULT_MODEL_FLASH
 )
 from app.models import ChatRequest
+from app.modules.aims.engine import load_mapping
+from app.modules.aims.services.aims_feedback_service import AimsFeedbackService
+from app.modules.aims.services.aims_handler_config import AimsMemoryConfig, AimsVertexConfig
+from app.modules.aims.services.aims_metrics_service import AimsMetricsService
+from app.modules.aims.services.classifier_service import ClassifierService
+from app.modules.aims.services.patient_reply_service import PatientReplyService
+from app.modules.aims.services.summary_service import build_summary_analysis_bullets
 from app.services.chat_context import ChatContext
 from app.services.chat_helpers import strip_appointment_headers
-from app.services.classifier_service import ClassifierService
 from app.services.clinician_identity import clinician_display_name_from_user_info
 from app.services.aims_dependencies import (
     AimsEndgameDependency,
@@ -53,19 +58,14 @@ from app.services.aims_dependencies import (
     PatientReplyDependency,
 )
 from app.services.aims_endgame_service import AimsEndgameService
-from app.services.aims_feedback_service import AimsFeedbackService
-from app.services.aims_handler_config import AimsMemoryConfig, AimsVertexConfig
-from app.services.aims_metrics_service import AimsMetricsService
 from app.services.aims_state_service import AimsStateService
 from app.services.aims_turn_telemetry import AimsTurnTelemetry
 from app.services.aims_turn_coordinator import AimsTurnCoordinator
-from app.services.summary_service import build_summary_analysis_bullets
 from app.services.coach_feedback_history_service import CoachFeedbackHistoryService
 from app.services.coach_post import (
     VaccineRelevanceGate,
     AimsPostProcessor,
 )
-from app.services.patient_reply_service import PatientReplyService
 from app.services.vertex_helpers import (
     avertex_call_with_fallback_json,
     get_last_model_used

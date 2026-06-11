@@ -14,7 +14,7 @@ import pytest
 
 from app.models import Coaching, ClassifierResult
 from app.services.aims_coaching_handler import AimsCoachingHandler
-from app.services.classifier_service import ClassifierService
+from app.modules.aims.services.classifier_service import ClassifierService
 from app.services.coach_post import EndGameDetector
 
 

@@ -4,8 +4,8 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any
 
-from app.aims_engine import evaluate_turn
 from app.models import ClassifierResult
+from app.modules.aims.engine import evaluate_turn
 
 
 @dataclass

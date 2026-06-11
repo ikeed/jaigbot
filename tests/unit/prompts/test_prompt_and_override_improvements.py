@@ -1,4 +1,4 @@
-from app.prompts.aims import (
+from app.modules.aims.prompts.aims import (
     build_classify_turn_prompt,
     build_fallback_feedback_prompt,
     build_summary_analysis_prompt,
