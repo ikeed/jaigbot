@@ -161,6 +161,7 @@ The backend supports session-keyed memory with optional persona/scene, using in-
 - Developer setup (step‑by‑step): docs/developer-setup.md
 - AIMS implementation map: app/modules/aims/docs/README.md
 - API reference: docs/api.md (and Swagger UI at GET /docs when running)
+- Module implementation guide: docs/module-development.md
 - Terraform IaC: terraform/README.md
 - Chainlit UI details: docs/chainlit-ui.md
 - Health checks and URLs: docs/health-checks.md

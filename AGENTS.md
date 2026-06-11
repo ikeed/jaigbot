@@ -28,8 +28,8 @@ Runtime shapes:
 ## Read First By Task
 
 - Generic module/runtime work: `app/core/`, `app/modules/`, `app/main.py`,
-  `docs/generify_plan/`, then the specific module implementation you are
-  touching.
+  `docs/generify_plan/`, `docs/module-development.md`, then the specific
+  module implementation you are touching.
 
 - Chat API behavior: `app/services/chat_orchestrator.py`, then
   `app/modules/aims/services/aims_coaching_handler.py` or
@@ -138,6 +138,7 @@ unified app and verify the affected `/chat` flow with the in-app browser.
 ## Supporting Docs
 
 - `docs/api.md`: backend API surface.
+- `docs/module-development.md`: how to implement and test a new module.
 - `docs/memory-and-persona.md`: generic memory/session and Redis behavior.
 - `app/modules/aims/docs/persona-and-scenarios.md`: AIMS persona rotation and
   scenario source material.

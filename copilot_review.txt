@@ -1,0 +1,113 @@
+I'll load the PR review ability and then perform a comprehensive review of this pull request.Now I'll fetch the PR data to understand its scope and content.## PR Summary
+
+**Title:** Update module ownership and refactor legacy components
+
+**State:** Open | **Files Changed:** 184 | **Commits:** 27 | **Additions:** +5,659 | **Deletions:** −1,338
+
+**Purpose:** This PR implements a modularization architecture for the training platform, moving AIMS from a monolithic app into a module-based design with generic core infrastructure and proof-of-concept support for a second module (interview practice).
+
+---
+
+## Core Changes
+
+### 1. **Module-Based Architecture** 
+The PR introduces a clean module contract and registry system:
+
+- **New `app/core/` package** defines module interfaces and lifecycle:
+  - `TrainingModule` protocol with methods like `handle_turn()`, `build_summary()`, `build_archive_envelope()`
+  - `ModuleRegistry` to register and resolve modules at startup
+  - Generic response/session envelope types for cross-module compatibility
+  
+- **AIMS moved to `app/modules/aims/`** with full service relocation:
+  - All AIMS services now live under `app/modules/aims/services/`
+  - AIMS docs, prompts, and models move to module namespace
+  - Module exposes a manifest with dialogue roles, features, and branding
+  
+- **Interview Practice module** added as proof-of-concept at `app/modules/interview/`
+
+### 2. **Dependency Injection & Runtime Resolution**
+- `app/config.py` adds `ACTIVE_MODULE` setting (defaults to `"aims"`)
+- `app/main.py` bootstraps the module registry and active module on startup
+- Routes now receive `get_active_module()` dependency for module dispatch
+
+### 3. **Unified Chat Orchestration**
+- `ChatOrchestrator` now delegates to the active module's `handle_turn()` method
+- Removed hardcoded coaching vs. legacy branching
+- Module response formatting is module-owned via `format_module_response()`
+
+### 4. **Session & Thread Management**
+- `ChatContextBuilder` now accepts module dialogue roles (counted roles, counterpart roles, display names)
+- `chainlit_thread_state.py` tracks `module_id` per thread to prevent resume across modules
+- Startup artifact support for flexible UI rendering (e.g., interview briefing cards)
+
+### 5. **Archive & Storage Refactoring**
+- Generic `ModuleArchiveEnvelope` replaces AIMS-specific schema
+- Each module implements `build_archive_envelope()` to shape its own archive
+- `StorageService` delegates archive serialization to the active module
+
+### 6. **Branding & UI Customization**
+- `BrandingSpec` in module manifest controls app title, loading text, avatars
+- Templates accept dynamic `shell_title` and `module_title` from active module
+- Avatar SVGs retitled from "AIMSBot" to "Training platform"
+
+---
+
+## Other Changes
+
+### Cleanup & Refactors
+- **Removed legacy files:**
+  - `docs/standing-orders.md` (standing workflow guidance moved elsewhere)
+  - `docs/unused_app_methods_cleanup.md` (cleanup documentation)
+  - `public/aimsbot-ui.js` (custom JS entry point — migrated into modular bundles)
+
+- **Renamed core files to reflect shared ownership:**
+  - `app/models.py` split: kept `ChatRequest`/`ReportRequest` in core, moved AIMS-specific models to `app/modules/aims/models.py`
+  - `app/prompts/loader.py` exposed `load_text()` (was private `_load_text()`)
+
+- **Updated documentation:**
+  - `AGENTS.md`, `README.md`: Updated paths and references to new module structure
+  - `docs/api.md`: Marked coaching activation as AIMS-specific; pointed to `app/modules/aims/docs/api.md`
+  - `docs/chainlit-ui.md`, `docs/memory-and-persona.md`: Generalized language around "training platform"
+
+### Configuration & Constants
+- `app/config.py`: Added `ACTIVE_MODULE` validation and module-specific Redis key prefix generation
+- `app/constants.py`: Renamed UI message types for platform neutrality (`MSG_PERSONA_NAME` → `MSG_PARTICIPANT_NAME`)
+- Added `QUERY_NEW_CHAT` and `LEGACY_QUERY_NEW_CHAT` for backward compatibility
+
+### Request Validation
+- `ChatRequest` now rejects legacy `coach: true` flag with clear error message
+- Prefers `moduleOptions.feedbackEnabled` for module-agnostic feedback requests
+- Extra fields allowed via `ConfigDict(extra="allow")`
+
+---
+
+## Merge Readiness & Risk Assessment
+
+**Status:** ✅ **Mergeable** — no conflicts  
+**Risk Level:** 🟡 **Medium**
+
+**Strengths:**
+- Large refactor is well-scoped to new `app/core/` and `app/modules/` directories
+- Backward-compatible at API level (old `coach` flag is explicitly rejected with clear guidance)
+- Archive serialization delegates to modules, preserving extensibility
+- Comprehensive module manifest unifies metadata and feature discovery
+- Session-level module tracking prevents cross-module thread confusion
+
+**Potential Issues to Verify:**
+1. **Full test coverage** for the module registry and startup logic
+2. **Interview module is a stub** — confirm it's intentional as proof-of-concept
+3. **Prompt imports** in AIMS services now use new module paths (`app/modules/aims/prompts/...`)
+4. **Session initialization** now requires `module_id` parameter; verify all entry points provide it
+5. **Archive schema version** strings ("aims-v1", "interview-v1") should be validated in tests
+6. **Chainlit compatibility** — verify module manifests with async callback signatures match pinned Chainlit version
+
+---
+
+## Possible Improvements
+
+1. **Add integration tests** for module registry and round-trip serialization (session bootstrap → turn handling → archive)
+2. **Document module contract** with a formal interface spec in `docs/` (e.g., `docs/module-development.md`)
+3. **Validation** for module manifest invariants (non-empty dialogue roles, unique module IDs) is present but could be tested more exhaustively
+4. **Error handling** for module lookup failures could surface more context in 500 responses
+5. **CLI or admin endpoint** to list/query available modules at runtime
+
