@@ -34,7 +34,7 @@ Runtime shapes:
 - Chat API behavior: `app/services/chat_orchestrator.py`, then
   `app/modules/aims/services/aims_coaching_handler.py` or
   `app/modules/aims/services/legacy_chat_handler.py`.
-- AIMS coaching internals: start with `docs/aims/README.md` for the service
+- AIMS coaching internals: start with `app/modules/aims/docs/README.md` for the service
   map, then open only the owned service you are changing:
   `app/modules/aims/services/classifier_service.py`,
   `app/modules/aims/services/aims_turn_coordinator.py`,
@@ -58,9 +58,10 @@ Runtime shapes:
   `docs/developer-setup.md`, and `docs/environments.md`.
 
 Before changing AIMS classification, scoring, phase progression, or endgame
-behavior, read `docs/aims/classification-scoring-rules.md` and the service map
-in `docs/aims/README.md`. Use `docs/aims/AIMS_Approach_Summary.md` for theory
-and `docs/aims/aims_mapping.json` for deterministic fallback data.
+behavior, read `app/modules/aims/docs/classification-scoring-rules.md` and the
+service map in `app/modules/aims/docs/README.md`. Use
+`app/modules/aims/docs/AIMS_Approach_Summary.md` for theory and
+`app/modules/aims/docs/aims_mapping.json` for deterministic fallback data.
 
 ## Token-Efficient Workflow
 
@@ -80,6 +81,21 @@ and `docs/aims/aims_mapping.json` for deterministic fallback data.
 
 Do not inspect all docs, all tests, or all integration transcripts by default.
 Open them only when they are relevant to the requested behavior.
+
+## Execution Defaults
+
+- Prefer the most capable specialized tool available over generic shell work
+  when it reduces manual effort or ambiguity.
+- Keep the implemented change set minimal and targeted to the issue at hand.
+- Match plan depth to task risk:
+  - for narrow, low-risk fixes, a short plan is enough
+  - for broad changes, refactors, migrations, or anything with meaningful
+    coupling, produce a detailed step-by-step plan that surfaces assumptions,
+    risks, sequencing, and verification
+- For runtime or API changes, run pytest; for pure docs changes, verification is
+  optional but still preferred when references or executable imports move.
+- Maintain tested API contracts and response shapes unless the task explicitly
+  calls for changing them.
 
 ## Engineering Constraints
 
@@ -121,8 +137,9 @@ unified app and verify the affected `/chat` flow with the in-app browser.
 
 ## Supporting Docs
 
-- `docs/standing-orders.md`: general workflow expectations.
 - `docs/api.md`: backend API surface.
-- `docs/memory-and-persona.md`: memory, persona, and Redis behavior.
+- `docs/memory-and-persona.md`: generic memory/session and Redis behavior.
+- `app/modules/aims/docs/persona-and-scenarios.md`: AIMS persona rotation and
+  scenario source material.
 - `docs/chainlit-ui.md`: UI details.
 - `docs/health-checks.md`: deployment URL and health probe behavior.

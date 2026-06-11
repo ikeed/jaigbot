@@ -1,6 +1,8 @@
-# Conversation memory and persona
+# Conversation memory and session context
 
-The backend supports lightweight, server‑side memory keyed by a `sessionId`, plus optional persona (character) and scene context. Memory can be in‑process or backed by Redis/Google Memorystore.
+The backend supports lightweight, server-side memory keyed by a `sessionId`,
+plus optional module-owned participant context. Memory can be in-process or
+backed by Redis/Google Memorystore.
 
 Runtime data is scoped by `APP_ENV` (`local`, `staging`, or `prod`). See `docs/environments.md` for the Redis and GCS namespace layout.
 
@@ -69,14 +71,10 @@ Behavior and diagnostics:
 - Redis keys are JSON blobs under the environment prefix; TTL is applied on write.
 - GET `/config` and `/diagnostics` show `memoryBackend`/`backend` and `storeSize`.
 
-## Persona (character) and scene
-You can set a character sketch (persona) and optional scene objectives to steer the assistant.
-
-For Chainlit sessions, new personas are selected by user history. The app keeps
-per-user persona interaction counts in Redis using non-expiring keys, backfills
-the cache from GCS archives when needed, and chooses among personas with weight
-`1 / (previous_interactions + 1)`. This makes personas a user has seen less
-often more likely without making any persona impossible to select.
+## Participant context
+Modules may set participant context to steer the conversation. The current shell
+still supports compatibility-shaped fields such as `character` and `scene`,
+though long term this belongs to module-specific startup payloads.
 
 Where to configure:
 - Hard‑coded defaults: edit `app/persona.py` → `DEFAULT_CHARACTER` and `DEFAULT_SCENE`.
@@ -101,6 +99,9 @@ In the Chainlit UI, the Chainlit thread id is the backend `sessionId` for new co
 4. No transcript is manually replayed by `chainlit_app.py`; Chainlit owns UI restoration.
 
 To disable hard‑coded defaults, set the strings to empty in `app/persona.py`.
+
+For AIMS-specific persona rotation and scenario source material, see
+[`app/modules/aims/docs/persona-and-scenarios.md`](/Users/craigburnett/PycharmProjects/AIMSBot/app/modules/aims/docs/persona-and-scenarios.md).
 
 ## Using with Chainlit
 - Chainlit persists each chat as a thread using the app memory backend.

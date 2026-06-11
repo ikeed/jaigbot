@@ -54,7 +54,7 @@ goal that all AIMS-specific behavior should live in the AIMS module.
    `app/modules/aims/services/`.
 2. Rewire app imports to the owned paths.
 3. Rewire tests and monkeypatch targets to the owned paths.
-4. Update `AGENTS.md` and `docs/aims/README.md` so the documented ownership
+4. Update `AGENTS.md` and `app/modules/aims/docs/README.md` so the documented ownership
    model matches the code.
 5. Re-run focused AIMS service tests, then the full non-integration suite.
 
@@ -103,7 +103,7 @@ Mitigation:
   - `coach_feedback_history_service.py`
   - `coach_post.py`
 - rewired app imports and test imports to the owned module paths
-- updated AIMS runtime ownership docs in `docs/aims/README.md`
+- updated AIMS runtime ownership docs in `app/modules/aims/docs/README.md`
 - updated `AGENTS.md` so “read first” guidance points at the actual owned
   module paths
 

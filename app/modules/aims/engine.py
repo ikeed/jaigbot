@@ -2,7 +2,7 @@
 Deterministic AIMS engine: loader, classifier, and scorer.
 
 Pure-Python utilities that do not call any LLM. These are used for
-classification and per-turn scoring using the docs/aims/aims_mapping.json
+classification and per-turn scoring using the AIMS module mapping JSON
 as the source of truth.
 
 Functions are intentionally simple and conservative; they implement the
@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from docs.aims import aims_mapping
+from app.modules.aims.docs import aims_mapping
 
 # Regex patterns for small-talk detection of generic well-being questions
 _GENERIC_WELLBEING_Q = re.compile(
