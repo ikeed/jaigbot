@@ -13,7 +13,6 @@
 
   const assetVersion = "20260610-platform-1";
   window.TrainingUI = window.TrainingUI || {};
-  window.AIMSBotUI = window.TrainingUI;
   window.TrainingUI.pendingWindowMessages = window.TrainingUI.pendingWindowMessages || [];
   window.TrainingUI.handleWindowMessagePayload =
     window.TrainingUI.handleWindowMessagePayload || null;

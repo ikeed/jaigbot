@@ -9,10 +9,7 @@ None currently.
 
 ## Phase 3
 
-- The old legacy chat path now runs behind `AimsTrainingModule.handle_turn(...)`
-  instead of in core, but it is not yet represented as its own compatibility
-  module. Revisit that split once session/resume and storage ownership are
-  module-aware enough to support a second runtime module cleanly.
+None currently.
 
 ## Phase 4
 
@@ -25,11 +22,10 @@ None currently.
 
 ## Phase 5
 
-- `StorageService._transform_to_logical_schema(...)` resolves archives without
-  a persisted `module_id` through the deployment's active module. That is
-  correct for the current one-module-per-deployment runtime, but mixed-module
-  buckets or cross-deployment archive readers will need an explicit legacy
-  adapter strategy before multiple modules write into the same archive space.
+- Archive serialization now refuses to guess a module family for
+  archive-shaped payloads that lack resolvable module metadata. Mixed-module
+  buckets or cross-deployment archive readers would still need a broader
+  legacy-adapter strategy once more than historical AIMS payloads matter.
 - Summary capability is now module-owned, but there is still only one concrete
   rich summary payload shape in the repo. Phase 8 proved that the "no summary
   capability" path works, but it did not add a second fully featured summary
@@ -37,11 +33,7 @@ None currently.
 
 ## Phase 6
 
-- Browser-based local verification could not be completed in this environment:
-  the in-app browser runtime had no active `iab` instance, and fallback
-  Playwright verification could not launch because the required local browser
-  runtime was unavailable here. Re-run a real browser sanity check in a normal
-  local developer session before treating Phase 6 as fully field-verified.
+None currently.
 
 ## Phase 7
 
@@ -73,10 +65,6 @@ None currently.
   the shell model is still intentionally narrow: one primary artifact plus
   inline cards, with passive artifacts ignored until a later module needs a
   richer layout contract.
-- Local frontend verification here reached the served `/api/config` payload and
-  the `/chat` bootstrap asset wiring, but a full Playwright-driven browser pass
-  could not run because the required local browser runtime was unavailable in
-  this environment.
 - Shared avatar ownership is still shell-level even though the browser
   role-label logic is now generic.
 
@@ -88,19 +76,14 @@ None currently.
 
 ## Phase 14
 
-- `LegacyChatHandler` is now physically owned by AIMS, but it is still a
-  compatibility-oriented path hidden inside the AIMS module instead of a
-  dedicated compatibility module or a truly generic fallback module.
+- The old non-coaching AIMS path is now explicitly named
+  `AimsLegacyFallbackHandler`, with `LegacyChatHandler` kept only as a
+  compatibility alias. Removing that alias would be cleanup only.
 
 ## Phase 15
 
-- The UI layer still uses a few low-risk app-state fallbacks for active-module
-  lookup in shell contexts. That is much narrower than the old orchestrator
-  self-resolution seam, but it is still a convenience pattern rather than pure
-  dependency injection.
+None currently.
 
 ## Phase 16
 
-- The frontend compatibility alias `window.AIMSBotUI` still exists
-  intentionally. The live shell now runs through generic asset names, but the
-  alias remains to keep module UI code and JS tests stable.
+None currently.

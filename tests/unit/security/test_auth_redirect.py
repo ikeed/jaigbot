@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.config import settings
 from app.middleware import AuthRedirectMiddleware
 from app.routes import ui
 
@@ -37,6 +38,39 @@ def test_chat_login_callback_redirects_to_current_thread(monkeypatch):
 
     assert response.status_code == 307
     assert response.headers["location"] == "/chat/thread/existing-thread"
+
+
+def test_chat_login_callback_uses_app_active_module_id(monkeypatch):
+    observed = {}
+
+    monkeypatch.setattr(
+        "app.middleware.authenticated_user_identifier",
+        lambda request: "clinician@example.com",
+    )
+    monkeypatch.setattr(settings, "ACTIVE_MODULE", "interview")
+
+    def fake_get_current_thread_id(user_id, active_module_id=None):
+        observed["user_id"] = user_id
+        observed["active_module_id"] = active_module_id
+        return None
+
+    monkeypatch.setattr("app.middleware.get_current_thread_id", fake_get_current_thread_id)
+
+    app = FastAPI()
+    app.state.active_module = type("StubModule", (), {"module_id": "aims"})()
+    app.add_middleware(AuthRedirectMiddleware)
+
+    @app.get("/chat/login/callback")
+    async def login_callback():
+        return {"route": "login-callback"}
+
+    response = TestClient(app).get("/chat/login/callback?success=True")
+
+    assert response.status_code == 200
+    assert observed == {
+        "user_id": "clinician@example.com",
+        "active_module_id": "aims",
+    }
 
 
 def test_chat_login_callback_without_current_thread_reaches_chainlit(monkeypatch):
@@ -77,6 +111,7 @@ def test_login_page_redirects_authenticated_user_to_current_thread(monkeypatch):
     monkeypatch.setattr(ui, "get_current_thread_id", lambda user_id, active_module_id=None: "existing-thread")
 
     app = FastAPI()
+    app.state.active_module = type("StubModule", (), {"module_id": "aims"})()
     app.include_router(ui.router)
     response = TestClient(app).get("/", follow_redirects=False)
 

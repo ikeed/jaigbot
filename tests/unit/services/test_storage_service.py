@@ -175,6 +175,18 @@ def test_storage_service_legacy_aims_payload_does_not_follow_active_module(monke
     assert result["metadata"]["moduleId"] == "aims"
     assert result["module"]["id"] == "aims"
 
+
+def test_storage_service_archive_shaped_payload_without_module_id_raises(monkeypatch):
+    monkeypatch.setattr("app.config.settings.ACTIVE_MODULE", "interview")
+    data = {
+        "metadata": {"sessionId": "sid"},
+        "transcript": [],
+        "analytics": {},
+    }
+
+    with pytest.raises(ValueError, match="Cannot infer module_id"):
+        StorageService._transform_to_logical_schema("sid", "uid", data)
+
 def test_storage_service_error_handling(mock_storage_client):
     service = StorageService(bucket_name="test-bucket")
     

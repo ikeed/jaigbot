@@ -171,7 +171,7 @@ async def test_aims_module_handle_turn_routes_to_legacy_when_coaching_not_select
     settings = SimpleNamespace(redis_key_prefix="aims:local:session:")
     module = create_aims_training_module(settings=settings)
 
-    class FakeLegacyHandler:
+    class FakeLegacyFallbackHandler:
         def __init__(self, **kwargs):
             self.kwargs = kwargs
 
@@ -179,7 +179,10 @@ async def test_aims_module_handle_turn_routes_to_legacy_when_coaching_not_select
         async def handle(req, body, ctx):
             return {"reply": "legacy", "model": "m", "latency_ms": 1}
 
-    monkeypatch.setattr("app.modules.aims.services.legacy_chat_handler.LegacyChatHandler", FakeLegacyHandler)
+    monkeypatch.setattr(
+        "app.modules.aims.services.legacy_chat_handler.AimsLegacyFallbackHandler",
+        FakeLegacyFallbackHandler,
+    )
 
     result = await module.handle_turn(
         req=object(),

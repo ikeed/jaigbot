@@ -2,7 +2,6 @@
   "use strict";
 
     const app = window.TrainingUI = window.TrainingUI || {};
-    window.AIMSBotUI = app;
     if (app.coreReady) return;
 
   app.coreReady = true;

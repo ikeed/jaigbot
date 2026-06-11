@@ -85,11 +85,10 @@ service family.
   legacy shapes must return `None`
 - `LegacyChatHandler` was kept as an AIMS-owned compatibility path and its
   module/class documentation now says so directly
+- the remaining UI redirect seam now uses the resolved app-state active module
+  ID rather than `settings.ACTIVE_MODULE`
 
 ## Residual Issues
 
 - `LegacyChatHandler` is still a compatibility-oriented AIMS path rather than a
   renamed fallback family with more explicit product semantics
-- the UI layer still uses a few app-state fallbacks for resolving the active
-  module in low-risk shell contexts; those are not the same risk as the old
-  orchestrator self-resolution path, but they remain convenience seams

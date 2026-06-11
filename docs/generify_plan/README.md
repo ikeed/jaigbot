@@ -416,11 +416,11 @@ What landed:
   legacy inference is bounded and AIMS-specific
 - `LegacyChatHandler` remains as an AIMS-owned compatibility path, now labeled
   as such directly in its module and class docs
+- the remaining auth/UI redirect seams now use the resolved app-state active
+  module rather than deployment-default module settings
 
 Still deferred:
 
-- some UI/shell contexts still use low-risk app-state fallbacks for active
-  module resolution
 - the remaining cleanup work is now mostly branding/assets/docs finish work
 
 ### Phase 16
@@ -442,8 +442,6 @@ What landed:
 
 Still deferred:
 
-- the frontend compatibility alias `window.AIMSBotUI` still exists
-  intentionally for stability across module UI code and JS tests
 - AIMS-specific product docs remain intentionally AIMS-specific where they
   describe the shipped module rather than the generic shell
 ## Cross-Phase Rules

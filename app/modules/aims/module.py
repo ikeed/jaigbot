@@ -115,10 +115,10 @@ class AimsTrainingModule:
             result = cast(Mapping[str, Any], await handler.handle(req, body, ctx))
             return {"_dispatch_path": "coaching", **result}
 
-        from app.modules.aims.services.legacy_chat_handler import LegacyChatHandler
+        from app.modules.aims.services.legacy_chat_handler import AimsLegacyFallbackHandler
 
         logger.debug("Module dispatch: module=%s route=legacy", self.module_id)
-        legacy_handler = LegacyChatHandler(
+        legacy_handler = AimsLegacyFallbackHandler(
             memory_store=memory_store,
             vertex_config=vertex_config,
             memory_config=memory_config,

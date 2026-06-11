@@ -23,7 +23,7 @@ from app.services.security_guard import JailbreakGuard
 from app.vertex import VertexClient
 
 
-class LegacyChatHandler:
+class AimsLegacyFallbackHandler:
     """Handles the compatibility non-coaching AIMS chat flow."""
     
     def __init__(
@@ -203,3 +203,7 @@ class LegacyChatHandler:
             
         except Exception as e:
             self.logger.debug("Memory persistence failed for session %s: %s", session_id, e)
+
+
+# Backward-compatible alias during the cleanup transition.
+LegacyChatHandler = AimsLegacyFallbackHandler

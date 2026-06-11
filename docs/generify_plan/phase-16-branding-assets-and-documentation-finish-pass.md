@@ -82,7 +82,5 @@ finish so new contributors are steered toward stable paths only.
 
 ## Residual Issues
 
-- the frontend compatibility alias `window.AIMSBotUI` still exists
-  intentionally to keep module UI code and JS tests stable
 - AIMS-specific product docs remain intentionally AIMS-specific where they
   describe the shipped AIMS module rather than the generic shell

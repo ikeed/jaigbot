@@ -94,7 +94,7 @@ class StorageService:
     @staticmethod
     def _transform_to_logical_schema(session_id: str, user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """Convert internal memory to a module-aware logical archive schema."""
-        persisted_module_id = resolve_archive_module_id(data) or settings.ACTIVE_MODULE
+        persisted_module_id = StorageService._resolve_module_id_for_archive_build(data)
         active_module = get_builtin_active_module(active_module_id=persisted_module_id)
         envelope = active_module.build_archive_envelope(
             session_id=session_id,
@@ -104,6 +104,36 @@ class StorageService:
             settings=settings,
         )
         return serialize_archive_envelope(envelope)
+
+    @staticmethod
+    def _resolve_module_id_for_archive_build(data: Dict[str, Any]) -> str:
+        """Resolve module ownership for archive serialization.
+
+        Current live session memory may still rely on the deployment's active
+        module when it does not persist a `module_id` yet. Structured
+        archive-shaped payloads are stricter: if they look like archives but do
+        not carry a resolvable module identity, refuse to guess.
+        """
+        persisted_module_id = resolve_archive_module_id(data)
+        if persisted_module_id:
+            return persisted_module_id
+        if StorageService._looks_like_structured_archive_payload(data):
+            raise ValueError("Cannot infer module_id for archive-shaped payload without explicit module metadata.")
+        return settings.ACTIVE_MODULE
+
+    @staticmethod
+    def _looks_like_structured_archive_payload(data: Dict[str, Any]) -> bool:
+        return any(
+            key in data
+            for key in (
+                "metadata",
+                "module",
+                "environment",
+                "transcript",
+                "analytics",
+                "config",
+            )
+        )
 
     def download_session(self, session_id: str, user_id: str) -> Optional[dict]:
         """
