@@ -147,7 +147,7 @@ async def test_aims_module_handle_turn_routes_to_coaching_when_enabled(monkeypat
             return {"reply": "patient", "model": "m", "latency_ms": 1}
 
     monkeypatch.setattr(
-        "app.services.aims_coaching_handler.AimsCoachingHandler",
+        "app.modules.aims.services.aims_coaching_handler.AimsCoachingHandler",
         FakeAimsHandler,
     )
 
@@ -179,7 +179,7 @@ async def test_aims_module_handle_turn_routes_to_legacy_when_coaching_not_select
         async def handle(req, body, ctx):
             return {"reply": "legacy", "model": "m", "latency_ms": 1}
 
-    monkeypatch.setattr("app.services.legacy_chat_handler.LegacyChatHandler", FakeLegacyHandler)
+    monkeypatch.setattr("app.modules.aims.services.legacy_chat_handler.LegacyChatHandler", FakeLegacyHandler)
 
     result = await module.handle_turn(
         req=object(),

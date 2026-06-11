@@ -23,8 +23,9 @@ None currently.
 - Chainlit startup and UI rendering still assume an AIMS-style scenario-card
   experience (`initialCard`, persona naming, `present_scenario_card(...)`).
   The ownership seam is better now because `/session` is module-owned, but the
-  frontend-facing bootstrap vocabulary is still compatibility-shaped and should
-  be generalized in Phase 6.
+  frontend-facing bootstrap vocabulary is still compatibility-shaped and will
+  need another pass only if a future module needs a meaningfully different
+  startup shell.
 
 ## Phase 5
 
@@ -40,11 +41,6 @@ None currently.
 
 ## Phase 6
 
-- Module-owned frontend CSS is not actually loaded through the manifest yet.
-  `frontendCss` is exposed via `/config`, but Chainlit still serves one
-  deployment-level `custom_css` entrypoint. Phase 8 left that unresolved:
-  decide later whether CSS remains one shell asset with module sections or
-  becomes manifest-driven like JS bundles.
 - Browser-based local verification could not be completed in this environment:
   the in-app browser runtime had no active `iab` instance, and fallback
   Playwright verification could not launch because the required local browser
@@ -53,22 +49,7 @@ None currently.
 
 ## Phase 7
 
-- The AIMS-prefixed orchestration/state cluster still lives under
-  `app/services/`:
-  - `aims_coaching_handler.py`
-  - `aims_dependencies.py`
-  - `aims_endgame_service.py`
-  - `aims_state_service.py`
-  - `aims_turn_coordinator.py`
-  - `aims_turn_telemetry.py`
-  This is intentional. Moving that cluster now would enlarge the touched
-  surface without improving any already-proven seam. Revisit it only if a later
-  phase needs stricter physical ownership or if a second module demonstrates a
-  real collision.
-- Compatibility shims still exist at the old import paths for the moved AIMS
-  engine, prompt module, and several generic-named services. Phase 8 proved the
-  architecture without removing them; they should be retired only when
-  downstream imports, test ownership, and docs are cleaned up deliberately.
+None currently.
 
 ## Phase 9
 
@@ -90,10 +71,6 @@ None currently.
 
 ## Phase 11
 
-- Compatibility shims remain at the old import paths for the AIMS engine,
-  prompt module, and several service modules. They are still referenced widely
-  across app-level AIMS services and tests, so Phase 11 stopped at lifecycle
-  cleanup and explicit legacy adapters rather than deleting them half-way.
 - Direct construction still falls back to the cached built-in runtime when an
   explicit `active_module` is not supplied. That is a bounded fallback now, not
   a registry rebuild path, but it is still transitional.
@@ -117,15 +94,17 @@ None currently.
 
 ## Phase 13
 
-- Several AIMS-owned runtime services still physically live under
-  `app/services/` by design:
-  - `aims_coaching_handler.py`
-  - `aims_state_service.py`
-  - `aims_turn_coordinator.py`
-  - `aims_turn_telemetry.py`
-  - `aims_endgame_service.py`
-  That is no longer a shim problem, but it is still an ownership cleanup
-  decision for any future “all AIMS code under app/modules/aims” effort.
 - Historical planning and cleanup docs still mention some pre-move file paths
   intentionally as transition context. Those references are now marked
   historical, but the repo still carries that historical narrative in docs.
+
+## Phase 14
+
+- `LegacyChatHandler` is now physically owned by AIMS, but it is still a
+  compatibility-oriented path hidden inside the AIMS module instead of a
+  dedicated compatibility module or a truly generic fallback module.
+- Several shared static assets and file names are still AIMS-era even though
+  the runtime ownership move is complete:
+  - `/public/aimsbot.png`
+  - several avatar file names
+  - some internal JS/CSS naming

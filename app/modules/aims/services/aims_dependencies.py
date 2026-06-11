@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Protocol
 
 from app.models import ClassifierResult
-from app.services.aims_turn_coordinator import AimsTurnResult
+from app.modules.aims.services.aims_turn_coordinator import AimsTurnResult
 
 
 class ClassifierDependency(Protocol):

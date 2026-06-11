@@ -46,7 +46,7 @@ from app.modules.aims.services.summary_service import build_summary_analysis_bul
 from app.services.chat_context import ChatContext
 from app.services.chat_helpers import strip_appointment_headers
 from app.services.clinician_identity import clinician_display_name_from_user_info
-from app.services.aims_dependencies import (
+from app.modules.aims.services.aims_dependencies import (
     AimsEndgameDependency,
     AimsFeedbackDependency,
     AimsMetricsDependency,
@@ -57,12 +57,12 @@ from app.services.aims_dependencies import (
     CoachFeedbackHistoryDependency,
     PatientReplyDependency,
 )
-from app.services.aims_endgame_service import AimsEndgameService
-from app.services.aims_state_service import AimsStateService
-from app.services.aims_turn_telemetry import AimsTurnTelemetry
-from app.services.aims_turn_coordinator import AimsTurnCoordinator
-from app.services.coach_feedback_history_service import CoachFeedbackHistoryService
-from app.services.coach_post import (
+from app.modules.aims.services.aims_endgame_service import AimsEndgameService
+from app.modules.aims.services.aims_state_service import AimsStateService
+from app.modules.aims.services.aims_turn_telemetry import AimsTurnTelemetry
+from app.modules.aims.services.aims_turn_coordinator import AimsTurnCoordinator
+from app.modules.aims.services.coach_feedback_history_service import CoachFeedbackHistoryService
+from app.modules.aims.services.coach_post import (
     VaccineRelevanceGate,
     AimsPostProcessor,
 )

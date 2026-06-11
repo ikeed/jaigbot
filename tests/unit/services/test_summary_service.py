@@ -71,7 +71,7 @@ async def test_build_summary_analysis_bullets_falls_back_when_sanitizer_fails(mo
         lambda *args, **kwargs: "- First bullet\n- Second bullet",
     )
     monkeypatch.setattr(
-        "app.services.coach_post.sanitize_endgame_bullets",
+        "app.modules.aims.services.coach_post.sanitize_endgame_bullets",
         MagicMock(side_effect=RuntimeError("sanitize failed")),
     )
     monkeypatch.setattr(

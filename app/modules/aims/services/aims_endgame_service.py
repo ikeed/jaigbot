@@ -7,7 +7,7 @@ from typing import Any
 
 from app.chat_roles import ROLE_ASSISTANT, ROLE_USER, get_ui_attributes
 from app.constants import KEY_AIMS_STATE, PHASE_PRE_ANNOUNCE, SESSION_HISTORY
-from app.services.coach_post import (
+from app.modules.aims.services.coach_post import (
     EndGameDetector,
     build_endgame_bullets_fallback,
     endgame_title,

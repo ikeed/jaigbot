@@ -168,7 +168,7 @@ async def _analysis_bullets(
     )
     bullets_raw = [line for line in (narrative or "").strip().splitlines() if line.strip()]
     try:
-        from app.services.coach_post import sanitize_endgame_bullets
+        from app.modules.aims.services.coach_post import sanitize_endgame_bullets
         bullets = sanitize_endgame_bullets(bullets_raw)
     except Exception as e:
         logger.debug("Failed to sanitize bullets: %s", e)

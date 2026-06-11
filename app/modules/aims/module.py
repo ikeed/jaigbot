@@ -103,7 +103,7 @@ class AimsTrainingModule:
         should_use_coaching = coaching_enabled and (bool(getattr(body, "coach", False)) or force_default)
 
         if should_use_coaching:
-            from app.services.aims_coaching_handler import AimsCoachingHandler
+            from app.modules.aims.services.aims_coaching_handler import AimsCoachingHandler
 
             logger.debug("Module dispatch: module=%s route=coaching", self.module_id)
             handler = AimsCoachingHandler(
@@ -115,7 +115,7 @@ class AimsTrainingModule:
             result = cast(Mapping[str, Any], await handler.handle(req, body, ctx))
             return {"_dispatch_path": "coaching", **result}
 
-        from app.services.legacy_chat_handler import LegacyChatHandler
+        from app.modules.aims.services.legacy_chat_handler import LegacyChatHandler
 
         logger.debug("Module dispatch: module=%s route=legacy", self.module_id)
         legacy_handler = LegacyChatHandler(

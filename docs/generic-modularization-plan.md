@@ -29,7 +29,7 @@ Detailed implementation planning now lives under:
 
 Current implementation status:
 
-- Phases 1-8 are implemented
+- Phases 1-14 are implemented
 - remaining gaps and cleanup candidates are tracked in
   `docs/generify_plan/deferred-issues.md`
 

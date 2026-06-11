@@ -13,9 +13,9 @@ import logging
 import pytest
 
 from app.models import Coaching, ClassifierResult
-from app.services.aims_coaching_handler import AimsCoachingHandler
+from app.modules.aims.services.aims_coaching_handler import AimsCoachingHandler
 from app.modules.aims.services.classifier_service import ClassifierService
-from app.services.coach_post import EndGameDetector
+from app.modules.aims.services.coach_post import EndGameDetector
 
 
 # ---------------------------------------------------------------------------

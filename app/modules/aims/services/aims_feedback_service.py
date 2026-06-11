@@ -16,7 +16,7 @@ from app.constants import (
     STEP_SECURE_INQUIRE,
 )
 from app.modules.aims.prompts.aims import build_fallback_feedback_prompt
-from app.services.aims_state_service import AimsStateService
+from app.modules.aims.services.aims_state_service import AimsStateService
 from app.services.vertex_gateway import VertexGateway
 
 

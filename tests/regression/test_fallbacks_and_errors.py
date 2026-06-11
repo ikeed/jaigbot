@@ -8,12 +8,12 @@ client = TestClient(app)
 
 def test_model_fallback_succeeds(monkeypatch):
     from app.vertex import VertexAIError
-    import app.services.legacy_chat_handler
+    import app.modules.aims.services.legacy_chat_handler
     import app.services.vertex_helpers
     import app.services.chat_orchestrator
     
     # Inject the exception class so it's available for catching
-    app.services.legacy_chat_handler.VertexAIError = VertexAIError
+    app.modules.aims.services.legacy_chat_handler.VertexAIError = VertexAIError
     app.services.vertex_helpers.VertexAIError = VertexAIError
     app.services.chat_orchestrator.VertexAIError = VertexAIError
 
@@ -79,12 +79,12 @@ def test_model_fallback_succeeds(monkeypatch):
 
 def test_upstream_error_maps_to_502_and_sets_cookie(monkeypatch):
     from app.vertex import VertexAIError
-    import app.services.legacy_chat_handler
+    import app.modules.aims.services.legacy_chat_handler
     import app.services.vertex_helpers
     import app.services.chat_orchestrator
     
     # Inject the exception class so it's available for catching
-    app.services.legacy_chat_handler.VertexAIError = VertexAIError
+    app.modules.aims.services.legacy_chat_handler.VertexAIError = VertexAIError
     app.services.vertex_helpers.VertexAIError = VertexAIError
     app.services.chat_orchestrator.VertexAIError = VertexAIError
 

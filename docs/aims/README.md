@@ -28,18 +28,18 @@ with the smallest owner for the behavior you are changing:
 
 | Area | Runtime owner |
 |------|---------------|
-| Turn orchestration and API response assembly | `app/services/aims_coaching_handler.py` |
-| Parallel classifier + patient-reply calls and deterministic classification fallback | `app/services/aims_turn_coordinator.py` |
+| Turn orchestration and API response assembly | `app/modules/aims/services/aims_coaching_handler.py` |
+| Parallel classifier + patient-reply calls and deterministic classification fallback | `app/modules/aims/services/aims_turn_coordinator.py` |
 | LLM AIMS classification and endgame LLM call | `app/modules/aims/services/classifier_service.py` |
 | Roleplayed patient reply generation, JSON validation, jailbreak handling | `app/modules/aims/services/patient_reply_service.py` |
 | LLM refinement of fallback coaching text only | `app/modules/aims/services/aims_feedback_service.py` |
-| Phase transitions, concern tracking, mirroring/securing state, stateful coaching guidance | `app/services/aims_state_service.py` |
+| Phase transitions, concern tracking, mirroring/securing state, stateful coaching guidance | `app/modules/aims/services/aims_state_service.py` |
 | Per-session AIMS metrics and running averages | `app/modules/aims/services/aims_metrics_service.py` |
-| Compact coach notes in conversation history and user-facing reason filtering | `app/services/coach_feedback_history_service.py` |
-| Endgame hard guards, heuristic fallback, final coach post construction | `app/services/aims_endgame_service.py` |
-| Turn telemetry event wrapper | `app/services/aims_turn_telemetry.py` |
+| Compact coach notes in conversation history and user-facing reason filtering | `app/modules/aims/services/coach_feedback_history_service.py` |
+| Endgame hard guards, heuristic fallback, final coach post construction | `app/modules/aims/services/aims_endgame_service.py` |
+| Turn telemetry event wrapper | `app/modules/aims/services/aims_turn_telemetry.py` |
 | Typed constructor config | `app/modules/aims/services/aims_handler_config.py` |
-| Constructor-injected collaborator protocols | `app/services/aims_dependencies.py` |
+| Constructor-injected collaborator protocols | `app/modules/aims/services/aims_dependencies.py` |
 
 `AimsCoachingHandler` should stay mostly orchestration code. Prefer adding or
 testing behavior in the specific service that owns it, then inject that service

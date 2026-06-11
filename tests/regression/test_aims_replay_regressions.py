@@ -8,9 +8,9 @@ import pytest
 
 from app.constants import KEY_AIMS_STATE, KEY_COACH_POST, KEY_GAME_OVER, KEY_UPDATED, SESSION_HISTORY
 from app.models import ChatRequest, ClassifierResult, Coaching
-from app.services.aims_coaching_handler import AimsCoachingHandler
-from app.services.aims_endgame_service import AimsEndgameService
-from app.services.aims_turn_coordinator import AimsTurnResult
+from app.modules.aims.services.aims_coaching_handler import AimsCoachingHandler
+from app.modules.aims.services.aims_endgame_service import AimsEndgameService
+from app.modules.aims.services.aims_turn_coordinator import AimsTurnResult
 from app.services.chat_context import ChatContext
 
 

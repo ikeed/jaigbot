@@ -18,6 +18,9 @@ sequence:
 11. lifecycle consolidation and compatibility retirement
 12. frontend role/artifact presentation generalization
 13. compatibility shim retirement and broader documentation cleanup
+14. AIMS runtime ownership relocation
+15. compatibility and fallback cleanup
+16. branding, assets, and documentation finish pass
 
 The goal is to let implementation proceed incrementally without forcing
 backtracking in storage, resume, or frontend work that will come later.
@@ -37,6 +40,9 @@ backtracking in storage, resume, or frontend work that will come later.
 - [Phase 11: Lifecycle Consolidation And Compatibility Retirement](./phase-11-lifecycle-consolidation-and-compatibility-retirement.md)
 - [Phase 12: Frontend Role And Artifact Presentation](./phase-12-frontend-role-and-artifact-presentation.md)
 - [Phase 13: Shim Retirement And Documentation Cleanup](./phase-13-shim-retirement-and-documentation-cleanup.md)
+- [Phase 14: AIMS Runtime Ownership Relocation](./phase-14-aims-runtime-ownership-relocation.md)
+- [Phase 15: Compatibility And Fallback Cleanup](./phase-15-compatibility-and-fallback-cleanup.md)
+- [Phase 16: Branding, Assets, And Documentation Finish Pass](./phase-16-branding-assets-and-documentation-finish-pass.md)
 
 ## Current Status
 
@@ -285,10 +291,8 @@ What landed:
 Still deferred:
 
 - the shared logo asset and several internal asset names remain AIMS-named
-- the frontend still does not consume role-label metadata for live message
-  presentation
-- CSS remains one shell stylesheet rather than a manifest-driven per-module
-  loader
+- some shell assets and filenames still leak old AIMS-era naming even though
+  live message presentation and CSS loading are now module-aware
 
 ### Phase 11
 
@@ -311,8 +315,6 @@ What landed:
 
 Still deferred:
 
-- import-path compatibility shims remain because they are still used widely in
-  app-level AIMS services and test imports
 - direct-construction fallbacks still exist, but now converge on the cached
   built-in runtime rather than rebuilding registries
 - legacy-module inference currently knows how to identify historical AIMS data,
@@ -367,16 +369,39 @@ What landed:
 
 Still deferred:
 
-- several remaining AIMS-owned runtime services still physically live under
-  `app/services/` by design:
+- a few historical planning docs still mention pre-move paths intentionally as
+  transition context
+
+### Phase 14
+
+Implemented.
+
+What landed:
+
+- moved the remaining AIMS-owned runtime services under
+  `app/modules/aims/services/`, including:
   - `aims_coaching_handler.py`
+  - `aims_dependencies.py`
+  - `aims_endgame_service.py`
   - `aims_state_service.py`
   - `aims_turn_coordinator.py`
   - `aims_turn_telemetry.py`
-  - `aims_endgame_service.py`
-  That is no longer a shim problem; it is a future physical-relocation choice.
-- a few historical planning docs still mention pre-move paths intentionally as
-  transition context
+  - `legacy_chat_handler.py`
+  - `coach_feedback_history_service.py`
+  - `coach_post.py`
+- rewired remaining runtime imports and test patch targets to the owned paths
+- updated AIMS runtime docs and the agent guide so contributors are pointed at
+  the owned module paths instead of the old `app/services/` locations
+
+Still deferred:
+
+- `LegacyChatHandler` is now clearly AIMS-owned, but it is still a
+  compatibility-oriented path hidden inside the AIMS module rather than a
+  separate compatibility module
+- the remaining backlog is now mostly:
+  - direct-construction/runtime fallback cleanup
+  - limited legacy-module inference semantics
+  - AIMS-era asset naming and broader documentation finish work
 ## Cross-Phase Rules
 
 These rules apply across all remaining phases.

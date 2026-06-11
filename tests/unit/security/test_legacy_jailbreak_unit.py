@@ -2,7 +2,7 @@ import pytest
 
 from app.models import ChatRequest
 from app.services.chat_context import ChatContext
-from app.services.legacy_chat_handler import LegacyChatHandler
+from app.modules.aims.services.legacy_chat_handler import LegacyChatHandler
 
 
 class DummyLogger:
@@ -18,7 +18,7 @@ class DummyLogger:
 
 def test_legacy_handler_jailbreak_early_return(monkeypatch):
     # Force JailbreakGuard.detect to trigger
-    import app.services.legacy_chat_handler as lch
+    import app.modules.aims.services.legacy_chat_handler as lch
 
     def fake_detect(text):
         return True, ["jb"]

@@ -1,6 +1,6 @@
 from app.chat_roles import ROLE_COACH
 from app.constants import KEY_AIMS_STATE, KEY_FULL_HISTORY, SESSION_HISTORY
-from app.services.coach_feedback_history_service import CoachFeedbackHistoryService
+from app.modules.aims.services.coach_feedback_history_service import CoachFeedbackHistoryService
 
 
 class DummyLogger:

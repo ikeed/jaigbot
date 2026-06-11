@@ -32,17 +32,18 @@ Runtime shapes:
   touching.
 
 - Chat API behavior: `app/services/chat_orchestrator.py`, then
-  `app/services/aims_coaching_handler.py` or
-  `app/services/legacy_chat_handler.py`.
+  `app/modules/aims/services/aims_coaching_handler.py` or
+  `app/modules/aims/services/legacy_chat_handler.py`.
 - AIMS coaching internals: start with `docs/aims/README.md` for the service
   map, then open only the owned service you are changing:
   `app/modules/aims/services/classifier_service.py`,
-  `app/services/aims_turn_coordinator.py`,
+  `app/modules/aims/services/aims_turn_coordinator.py`,
   `app/modules/aims/services/patient_reply_service.py`,
-  `app/services/aims_state_service.py`,
+  `app/modules/aims/services/aims_state_service.py`,
   `app/modules/aims/services/aims_metrics_service.py`,
-  `app/services/coach_feedback_history_service.py`,
-  `aims_endgame_service.py`, or `aims_turn_telemetry.py`.
+  `app/modules/aims/services/coach_feedback_history_service.py`,
+  `app/modules/aims/services/aims_endgame_service.py`, or
+  `app/modules/aims/services/aims_turn_telemetry.py`.
 - Chainlit startup, replay, or avatar UI: `chainlit_app.py`,
   `app/services/chainlit/orchestrator.py`,
   `app/services/chainlit/ui_handler.py`, and `public/`.
