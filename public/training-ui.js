@@ -7,7 +7,8 @@
 (function () {
   "use strict";
 
-  if (window.__aimsbotCustomJsInitialized) return;
+  if (window.__trainingUiCustomJsInitialized || window.__aimsbotCustomJsInitialized) return;
+  window.__trainingUiCustomJsInitialized = true;
   window.__aimsbotCustomJsInitialized = true;
 
   const assetVersion = "20260610-platform-1";
@@ -28,14 +29,14 @@
   });
 
   const platformModules = [
-        "/public/js/aimsbot/core.js?v=" + assetVersion,
-        "/public/js/aimsbot/message-presentation.js?v=" + assetVersion,
-        "/public/js/aimsbot/modal.js?v=" + assetVersion,
-        "/public/js/aimsbot/report-issue.js?v=" + assetVersion,
-        "/public/js/aimsbot/session-controls.js?v=" + assetVersion,
-        "/public/js/aimsbot/dictation.js?v=" + assetVersion,
-        "/public/js/aimsbot/splash.js?v=" + assetVersion,
-        "/public/js/aimsbot/window-events.js?v=" + assetVersion
+        "/public/js/platform/core.js?v=" + assetVersion,
+        "/public/js/platform/message-presentation.js?v=" + assetVersion,
+        "/public/js/platform/modal.js?v=" + assetVersion,
+        "/public/js/platform/report-issue.js?v=" + assetVersion,
+        "/public/js/platform/session-controls.js?v=" + assetVersion,
+        "/public/js/platform/dictation.js?v=" + assetVersion,
+        "/public/js/platform/splash.js?v=" + assetVersion,
+        "/public/js/platform/window-events.js?v=" + assetVersion
     ];
 
   function withVersion(path) {

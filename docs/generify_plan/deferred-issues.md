@@ -9,10 +9,6 @@ None currently.
 
 ## Phase 3
 
-- `ChatOrchestrator.__init__` still has a defensive registry/settings fallback
-  for direct-construction and non-lifespan code paths. Consolidate active-module
-  resolution to one authoritative path once later phases finish moving startup,
-  resume, and tests onto app-state or explicit dependency injection.
 - The old legacy chat path now runs behind `AimsTrainingModule.handle_turn(...)`
   instead of in core, but it is not yet represented as its own compatibility
   module. Revisit that split once session/resume and storage ownership are
@@ -60,10 +56,6 @@ None currently.
 
 ## Phase 10
 
-- The shell title is now generic, but the shared logo asset path remains
-  `/public/aimsbot.png` and several internal static asset names still use the
-  old AIMSBot naming. That is acceptable for now, but it is still branding
-  debt.
 - Generic product docs and `AGENTS.md` were updated, but AIMS-specific docs
   still intentionally dominate the repo. That is correct while AIMS remains the
   primary shipped module, but a future broader module rollout will need another
@@ -85,9 +77,8 @@ None currently.
   the `/chat` bootstrap asset wiring, but a full Playwright-driven browser pass
   could not run because the required local browser runtime was unavailable in
   this environment.
-- Shared avatar and logo asset ownership is still shell-level, and several
-  asset filenames remain AIMS-named even though the browser role-label logic is
-  now generic.
+- Shared avatar ownership is still shell-level even though the browser
+  role-label logic is now generic.
 
 ## Phase 13
 
@@ -100,11 +91,6 @@ None currently.
 - `LegacyChatHandler` is now physically owned by AIMS, but it is still a
   compatibility-oriented path hidden inside the AIMS module instead of a
   dedicated compatibility module or a truly generic fallback module.
-- Several shared static assets and file names are still AIMS-era even though
-  the runtime ownership move is complete:
-  - `/public/aimsbot.png`
-  - several avatar file names
-  - some internal JS/CSS naming
 
 ## Phase 15
 
@@ -112,3 +98,9 @@ None currently.
   lookup in shell contexts. That is much narrower than the old orchestrator
   self-resolution seam, but it is still a convenience pattern rather than pure
   dependency injection.
+
+## Phase 16
+
+- The frontend compatibility alias `window.AIMSBotUI` still exists
+  intentionally. The live shell now runs through generic asset names, but the
+  alias remains to keep module UI code and JS tests stable.

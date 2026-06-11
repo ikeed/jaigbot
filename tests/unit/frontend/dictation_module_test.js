@@ -64,7 +64,7 @@ const scriptPath = path.join(
   "..",
   "public",
   "js",
-  "aimsbot",
+  "platform",
   "dictation.js"
 );
 

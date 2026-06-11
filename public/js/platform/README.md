@@ -1,6 +1,6 @@
 # Training UI Chainlit Modules
 
-`/public/aimsbot-ui.js` is the single Chainlit `custom_js` entry point. It only
+`/public/training-ui.js` is the single Chainlit `custom_js` entry point. It only
 loads these modules in dependency order.
 
 - `core.js`: shared namespace, state, DOM helpers, message helpers.

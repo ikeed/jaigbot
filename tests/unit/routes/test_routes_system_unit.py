@@ -66,7 +66,7 @@ def _client(*, settings=None, store=None, model_check=None, logger=None):
             frontend_js_bundles=(
                 "/public/js/modules/aims/module-ui.js",
             ),
-            frontend_css="/public/aimsbot.css",
+            frontend_css="/public/training-ui.css",
             branding=BrandingSpec(
                 app_title="AIMSBot",
                 avatar_assets={"counterpart": "/public/avatars/assistant.svg?v=3"},
@@ -86,7 +86,7 @@ def _client(*, settings=None, store=None, model_check=None, logger=None):
                     dialogue_roles=DialogueRoles(participant_roles=("candidate", "interviewer")),
                     supports_summary=False,
                     frontend_js_bundles=("/public/js/modules/interview/module-ui.js",),
-                    frontend_css="/public/aimsbot.css",
+                    frontend_css="/public/training-ui.css",
                     branding=BrandingSpec(
                         app_title="Interview Practice",
                         avatar_assets={"counterpart": "/public/avatars/briefing.svg?v=3"},
@@ -181,7 +181,7 @@ def test_config_modelcheck_and_diagnostics_use_injected_dependencies():
     assert config["activeModule"]["frontendJsBundles"] == [
         "/public/js/modules/aims/module-ui.js",
     ]
-    assert config["activeModule"]["frontendCss"] == "/public/aimsbot.css"
+    assert config["activeModule"]["frontendCss"] == "/public/training-ui.css"
     assert config["activeModule"]["branding"]["appTitle"] == "AIMSBot"
     assert config["activeModule"]["branding"]["avatarAssets"]["counterpart"] == "/public/avatars/assistant.svg?v=3"
     assert [module["id"] for module in config["availableModules"]] == ["aims", "interview"]

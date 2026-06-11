@@ -131,10 +131,10 @@ Mitigation:
 ## What Landed
 
 - added generic browser-side message rendering in
-  `public/js/aimsbot/message-presentation.js`
+  `public/js/platform/message-presentation.js`
 - switched frontend role/author decoration from the old AIMS-only path to
   module dialogue-role metadata from `/api/config`
-- added manifest-driven CSS loading in `public/aimsbot-ui.js`
+- added manifest-driven CSS loading in `public/training-ui.js`
 - updated Chainlit startup flow to:
   - choose a primary startup artifact explicitly
   - render additional inline artifacts separately

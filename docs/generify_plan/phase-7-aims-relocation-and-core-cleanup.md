@@ -44,7 +44,7 @@ Implication:
   boundary that already exists instead of trying to invent new seams during the
   file moves
 - frontend relocation is now part of the ownership cleanup as well, especially
-  for AIMS-owned JS that still sits under `public/js/aimsbot/`
+  for AIMS-owned JS that still sits under the shared shell paths
 
 ### Step 1: Classify files by true ownership
 

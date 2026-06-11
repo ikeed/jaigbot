@@ -1,5 +1,5 @@
 /* Training-platform custom UI tweaks for Chainlit (v2.11.1)
-   aimsbot-ui.js modules tag message rows with data-author and aims-* classes so
+   training-ui.js modules tag message rows with data-author and aims-* classes so
    these selectors can avoid Chainlit's action buttons and layout controls.
 */
 

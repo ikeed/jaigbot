@@ -382,7 +382,7 @@ def create_aims_training_module(*, settings: Any) -> AimsTrainingModule:
         frontend_js_bundles=(
             "/public/js/modules/aims/module-ui.js",
         ),
-        frontend_css="/public/aimsbot.css",
+        frontend_css="/public/training-ui.css",
         branding=BrandingSpec(
             app_title="AIMSBot",
             avatar_name=chat_profile_name,

@@ -165,7 +165,7 @@ Implemented.
 
 Actual artifacts now present in the repo:
 
-- `public/aimsbot-ui.js` is now a generic bootstrap loader that initializes
+- `public/training-ui.js` is now a generic bootstrap loader that initializes
   `window.TrainingUI`, loads platform modules first, then loads
   module-specific JS bundles from `/config`
 - additive active-module frontend metadata is exposed in `/config`:
@@ -184,8 +184,8 @@ Actual artifacts now present in the repo:
 
 Implication for later phases:
 
-- Phase 7 should physically relocate the remaining AIMS-owned frontend file
-  (`public/js/aimsbot/message-roles.js`) behind the module tree
+- Phase 7 should continue the physical AIMS ownership move on the frontend as
+  needed
 - Phase 8 should finish CSS ownership, because JS is now manifest-driven but
   CSS is still served through one deployment-level Chainlit entrypoint
 
@@ -290,9 +290,8 @@ What landed:
 
 Still deferred:
 
-- the shared logo asset and several internal asset names remain AIMS-named
-- some shell assets and filenames still leak old AIMS-era naming even though
-  live message presentation and CSS loading are now module-aware
+- generic product docs and broader contributor guidance still need another pass
+  once the remaining shell polish and manual browser verification are complete
 
 ### Phase 11
 
@@ -327,9 +326,9 @@ Implemented.
 What landed:
 
 - the browser shell now consumes module dialogue-role metadata for visible
-  message presentation through `public/js/aimsbot/message-presentation.js`
+  message presentation through `public/js/platform/message-presentation.js`
 - active-module CSS is now loaded explicitly from the manifest by
-  `public/aimsbot-ui.js`
+  `public/training-ui.js`
 - Chainlit startup now renders:
   - one explicit primary startup artifact
   - zero or more inline startup artifacts
@@ -363,7 +362,7 @@ What landed:
   module paths
 - refreshed contributor-facing docs including:
   - `AGENTS.md`
-  - `public/js/aimsbot/README.md`
+  - `public/js/platform/README.md`
   - historical plan/cleanup docs with notes clarifying which path references
     are historical
 
@@ -423,6 +422,30 @@ Still deferred:
 - some UI/shell contexts still use low-risk app-state fallbacks for active
   module resolution
 - the remaining cleanup work is now mostly branding/assets/docs finish work
+
+### Phase 16
+
+Implemented.
+
+What landed:
+
+- renamed shared shell assets and loader paths to generic names:
+  - `public/training-ui.js`
+  - `public/training-ui.css`
+  - `public/training-platform.png`
+  - `public/js/platform/`
+- updated live shell references in the Chainlit config, UI routes, module
+  manifests, and frontend tests
+- refreshed shared avatar `<title>` metadata so shell-owned assets no longer
+  read as AIMSBot-specific
+- updated the planning/docs set to point at the new shared shell paths
+
+Still deferred:
+
+- the frontend compatibility alias `window.AIMSBotUI` still exists
+  intentionally for stability across module UI code and JS tests
+- AIMS-specific product docs remain intentionally AIMS-specific where they
+  describe the shipped module rather than the generic shell
 ## Cross-Phase Rules
 
 These rules apply across all remaining phases.

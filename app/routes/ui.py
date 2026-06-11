@@ -37,7 +37,7 @@ def _get_shell_context(request: Request) -> dict[str, str]:
         "shell_title": APP_TITLE,
         "module_title": module_title,
         "module_display_name": manifest.display_name,
-        "logo_url": "/public/aimsbot.png",
+        "logo_url": "/public/training-platform.png",
     }
 
 @router.get(ROUTE_ROOT, response_class=HTMLResponse)

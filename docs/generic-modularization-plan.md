@@ -152,8 +152,8 @@ But the rest of the app still assumes the product is AIMSBot.
 
 - `.chainlit/config.toml` name and branding
 - `chainlit_app.py` chat profile name and loading text
-- `public/js/aimsbot/*`
-- `public/aimsbot.css`
+- `public/js/platform/*`
+- `public/training-ui.css`
 - `public/aims_infographic.svg`
 - login/duplicate templates and avatar titles
 

@@ -2,7 +2,7 @@
 
 ## Status
 
-Planned.
+Implemented.
 
 ## Objective
 
@@ -35,10 +35,8 @@ The runtime seams are now much cleaner than the presentation layer:
 
 ### 1. Shared Asset Names Still Leak AIMS
 
-Examples include:
-
-- `/public/aimsbot.png`
-- AIMS-era avatar or bundle names that are now used by the generic shell
+Examples included the old shared shell logo path and AIMS-era avatar or bundle
+names that were used by the generic shell.
 
 ### 2. Documentation Still Carries Too Much Transition History
 
@@ -65,3 +63,26 @@ finish so new contributors are steered toward stable paths only.
 - `git diff --check`
 - full non-integration suite if asset or route references move
 
+## What Landed
+
+- renamed shared shell assets and loader paths to generic names:
+  - `public/training-ui.js`
+  - `public/training-ui.css`
+  - `public/training-platform.png`
+  - `public/js/platform/`
+- updated live references in:
+  - `.chainlit/config.toml`
+  - module manifests
+  - UI routes
+  - frontend tests
+- refreshed shared avatar `<title>` metadata so shell-owned assets no longer
+  read as AIMSBot-specific
+- updated the planning/docs set so current shell references point at the new
+  generic paths
+
+## Residual Issues
+
+- the frontend compatibility alias `window.AIMSBotUI` still exists
+  intentionally to keep module UI code and JS tests stable
+- AIMS-specific product docs remain intentionally AIMS-specific where they
+  describe the shipped AIMS module rather than the generic shell

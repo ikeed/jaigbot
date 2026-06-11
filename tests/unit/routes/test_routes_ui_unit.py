@@ -41,7 +41,7 @@ async def test_custom_login_page_renders_template_for_unauthenticated_user(monke
             "shell_title": "Conversation Trainer",
             "module_title": "AIMSBot (Gemini Enterprise)",
             "module_display_name": "AIMS",
-            "logo_url": "/public/aimsbot.png",
+            "logo_url": "/public/training-platform.png",
         },
     )
     monkeypatch.setattr(ui.templates, "TemplateResponse", MagicMock(return_value=template_response))
@@ -66,7 +66,7 @@ async def test_duplicate_tab_page_renders_template(monkeypatch):
             "shell_title": "Conversation Trainer",
             "module_title": "Interview Practice",
             "module_display_name": "Interview Practice",
-            "logo_url": "/public/aimsbot.png",
+            "logo_url": "/public/training-platform.png",
         },
     )
     monkeypatch.setattr(ui.templates, "TemplateResponse", MagicMock(return_value=template_response))

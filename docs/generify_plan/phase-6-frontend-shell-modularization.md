@@ -141,7 +141,7 @@ Mitigation:
 
 Phase 6 is now implemented with these concrete repo changes:
 
-- `public/aimsbot-ui.js` remains the one Chainlit bootstrap entrypoint, but it
+- `public/training-ui.js` remains the one Chainlit bootstrap entrypoint, but it
   now behaves as a generic shell loader:
   - it initializes `window.TrainingUI`
   - loads platform JS first
@@ -156,8 +156,8 @@ Phase 6 is now implemented with these concrete repo changes:
 - legacy `aims_*` event names are still accepted on the frontend as
   compatibility aliases during the migration window
 - generic platform shell code stays in:
-  - `public/aimsbot-ui.js`
-  - `public/js/aimsbot/core.js`
+  - `public/training-ui.js`
+  - `public/js/platform/core.js`
   - `modal.js`
   - `report-issue.js`
   - `session-controls.js`
@@ -166,9 +166,8 @@ Phase 6 is now implemented with these concrete repo changes:
   - `window-events.js`
 - AIMS-specific intro/infographic behavior now loads through:
   - `public/js/modules/aims/module-ui.js`
-- AIMS-specific role-label behavior is module-owned logically and loaded through
-  the manifest, even though the file still lives at:
-  - `public/js/aimsbot/message-roles.js`
+- at the time Phase 6 landed, AIMS-specific role-label behavior was still
+  module-owned logically but not yet fully relocated physically
 - `/config` now exposes additive active-module frontend metadata:
   - `frontendJsBundles`
   - `frontendCss`

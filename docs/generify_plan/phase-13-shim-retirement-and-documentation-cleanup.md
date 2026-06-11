@@ -120,7 +120,7 @@ Mitigation:
   owned module paths
 - updated contributor-facing docs:
   - `AGENTS.md`
-  - `public/js/aimsbot/README.md`
+  - `public/js/platform/README.md`
   - historical plan/cleanup docs now explicitly mark old path references as
     historical context
 

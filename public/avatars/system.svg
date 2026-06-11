@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
-  <title id="title">AIMSBot scenario avatar</title>
+  <title id="title">Training platform scenario avatar</title>
   <desc id="desc">A slate circular avatar with a clipboard and document lines for scenario and system messages.</desc>
   <defs>
     <linearGradient id="systemBg" x1="18" y1="16" x2="108" y2="112" gradientUnits="userSpaceOnUse">
