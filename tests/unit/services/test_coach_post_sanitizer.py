@@ -1,4 +1,4 @@
-from app.services.coach_post import (
+from app.modules.aims.services.coach_post import (
     AimsPostProcessor,
     EndGameDetector,
     build_endgame_bullets_fallback,

@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     DEBUG_MODE: bool = False
     ALLOWED_ORIGINS: List[str] = []
+    ACTIVE_MODULE: str = "aims"
     
     # Logging configuration
     LOG_REQUEST_BODY_MAX: int = 1024
@@ -129,15 +130,22 @@ class Settings(BaseSettings):
 
     @property
     def redis_key_prefix(self) -> str:
+        return self.module_redis_key_prefix(self.ACTIVE_MODULE)
+
+    def module_redis_key_prefix(self, module_id: str) -> str:
         if self.REDIS_PREFIX:
             return self.REDIS_PREFIX
-        return f"{PREFIX_AIMS}:{self.APP_ENV}:{PREFIX_SESSION}:"
+        module = (module_id or "aims").strip().lower() or "aims"
+        return f"{module}:{self.APP_ENV}:{PREFIX_SESSION}:"
 
     @property
     def redis_fallback_prefixes(self) -> List[str]:
+        return self.module_redis_fallback_prefixes(self.ACTIVE_MODULE)
+
+    def module_redis_fallback_prefixes(self, module_id: str) -> List[str]:
         if self.REDIS_PREFIX:
             return []
-        if self.APP_ENV == "prod":
+        if (module_id or "aims").strip().lower() == PREFIX_AIMS and self.APP_ENV == "prod":
             return [f"{PREFIX_AIMS}:{PREFIX_SESSION}:"]
         return []
 
@@ -207,6 +215,14 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return v.upper()
         return v or "INFO"
+
+    @field_validator("ACTIVE_MODULE", mode="before")
+    @classmethod
+    def validate_active_module(cls, v):
+        if isinstance(v, str):
+            module_id = v.strip().lower()
+            return module_id or "aims"
+        return "aims"
 
     @field_validator("SESSION_COOKIE_MAX_AGE", mode="before")
     @classmethod

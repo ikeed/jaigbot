@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
+from .core.module_runtime import get_builtin_active_module, get_builtin_module_registry
 from .http_handlers import get_request_id as _get_request_id, install_http_handlers
 from .vertex import VertexClient
 from .runtime import VertexClientCache, create_memory_store, get_logging_config
@@ -28,6 +29,15 @@ async def _lifespan(application: FastAPI):
     """Application lifespan: run startup tasks before yielding, cleanup after."""
     application.state.memory_store = MEMORY_STORE
     application.state.vertex_client_cache = _VERTEX_CLIENT_CACHE
+    module_registry = get_builtin_module_registry()
+    active_module = get_builtin_active_module()
+    application.state.module_registry = module_registry
+    application.state.active_module = active_module
+    logger.info(
+        "Active training module resolved: id=%s display_name=%s",
+        active_module.module_id,
+        active_module.display_name,
+    )
     await _model_preflight(application)
     yield
 
@@ -41,6 +51,20 @@ def get_memory_store(request: Request):
 
 def get_model_check(request: Request) -> dict:
     return getattr(request.app.state, "model_check", {"available": "unknown"})
+
+
+def get_active_module(request: Request):
+    active_module = getattr(request.app.state, "active_module", None)
+    if active_module is not None:
+        return active_module
+    return get_builtin_active_module()
+
+
+def get_module_registry(request: Request):
+    module_registry = getattr(request.app.state, "module_registry", None)
+    if module_registry is not None:
+        return module_registry
+    return get_builtin_module_registry()
 
 # Optional CORS
 if settings.ALLOWED_ORIGINS:
@@ -70,18 +94,22 @@ app.include_router(create_system_router(
     logger=logger,
     get_memory_store=get_memory_store,
     get_model_check=get_model_check,
+    get_active_module=get_active_module,
+    get_module_registry=get_module_registry,
     get_request_id=_get_request_id,
 ))
 app.include_router(create_summary_router(
     settings=settings,
     logger=logger,
     get_memory_store=get_memory_store,
+    get_active_module=get_active_module,
     vertex_client_cls=VertexClient,
 ))
 app.include_router(create_session_router(
     settings=settings,
     logger=logger,
     get_memory_store=get_memory_store,
+    get_active_module=get_active_module,
 ))
 
 
@@ -116,11 +144,13 @@ def _session_cookie_settings() -> dict:
     }
 
 
-def _aims_config() -> dict:
-    return {
-        "enabled": settings.AIMS_COACHING_ENABLED,
-        "force_default": settings.AIMS_COACHING_DEFAULT,
-    }
+def _module_runtime_config(active_module) -> dict:
+    if getattr(active_module, "module_id", None) == "aims":
+        return {
+            "enabled": settings.AIMS_COACHING_ENABLED,
+            "force_default": settings.AIMS_COACHING_DEFAULT,
+        }
+    return {}
 
 
 def _debug_config() -> dict:
@@ -130,22 +160,26 @@ def _debug_config() -> dict:
     }
 
 
-def _chat_orchestrator(memory_store=None):
+def _chat_orchestrator(memory_store=None, active_module=None):
     from .services.chat_orchestrator import ChatOrchestrator
+
+    if active_module is None:
+        raise RuntimeError("_chat_orchestrator requires an explicit active_module")
 
     return ChatOrchestrator(
         memory_store=memory_store or MEMORY_STORE,
         session_cookie_settings=_session_cookie_settings(),
         memory_config=_memory_config(),
-        aims_config=_aims_config(),
+        module_runtime_config=_module_runtime_config(active_module),
         vertex_config=_vertex_config(),
         debug_config=_debug_config(),
         logger=logger,
+        active_module=active_module,
     )
 
 
-def get_chat_orchestrator(memory_store=Depends(get_memory_store)):
-    return _chat_orchestrator(memory_store=memory_store)
+def get_chat_orchestrator(memory_store=Depends(get_memory_store), active_module=Depends(get_active_module)):
+    return _chat_orchestrator(memory_store=memory_store, active_module=active_module)
 
 
 app.include_router(create_chat_router(

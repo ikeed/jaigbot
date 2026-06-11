@@ -38,10 +38,12 @@ def test_storage_service_upload_path(mock_storage_client):
     assert payload["environment"]["appEnv"] == "local"
     assert payload["metadata"]["sessionId"] == "sid"
     assert payload["metadata"]["userId"] == "uid@example.com"
+    assert payload["metadata"]["moduleId"] == "aims"
     assert "persona" in payload["config"]
     assert "config" in payload
     assert "transcript" in payload
     assert "analytics" in payload
+    assert payload["module"]["id"] == "aims"
 
 def test_storage_service_structured_archive(mock_storage_client):
     service = StorageService(bucket_name="test-bucket")
@@ -108,12 +110,16 @@ def test_storage_service_structured_archive(mock_storage_client):
     # Verify analytics has summary (coach_post)
     assert payload["analytics"]["summary"]["title"] == "Nice job!"
     assert "Line 1" in payload["analytics"]["summary"]["lines"]
+    assert payload["module"]["participantContext"]["personaName"] == "Test Persona"
+    assert payload["module"]["payload"]["summary"]["title"] == "Nice job!"
+    assert payload["module"]["payload"]["analytics"]["perStepCounts"]["Announce"] == 1
     
     # Verify metadata outcome
     assert payload["metadata"]["outcome"]["isGameOver"] is True
     assert payload["metadata"]["outcome"]["exitContext"] == "completion"
     assert payload["config"]["persona"]["id"] == 99
     assert payload["config"]["persona"]["name"] == "Test Persona"
+    assert payload["metadata"]["moduleId"] == "aims"
 def test_storage_service_duration_calculation_edge_cases():
     """Test that _transform_to_logical_schema handles duration calculation edge cases."""
     service = StorageService(bucket_name="test-bucket")
@@ -150,6 +156,37 @@ def test_storage_service_duration_calculation_edge_cases():
     }
     result = service._transform_to_logical_schema("sid", "uid", data_numeric_strings)
     assert result["metadata"]["timestamps"]["durationSeconds"] == 100.0
+
+
+def test_storage_service_legacy_aims_payload_does_not_follow_active_module(monkeypatch):
+    monkeypatch.setattr("app.config.settings.ACTIVE_MODULE", "interview")
+    data = {
+        "session_started": 100.0,
+        "updated": 120.0,
+        "character": "Specific Persona: Jasmine",
+        "scene": "Clinic",
+        "full_history": [],
+        "aims": {"totalTurns": 1},
+        "coach_post": {"title": "Done"},
+    }
+
+    result = StorageService._transform_to_logical_schema("sid", "uid", data)
+
+    assert result["metadata"]["moduleId"] == "aims"
+    assert result["module"]["id"] == "aims"
+
+
+def test_storage_service_archive_shaped_payload_without_module_id_raises(monkeypatch):
+    monkeypatch.setattr("app.config.settings.ACTIVE_MODULE", "interview")
+    data = {
+        "metadata": {"sessionId": "sid"},
+        "transcript": [],
+        "analytics": {},
+    }
+
+    with pytest.raises(ValueError, match="Cannot infer module_id"):
+        StorageService._transform_to_logical_schema("sid", "uid", data)
+
 def test_storage_service_error_handling(mock_storage_client):
     service = StorageService(bucket_name="test-bucket")
     
@@ -238,7 +275,7 @@ def test_storage_service_count_personas_handles_blob_parse_errors_and_cap(monkey
     client.list_blobs.return_value = [bad_blob, ignored_blob, good_blob]
     service._client = client
     monkeypatch.setattr(
-        "app.services.persona_service.extract_persona_name_from_archive",
+        "app.modules.aims.services.persona_service.extract_persona_name_from_archive",
         lambda data: data.get("persona", {}).get("name"),
     )
 

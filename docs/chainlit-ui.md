@@ -1,6 +1,11 @@
-# Chainlit UI for AIMSBot
+# Chainlit UI for the Training Platform
 
-This guide covers running the Chainlit chat interface locally or as a separate service, how session persistence works, and useful environment switches.
+This guide covers running the Chainlit chat interface locally or as a separate
+service, how session persistence works, and useful environment switches.
+
+The repo now has a generic core shell plus module-owned UI bundles. AIMS is
+still the default shipped module, but the shell can load other built-in modules
+through the active-module manifest.
 
 ## Overview
 - Chainlit provides a lightweight ChatGPT‑like UI that forwards messages to the existing FastAPI POST /chat endpoint.

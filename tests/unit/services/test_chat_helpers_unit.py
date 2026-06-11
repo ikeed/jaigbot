@@ -45,6 +45,41 @@ def test_format_history_limits_turns():
     assert lines == ["Doctor: U4", "Assistant: A4", "Doctor: U5", "Assistant: A5"]
 
 
+def test_format_history_uses_module_counted_roles():
+    turns = [
+        {"role": "system", "content": "meta"},
+        {"role": "mentor", "content": "coach"},
+        {"role": "student", "content": "Q1"},
+        {"role": "interviewer", "content": "A1"},
+        {"role": "mentor", "content": "coach-2"},
+        {"role": "student", "content": "Q2"},
+        {"role": "interviewer", "content": "A2"},
+    ]
+
+    formatted = format_history(turns, memory_max_turns=1, counted_roles=("student", "interviewer"))
+
+    assert formatted.split("\n") == ["Assistant: coach-2", "Assistant: Q2", "Assistant: A2"]
+
+
+def test_format_history_uses_module_role_labels():
+    turns = [
+        {"role": "candidate", "content": "I led the migration."},
+        {"role": "interviewer", "content": "What was the outcome?"},
+    ]
+
+    formatted = format_history(
+        turns,
+        memory_max_turns=2,
+        counted_roles=("candidate", "interviewer"),
+        role_labels={"candidate": "Candidate", "interviewer": "Interviewer"},
+    )
+
+    assert formatted.split("\n") == [
+        "Candidate: I led the migration.",
+        "Interviewer: What was the outcome?",
+    ]
+
+
 def test_recent_context_labels_and_empty():
     # empty
     assert recent_context([], 4) == ""
@@ -95,3 +130,20 @@ def test_extract_recent_concerns_filters_parent_and_limits():
         "Too many shots on the schedule makes me nervous"[:300],
         "What about polio dose risks?"[:300],
     ]
+
+
+def test_extract_recent_concerns_can_use_module_counterpart_roles():
+    turns = [
+        {"role": "interviewer", "content": "Tell me about the project risk you were most worried about."},
+        {"role": "candidate", "content": "Sure"},
+        {"role": "interviewer", "content": "I was nervous about rollout safety and migration risk."},
+    ]
+
+    items = extract_recent_concerns(
+        turns,
+        concern_roles=("interviewer",),
+        concern_keywords=("risk", "safety", "nervous"),
+        max_items=1,
+    )
+
+    assert items == ["I was nervous about rollout safety and migration risk."[:300]]

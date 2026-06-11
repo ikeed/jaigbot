@@ -25,9 +25,24 @@ def create_system_router(
     logger: logging.Logger,
     get_memory_store: Callable[..., Any],
     get_model_check: Callable[..., dict],
+    get_active_module: Callable[..., Any],
+    get_module_registry: Callable[..., Any],
     get_request_id: Callable[[Request], str | None],
 ) -> APIRouter:
     router = APIRouter()
+
+    def serialize_dialogue_roles(dialogue_roles: Any) -> dict[str, Any] | None:
+        if dialogue_roles is None:
+            return None
+        return {
+            "participantRoles": list(getattr(dialogue_roles, "participant_roles", ()) or ()),
+            "feedbackRoles": list(getattr(dialogue_roles, "feedback_roles", ()) or ()),
+            "metadataRoles": list(getattr(dialogue_roles, "metadata_roles", ()) or ()),
+            "countedRoles": list(getattr(dialogue_roles, "counted_roles", ()) or ()),
+            "userRoles": list(getattr(dialogue_roles, "user_roles", ()) or ()),
+            "counterpartRoles": list(getattr(dialogue_roles, "counterpart_roles", ()) or ()),
+            "displayNames": dict(getattr(dialogue_roles, "display_names", {}) or {}),
+        }
 
     @router.get(ENDPOINT_HEALTHZ)
     async def healthz():
@@ -71,7 +86,40 @@ def create_system_router(
     async def config(
         memory_store=Depends(get_memory_store),
         model_check: dict = Depends(get_model_check),
+        active_module=Depends(get_active_module),
+        module_registry=Depends(get_module_registry),
     ):
+        active_module_manifest = getattr(active_module, "manifest", None)
+        available_modules = []
+        for module in module_registry.list_modules():
+            manifest = getattr(module, "manifest", None)
+            if manifest is None:
+                continue
+            available_modules.append(
+                {
+                    "id": manifest.id,
+                    "displayName": manifest.display_name,
+                    "chatProfileName": manifest.chat_profile_name,
+                    "supportsIntro": manifest.supports_intro,
+                    "supportsFeedback": manifest.supports_feedback,
+                    "supportsSummary": manifest.supports_summary,
+                    "storagePrefix": manifest.storage_prefix,
+                    "dialogueRoles": serialize_dialogue_roles(manifest.dialogue_roles),
+                    "frontendJsBundles": list(manifest.frontend_js_bundles),
+                    "frontendCss": manifest.frontend_css,
+                    "branding": (
+                        {
+                            "appTitle": manifest.branding.app_title,
+                            "avatarName": manifest.branding.avatar_name,
+                            "logoAsset": manifest.branding.logo_asset,
+                            "loadingText": manifest.branding.loading_text,
+                            "avatarAssets": dict(manifest.branding.avatar_assets),
+                        }
+                        if manifest.branding
+                        else None
+                    ),
+                }
+            )
         return {
             "projectId": settings.PROJECT_ID,
             "region": settings.REGION,
@@ -115,6 +163,35 @@ def create_system_router(
                 "sameSite": settings.SESSION_COOKIE_SAMESITE,
                 "maxAge": settings.SESSION_COOKIE_MAX_AGE,
             },
+            "activeModule": (
+                {
+                    "id": active_module_manifest.id,
+                    "displayName": active_module_manifest.display_name,
+                    "chatProfileName": active_module_manifest.chat_profile_name,
+                    "storagePrefix": active_module_manifest.storage_prefix,
+                    "archiveSchemaVersion": active_module_manifest.archive_schema_version,
+                    "dialogueRoles": serialize_dialogue_roles(active_module_manifest.dialogue_roles),
+                    "supportsIntro": active_module_manifest.supports_intro,
+                    "supportsFeedback": active_module_manifest.supports_feedback,
+                    "supportsSummary": active_module_manifest.supports_summary,
+                    "frontendJsBundles": list(active_module_manifest.frontend_js_bundles),
+                    "frontendCss": active_module_manifest.frontend_css,
+                    "branding": (
+                        {
+                            "appTitle": active_module_manifest.branding.app_title,
+                            "avatarName": active_module_manifest.branding.avatar_name,
+                            "logoAsset": active_module_manifest.branding.logo_asset,
+                            "loadingText": active_module_manifest.branding.loading_text,
+                            "avatarAssets": dict(active_module_manifest.branding.avatar_assets),
+                        }
+                        if active_module_manifest.branding
+                        else None
+                    ),
+                }
+                if active_module_manifest
+                else None
+            ),
+            "availableModules": available_modules,
         }
 
     @router.get(ENDPOINT_MODELCHECK)
@@ -122,8 +199,9 @@ def create_system_router(
         return {"modelId": settings.MODEL_ID, "region": settings.VERTEX_LOCATION, **model_check}
 
     @router.get(ENDPOINT_DIAGNOSTICS)
-    async def diagnostics(memory_store=Depends(get_memory_store)):
+    async def diagnostics(memory_store=Depends(get_memory_store), active_module=Depends(get_active_module)):
         """Expose effective generation settings to help root-cause truncation issues."""
+        active_module_manifest = getattr(active_module, "manifest", None)
         return {
             "transport": "rest" if settings.USE_VERTEX_REST else "sdk",
             "generationConfig": {
@@ -149,6 +227,7 @@ def create_system_router(
             "environment": {
                 "appEnv": settings.APP_ENV,
                 "gcsObjectPrefix": settings.gcs_object_prefix,
+                "activeModuleId": (active_module_manifest.id if active_module_manifest else None),
             },
         }
 

@@ -3,8 +3,19 @@ from fastapi.responses import RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.chainlit_thread_state import get_current_thread_id
-from app.constants import PATH_CHAT, ROUTE_CHAT_LOGIN, ROUTE_CHAT_LOGIN_CALLBACK
+from app.constants import (
+    LEGACY_QUERY_NEW_CHAT,
+    PATH_CHAT,
+    QUERY_NEW_CHAT,
+    ROUTE_CHAT_LOGIN,
+    ROUTE_CHAT_LOGIN_CALLBACK,
+)
 from app.security.auth import authenticated_user_identifier
+
+
+def _active_module_id(request: Request) -> str | None:
+    active_module = getattr(request.app.state, "active_module", None)
+    return getattr(active_module, "module_id", None)
 
 
 class AuthRedirectMiddleware(BaseHTTPMiddleware):
@@ -29,10 +40,11 @@ class AuthRedirectMiddleware(BaseHTTPMiddleware):
                 chat_slash_path,
                 ROUTE_CHAT_LOGIN_CALLBACK,
             }
-            and request.query_params.get("aims_new") != "1"
+            and request.query_params.get(QUERY_NEW_CHAT) != "1"
+            and request.query_params.get(LEGACY_QUERY_NEW_CHAT) != "1"
         ):
             user_identifier = authenticated_user_identifier(request)
-            thread_id = get_current_thread_id(user_identifier)
+            thread_id = get_current_thread_id(user_identifier, active_module_id=_active_module_id(request))
             if thread_id:
                 return RedirectResponse(url=f"{PATH_CHAT}/thread/{thread_id}", status_code=307)
 

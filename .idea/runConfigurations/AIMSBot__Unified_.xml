@@ -6,6 +6,7 @@
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
     <envs>
+      <env name="ACTIVE_MODULE" value="aims" />
       <env name="PYTHONUNBUFFERED" value="1" />
       <env name="PORT" value="8080" />
       <env name="PROJECT_ID" value="warm-actor-253703" />

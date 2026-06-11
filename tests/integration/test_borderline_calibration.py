@@ -67,7 +67,7 @@ def _seed_session(*, session_id: str, initial_parent_msg: str, aims_state: dict)
 def _post_turn(client: TestClient, *, session_id: str, message: str) -> dict:
     response = client.post(
         "/chat",
-        json={"message": message, "coach": True, "sessionId": session_id},
+        json={"message": message, "moduleOptions": {"feedbackEnabled": True}, "sessionId": session_id},
     )
     assert response.status_code == 200, response.text
     return response.json()

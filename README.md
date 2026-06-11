@@ -10,16 +10,16 @@ with deterministic fallbacks and session-level metrics.
 - UI: Chainlit (see `chainlit_app.py`) or the unified login/UI/API app in
   `run_app.py`.
 - API endpoints (FastAPI backend):
-  - **POST /chat** → calls Vertex AI and returns `{ reply, model, latencyMs }`. When `AIMS_COACHING_ENABLED=true` and the request includes `coach=true`, the response may also include optional `coaching` and `session` fields (see AIMS coaching docs).
+  - **POST /chat** → calls Vertex AI and returns `{ reply, model, latencyMs }`. When `AIMS_COACHING_ENABLED=true` and the request includes `moduleOptions.feedbackEnabled=true`, the response may also include optional `coaching` and `session` fields (see AIMS coaching docs).
   - **GET  /history?sessionId=...** → returns stored session history for debugging, reporting, and server-side context recovery.
   - **GET  /summary?sessionId=...** → returns an aggregated AIMS summary for a session (overallScore, stepCoverage, strengths, growthAreas, narrative). Present even if coaching is disabled; contents may be minimal.
   - **POST /session**, **/session/deregister**, **/report** → session initialization, duplicate-tab cleanup, and issue reporting/archive flow.
   - **GET  /healthz** → simple health check.
   - **GET  /config**, **/modelcheck**, **/diagnostics**, **/models** for configuration/diagnostics.
 - Backend code: `app/main.py`, `app/services/chat_orchestrator.py`, and `app/vertex.py`.
-- AIMS coaching architecture: `docs/aims/README.md`.
+- AIMS coaching architecture: `app/modules/aims/docs/README.md`.
 - Run/setup docs: `docs/developer-setup.md` (step‑by‑step).
-- AIMS implementation map: `docs/aims/README.md`.
+- AIMS implementation map: `app/modules/aims/docs/README.md`.
 - SSO Setup Guide: `docs/sso-setup.md` (step-by-step for Google, Facebook, Apple).
 - Note: `app/static/index.html` is deprecated and no longer served; the backend does not mount a static UI.
 
@@ -159,8 +159,9 @@ The backend supports session-keyed memory with optional persona/scene, using in-
 
 ## More docs
 - Developer setup (step‑by‑step): docs/developer-setup.md
-- AIMS implementation map: docs/aims/README.md
+- AIMS implementation map: app/modules/aims/docs/README.md
 - API reference: docs/api.md (and Swagger UI at GET /docs when running)
+- Module implementation guide: docs/module-development.md
 - Terraform IaC: terraform/README.md
 - Chainlit UI details: docs/chainlit-ui.md
 - Health checks and URLs: docs/health-checks.md
@@ -168,6 +169,5 @@ The backend supports session-keyed memory with optional persona/scene, using in-
 - Release and rollback: docs/release-and-rollback.md
 - Memory and persona: docs/memory-and-persona.md
 - MCP empowerment/readiness: docs/mcp-empowerment.md
-- Standing orders (minimize manual work via efficient tool use): docs/standing-orders.md
-- AIMS protocol summary (Source of Truth): docs/aims/AIMS_Approach_Summary.md
-- AIMS protocol mapping (reference): docs/aims/aims_mapping.json (source paper: fpubh-11-1120326.pdf)
+- AIMS protocol summary (Source of Truth): app/modules/aims/docs/AIMS_Approach_Summary.md
+- AIMS protocol mapping (reference): app/modules/aims/docs/aims_mapping.json (source paper: app/modules/aims/docs/fpubh-11-1120326.pdf)

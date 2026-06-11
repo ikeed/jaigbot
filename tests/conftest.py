@@ -21,7 +21,7 @@ def aims_mapping_mock():
     import sys
     
     # Clear any cached modules that might have the old load_mapping
-    modules_to_clear = [k for k in sys.modules.keys() if k.startswith('app.aims_engine')]
+    modules_to_clear = [k for k in sys.modules.keys() if k.startswith('app.modules.aims.engine')]
     for mod in modules_to_clear:
         if mod in sys.modules:
             del sys.modules[mod]
@@ -38,7 +38,7 @@ def aims_mapping_mock():
     }
     
     # Use session-scoped patch
-    with patch("app.aims_engine.load_mapping", return_value=mock_mapping):
+    with patch("app.modules.aims.engine.load_mapping", return_value=mock_mapping):
         yield mock_mapping
 
 
@@ -101,7 +101,7 @@ def vertex_client_mock(monkeypatch):
             return json.dumps({"patient_reply": "Mock JSON reply"})
 
     monkeypatch.setattr("app.vertex.VertexClient", MockVertexClient)
-    monkeypatch.setattr("app.services.classifier_service.VertexClient", MockVertexClient)
+    monkeypatch.setattr("app.modules.aims.services.classifier_service.VertexClient", MockVertexClient)
     monkeypatch.setattr("app.services.vertex_helpers.VertexClient", MockVertexClient)
     return MockVertexClient
 

@@ -1,8 +1,9 @@
 # API reference
 
-This document describes the FastAPI endpoints exposed by AIMSBot. See the root
-README for run instructions and Swagger UI at `/docs` when the API-only backend
-is running.
+This document describes the FastAPI endpoints exposed by the training-platform
+backend. The default shipped module is AIMS, so many examples still use AIMS
+payloads. See the root README for run instructions and Swagger UI at `/docs`
+when the API-only backend is running.
 
 Local base URLs:
 
@@ -15,38 +16,38 @@ Local base URLs:
 - `POST /chat` keeps the core response fields `{ reply, model, latencyMs }`.
 - Backward-compatible aliases such as `text`, `modelId`, and `latency_ms` may
   also be present.
-- AIMS coaching output is returned when `AIMS_COACHING_ENABLED=true` and the
-  request opts in with `coach: true`, or when the server is configured to force
-  coaching by default.
 - Session state is stored in memory or Redis. See `docs/memory-and-persona.md`.
+- Module-specific request options and richer payloads are documented by the
+  owning module. For AIMS, see
+  [`app/modules/aims/docs/api.md`](/Users/craigburnett/PycharmProjects/AIMSBot/app/modules/aims/docs/api.md).
 
 ## POST /chat
 
-Sends one clinician message and receives a patient/parent simulator reply.
-When coaching is active, the response also includes AIMS feedback and session
-metrics.
+Sends one training turn and receives the module-owned counterpart reply.
 
 Request body:
 
 - `message`: string, required, non-empty, max 2 KiB after UTF-8 encoding
 - `sessionId`: string, optional; if omitted the server uses a cookie or issues a
   new session id
-- `coach`: boolean, optional
-- `character`: string, optional persona override
-- `scene`: string, optional scene/objective override
+- `moduleId`: string, optional explicit module override when a deployment
+  supports it
+- `moduleOptions`: object, optional module-directed request metadata
+- `character`: string, optional compatibility participant override
+- `scene`: string, optional compatibility scene/objective override
 - `userInfo`: object, optional user metadata for session association/audit
 
 Example:
 
 ```json
 {
-  "message": "What concerns do you have about the MMR vaccine for Layla?",
+  "message": "Tell me more about what is worrying you.",
   "sessionId": "abc-123",
-  "coach": true
+  "moduleOptions": {
+    "feedbackEnabled": true
+  }
 }
 ```
-
-Response without coaching:
 
 ```json
 {
@@ -60,52 +61,6 @@ Response without coaching:
 }
 ```
 
-Response with coaching:
-
-```json
-{
-  "reply": "...",
-  "model": "gemini-2.5-pro",
-  "latencyMs": 234,
-  "sessionId": "abc-123",
-  "coaching": {
-    "step": "Mirror+Inquire",
-    "steps": ["Mirror", "Inquire"],
-    "score": 2,
-    "reasons": ["..."],
-    "tips": ["..."],
-    "step_feedback": [
-      {
-        "step": "Mirror",
-        "feedback": "...",
-        "tone": "praise"
-      }
-    ],
-    "phase": "InquireMirror"
-  },
-  "session": {
-    "totalTurns": 2,
-    "perStepCounts": {
-      "Announce": 1,
-      "Inquire": 1,
-      "Mirror": 1,
-      "Secure": 0,
-      "Mirror+Inquire": 1
-    },
-    "runningAverage": {
-      "Announce": 2.5,
-      "Inquire": 2,
-      "Mirror": 2
-    }
-  }
-}
-```
-
-Coaching responses may also include:
-
-- `coachPost`: final coaching summary when the scenario reaches an end state
-- `gameOver`: `true` when a coach post ends the scenario
-
 Errors:
 
 - `400`: invalid UTF-8 or message too large
@@ -116,7 +71,8 @@ Errors:
 
 Behavioral notes:
 
-- Persona and scene are composed into the model system instruction.
+- Participant context is composed into the module/system instruction when the
+  active module uses it.
 - Jailbreak/meta requests are intercepted by the security guard path.
 - Advice-like patient replies are treated as safety failures and replaced with
   an error-style retry message.
@@ -136,7 +92,7 @@ metadata in addition to history entries.
 
 ## GET /summary
 
-Returns a session-level AIMS summary aggregated from stored per-turn metrics.
+Returns a session-level module summary when the active module supports it.
 
 Query parameters:
 
@@ -144,25 +100,9 @@ Query parameters:
 - `analysis`: optional boolean. When true, the server may include richer
   analysis when available.
 
-Example response:
-
-```json
-{
-  "overallScore": 2.1,
-  "stepCoverage": {
-    "Announce": 1,
-    "Inquire": 2,
-    "Mirror": 1,
-    "Secure": 0
-  },
-  "strengths": [],
-  "growthAreas": [],
-  "narrative": ""
-}
-```
-
-If no data is present for the session, numeric fields default to `0` and arrays
-to empty.
+Concrete summary payloads are module-owned. The current rich example in this
+repo is the AIMS summary shape described in
+[`app/modules/aims/docs/api.md`](/Users/craigburnett/PycharmProjects/AIMSBot/app/modules/aims/docs/api.md).
 
 ## POST /session
 
@@ -176,8 +116,9 @@ Important request fields:
 - `scene`: optional
 - `userInfo`: optional
 
-The response includes the effective session id and any available recovered
-history/persona information.
+The response includes the effective session id plus a generic module bootstrap
+block. Compatibility aliases such as `character`, `scene`, and `initialCard`
+may also be present for current shell consumers.
 
 ## POST /session/deregister
 
@@ -216,9 +157,6 @@ Successful response:
 
 Common runtime flags:
 
-- `AIMS_COACHING_ENABLED`
-- `AIMS_COACHING_DEFAULT`
-- `AIMS_CLASSIFIER_MODE`
 - `APP_ENV` (`local`, `staging`, or `prod`; required on Cloud Run)
 - `MEMORY_ENABLED`
 - `MEMORY_BACKEND`
@@ -237,6 +175,10 @@ Common runtime flags:
 - `SAFETY_LOG_CAP`
 - `CHAINLIT_AUTH_SECRET`
 - `BACKEND_URL`
+
+Module-specific flags such as AIMS coaching toggles are documented by the
+owning module. See
+[`app/modules/aims/docs/api.md`](/Users/craigburnett/PycharmProjects/AIMSBot/app/modules/aims/docs/api.md).
 
 ## Vertex note
 

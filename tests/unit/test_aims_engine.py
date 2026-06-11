@@ -1,6 +1,6 @@
 import pytest
 
-from app.aims_engine import load_mapping, classify_step, score_step, evaluate_turn
+from app.modules.aims.engine import load_mapping, classify_step, score_step, evaluate_turn
 
 
 @pytest.fixture(scope="module")

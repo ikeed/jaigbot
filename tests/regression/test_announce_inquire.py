@@ -13,10 +13,10 @@ import json
 import pytest
 from unittest.mock import MagicMock, AsyncMock
 
-from app.models import Coaching, ClassifierResult
-from app.services.aims_metrics_service import AimsMetricsService
-from app.services.aims_state_service import AimsStateService
-from app.services.classifier_service import ClassifierService
+from app.modules.aims.models import Coaching, ClassifierResult
+from app.modules.aims.services.aims_metrics_service import AimsMetricsService
+from app.modules.aims.services.aims_state_service import AimsStateService
+from app.modules.aims.services.classifier_service import ClassifierService
 
 
 # ---------------------------------------------------------------------------

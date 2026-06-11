@@ -11,9 +11,9 @@ def test_current_thread_round_trip_and_clear(monkeypatch):
     }
     monkeypatch.setattr("app.main.MEMORY_STORE", store)
 
-    state.set_current_thread_id("doctor@example.com", "thread-1")
+    state.set_current_thread_id("doctor@example.com", "thread-1", "aims")
 
-    assert state.get_current_thread_id("doctor@example.com") == "thread-1"
+    assert state.get_current_thread_id("doctor@example.com", active_module_id="aims") == "thread-1"
 
     state.clear_current_thread_id("doctor@example.com")
 
@@ -62,6 +62,22 @@ def test_get_current_thread_id_clears_thread_owned_by_someone_else(monkeypatch):
     monkeypatch.setattr("app.main.MEMORY_STORE", store)
 
     assert state.get_current_thread_id(user_id) is None
+    assert key not in store
+
+
+def test_get_current_thread_id_clears_module_mismatch(monkeypatch):
+    user_id = "doctor@example.com"
+    key = state._key(user_id)
+    store = {
+        key: {KEY_THREAD_ID: "thread-1", "module_id": "aims"},
+        "chainlit:local:thread:thread-1": {
+            "id": "thread-1",
+            "userIdentifier": "doctor@example.com",
+        },
+    }
+    monkeypatch.setattr("app.main.MEMORY_STORE", store)
+
+    assert state.get_current_thread_id(user_id, active_module_id="interview") is None
     assert key not in store
 
 

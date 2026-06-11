@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from app.services.aims_turn_coordinator import AimsTurnCoordinator
+from app.modules.aims.services.aims_turn_coordinator import AimsTurnCoordinator
 
 
 @pytest.mark.asyncio

@@ -111,6 +111,14 @@ def client():
     return TestClient(m.app)
 
 
+def test_chat_rejects_legacy_coach_flag():
+    response = client().post("/chat", json={"message": "hello", "coach": True})
+
+    assert response.status_code == 422
+    errors = response.json()["error"]["errors"]
+    assert "moduleOptions.feedbackEnabled" in json.dumps(errors)
+
+
 def test_classifier_post_processing_inquire_to_secure_and_tip_trim_and_score_norm(monkeypatch):
     # LLM classifier returns Secure with score=1 and >1 tips.
     # Message is a long (>40 words), question-free didactic lecture.
@@ -138,7 +146,7 @@ def test_classifier_post_processing_inquire_to_secure_and_tip_trim_and_score_nor
             "Evidence shows that herd immunity requires approximately 95 percent coverage. "
             "Research shows that vaccine-preventable diseases resurge when coverage drops below threshold."
         ),
-        "coach": True,
+        "moduleOptions": {"feedbackEnabled": True},
         "sessionId": "s1",
     }
     r = c.post("/chat", json=body)
@@ -177,7 +185,7 @@ def test_patient_reply_medical_language_passes_through(monkeypatch):
     monkeypatch.setattr(m, "evaluate_turn", fake_eval, raising=False)
 
     c = client()
-    body = {"message": "Let's discuss vaccines", "coach": True, "sessionId": "s2"}
+    body = {"message": "Let's discuss vaccines", "moduleOptions": {"feedbackEnabled": True}, "sessionId": "s2"}
     r = c.post("/chat", json=body)
     assert r.status_code == 200
     data = r.json()
@@ -201,7 +209,7 @@ def test_patient_reply_prompt_includes_clinician_name_from_user_info(monkeypatch
     c = client()
     body = {
         "message": "How are you and Sophia doing today?",
-        "coach": True,
+        "moduleOptions": {"feedbackEnabled": True},
         "sessionId": "clinician-name",
         "userInfo": {
             "identifier": "craig.burnett@gmail.com",
@@ -228,7 +236,7 @@ def test_invalid_json_twice_falls_back_based_on_step(monkeypatch):
     GWStub.reply_json_invalid_times = 2
 
     c = client()
-    body = {"message": "Let's talk vaccines", "coach": True, "sessionId": "s3"}
+    body = {"message": "Let's talk vaccines", "moduleOptions": {"feedbackEnabled": True}, "sessionId": "s3"}
     r = c.post("/chat", json=body)
     assert r.status_code == 200
     data = r.json()

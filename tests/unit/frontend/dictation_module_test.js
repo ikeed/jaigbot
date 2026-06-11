@@ -24,7 +24,7 @@ const context = {
       this.type = type;
       this.bubbles = init && init.bubbles;
     },
-    AIMSBotUI: {
+    TrainingUI: {
       chainlitIconButtonClass: "icon-button",
       prevent() {},
       state: {}
@@ -64,14 +64,14 @@ const scriptPath = path.join(
   "..",
   "public",
   "js",
-  "aimsbot",
+  "platform",
   "dictation.js"
 );
 
 const script = fs.readFileSync(scriptPath, "utf8");
 vm.runInNewContext(script, context, { filename: scriptPath });
 
-const hooks = context.window.AIMSBotUI.dictation.testHooks;
+const hooks = context.window.TrainingUI.dictation.testHooks;
 
 function FakeSpeechRecognition() {}
 function FakeWebkitSpeechRecognition() {}

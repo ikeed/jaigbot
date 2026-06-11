@@ -7,10 +7,11 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from app.constants import KEY_AIMS_STATE, KEY_COACH_POST, KEY_GAME_OVER, KEY_UPDATED, SESSION_HISTORY
-from app.models import ChatRequest, ClassifierResult, Coaching
-from app.services.aims_coaching_handler import AimsCoachingHandler
-from app.services.aims_endgame_service import AimsEndgameService
-from app.services.aims_turn_coordinator import AimsTurnResult
+from app.models import ChatRequest
+from app.modules.aims.models import ClassifierResult, Coaching
+from app.modules.aims.services.aims_coaching_handler import AimsCoachingHandler
+from app.modules.aims.services.aims_endgame_service import AimsEndgameService
+from app.modules.aims.services.aims_turn_coordinator import AimsTurnResult
 from app.services.chat_context import ChatContext
 
 
@@ -205,7 +206,7 @@ async def test_replay_split_acceptance_requires_second_turn():
 
     result1 = await handler.handle(
         req=None,
-        body=ChatRequest(message="I can send you home with the evidence summary.", sessionId=session_id, coach=True),
+        body=ChatRequest(message="I can send you home with the evidence summary.", sessionId=session_id, moduleOptions={"feedbackEnabled": True}),
         ctx=ctx,
     )
     assert "coach_post" not in result1
@@ -214,7 +215,7 @@ async def test_replay_split_acceptance_requires_second_turn():
     _sync_ctx(ctx, memory_store, result1)
     result2 = await handler.handle(
         req=None,
-        body=ChatRequest(message="We can also schedule a follow-up appointment in a few weeks.", sessionId=session_id, coach=True),
+        body=ChatRequest(message="We can also schedule a follow-up appointment in a few weeks.", sessionId=session_id, moduleOptions={"feedbackEnabled": True}),
         ctx=ctx,
     )
 
@@ -272,7 +273,7 @@ async def test_replay_literature_followup_cannot_end_without_inquiry_or_surfaced
         body=ChatRequest(
             message="I can send you home with some literature and book a follow-up to talk about it.",
             sessionId=session_id,
-            coach=True,
+            moduleOptions={"feedbackEnabled": True},
         ),
         ctx=ctx,
     )
@@ -309,7 +310,7 @@ async def test_replay_polite_appreciation_near_miss_does_not_end():
 
     result = await handler.handle(
         req=None,
-        body=ChatRequest(message="I can give you a handout if you'd like.", sessionId=session_id, coach=True),
+        body=ChatRequest(message="I can give you a handout if you'd like.", sessionId=session_id, moduleOptions={"feedbackEnabled": True}),
         ctx=ctx,
     )
 
@@ -345,7 +346,7 @@ async def test_replay_resolved_trust_concern_does_not_reopen_on_paraphrase():
 
     await handler.handle(
         req=None,
-        body=ChatRequest(message="You're looking for a transparent account of what the numbers can and can't tell us.", sessionId=session_id, coach=True),
+        body=ChatRequest(message="You're looking for a transparent account of what the numbers can and can't tell us.", sessionId=session_id, moduleOptions={"feedbackEnabled": True}),
         ctx=ctx,
     )
 
@@ -392,7 +393,7 @@ async def test_replay_mixed_resolution_vaccine_today_plus_literature_ends_as_vac
 
     result = await handler.handle(
         req=None,
-        body=ChatRequest(message="We could do the Tdap today and send you home with information on the others.", sessionId=session_id, coach=True),
+        body=ChatRequest(message="We could do the Tdap today and send you home with information on the others.", sessionId=session_id, moduleOptions={"feedbackEnabled": True}),
         ctx=ctx,
     )
 

@@ -1,6 +1,6 @@
 import asyncio
 
-from app.services import aims_dependencies as deps
+from app.modules.aims.services import aims_dependencies as deps
 
 
 def test_aims_dependency_protocols_are_defined():

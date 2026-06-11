@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.core.module_types import BrandingSpec, DialogueRoles, ModuleManifest
 from app.routes.system import create_system_router
 
 
@@ -53,12 +54,55 @@ def _settings(**overrides):
 def _client(*, settings=None, store=None, model_check=None, logger=None):
     app = FastAPI()
     memory_store = {} if store is None else store
+    active_module = SimpleNamespace(
+        manifest=ModuleManifest(
+            id="aims",
+            display_name="AIMS",
+            chat_profile_name="AIMSBot",
+            archive_schema_version="aims-v1",
+            storage_prefix="aims:local:session:",
+            dialogue_roles=DialogueRoles(participant_roles=("user", "assistant")),
+            supports_summary=True,
+            frontend_js_bundles=(
+                "/public/js/modules/aims/module-ui.js",
+            ),
+            frontend_css="/public/training-ui.css",
+            branding=BrandingSpec(
+                app_title="AIMSBot",
+                avatar_assets={"counterpart": "/public/avatars/assistant.svg?v=3"},
+            ),
+        )
+    )
+    module_registry = SimpleNamespace(
+        list_modules=lambda: [
+            active_module,
+            SimpleNamespace(
+                manifest=ModuleManifest(
+                    id="interview",
+                    display_name="Interview Practice",
+                    chat_profile_name="Interview Coach",
+                    archive_schema_version="interview-v1",
+                    storage_prefix="interview:local:session:",
+                    dialogue_roles=DialogueRoles(participant_roles=("candidate", "interviewer")),
+                    supports_summary=False,
+                    frontend_js_bundles=("/public/js/modules/interview/module-ui.js",),
+                    frontend_css="/public/training-ui.css",
+                    branding=BrandingSpec(
+                        app_title="Interview Practice",
+                        avatar_assets={"counterpart": "/public/avatars/briefing.svg?v=3"},
+                    ),
+                )
+            ),
+        ]
+    )
     app.include_router(
         create_system_router(
             settings=settings or _settings(),
             logger=logger or logging.getLogger("test.routes.system"),
             get_memory_store=lambda: memory_store,
             get_model_check=lambda: model_check or {"available": True},
+            get_active_module=lambda: active_module,
+            get_module_registry=lambda: module_registry,
             get_request_id=lambda request: request.headers.get("x-request-id"),
         )
     )
@@ -131,6 +175,19 @@ def test_config_modelcheck_and_diagnostics_use_injected_dependencies():
     assert config["modelAvailable"] is False
     assert config["modelCheck"]["reason"] == "missing"
     assert config["memoryStoreSize"] == 2
+    assert config["activeModule"]["id"] == "aims"
+    assert config["activeModule"]["supportsSummary"] is True
+    assert config["activeModule"]["dialogueRoles"]["participantRoles"] == ["user", "assistant"]
+    assert config["activeModule"]["frontendJsBundles"] == [
+        "/public/js/modules/aims/module-ui.js",
+    ]
+    assert config["activeModule"]["frontendCss"] == "/public/training-ui.css"
+    assert config["activeModule"]["branding"]["appTitle"] == "AIMSBot"
+    assert config["activeModule"]["branding"]["avatarAssets"]["counterpart"] == "/public/avatars/assistant.svg?v=3"
+    assert [module["id"] for module in config["availableModules"]] == ["aims", "interview"]
+    assert config["availableModules"][1]["supportsSummary"] is False
+    assert config["availableModules"][1]["dialogueRoles"]["participantRoles"] == ["candidate", "interviewer"]
+    assert config["availableModules"][1]["branding"]["avatarAssets"]["counterpart"] == "/public/avatars/briefing.svg?v=3"
 
     modelcheck = client.get("/modelcheck").json()
     assert modelcheck["modelId"] == "gemini-test"
@@ -139,6 +196,7 @@ def test_config_modelcheck_and_diagnostics_use_injected_dependencies():
     diagnostics = client.get("/diagnostics").json()
     assert diagnostics["memory"]["storeSize"] == 2
     assert diagnostics["environment"]["gcsObjectPrefix"] == "env=local"
+    assert diagnostics["environment"]["activeModuleId"] == "aims"
 
 
 def test_models_success_uses_global_vertex_host(monkeypatch):

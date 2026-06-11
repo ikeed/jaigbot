@@ -207,7 +207,7 @@ class TranscriptReplayTest:
         """POST a clinician turn and return parsed JSON."""
         r = client.post("/chat", json={
             "message": clinician_msg,
-            "coach": True,
+            "moduleOptions": {"feedbackEnabled": True},
             "sessionId": self.SESSION_ID,
         })
         assert r.status_code == 200, f"Turn failed ({r.status_code}): {r.text}"

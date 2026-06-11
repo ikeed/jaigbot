@@ -17,6 +17,14 @@ class UIHandler:
     """Handles all formatting and sending of messages to the Chainlit frontend."""
 
     @staticmethod
+    def _startup_artifact_title(artifact: Dict[str, Any] | None, fallback: str = "Session Briefing") -> str:
+        if isinstance(artifact, dict):
+            title = artifact.get("title")
+            if isinstance(title, str) and title.strip():
+                return title.strip()
+        return fallback
+
+    @staticmethod
     def format_coach_message(text: str) -> str:
         txt = (text or "").strip()
         if not txt:
@@ -37,13 +45,19 @@ class UIHandler:
         return f"**{title}**\n\n{bullets}" if bullets else f"**{title}**"
 
     @staticmethod
-    def render_scenario_card_html(card_text: str) -> str:
-        """Render a scenario briefing with consistent HTML styling."""
+    def render_startup_artifact_html(artifact: Dict[str, Any] | None = None, *, card_text: str | None = None) -> str:
+        """Render a startup artifact with consistent HTML styling."""
+        title = UIHandler._startup_artifact_title(artifact)
+        text = card_text
+        if text is None and isinstance(artifact, dict):
+            artifact_content = artifact.get("content")
+            text = artifact_content if isinstance(artifact_content, str) else ""
+
         lines: list[str] = [
             '<div class="aims-scenario-briefing">',
-            '<div class="aims-scenario-title">Scenario Briefing</div>',
+            f'<div class="aims-scenario-title">{title}</div>',
         ]
-        for line in (card_text or "").splitlines():
+        for line in (text or "").splitlines():
             stripped = line.strip()
             if not stripped:
                 continue
@@ -59,9 +73,19 @@ class UIHandler:
         lines.append("</div>")
         return "".join(lines)
 
+    @staticmethod
+    def render_scenario_card_html(card_text: str) -> str:
+        return UIHandler.render_startup_artifact_html(card_text=card_text)
+
     async def present_scenario_card(self, card: str):
         await cl.Message(
             content=self.render_scenario_card_html(card), 
+            **get_ui_attributes(ROLE_SYSTEM)
+        ).send()
+
+    async def present_startup_artifact(self, artifact: Dict[str, Any]):
+        await cl.Message(
+            content=self.render_startup_artifact_html(artifact),
             **get_ui_attributes(ROLE_SYSTEM)
         ).send()
 
@@ -74,15 +98,26 @@ class UIHandler:
         await cl.send_window_message(payload)
 
     @staticmethod
-    async def send_user_message_update(message: cl.Message):
-        attrs = get_ui_attributes(ROLE_USER)
+    async def send_user_message_update(
+        message: cl.Message,
+        *,
+        author_name: str | None = None,
+        role_labels: Dict[str, str] | None = None,
+    ):
+        attrs = get_ui_attributes(ROLE_USER, role_labels=role_labels)
         message.author = attrs["author"]
+        if author_name:
+            message.author = author_name
         message.type = attrs["type"]
         await message.update()
 
     @staticmethod
-    async def send_assistant_reply(content: str, author_name: str | None = None):
-        attrs = get_ui_attributes(ROLE_ASSISTANT)
+    async def send_assistant_reply(
+        content: str,
+        author_name: str | None = None,
+        role_labels: Dict[str, str] | None = None,
+    ):
+        attrs = get_ui_attributes(ROLE_ASSISTANT, role_labels=role_labels)
         await cl.Message(
             content,
             author=(author_name or attrs["author"]),

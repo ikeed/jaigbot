@@ -1,10 +1,10 @@
 """
-Main chat orchestrator that delegates to coaching or legacy paths.
+Main chat orchestrator that delegates to the active training module.
 
 This service coordinates the high-level flow:
 1. Input validation
 2. Chat context building 
-3. Route to coaching or legacy handler
+3. Delegate to active module turn handling
 4. Response formatting
 5. Memory persistence
 6. Error handling and response building
@@ -15,11 +15,12 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from fastapi import HTTPException, Request, BackgroundTasks
 from fastapi.responses import JSONResponse
 
+from app.core.interfaces import TrainingModule
 from app.models import ChatRequest, ReportRequest
 from app.services.chat_context import ChatContextBuilder, ChatContext
 from app.services.session_service import SessionService, CookieSettings
@@ -28,7 +29,7 @@ from app.vertex import VertexAIError
 
 
 class ChatOrchestrator:
-    """Main orchestrator for chat requests - delegates to coaching or legacy paths."""
+    """Main orchestrator for chat requests that delegates turn handling to the active module."""
     
     def __init__(
         self,
@@ -36,10 +37,11 @@ class ChatOrchestrator:
         memory_store: Any,
         session_cookie_settings: dict[str, Any],
         memory_config: dict[str, Any],
-        aims_config: dict[str, Any],
+        module_runtime_config: dict[str, Any],
         vertex_config: dict[str, Any],
         debug_config: dict[str, Any],
         logger: Any,
+        active_module: TrainingModule,
     ):
         self.background_tasks: Optional[BackgroundTasks] = None
         self.memory_store = memory_store
@@ -49,9 +51,7 @@ class ChatOrchestrator:
         self.memory_enabled = memory_config.get("enabled", True)
         self.memory_max_turns = memory_config.get("max_turns", 10)
         self.memory_ttl_seconds = memory_config.get("ttl_seconds", 3600)
-        
-        self.aims_coaching_enabled = aims_config.get("enabled", False)
-        self.force_coach_default = bool(aims_config.get("force_default", False))
+        self.module_runtime_config = dict(module_runtime_config)
         
         self.project_id = vertex_config.get("project_id")
         self.region = vertex_config.get("region", "us-central1")
@@ -63,6 +63,11 @@ class ChatOrchestrator:
         self.client_cls = vertex_config.get("client_cls")
         self.expose_upstream_error = debug_config.get("expose_upstream_error", False)
         self.log_response_preview_max = debug_config.get("log_response_preview_max", 100)
+        self.active_module = active_module
+        dialogue_roles = self.active_module.dialogue_roles()
+        self.counted_roles = dialogue_roles.counted_roles
+        self.counterpart_roles = dialogue_roles.counterpart_roles or ("assistant",)
+        self.role_labels = dialogue_roles.display_names
         
         # Initialize session service
         self.session_service = SessionService(
@@ -76,6 +81,8 @@ class ChatOrchestrator:
             memory_enabled=self.memory_enabled,
             memory_max_turns=self.memory_max_turns,
             memory_ttl_seconds=self.memory_ttl_seconds,
+            module_id=self.active_module.module_id,
+            counted_roles=self.counted_roles,
         )
         
         # Initialize context builder
@@ -84,6 +91,9 @@ class ChatOrchestrator:
             memory_enabled=self.memory_enabled,
             memory_max_turns=self.memory_max_turns,
             memory_ttl_seconds=self.memory_ttl_seconds,
+            counted_roles=self.counted_roles,
+            counterpart_roles=self.counterpart_roles,
+            role_labels=self.role_labels,
             do_prune_mod=29,
         )
     
@@ -101,11 +111,7 @@ class ChatOrchestrator:
                 req, body.sessionId, body.character, body.scene, body.userInfo
             )
             
-            # Route to appropriate handler
-            if self.aims_coaching_enabled and (getattr(body, "coach", False) or self.force_coach_default):
-                return await self._handle_coaching_path(req, body, ctx)
-            else:
-                return await self._handle_legacy_path(req, body, ctx)
+            return await self._handle_module_turn(req, body, ctx)
                 
         except HTTPException:
             # Re-raise HTTP exceptions as-is
@@ -132,165 +138,75 @@ class ChatOrchestrator:
                 detail={"error": {"message": "Message too large (max 2 KiB)", "code": 400}}
             )
     
-    async def _handle_coaching_path(
+    async def _handle_module_turn(
         self, req: Request, body: ChatRequest, ctx: ChatContext
     ) -> JSONResponse:
-        """Handle requests with AIMS coaching enabled."""
-        from app.services.aims_coaching_handler import AimsCoachingHandler
-        
-        handler = AimsCoachingHandler(
-            memory_store=self.memory_store,
-            vertex_config={
-                "project_id": self.project_id,
-                "region": self.region,
-                "vertex_location": self.vertex_location,
-                "model_id": self.model_id,
-                "model_fallbacks": self.model_fallbacks,
-                "temperature": self.temperature,
-                "max_tokens": self.max_tokens,
-                "client_cls": self.client_cls,
-            },
-            memory_config={
-                "enabled": self.memory_enabled,
-                "max_turns": self.memory_max_turns,
-            },
-            logger=self.logger,
-        )
-        
+        """Handle a chat turn through the active training module."""
         try:
-            result = await handler.handle(req, body, ctx)
-            
-            # Build response with coaching data
-            response_payload = {
-                "reply": result["reply"],
-                "model": result["model"],
-                "latencyMs": result["latency_ms"],
-                "coaching": result["coaching"],
-                "session": result["session"],
-                # Backward-compatible aliases for older clients
-                "text": result["reply"],
-                "modelId": result["model"],
-                "latency_ms": result["latency_ms"],
-            }
+            self.logger.debug(
+                "Chat dispatch starting: module=%s display_name=%s",
+                self.active_module.module_id,
+                self.active_module.display_name,
+            )
+            result = await self.active_module.handle_turn(
+                req=req,
+                body=body,
+                ctx=ctx,
+                memory_store=self.memory_store,
+                vertex_config={
+                    "project_id": self.project_id,
+                    "region": self.region,
+                    "vertex_location": self.vertex_location,
+                    "model_id": self.model_id,
+                    "model_fallbacks": self.model_fallbacks,
+                    "temperature": self.temperature,
+                    "max_tokens": self.max_tokens,
+                    "client_cls": self.client_cls,
+                },
+                memory_config={
+                    "enabled": self.memory_enabled,
+                    "max_turns": self.memory_max_turns,
+                },
+                module_runtime_config=dict(self.module_runtime_config),
+                logger=self.logger,
+            )
+            response_payload = dict(
+                self.active_module.format_module_response(result=result, session_id=ctx.session_id)
+            )
 
-            # Always include the sessionId for clients that track by id
-            try:
-                response_payload["sessionId"] = ctx.session_id
-            except Exception as e:
-                self.logger.debug(f"Failed to set sessionId in response (non-fatal): {e}")
-                pass
-            
-            # Add optional coach post for end-game scenarios
-            if result.get("coach_post"):
-                response_payload["coachPost"] = result["coach_post"]
-                response_payload["gameOver"] = True
-                
-                # Trigger background archive to GCS
-                if self.background_tasks:
+            if self.background_tasks:
+                try:
+                    archive_data = self.active_module.build_archive_payload(
+                        result=result,
+                        ctx=ctx,
+                        session_service=self.session_service,
+                        memory_store=self.memory_store,
+                    )
+                except NotImplementedError:
+                    archive_data = None
+
+                if archive_data:
                     try:
-                        mem = self.session_service.get_mem(ctx.session_id)
-                        # Use identifier (email) from user_info if present
-                        user_id = ctx.user_info.get("identifier") if ctx.user_info else None
-                        if not user_id:
-                            user_id = "anonymous"
-                            
-                        # Enrich mem with endgame status for the archive
-                        mem["session_ended"] = time.time()
-                        self.memory_store[ctx.session_id] = mem
-                        archive_data = {
-                            **mem,
-                            "session_id": ctx.session_id,
-                            "user_id": user_id,
-                            "game_over": True,
-                            "coach_post": result["coach_post"],
-                            "exported_via": "endgame"
-                        }
+                        archive_payload = cast(dict[str, Any], archive_data)
                         self.background_tasks.add_task(
                             storage_service.upload_session,
                             ctx.session_id,
-                            user_id,
-                            archive_data
+                            archive_payload["user_id"],
+                            archive_payload,
                         )
                     except Exception as archive_err:
                         self.logger.warning(f"Failed to queue GCS archive for session {ctx.session_id}: {archive_err}")
-            
+
             resp = JSONResponse(status_code=200, content=response_payload)
-            
-            # Set session cookie
+
             try:
                 self.session_service.apply_cookie(resp, ctx.session_id)
             except Exception as e:
                 self.logger.debug(f"Failed to apply session cookie (non-fatal): {e}")
                 pass
-            
-            return resp
-            
-        except VertexAIError as e:
-            return self._handle_vertex_error(req, e, ctx.session_id)
-    
-    async def _handle_legacy_path(
-        self, req: Request, body: ChatRequest, ctx: ChatContext
-    ) -> JSONResponse:
-        """Handle legacy (non-coaching) chat requests."""
-        from app.services.legacy_chat_handler import LegacyChatHandler
-        
-        handler = LegacyChatHandler(
-            memory_store=self.memory_store,
-            vertex_config={
-                "project_id": self.project_id,
-                "region": self.region,
-                "vertex_location": self.vertex_location,
-                "model_id": self.model_id,
-                "model_fallbacks": self.model_fallbacks,
-                "temperature": self.temperature,
-                "max_tokens": self.max_tokens,
-                "client_cls": self.client_cls,
-            },
-            memory_config={
-                "enabled": self.memory_enabled,
-                "max_turns": self.memory_max_turns,
-            },
-            logger=self.logger,
-        )
-        
-        try:
-            result = await handler.handle(req, body, ctx)
-            
-            # Build response
-            response_payload = {
-                "reply": result["reply"],
-                "model": result["model"],
-                "latencyMs": result["latency_ms"],
-                # Backward-compatible aliases for older clients
-                "text": result["reply"],
-                "modelId": result["model"],
-                "latency_ms": result["latency_ms"],
-            }
 
-            # Always include the sessionId for clients that track by id
-            try:
-                response_payload["sessionId"] = ctx.session_id
-            except Exception as e:
-                self.logger.debug(f"Failed to set sessionId in legacy response (non-fatal): {e}")
-                pass
-            
-            # Add optional coaching/session if enabled and requested
-            if result.get("coaching"):
-                response_payload["coaching"] = result["coaching"]
-            if result.get("session"):
-                response_payload["session"] = result["session"]
-            
-            resp = JSONResponse(status_code=200, content=response_payload)
-            
-            # Set session cookie
-            try:
-                self.session_service.apply_cookie(resp, ctx.session_id)
-            except Exception as e:
-                self.logger.debug(f"Failed to apply session cookie in legacy path (non-fatal): {e}")
-                pass
-            
             return resp
-            
+
         except VertexAIError as e:
             return self._handle_vertex_error(req, e, ctx.session_id)
     

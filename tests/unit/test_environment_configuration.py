@@ -193,6 +193,7 @@ class TestProductionConfiguration:
 
         assert settings.APP_ENV == "local"
         assert settings.redis_key_prefix == "aims:local:session:"
+        assert settings.module_redis_key_prefix("interview") == "interview:local:session:"
         assert settings.gcs_object_prefix == "env=local"
 
     def test_app_env_namespaces_prod_resources(self, monkeypatch):
@@ -203,9 +204,20 @@ class TestProductionConfiguration:
         assert settings.APP_ENV == "prod"
         assert settings.redis_key_prefix == "aims:prod:session:"
         assert settings.redis_fallback_prefixes == ["aims:session:"]
+        assert settings.module_redis_key_prefix("interview") == "interview:prod:session:"
+        assert settings.module_redis_fallback_prefixes("interview") == []
         assert settings.gcs_path("sessions/v1", "user_id=u", "session_id=s.json") == (
             "env=prod/sessions/v1/user_id=u/session_id=s.json"
         )
+
+    def test_active_module_changes_default_redis_namespace(self, monkeypatch):
+        monkeypatch.setenv("APP_ENV", "local")
+        monkeypatch.setenv("ACTIVE_MODULE", "interview")
+
+        settings = Settings()
+
+        assert settings.redis_key_prefix == "interview:local:session:"
+        assert settings.redis_fallback_prefixes == []
 
     def test_cloud_run_requires_explicit_app_env(self, monkeypatch):
         monkeypatch.delenv("APP_ENV", raising=False)

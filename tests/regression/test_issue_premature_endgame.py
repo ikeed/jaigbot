@@ -1,4 +1,4 @@
-from app.services.coach_post import EndGameDetector
+from app.modules.aims.services.coach_post import EndGameDetector
 
 def test_premature_endgame_trigger_literature_home():
     """

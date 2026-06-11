@@ -7,6 +7,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.chainlit_thread_state import get_current_thread_id
 from app.config import settings
+from app.core.interfaces import TrainingModule
 from app.constants import (
     TEMPLATE_LOGIN,
     TEMPLATE_DUPLICATE,
@@ -25,12 +26,33 @@ router = APIRouter()
 BASE_DIR = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
+
+def _get_active_module(request: Request) -> TrainingModule:
+    active_module = getattr(request.app.state, "active_module", None)
+    if active_module is None:
+        raise RuntimeError("Active module must be initialized on app.state before rendering UI routes.")
+    return active_module
+
+
+def _get_shell_context(request: Request) -> dict[str, str]:
+    active_module = _get_active_module(request)
+    manifest = active_module.get_ui_manifest()
+    branding = manifest.branding
+    module_title = branding.app_title if branding and branding.app_title else manifest.display_name
+    return {
+        "shell_title": module_title,
+        "module_title": module_title,
+        "module_display_name": manifest.display_name,
+        "logo_url": "/public/training-platform.png",
+    }
+
 @router.get(ROUTE_ROOT, response_class=HTMLResponse)
 async def custom_login_page(request: Request):
     """Render the custom SSO landing page."""
     user_id = authenticated_user_identifier(request)
     if user_id:
-        thread_id = get_current_thread_id(user_id)
+        active_module = _get_active_module(request)
+        thread_id = get_current_thread_id(user_id, active_module_id=active_module.module_id)
         target_url = f"{PATH_CHAT}/thread/{thread_id}" if thread_id else PATH_CHAT
         return RedirectResponse(url=target_url)
 
@@ -41,7 +63,8 @@ async def custom_login_page(request: Request):
         request=request,
         context={
             "providers": providers,
-            "auth_secret_set": auth_secret_set
+            "auth_secret_set": auth_secret_set,
+            **_get_shell_context(request),
         }
     )
 
@@ -50,7 +73,8 @@ async def duplicate_tab_page(request: Request):
     """Render the duplicate tab warning page."""
     return templates.TemplateResponse(
         name=TEMPLATE_DUPLICATE,
-        request=request
+        request=request,
+        context=_get_shell_context(request),
     )
 
 @router.get(ROUTE_CHAT_LOGIN, response_class=RedirectResponse)

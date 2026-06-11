@@ -12,9 +12,9 @@ Covers:
 import asyncio
 import logging
 
-from app.services.coach_post import EndGameDetector
-from app.services.aims_endgame_service import AimsEndgameService
-from app.services.aims_state_service import AimsStateService
+from app.modules.aims.services.coach_post import EndGameDetector
+from app.modules.aims.services.aims_endgame_service import AimsEndgameService
+from app.modules.aims.services.aims_state_service import AimsStateService
 
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 from unittest.mock import patch
 
-from app.prompts.aims import (
+from app.modules.aims.prompts.aims import (
     build_endgame_detector_prompt,
     build_patient_reply_prompt,
     build_summary_analysis_prompt,
@@ -107,7 +107,7 @@ def test_endgame_detector_prompt_warns_that_concern_lists_are_incomplete():
 
 
 def test_summary_analysis_builder_uses_live_template_not_endgame_summary():
-    with patch("app.prompts.aims.load_and_render") as load_and_render:
+    with patch("app.modules.aims.prompts.aims.load_and_render") as load_and_render:
         load_and_render.return_value = "ok"
         build_summary_analysis_prompt(
             metrics_blob="{}",

@@ -10,8 +10,11 @@ from typing import Dict, Optional
 
 import chainlit as cl
 from fastapi import Request, Response
+from starlette.datastructures import Headers
+from chainlit.types import ThreadDict
 
 from app.config import settings
+from app.core.module_runtime import get_builtin_active_module
 from app.utils.env import is_valid_env_val
 from app.constants import (
     MSG_DUPLICATE_TAB,
@@ -36,7 +39,11 @@ from app.services.chainlit.orchestrator import ChainlitOrchestrator
 backend_client = BackendClient()
 ui_handler = UIHandler()
 session_manager = SessionManager()
-orchestrator = ChainlitOrchestrator(backend_client, ui_handler, session_manager)
+active_module_id = getattr(settings, "ACTIVE_MODULE", "aims")
+if not isinstance(active_module_id, str) or not active_module_id.strip():
+    active_module_id = "aims"
+active_module = get_builtin_active_module(active_module_id=active_module_id)
+orchestrator = ChainlitOrchestrator(backend_client, ui_handler, session_manager, active_module=active_module)
 logger = logging.getLogger(__name__)
 
 @cl.data_layer
@@ -45,13 +52,17 @@ def get_chainlit_data_layer():
     return MemoryDataLayer(MEMORY_STORE)
 
 @cl.set_chat_profiles
-async def chat_profiles():
+async def chat_profiles(_current_user: Optional[cl.User] = None):
+    manifest = active_module.get_ui_manifest()
+    branding = manifest.branding
+    profile_name = manifest.chat_profile_name
+    loading_text = (branding.loading_text if branding and branding.loading_text else "Loading…")
     try:
         icon = "/public/avatars/spinner.svg"
         return [
             cl.ChatProfile(
-                name="AIMSBot",
-                markdown_description="Loading your scenario…",
+                name=profile_name,
+                markdown_description=loading_text,
                 icon=icon,
                 default=True,
             )
@@ -60,14 +71,14 @@ async def chat_profiles():
         # Import cl here if not available, though it should be.
         import logging
         logging.warning("Failed to load chat profiles, using default: %s", e)
-        return [cl.ChatProfile(name="AIMSBot", markdown_description="Loading your scenario…", default=True)]
+        return [cl.ChatProfile(name=profile_name, markdown_description=loading_text, default=True)]
 
 @cl.on_chat_start
 async def start_chat():
     await orchestrator.handle_chat_start()
 
 @cl.on_chat_resume
-async def resume_chat(thread: Optional[Dict] = None):
+async def resume_chat(thread: ThreadDict):
     await orchestrator.handle_session_resume(thread)
 
 @cl.on_message
@@ -94,7 +105,8 @@ async def on_report_issue(action: cl.Action):
         timeout=120,
     ).send()
     if res:
-        reason = res.content.strip() if hasattr(res, "content") else str(res)
+        reason = getattr(res, "content", "")
+        reason = reason.strip() if isinstance(reason, str) else str(res)
         if reason:
             await orchestrator.handle_report_issue(reason)
 
@@ -159,7 +171,7 @@ if is_oauth_enabled or is_valid_env_val(settings.CHAINLIT_AUTH_SECRET) or settin
 
     if should_enable_password:
         @cl.password_auth_callback
-        def auth_callback(username: str, password: str) -> Optional[cl.User]:
+        async def auth_callback(username: str, password: str) -> Optional[cl.User]:
             expected_user = os.getenv("AUTH_USERNAME", "admin")
             expected_pass = os.getenv("AUTH_PASSWORD")
             if not expected_pass:
@@ -181,7 +193,7 @@ if is_oauth_enabled or is_valid_env_val(settings.CHAINLIT_AUTH_SECRET) or settin
 
     if is_valid_env_val(os.environ.get("ENABLE_HEADER_AUTH")):
         @cl.header_auth_callback
-        def header_auth_callback(headers: Dict) -> Optional[cl.User]:
+        async def header_auth_callback(headers: Headers) -> Optional[cl.User]:
             user_id = headers.get("x-user-id")
             user_name = headers.get("x-user-name")
             if user_id:
@@ -190,11 +202,12 @@ if is_oauth_enabled or is_valid_env_val(settings.CHAINLIT_AUTH_SECRET) or settin
 
 if is_oauth_enabled:
     @cl.oauth_callback
-    def oauth_callback(
+    async def oauth_callback(
         provider_id: str,
         _token: str,
         raw_user_data: Dict[str, str],
         default_user: cl.User,
+        _redirect_url: Optional[str] = None,
     ) -> Optional[cl.User]:
         email = raw_user_data.get("email")
         name = raw_user_data.get("name")

@@ -70,7 +70,12 @@ This configuration runs `run_app.py` and includes the same local session persist
 MEMORY_PERSIST_PATH=.chainlit/session_memory.json
 ```
 
-Only `.idea/runConfigurations/AIMSBot__Unified_.xml` is tracked. Other `.idea` files are ignored because they contain local interpreter paths, workspace layout, and other machine-specific state.
+Only `.idea/runConfigurations/AIMSBot__Unified_.xml` is tracked. Other `.idea`
+files are ignored because they contain local interpreter paths, workspace
+layout, and other machine-specific state.
+
+The run configuration name is historical. The runtime itself is now a modular
+training shell with `ACTIVE_MODULE=aims` as the default.
 
 ## 4) Local Terraform apply (first time)
 The first apply must typically be run locally because the Workload Identity Federation (WIF) provider and deployer service account that CI uses are created by Terraform itself.

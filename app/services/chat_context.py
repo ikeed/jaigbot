@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from typing import Optional, Any
+from typing import Optional, Any, Mapping, Sequence
 
 from app.chat_roles import ROLE_ASSISTANT
 from app.persona import DEFAULT_CHARACTER, DEFAULT_SCENE
@@ -44,12 +44,20 @@ class ChatContextBuilder:
         memory_enabled: bool,
         memory_max_turns: int,
         memory_ttl_seconds: int,
+        counted_roles: tuple[str, ...] | None = None,
+        counterpart_roles: Sequence[str] | None = None,
+        role_labels: Mapping[str, str] | None = None,
         do_prune_mod: int = 29,
     ) -> None:
         self.sess = session_service
         self.memory_enabled = memory_enabled
         self.memory_max_turns = int(memory_max_turns)
         self.memory_ttl_seconds = int(memory_ttl_seconds)
+        self.counted_roles = counted_roles or ("user", "assistant")
+        self.counterpart_roles = tuple(
+            str(role).strip().lower() for role in (counterpart_roles or (ROLE_ASSISTANT,)) if str(role).strip()
+        )
+        self.role_labels = dict(role_labels or {})
         self._do_prune_mod = int(do_prune_mod)
 
     def build(self, req: Any, body_session_id: Optional[str], character: Optional[str], scene: Optional[str], user_info: Optional[dict] = None) -> ChatContext:
@@ -81,16 +89,25 @@ class ChatContextBuilder:
 
         system_instruction = build_system_instruction(effective_character, effective_scene)
 
-        # last assistant turn (person voice)
+        # last counterpart turn (person/interviewer/etc voice)
         person_last = ""
         if mem and mem.get("history"):
             for t in reversed(mem["history"]):
-                if t.get("role") == ROLE_ASSISTANT:
+                if str(t.get("role") or "").strip().lower() in self.counterpart_roles:
                     person_last = t.get("content") or ""
                     break
 
         # compact history text like before (tail of last N turns)
-        history_text = format_history(mem.get("history", []), self.memory_max_turns) if mem else ""
+        history_text = (
+            format_history(
+                mem.get("history", []),
+                self.memory_max_turns,
+                counted_roles=self.counted_roles,
+                role_labels=self.role_labels,
+            )
+            if mem
+            else ""
+        )
 
         # identify effective user_info (session vs request)
         effective_user_info = (mem.get("user_info") if mem else None) or user_info

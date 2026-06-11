@@ -1,5 +1,6 @@
 import logging
 import uuid
+from collections.abc import Mapping
 from typing import Any, Dict, List, Optional
 
 from chainlit.context import context as cl_context
@@ -11,14 +12,19 @@ from app.chat_roles import (
     ROLE_COACH,
     ROLE_SYSTEM,
     ROLE_USER,
+    author_label_for_role,
     is_scenario_card
 )
 from app.config import settings
+from app.core.legacy_module_resolution import resolve_thread_metadata_module_id
+from app.core.interfaces import TrainingModule
 from app.constants import (
+    LEGACY_QUERY_NEW_CHAT,
     MSG_INTRO_REQUIRED,
     MSG_DUPLICATE_TAB,
-    MSG_PERSONA_NAME,
+    MSG_PARTICIPANT_NAME,
     MSG_RESUME_THREAD,
+    QUERY_NEW_CHAT,
 )
 from app.persona import DEFAULT_CHARACTER, DEFAULT_SCENE
 from app.services.chainlit.backend_client import BackendClient
@@ -34,11 +40,20 @@ class ChainlitOrchestrator:
         self,
         backend_client: BackendClient,
         ui_handler: UIHandler,
-        session_manager: SessionManager
+        session_manager: SessionManager,
+        active_module: TrainingModule,
     ):
         self.backend = backend_client
         self.ui = ui_handler
         self.session = session_manager
+        self.active_module = active_module
+        self.dialogue_roles = self.active_module.dialogue_roles()
+        self.role_labels = dict(getattr(self.dialogue_roles, "display_names", {}) or {})
+        self.user_role = next(iter(getattr(self.dialogue_roles, "user_roles", ()) or (ROLE_USER,)), ROLE_USER)
+        self.counterpart_role = next(
+            iter(getattr(self.dialogue_roles, "counterpart_roles", ()) or (ROLE_ASSISTANT,)),
+            ROLE_ASSISTANT,
+        )
 
     async def handle_chat_start(self):
         """Main entry point for starting or resuming a chat session."""
@@ -81,7 +96,11 @@ class ChainlitOrchestrator:
             return
 
         # Update UI for user message
-        await self.ui.send_user_message_update(message)
+        await self.ui.send_user_message_update(
+            message,
+            author_name=author_label_for_role(self.user_role, self.role_labels),
+            role_labels=self.role_labels,
+        )
 
         # Update local history
         history = self.session.history
@@ -111,7 +130,7 @@ class ChainlitOrchestrator:
             await self._report_error_silently(e, "handle_user_message")
             await self.ui.show_error(f"Error: {str(e)}")
 
-    async def handle_session_resume(self, thread: Dict[str, Any]):
+    async def handle_session_resume(self, thread: Optional[Mapping[str, Any]] = None):
         """Rehydrates session state from a resumed Chainlit thread."""
         try:
             user_id = self.session.get_user_identifier()
@@ -122,13 +141,25 @@ class ChainlitOrchestrator:
 
             metadata = (thread or {}).get("metadata") or {}
             thread_id = (thread or {}).get("id") or self._get_thread_id()
+            persisted_module_id = resolve_thread_metadata_module_id(metadata)
+            resume_validation = self.active_module.resume_validation(persisted_module_id=persisted_module_id)
+            if not resume_validation.is_resumable:
+                logger.warning(
+                    "Resume rejected by module validation: module=%s persisted_module_id=%s reason=%s",
+                    self.active_module.module_id,
+                    persisted_module_id,
+                    resume_validation.reason,
+                )
+                self.session.history = []
+                await self._start_scenario_flow()
+                return
             
             # Resolve Session ID
             session_id = self._resolve_session_id(thread_id, metadata.get("session_id"))
             self.session.session_id = session_id
             
             if user_id and thread_id:
-                set_current_thread_id(user_id, thread_id)
+                set_current_thread_id(user_id, thread_id, self.active_module.module_id)
 
             connection_id = self._ensure_connection_id()
             needs_fresh_start = False
@@ -162,7 +193,7 @@ class ChainlitOrchestrator:
                     self.session.persona_name = persona_name.strip()
                 if isinstance(persona_name, str) and persona_name.strip():
                     await self.ui.send_window_message(
-                        {"type": MSG_PERSONA_NAME, "personaName": persona_name.strip()}
+                        {"type": MSG_PARTICIPANT_NAME, "participantName": persona_name.strip()}
                     )
 
                 # Always refresh history from backend source of truth
@@ -250,12 +281,28 @@ class ChainlitOrchestrator:
         logger.info("Session data received from backend.")
         logger.debug("Character: %s, Scene: %s", session_data.get("character"), session_data.get("scene"))
         # Update local state
-        self.session.character = session_data.get("character")
-        self.session.scene = session_data.get("scene")
-        persona_name = session_data.get("personaName")
+        participant_context = self._get_bootstrap_participant_context(session_data)
+        module_state = self._get_bootstrap_module_state(session_data)
+        startup_artifacts = self._get_bootstrap_artifacts(session_data)
+        renderable_artifacts = self._renderable_startup_artifacts(startup_artifacts)
+
+        self.session.character = participant_context.get("character") or session_data.get("character")
+        self.session.scene = participant_context.get("scene") or session_data.get("scene")
+        persona_name = (
+            participant_context.get("personaName")
+            or module_state.get("personaName")
+            or session_data.get("personaName")
+        )
         if isinstance(persona_name, str) and persona_name.strip():
             self.session.persona_name = persona_name.strip()
-        user_card = session_data.get("initialCard")
+        primary_artifact = renderable_artifacts[0] if renderable_artifacts else None
+        primary_content = (
+            primary_artifact.get("content")
+            if primary_artifact and isinstance(primary_artifact.get("content"), str)
+            else None
+        )
+        user_card = primary_content or session_data.get("initialCard")
+        startup_scene_text = self._startup_scene_text(renderable_artifacts, user_card)
 
         await self._send_persona_name(persona_name)
 
@@ -264,13 +311,20 @@ class ChainlitOrchestrator:
 
         if history:
             logger.info("Injecting scenario into scene from history")
-            self._inject_scenario_into_scene(history, user_card)
+            self._inject_scenario_into_scene(history, startup_scene_text)
         else:
             logger.info("Presenting scenario card to UI")
-            await self.ui.present_scenario_card(user_card)
-            new_history = [{"role": ROLE_SYSTEM, "content": user_card}]
+            if renderable_artifacts:
+                for artifact in renderable_artifacts:
+                    await self.ui.present_startup_artifact(dict(artifact))
+            elif user_card:
+                await self.ui.present_scenario_card(user_card)
+            new_history = [
+                {"role": ROLE_SYSTEM, "content": content}
+                for content in self._display_artifact_contents(renderable_artifacts, user_card)
+            ]
             self.session.history = new_history
-            self._inject_scenario_into_scene(new_history, user_card)
+            self._inject_scenario_into_scene(new_history, startup_scene_text)
             await self._send_persona_name(persona_name)
 
         logger.info("Running preflight checks")
@@ -306,9 +360,12 @@ class ChainlitOrchestrator:
         return cid
 
     def _get_reconnect_thread_id(self, user_id: Optional[str]) -> Optional[str]:
-        if self.session.query_params.get("aims_new") == "1":
+        if (
+            self.session.query_params.get(QUERY_NEW_CHAT) == "1"
+            or self.session.query_params.get(LEGACY_QUERY_NEW_CHAT) == "1"
+        ):
             return None
-        persisted_thread_id = get_current_thread_id(user_id)
+        persisted_thread_id = get_current_thread_id(user_id, active_module_id=self.active_module.module_id)
         context_thread_id = self._get_thread_id()
         if persisted_thread_id and persisted_thread_id != context_thread_id:
             return persisted_thread_id
@@ -350,8 +407,12 @@ class ChainlitOrchestrator:
             
             persisted = await dl.get_user(user.identifier) or await dl.create_user(user)
             if persisted:
-                await dl.update_thread(thread_id=thread_id, user_id=persisted.id, metadata={"session_id": session_id})
-                set_current_thread_id(user.identifier, thread_id)
+                await dl.update_thread(
+                    thread_id=thread_id,
+                    user_id=persisted.id,
+                    metadata={"session_id": session_id, "module_id": self.active_module.module_id},
+                )
+                set_current_thread_id(user.identifier, thread_id, self.active_module.module_id)
         except Exception as e:
             logger.debug(f"Failed to bind thread (non-fatal): {e}")
             pass
@@ -407,7 +468,11 @@ class ChainlitOrchestrator:
         reply = data.get("reply")
         if reply:
             history.append({"role": ROLE_ASSISTANT, "content": reply})
-            await self.ui.send_assistant_reply(reply, author_name=self.session.persona_name)
+            await self.ui.send_assistant_reply(
+                reply,
+                author_name=self.session.persona_name or author_label_for_role(self.counterpart_role, self.role_labels),
+                role_labels=self.role_labels,
+            )
 
         # 3. Coach Post (Game Over)
         coach_post = data.get("coachPost")
@@ -454,5 +519,79 @@ class ChainlitOrchestrator:
     async def _send_persona_name(self, persona_name: Any) -> None:
         if isinstance(persona_name, str) and persona_name.strip():
             await self.ui.send_window_message(
-                {"type": MSG_PERSONA_NAME, "personaName": persona_name.strip()}
+                {"type": MSG_PARTICIPANT_NAME, "participantName": persona_name.strip()}
             )
+
+    @staticmethod
+    def _get_bootstrap_module_block(session_data: Mapping[str, Any]) -> Mapping[str, Any]:
+        module_block = session_data.get("module")
+        return module_block if isinstance(module_block, Mapping) else {}
+
+    def _get_bootstrap_participant_context(self, session_data: Mapping[str, Any]) -> Mapping[str, Any]:
+        module_block = self._get_bootstrap_module_block(session_data)
+        participant_context = module_block.get("participantContext")
+        if isinstance(participant_context, Mapping):
+            return participant_context
+        return {}
+
+    def _get_bootstrap_module_state(self, session_data: Mapping[str, Any]) -> Mapping[str, Any]:
+        module_block = self._get_bootstrap_module_block(session_data)
+        state = module_block.get("state")
+        if isinstance(state, Mapping):
+            return state
+        return {}
+
+    def _get_bootstrap_artifacts(self, session_data: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+        module_block = self._get_bootstrap_module_block(session_data)
+        artifacts = module_block.get("artifacts")
+        if not isinstance(artifacts, list):
+            return []
+        return [artifact for artifact in artifacts if isinstance(artifact, Mapping)]
+
+    @staticmethod
+    def _artifact_presentation(artifact: Mapping[str, Any]) -> str:
+        metadata = artifact.get("metadata")
+        if not isinstance(metadata, Mapping):
+            return ""
+        presentation = metadata.get("presentation")
+        return presentation.strip().lower() if isinstance(presentation, str) else ""
+
+    def _renderable_startup_artifacts(
+        self,
+        artifacts: list[Mapping[str, Any]],
+    ) -> list[Mapping[str, Any]]:
+        def has_text_content(artifact: Mapping[str, Any]) -> bool:
+            content = artifact.get("content")
+            return isinstance(content, str) and bool(content.strip())
+
+        renderable: list[Mapping[str, Any]] = []
+        for artifact in artifacts:
+            if not has_text_content(artifact):
+                continue
+            presentation = self._artifact_presentation(artifact)
+            if presentation == "hidden":
+                continue
+            renderable.append(artifact)
+        return renderable
+
+    @staticmethod
+    def _display_artifact_contents(
+        artifacts: list[Mapping[str, Any]],
+        fallback_content: str | None,
+    ) -> list[str]:
+        contents: list[str] = []
+        if artifacts:
+            for artifact in artifacts:
+                content = artifact.get("content")
+                if isinstance(content, str) and content.strip():
+                    contents.append(content.strip())
+        elif isinstance(fallback_content, str) and fallback_content.strip():
+            contents.append(fallback_content.strip())
+        return contents
+
+    def _startup_scene_text(
+        self,
+        artifacts: list[Mapping[str, Any]],
+        fallback_content: str | None,
+    ) -> str:
+        return "\n\n".join(self._display_artifact_contents(artifacts, fallback_content))

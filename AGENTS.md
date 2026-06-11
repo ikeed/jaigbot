@@ -1,8 +1,11 @@
-# AIMSBot Agent Guide
+# Training Platform Agent Guide
 
 ## Purpose
 
-Use this file as the default working context for AIMSBot. Keep investigation
+Use this file as the default working context for the training platform repo.
+The default shipped module is still AIMS, but the core runtime now includes a
+module registry, generic core package, and a second built-in proof module for
+interview practice. Keep investigation
 narrow: read the relevant entry points first, follow nearby patterns, and open
 deeper docs only when the task touches that area.
 
@@ -13,6 +16,8 @@ deeper docs only when the task touches that area.
 - Gemini on Vertex AI for simulated patient replies and AIMS classification.
 - Local or Redis-backed session memory; optional GCS archive/report storage.
 - Unified local app: `run_app.py`.
+- Default active module: `aims`
+- Built-in proof module: `interview`
 
 Runtime shapes:
 
@@ -22,19 +27,28 @@ Runtime shapes:
 
 ## Read First By Task
 
+- Generic module/runtime work: `app/core/`, `app/modules/`, `app/main.py`,
+  `docs/generify_plan/`, `docs/module-development.md`, then the specific
+  module implementation you are touching.
+
 - Chat API behavior: `app/services/chat_orchestrator.py`, then
-  `app/services/aims_coaching_handler.py` or
-  `app/services/legacy_chat_handler.py`.
-- AIMS coaching internals: start with `docs/aims/README.md` for the service
+  `app/modules/aims/services/aims_coaching_handler.py` or
+  `app/modules/aims/services/legacy_chat_handler.py`.
+- AIMS coaching internals: start with `app/modules/aims/docs/README.md` for the service
   map, then open only the owned service you are changing:
-  `classifier_service.py`, `aims_turn_coordinator.py`,
-  `patient_reply_service.py`, `aims_state_service.py`,
-  `aims_metrics_service.py`, `coach_feedback_history_service.py`,
-  `aims_endgame_service.py`, or `aims_turn_telemetry.py`.
+  `app/modules/aims/services/classifier_service.py`,
+  `app/modules/aims/services/aims_turn_coordinator.py`,
+  `app/modules/aims/services/patient_reply_service.py`,
+  `app/modules/aims/services/aims_state_service.py`,
+  `app/modules/aims/services/aims_metrics_service.py`,
+  `app/modules/aims/services/coach_feedback_history_service.py`,
+  `app/modules/aims/services/aims_endgame_service.py`, or
+  `app/modules/aims/services/aims_turn_telemetry.py`.
 - Chainlit startup, replay, or avatar UI: `chainlit_app.py`,
   `app/services/chainlit/orchestrator.py`,
   `app/services/chainlit/ui_handler.py`, and `public/`.
-- Session, history, or duplicate-tab behavior: `app/services/session_initializer.py`,
+- Session, history, or duplicate-tab behavior:
+  `app/modules/aims/services/session_initializer.py`,
   `app/services/session_service.py`, `app/memory_store.py`, and
   `app/routes/session.py`.
 - Model and fallback behavior: `app/vertex.py`,
@@ -44,9 +58,10 @@ Runtime shapes:
   `docs/developer-setup.md`, and `docs/environments.md`.
 
 Before changing AIMS classification, scoring, phase progression, or endgame
-behavior, read `docs/aims/classification-scoring-rules.md` and the service map
-in `docs/aims/README.md`. Use `docs/aims/AIMS_Approach_Summary.md` for theory
-and `docs/aims/aims_mapping.json` for deterministic fallback data.
+behavior, read `app/modules/aims/docs/classification-scoring-rules.md` and the
+service map in `app/modules/aims/docs/README.md`. Use
+`app/modules/aims/docs/AIMS_Approach_Summary.md` for theory and
+`app/modules/aims/docs/aims_mapping.json` for deterministic fallback data.
 
 ## Token-Efficient Workflow
 
@@ -67,11 +82,28 @@ and `docs/aims/aims_mapping.json` for deterministic fallback data.
 Do not inspect all docs, all tests, or all integration transcripts by default.
 Open them only when they are relevant to the requested behavior.
 
+## Execution Defaults
+
+- Prefer the most capable specialized tool available over generic shell work
+  when it reduces manual effort or ambiguity.
+- Keep the implemented change set minimal and targeted to the issue at hand.
+- Match plan depth to task risk:
+  - for narrow, low-risk fixes, a short plan is enough
+  - for broad changes, refactors, migrations, or anything with meaningful
+    coupling, produce a detailed step-by-step plan that surfaces assumptions,
+    risks, sequencing, and verification
+- For runtime or API changes, run pytest; for pure docs changes, verification is
+  optional but still preferred when references or executable imports move.
+- Maintain tested API contracts and response shapes unless the task explicitly
+  calls for changing them.
+
 ## Engineering Constraints
 
 - Preserve API response shapes and stored-history role semantics.
 - Keep state and persistence changes backward-compatible with existing local
   memory and Redis data where practical.
+- Do not reintroduce AIMS-specific semantics into `app/core/` or generic shell
+  routes when a module-owned seam already exists.
 - Do not log secrets, full persona prompts, scene text, or unredacted request
   payloads.
 - Keep Chainlit compatibility aligned with the pinned dependency in
@@ -105,8 +137,10 @@ unified app and verify the affected `/chat` flow with the in-app browser.
 
 ## Supporting Docs
 
-- `docs/standing-orders.md`: general workflow expectations.
 - `docs/api.md`: backend API surface.
-- `docs/memory-and-persona.md`: memory, persona, and Redis behavior.
+- `docs/module-development.md`: how to implement and test a new module.
+- `docs/memory-and-persona.md`: generic memory/session and Redis behavior.
+- `app/modules/aims/docs/persona-and-scenarios.md`: AIMS persona rotation and
+  scenario source material.
 - `docs/chainlit-ui.md`: UI details.
 - `docs/health-checks.md`: deployment URL and health probe behavior.

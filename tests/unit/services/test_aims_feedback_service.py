@@ -6,7 +6,7 @@ from typing import Any, ClassVar
 
 import pytest
 
-from app.services.aims_feedback_service import AimsFeedbackService
+from app.modules.aims.services.aims_feedback_service import AimsFeedbackService
 
 
 class _FakeClient:
