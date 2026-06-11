@@ -284,7 +284,7 @@ class ChainlitOrchestrator:
         participant_context = self._get_bootstrap_participant_context(session_data)
         module_state = self._get_bootstrap_module_state(session_data)
         startup_artifacts = self._get_bootstrap_artifacts(session_data)
-        primary_artifact, inline_artifacts = self._partition_startup_artifacts(startup_artifacts)
+        renderable_artifacts = self._renderable_startup_artifacts(startup_artifacts)
 
         self.session.character = participant_context.get("character") or session_data.get("character")
         self.session.scene = participant_context.get("scene") or session_data.get("scene")
@@ -295,13 +295,14 @@ class ChainlitOrchestrator:
         )
         if isinstance(persona_name, str) and persona_name.strip():
             self.session.persona_name = persona_name.strip()
+        primary_artifact = renderable_artifacts[0] if renderable_artifacts else None
         primary_content = (
             primary_artifact.get("content")
-            if isinstance(primary_artifact.get("content"), str)
+            if primary_artifact and isinstance(primary_artifact.get("content"), str)
             else None
-        ) if primary_artifact else None
+        )
         user_card = primary_content or session_data.get("initialCard")
-        startup_scene_text = self._startup_scene_text(primary_artifact, inline_artifacts, user_card)
+        startup_scene_text = self._startup_scene_text(renderable_artifacts, user_card)
 
         await self._send_persona_name(persona_name)
 
@@ -313,15 +314,14 @@ class ChainlitOrchestrator:
             self._inject_scenario_into_scene(history, startup_scene_text)
         else:
             logger.info("Presenting scenario card to UI")
-            if primary_artifact:
-                await self.ui.present_startup_artifact(dict(primary_artifact))
+            if renderable_artifacts:
+                for artifact in renderable_artifacts:
+                    await self.ui.present_startup_artifact(dict(artifact))
             elif user_card:
                 await self.ui.present_scenario_card(user_card)
-            for artifact in inline_artifacts:
-                await self.ui.present_startup_artifact(dict(artifact))
             new_history = [
                 {"role": ROLE_SYSTEM, "content": content}
-                for content in self._display_artifact_contents(primary_artifact, inline_artifacts, user_card)
+                for content in self._display_artifact_contents(renderable_artifacts, user_card)
             ]
             self.session.history = new_history
             self._inject_scenario_into_scene(new_history, startup_scene_text)
@@ -556,54 +556,42 @@ class ChainlitOrchestrator:
         presentation = metadata.get("presentation")
         return presentation.strip().lower() if isinstance(presentation, str) else ""
 
-    def _partition_startup_artifacts(
+    def _renderable_startup_artifacts(
         self,
         artifacts: list[Mapping[str, Any]],
-    ) -> tuple[Optional[Mapping[str, Any]], list[Mapping[str, Any]]]:
+    ) -> list[Mapping[str, Any]]:
         def has_text_content(artifact: Mapping[str, Any]) -> bool:
             content = artifact.get("content")
             return isinstance(content, str) and bool(content.strip())
 
-        primary = next((artifact for artifact in artifacts if self._artifact_presentation(artifact) == "primary"), None)
-        if primary is None:
-            primary = next(
-                (
-                    artifact
-                    for artifact in artifacts
-                    if has_text_content(artifact)
-                ),
-                None,
-            )
-        inline = [
-            artifact for artifact in artifacts
-            if artifact is not primary and self._artifact_presentation(artifact) != "passive"
-            and has_text_content(artifact)
-        ]
-        return primary, inline
+        renderable: list[Mapping[str, Any]] = []
+        for artifact in artifacts:
+            if not has_text_content(artifact):
+                continue
+            presentation = self._artifact_presentation(artifact)
+            if presentation == "hidden":
+                continue
+            renderable.append(artifact)
+        return renderable
 
     @staticmethod
     def _display_artifact_contents(
-        primary_artifact: Optional[Mapping[str, Any]],
-        inline_artifacts: list[Mapping[str, Any]],
+        artifacts: list[Mapping[str, Any]],
         fallback_content: str | None,
     ) -> list[str]:
         contents: list[str] = []
-        if primary_artifact:
-            primary_content = primary_artifact.get("content")
-            if isinstance(primary_content, str) and primary_content.strip():
-                contents.append(primary_content.strip())
+        if artifacts:
+            for artifact in artifacts:
+                content = artifact.get("content")
+                if isinstance(content, str) and content.strip():
+                    contents.append(content.strip())
         elif isinstance(fallback_content, str) and fallback_content.strip():
             contents.append(fallback_content.strip())
-        for artifact in inline_artifacts:
-            content = artifact.get("content")
-            if isinstance(content, str) and content.strip():
-                contents.append(content.strip())
         return contents
 
     def _startup_scene_text(
         self,
-        primary_artifact: Optional[Mapping[str, Any]],
-        inline_artifacts: list[Mapping[str, Any]],
+        artifacts: list[Mapping[str, Any]],
         fallback_content: str | None,
     ) -> str:
-        return "\n\n".join(self._display_artifact_contents(primary_artifact, inline_artifacts, fallback_content))
+        return "\n\n".join(self._display_artifact_contents(artifacts, fallback_content))

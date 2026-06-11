@@ -203,7 +203,3 @@ class AimsLegacyFallbackHandler:
             
         except Exception as e:
             self.logger.debug("Memory persistence failed for session %s: %s", session_id, e)
-
-
-# Backward-compatible alias during the cleanup transition.
-LegacyChatHandler = AimsLegacyFallbackHandler

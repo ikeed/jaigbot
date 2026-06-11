@@ -1,14 +1,16 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 class ChatRequest(BaseModel):
     """Request model for POST /chat.
 
     Extracted verbatim from app.main to avoid behavior changes.
     """
+
+    model_config = ConfigDict(extra="allow")
 
     message: str = Field(min_length=1, description="User input message")
     # Optional session support for server-side memory
@@ -28,11 +30,6 @@ class ChatRequest(BaseModel):
         default=None,
         description="Scene objectives or context for this conversation",
     )
-    # Coaching toggle
-    coach: Optional[bool] = Field(
-        default=False,
-        description="Legacy compatibility alias for module-directed feedback enablement.",
-    )
     moduleId: Optional[str] = Field(
         default=None,
         description="Optional explicit module override for future multi-module routing.",
@@ -41,6 +38,13 @@ class ChatRequest(BaseModel):
         default=None,
         description="Optional module-directed request metadata such as feedback enablement.",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_legacy_coach_flag(cls, value: Any) -> Any:
+        if isinstance(value, dict) and "coach" in value:
+            raise ValueError("Legacy 'coach' request flag is no longer supported; use moduleOptions.feedbackEnabled.")
+        return value
 
 
 class ReportRequest(BaseModel):

@@ -67,7 +67,7 @@ def test_non_vax_gating_sets_null_step(monkeypatch):
     # LLM classifies to Announce, but message is not vaccine-related; expect step None
     GWStub.classify_payload = {"step": "Announce", "score": 2, "reasons": ["llm"], "tips": []}
     GWStub.reply_json_payload = {"patient_reply": "ok"}
-    r = c.post("/chat", json={"message": "How's your day going?", "coach": True, "sessionId": "g1"})
+    r = c.post("/chat", json={"message": "How's your day going?", "moduleOptions": {"feedbackEnabled": True}, "sessionId": "g1"})
     assert r.status_code == 200
     data = r.json()
     assert data["coaching"]["step"] is None
@@ -93,7 +93,7 @@ def test_tip_suppression_when_all_concerns_mirrored(monkeypatch):
     # Now LLM suggests Inquire with a tip containing 'what else'; it should be suppressed
     GWStub.classify_payload = {"step": "Inquire", "score": 2, "reasons": ["llm"], "tips": ["Before asking what else, mirror concerns"]}
     GWStub.reply_json_payload = {"patient_reply": "ok"}
-    r = c.post("/chat", json={"message": "How can I help?", "coach": True, "sessionId": sess})
+    r = c.post("/chat", json={"message": "How can I help?", "moduleOptions": {"feedbackEnabled": True}, "sessionId": sess})
     assert r.status_code == 200
     data = r.json()
     assert data["coaching"]["tips"] == []
@@ -117,7 +117,7 @@ def test_announce_after_inquiry_gets_reason_and_score_capped(monkeypatch):
     }
     GWStub.classify_payload = {"step": "Announce", "score": 3, "reasons": ["llm"], "tips": []}
     GWStub.reply_json_payload = {"patient_reply": "ok"}
-    r = c.post("/chat", json={"message": "We recommend vaccines today.", "coach": True, "sessionId": sess})
+    r = c.post("/chat", json={"message": "We recommend vaccines today.", "moduleOptions": {"feedbackEnabled": True}, "sessionId": sess})
     assert r.status_code == 200
     data = r.json()
     # Score should be capped to at most 2 and reasons should contain guidance about Announce after inquiry

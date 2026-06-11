@@ -77,7 +77,7 @@ def test_small_talk_fallback_produces_friendly_reply(caplog):
     # Small talk / pleasantries that should classify as non-step
     msg = "Hello Sarah and Liam! So good to see you both — wow, he's getting so big!"
 
-    r = client.post("/chat", json={"message": msg, "coach": True, "sessionId": "st1"})
+    r = client.post("/chat", json={"message": msg, "moduleOptions": {"feedbackEnabled": True}, "sessionId": "st1"})
     assert r.status_code == 200
     data = r.json()
     assert "reply" in data

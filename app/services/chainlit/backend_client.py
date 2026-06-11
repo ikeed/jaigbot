@@ -101,7 +101,6 @@ class BackendClient:
                 "character": character,
                 "scene": scene,
                 "userInfo": user_info,
-                "coach": coach_enabled,
                 "moduleOptions": {"feedbackEnabled": coach_enabled},
             }
             # Use the full URL for chat (including /api/chat if that's what BACKEND_URL points to)

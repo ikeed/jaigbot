@@ -204,7 +204,7 @@ async def test_handle_uses_injected_services(monkeypatch):
 
     result = await handler.handle(
         req=None,
-        body=ChatRequest(message="I recommend the vaccine today.", sessionId="sid", coach=True),
+        body=ChatRequest(message="I recommend the vaccine today.", sessionId="sid", moduleOptions={"feedbackEnabled": True}),
         ctx=ctx,
     )
 
@@ -284,7 +284,7 @@ async def test_handle_refines_fallback_coaching_when_available(monkeypatch):
     ctx = _basic_context()
     result = await handler.handle(
         req=None,
-        body=ChatRequest(message="We can do it today.", sessionId="sid", coach=True),
+        body=ChatRequest(message="We can do it today.", sessionId="sid", moduleOptions={"feedbackEnabled": True}),
         ctx=ctx,
     )
 
@@ -331,7 +331,7 @@ async def test_handle_continues_when_telemetry_and_metrics_fail(monkeypatch):
 
     result = await handler.handle(
         req=Mock(headers={}),
-        body=ChatRequest(message="I recommend the vaccine today.", sessionId="sid", coach=True),
+        body=ChatRequest(message="I recommend the vaccine today.", sessionId="sid", moduleOptions={"feedbackEnabled": True}),
         ctx=_basic_context(),
     )
 
@@ -374,7 +374,7 @@ async def test_handle_small_talk_without_step_clears_coaching(monkeypatch):
 
     result = await handler.handle(
         req=Mock(headers={}),
-        body=ChatRequest(message="How has he been sleeping?", sessionId="sid", coach=True),
+        body=ChatRequest(message="How has he been sleeping?", sessionId="sid", moduleOptions={"feedbackEnabled": True}),
         ctx=_basic_context(),
     )
 
@@ -443,7 +443,7 @@ async def test_handle_sets_coach_post_and_game_over_for_ethan_style_literature_f
 
     result = await handler.handle(
         req=Mock(headers={}),
-        body=ChatRequest(message="I can send you home with the evidence summary and we can revisit this in two weeks.", sessionId="sid", coach=True),
+        body=ChatRequest(message="I can send you home with the evidence summary and we can revisit this in two weeks.", sessionId="sid", moduleOptions={"feedbackEnabled": True}),
         ctx=ctx,
     )
 
@@ -491,7 +491,7 @@ async def test_handle_mixed_resolution_vaccine_today_plus_literature_surfaces_co
 
     result = await handler.handle(
         req=Mock(headers={}),
-        body=ChatRequest(message="We could do the Tdap today and send you home with information on the others.", sessionId="sid", coach=True),
+        body=ChatRequest(message="We could do the Tdap today and send you home with information on the others.", sessionId="sid", moduleOptions={"feedbackEnabled": True}),
         ctx=_basic_context(),
     )
 
@@ -524,7 +524,7 @@ async def test_handle_strips_initial_reply_headers_only_on_first_assistant_turn(
 
     result = await handler.handle(
         req=Mock(headers={}),
-        body=ChatRequest(message="How are things going?", sessionId="sid", coach=True),
+        body=ChatRequest(message="How are things going?", sessionId="sid", moduleOptions={"feedbackEnabled": True}),
         ctx=_basic_context(),
     )
 
@@ -548,7 +548,7 @@ async def test_handle_strips_initial_reply_headers_only_on_first_assistant_turn(
     ))
     result = await handler.handle(
         req=Mock(headers={}),
-        body=ChatRequest(message="How are things going?", sessionId="sid", coach=True),
+        body=ChatRequest(message="How are things going?", sessionId="sid", moduleOptions={"feedbackEnabled": True}),
         ctx=second_ctx,
     )
 

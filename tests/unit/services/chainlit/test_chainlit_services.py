@@ -294,7 +294,6 @@ async def test_backend_client_send_chat_message_posts_expected_payload(respx_moc
         "character": "character",
         "scene": "scene",
         "userInfo": {"identifier": "user@example.com"},
-        "coach": True,
         "moduleOptions": {"feedbackEnabled": True},
     }
 

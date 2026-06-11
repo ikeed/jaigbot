@@ -81,13 +81,13 @@ def test_session_metrics_counts_and_snapshot(monkeypatch):
     # Turn 1: Announce; have parent mention a vaccine concern to seed state
     GWStub2.classify_payload = {"step": "Announce", "score": 2, "reasons": ["llm"], "tips": []}
     GWStub2.reply_json_payload = {"patient_reply": "I'm worried about side effects of vaccines."}
-    r1 = c.post("/chat", json={"message": "We recommend vaccines today.", "coach": True, "sessionId": "test-sess"})
+    r1 = c.post("/chat", json={"message": "We recommend vaccines today.", "moduleOptions": {"feedbackEnabled": True}, "sessionId": "test-sess"})
     assert r1.status_code == 200
 
     # Turn 2: Mirror+Inquire (compound); should increment both Mirror and Inquire counts
     GWStub2.classify_payload = {"step": "Mirror+Inquire", "score": 3, "reasons": ["llm"], "tips": ["t"]}
     GWStub2.reply_json_payload = {"patient_reply": "Okay."}
-    r2 = c.post("/chat", json={"message": "It sounds like you're worried — how can I help?", "coach": True, "sessionId": "test-sess"})
+    r2 = c.post("/chat", json={"message": "It sounds like you're worried — how can I help?", "moduleOptions": {"feedbackEnabled": True}, "sessionId": "test-sess"})
     assert r2.status_code == 200
     data2 = r2.json()
     sess = data2.get("session")

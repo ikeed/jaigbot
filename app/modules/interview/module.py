@@ -165,7 +165,71 @@ class InterviewTrainingModule:
         raise NotImplementedError("History projection is not routed through TrainingModule yet.")
 
     async def build_summary(self, **kwargs: Any) -> Mapping[str, Any]:
-        return {"moduleId": self.module_id, "supported": False}
+        session_id = kwargs.get("session_id")
+        memory_store = kwargs["memory_store"]
+        mem = memory_store.get(session_id) if session_id else None
+        history = mem.get("history") if isinstance(mem, Mapping) else None
+        if not isinstance(history, list):
+            history = []
+
+        candidate_turns = [
+            str(entry.get("content", "")).strip()
+            for entry in history
+            if isinstance(entry, Mapping) and entry.get("role") == "candidate"
+        ]
+        interviewer_turns = [
+            str(entry.get("content", "")).strip()
+            for entry in history
+            if isinstance(entry, Mapping) and entry.get("role") == "interviewer"
+        ]
+
+        total_turns = len(candidate_turns)
+        quantified_examples = sum(
+            1
+            for text in candidate_turns
+            if any(char.isdigit() for char in text)
+        )
+        reflection_examples = sum(
+            1
+            for text in candidate_turns
+            if any(phrase in text.lower() for phrase in ("learned", "would do differently", "next time"))
+        )
+
+        strengths: list[str] = []
+        growth_areas: list[str] = []
+        if quantified_examples:
+            strengths.append("Used concrete outcomes or numbers in at least one answer.")
+        else:
+            growth_areas.append("Add measurable outcomes to at least one answer.")
+        if reflection_examples:
+            strengths.append("Included some reflection on what was learned or improved.")
+        else:
+            growth_areas.append("Add reflection on tradeoffs, lessons, or what changed afterward.")
+        if not candidate_turns:
+            growth_areas.append("Provide at least one substantive candidate answer before reviewing interview summary.")
+
+        latest_prompt = interviewer_turns[-1] if interviewer_turns else None
+        narrative = (
+            f"The candidate completed {total_turns} response turn(s). "
+            f"{quantified_examples} answer(s) included measurable detail and "
+            f"{reflection_examples} answer(s) included reflection."
+        )
+
+        return {
+            "moduleId": self.module_id,
+            "supported": True,
+            "sessionId": session_id,
+            "totalTurns": total_turns,
+            "questionCount": len(interviewer_turns),
+            "signals": {
+                "quantifiedExamples": quantified_examples,
+                "reflectionExamples": reflection_examples,
+            },
+            "strengths": strengths,
+            "growthAreas": growth_areas,
+            "latestPrompt": latest_prompt,
+            "narrative": narrative,
+        }
 
     @staticmethod
     def build_archive_payload(**kwargs: Any) -> Mapping[str, Any] | None:
@@ -222,7 +286,7 @@ def create_interview_training_module(*, settings: Any) -> InterviewTrainingModul
             ),
             supports_intro=False,
             supports_feedback=False,
-            supports_summary=False,
+            supports_summary=True,
             frontend_js_bundles=("/public/js/modules/interview/module-ui.js",),
             frontend_css="/public/training-ui.css",
             branding=BrandingSpec(

@@ -10,7 +10,7 @@ with deterministic fallbacks and session-level metrics.
 - UI: Chainlit (see `chainlit_app.py`) or the unified login/UI/API app in
   `run_app.py`.
 - API endpoints (FastAPI backend):
-  - **POST /chat** → calls Vertex AI and returns `{ reply, model, latencyMs }`. When `AIMS_COACHING_ENABLED=true` and the request includes `coach=true`, the response may also include optional `coaching` and `session` fields (see AIMS coaching docs).
+  - **POST /chat** → calls Vertex AI and returns `{ reply, model, latencyMs }`. When `AIMS_COACHING_ENABLED=true` and the request includes `moduleOptions.feedbackEnabled=true`, the response may also include optional `coaching` and `session` fields (see AIMS coaching docs).
   - **GET  /history?sessionId=...** → returns stored session history for debugging, reporting, and server-side context recovery.
   - **GET  /summary?sessionId=...** → returns an aggregated AIMS summary for a session (overallScore, stepCoverage, strengths, growthAreas, narrative). Present even if coaching is disabled; contents may be minimal.
   - **POST /session**, **/session/deregister**, **/report** → session initialization, duplicate-tab cleanup, and issue reporting/archive flow.

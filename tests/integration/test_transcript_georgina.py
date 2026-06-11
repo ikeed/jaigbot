@@ -355,7 +355,7 @@ def _post_turn(client, clinician_msg):
     """POST a clinician turn and return the parsed response."""
     r = client.post("/chat", json={
         "message": clinician_msg,
-        "coach": True,
+        "moduleOptions": {"feedbackEnabled": True},
         "sessionId": SESSION_ID,
     })
     assert r.status_code == 200, f"Turn failed with {r.status_code}: {r.text}"

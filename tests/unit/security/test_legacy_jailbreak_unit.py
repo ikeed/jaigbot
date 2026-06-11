@@ -2,7 +2,7 @@ import pytest
 
 from app.models import ChatRequest
 from app.services.chat_context import ChatContext
-from app.modules.aims.services.legacy_chat_handler import LegacyChatHandler
+from app.modules.aims.services.legacy_chat_handler import AimsLegacyFallbackHandler
 
 
 class DummyLogger:
@@ -25,7 +25,7 @@ def test_legacy_handler_jailbreak_early_return(monkeypatch):
 
     monkeypatch.setattr(lch.JailbreakGuard, "detect", staticmethod(fake_detect))
 
-    handler = LegacyChatHandler(
+    handler = AimsLegacyFallbackHandler(
         memory_store={},
         vertex_config={
             "project_id": "proj",

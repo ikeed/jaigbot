@@ -60,17 +60,18 @@ def install_http_handlers(app: FastAPI, *, settings: Any, logger: logging.Logger
     async def on_validation_error(request: Request, exc: RequestValidationError):
         req_id = get_request_id(request)
         body_logged = await _request_body_for_log(request)
+        errors = json.loads(json.dumps(exc.errors(), default=str))
 
         logger.warning(json.dumps({
             "event": "request_validation_error",
-            "errors": exc.errors(),
+            "errors": errors,
             "body": body_logged,
             "requestId": req_id,
             "path": request.url.path,
             "method": request.method,
         }))
         return JSONResponse(status_code=422, content={
-            "error": {"message": "Request validation failed", "code": 422, "requestId": req_id, "errors": exc.errors()}
+            "error": {"message": "Request validation failed", "code": 422, "requestId": req_id, "errors": errors}
         })
 
     @app.exception_handler(Exception)

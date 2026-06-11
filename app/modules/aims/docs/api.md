@@ -10,7 +10,6 @@ When the active module is `aims`, coaching output is returned when:
 
 - `AIMS_COACHING_ENABLED=true`, and
 - the request sets `moduleOptions.feedbackEnabled: true`, or
-- the request sets `coach: true` as a legacy compatibility alias, or
 - `AIMS_COACHING_DEFAULT=true` forces coaching by default
 
 ## AIMS request options
@@ -19,7 +18,6 @@ When the active module is `aims`, coaching output is returned when:
 The current AIMS module also uses:
 
 - `moduleOptions.feedbackEnabled`: boolean, preferred
-- `coach`: boolean, optional legacy alias
 - `character`: string, optional compatibility override
 - `scene`: string, optional compatibility override
 

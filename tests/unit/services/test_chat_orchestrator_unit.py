@@ -157,7 +157,7 @@ async def test_handle_chat_dispatches_through_active_module_and_queues_archive()
 
     response = await orchestrator.handle_chat(
         _request(),
-        ChatRequest(message="hello", sessionId="sid", coach=True),
+        ChatRequest(message="hello", sessionId="sid", moduleOptions={"feedbackEnabled": True}),
         background,
     )
 

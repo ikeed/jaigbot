@@ -98,7 +98,7 @@ def test_secure_before_mirror_adds_reason_tip_and_caps_score(monkeypatch):
     # Classifier says Secure prematurely
     GWStub.classify_payload = {"step": "Secure", "score": 3, "reasons": ["llm"], "tips": []}
     GWStub.reply_json_payload = {"patient_reply": "ok"}
-    r = c.post("/chat", json={"message": "Studies show it's safe.", "coach": True, "sessionId": sess})
+    r = c.post("/chat", json={"message": "Studies show it's safe.", "moduleOptions": {"feedbackEnabled": True}, "sessionId": sess})
     assert r.status_code == 200
     data = r.json()
     # Score capped and reason/tip injected
@@ -116,7 +116,7 @@ def test_topic_mirroring_and_securing_state_updates(monkeypatch):
     GWStub.classify_payload = {"step": "Announce", "score": 2, "reasons": ["llm"], "tips": []}
     GWStub.person_topic = "side_effects"
     GWStub.reply_json_payload = {"patient_reply": "I'm worried about vaccine side effects."}
-    r1 = c.post("/chat", json={"message": "We recommend vaccines today.", "coach": True, "sessionId": sess})
+    r1 = c.post("/chat", json={"message": "We recommend vaccines today.", "moduleOptions": {"feedbackEnabled": True}, "sessionId": sess})
     assert r1.status_code == 200
     
     # Turn 2: Mirror via clinician topic mention
@@ -124,7 +124,7 @@ def test_topic_mirroring_and_securing_state_updates(monkeypatch):
     GWStub.classify_payload = {"step": "Inquire", "score": 3, "reasons": ["llm"], "tips": []}
     GWStub.person_topic = "side_effects"
     GWStub.reply_json_payload = {"patient_reply": "ok"}
-    r1b = c.post("/chat", json={"message": "What have you heard about side effects?", "coach": True, "sessionId": sess})
+    r1b = c.post("/chat", json={"message": "What have you heard about side effects?", "moduleOptions": {"feedbackEnabled": True}, "sessionId": sess})
     assert r1b.status_code == 200
 
     # Verify that the concern is now seeded
@@ -135,13 +135,13 @@ def test_topic_mirroring_and_securing_state_updates(monkeypatch):
     GWStub.classify_payload = {"step": "Mirror", "score": 3, "reasons": ["llm"], "tips": []}
     GWStub.person_topic = "side_effects"
     GWStub.reply_json_payload = {"patient_reply": "ok"}
-    r2 = c.post("/chat", json={"message": "It sounds like the side effects worry you.", "coach": True, "sessionId": sess})
+    r2 = c.post("/chat", json={"message": "It sounds like the side effects worry you.", "moduleOptions": {"feedbackEnabled": True}, "sessionId": sess})
     assert r2.status_code == 200
     # Turn 4: Secure via clinician topic mention
     GWStub.classify_payload = {"step": "Secure", "score": 3, "reasons": ["llm"], "tips": []}
     GWStub.person_topic = None
     GWStub.reply_json_payload = {"patient_reply": "ok"}
-    r3 = c.post("/chat", json={"message": "For side effects, here is what to expect.", "coach": True, "sessionId": sess})
+    r3 = c.post("/chat", json={"message": "For side effects, here is what to expect.", "moduleOptions": {"feedbackEnabled": True}, "sessionId": sess})
     assert r3.status_code == 200
     state = m.MEMORY_STORE[sess]["aims_state"]
     assert state["parent_concerns"], "concerns should exist"
@@ -177,7 +177,7 @@ def test_zia_style_required_and_safe_reply_seeds_distinct_concerns_and_flags_sec
                 "The decision is yours, and these vaccines are monitored for safety. "
                 "Most side effects are mild."
             ),
-            "coach": True,
+            "moduleOptions": {"feedbackEnabled": True},
             "sessionId": sess,
         },
     )
@@ -200,10 +200,10 @@ def test_running_average_populated(monkeypatch):
     # Two turns for Secure with different scores
     GWStub.classify_payload = {"step": "Secure", "score": 1, "reasons": ["llm"], "tips": []}
     GWStub.reply_json_payload = {"patient_reply": "ok"}
-    r1 = c.post("/chat", json={"message": "It's your decision; here are options.", "coach": True, "sessionId": sess})
+    r1 = c.post("/chat", json={"message": "It's your decision; here are options.", "moduleOptions": {"feedbackEnabled": True}, "sessionId": sess})
     assert r1.status_code == 200
     GWStub.classify_payload = {"step": "Secure", "score": 3, "reasons": ["llm"], "tips": []}
-    r2 = c.post("/chat", json={"message": "We'll support whatever you choose.", "coach": True, "sessionId": sess})
+    r2 = c.post("/chat", json={"message": "We'll support whatever you choose.", "moduleOptions": {"feedbackEnabled": True}, "sessionId": sess})
     assert r2.status_code == 200
     data2 = r2.json()
     avg = data2["session"]["runningAverage"].get("Secure")

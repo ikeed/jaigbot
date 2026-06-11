@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 import app.main as m
 from app.main import app
+from app.modules.interview.module import create_interview_training_module
 
 client = TestClient(app)
 
@@ -129,3 +130,32 @@ def test_summary_route_returns_disabled_payload_when_module_does_not_support_sum
     assert response.status_code == 200
     assert response.json() == {"moduleId": "interview", "supported": False}
     fake_module.build_summary.assert_not_awaited()
+
+
+def test_summary_route_returns_interview_summary_payload():
+    interview_module = create_interview_training_module(settings=m.settings)
+    memory_store = {
+        "interview-sid": {
+            "history": [
+                {"role": "candidate", "content": "I improved throughput by 25% after simplifying the worker queue."},
+                {"role": "interviewer", "content": "What did you learn from that migration?"},
+                {"role": "candidate", "content": "I learned to involve support teams earlier and I would do that sooner next time."},
+            ]
+        }
+    }
+    app.dependency_overrides[m.get_active_module] = lambda: interview_module
+    app.dependency_overrides[m.get_memory_store] = lambda: memory_store
+    try:
+        response = client.get("/summary", params={"sessionId": "interview-sid"})
+    finally:
+        app.dependency_overrides.pop(m.get_active_module, None)
+        app.dependency_overrides.pop(m.get_memory_store, None)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["moduleId"] == "interview"
+    assert payload["supported"] is True
+    assert payload["totalTurns"] == 2
+    assert payload["questionCount"] == 1
+    assert payload["signals"]["quantifiedExamples"] == 1
+    assert payload["signals"]["reflectionExamples"] == 1

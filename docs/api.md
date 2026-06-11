@@ -36,15 +36,16 @@ Request body:
 - `character`: string, optional compatibility participant override
 - `scene`: string, optional compatibility scene/objective override
 - `userInfo`: object, optional user metadata for session association/audit
-- `coach`: boolean, optional legacy compatibility alias retained for the AIMS
-  module
 
 Example:
 
 ```json
 {
   "message": "Tell me more about what is worrying you.",
-  "sessionId": "abc-123"
+  "sessionId": "abc-123",
+  "moduleOptions": {
+    "feedbackEnabled": true
+  }
 }
 ```
 

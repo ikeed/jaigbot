@@ -121,7 +121,7 @@ def test_parent_context_keeps_vax_related_when_clinician_does_not_repeat_tokens(
     sid = "gate-ctx-1"
     r1 = client.post("/chat", json={
         "message": "It's time for Liam's MMR vaccine today. How does that sound?",
-        "coach": True,
+        "moduleOptions": {"feedbackEnabled": True},
         "sessionId": sid,
     })
     assert r1.status_code == 200
@@ -136,7 +136,7 @@ def test_parent_context_keeps_vax_related_when_clinician_does_not_repeat_tokens(
     )
     r2 = client.post("/chat", json={
         "message": clinician_turn,
-        "coach": True,
+        "moduleOptions": {"feedbackEnabled": True},
         "sessionId": sid,
     })
     assert r2.status_code == 200

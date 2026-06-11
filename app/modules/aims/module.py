@@ -20,7 +20,7 @@ def _feedback_requested(body: Any) -> bool:
         feedback_enabled = module_options.get("feedbackEnabled")
         if feedback_enabled is not None:
             return bool(feedback_enabled)
-    return bool(getattr(body, "coach", False))
+    return False
 
 
 @dataclass(frozen=True)

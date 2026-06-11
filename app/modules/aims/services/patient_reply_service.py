@@ -51,7 +51,7 @@ class PatientReplyService:
                 patterns=jb_matches,
                 requestBody={
                     "message": clinician_message,
-                    "coach": True,
+                    "moduleOptions": {"feedbackEnabled": True},
                     "sessionId": session_id,
                 },
             )

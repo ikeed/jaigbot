@@ -153,7 +153,7 @@ async def test_aims_module_handle_turn_routes_to_coaching_when_enabled(monkeypat
 
     result = await module.handle_turn(
         req=object(),
-        body=SimpleNamespace(coach=True),
+        body=SimpleNamespace(moduleOptions={"feedbackEnabled": True}),
         ctx=object(),
         memory_store={},
         vertex_config={"model_id": "m"},
@@ -186,7 +186,7 @@ async def test_aims_module_handle_turn_routes_to_legacy_when_coaching_not_select
 
     result = await module.handle_turn(
         req=object(),
-        body=SimpleNamespace(coach=False),
+        body=SimpleNamespace(moduleOptions={"feedbackEnabled": False}),
         ctx=object(),
         memory_store={},
         vertex_config={"model_id": "m"},
@@ -219,7 +219,7 @@ async def test_aims_module_handle_turn_prefers_module_options_feedback_flag(monk
 
     result = await module.handle_turn(
         req=object(),
-        body=SimpleNamespace(coach=False, moduleOptions={"feedbackEnabled": True}),
+        body=SimpleNamespace(moduleOptions={"feedbackEnabled": True}),
         ctx=object(),
         memory_store={},
         vertex_config={"model_id": "m"},

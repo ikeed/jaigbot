@@ -19,7 +19,7 @@ def test_interview_module_manifest_is_distinct_from_aims():
     assert manifest.storage_prefix == "interview:local:session:"
     assert manifest.supports_intro is False
     assert manifest.supports_feedback is False
-    assert manifest.supports_summary is False
+    assert manifest.supports_summary is True
     assert manifest.dialogue_roles.participant_roles == ("candidate", "interviewer")
     assert manifest.dialogue_roles.feedback_roles == ("observer",)
     assert manifest.dialogue_roles.metadata_roles == ("system",)
@@ -148,7 +148,7 @@ async def test_interview_module_handle_turn_updates_memory_with_non_aims_roles()
 
     result = await module.handle_turn(
         req=object(),
-        body=SimpleNamespace(message="I led the migration project.", coach=False),
+        body=SimpleNamespace(message="I led the migration project.", moduleOptions={"feedbackEnabled": False}),
         ctx=SimpleNamespace(session_id="sid"),
         memory_store=memory_store,
         vertex_config={},
@@ -189,7 +189,17 @@ async def test_interview_module_summary_and_archive_helpers_are_generic():
     settings = SimpleNamespace(APP_ENV="local")
     module = create_interview_training_module(settings=settings)
 
-    summary = await module.build_summary()
+    memory_store = {
+        "sid": {
+            "history": [
+                {"role": "candidate", "content": "I led a migration that cut runtime by 40%."},
+                {"role": "interviewer", "content": "What did you learn from that project?"},
+                {"role": "candidate", "content": "I learned to involve support teams earlier and would do that sooner next time."},
+            ]
+        }
+    }
+
+    summary = await module.build_summary(session_id="sid", memory_store=memory_store)
     archive = module.build_archive_payload()
     envelope = module.build_archive_envelope(
         session_id="sid",
@@ -198,7 +208,14 @@ async def test_interview_module_summary_and_archive_helpers_are_generic():
         settings=settings,
     )
 
-    assert summary == {"moduleId": "interview", "supported": False}
+    assert summary["moduleId"] == "interview"
+    assert summary["supported"] is True
+    assert summary["totalTurns"] == 2
+    assert summary["questionCount"] == 1
+    assert summary["signals"]["quantifiedExamples"] == 1
+    assert summary["signals"]["reflectionExamples"] == 1
+    assert summary["strengths"]
+    assert summary["latestPrompt"] == "What did you learn from that project?"
     assert archive is None
     assert envelope.module_id == "interview"
     assert envelope.metadata["moduleId"] == "interview"

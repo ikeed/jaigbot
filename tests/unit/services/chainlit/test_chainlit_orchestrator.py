@@ -164,6 +164,43 @@ async def test_start_scenario_flow_prefers_generic_bootstrap_fields(orchestrator
     assert mock_services["session"].persona_name == "Hiring Manager"
     assert mock_services["ui"].present_startup_artifact.await_count == 2
 
+
+def test_renderable_startup_artifacts_supports_multiple_primary_cards(orchestrator):
+    artifacts = [
+        {
+            "kind": "brief-1",
+            "title": "Brief 1",
+            "content": "First primary",
+            "metadata": {"presentation": "primary"},
+        },
+        {
+            "kind": "brief-2",
+            "title": "Brief 2",
+            "content": "Second primary",
+            "metadata": {"presentation": "primary"},
+        },
+        {
+            "kind": "hidden-note",
+            "title": "Hidden",
+            "content": "Do not show",
+            "metadata": {"presentation": "hidden"},
+        },
+        {
+            "kind": "inline-note",
+            "title": "Inline",
+            "content": "Inline guidance",
+            "metadata": {"presentation": "inline"},
+        },
+    ]
+
+    renderable = orchestrator._renderable_startup_artifacts(artifacts)
+    contents = orchestrator._display_artifact_contents(renderable, None)
+    scene_text = orchestrator._startup_scene_text(renderable, None)
+
+    assert [artifact["title"] for artifact in renderable] == ["Brief 1", "Brief 2", "Inline"]
+    assert contents == ["First primary", "Second primary", "Inline guidance"]
+    assert "Do not show" not in scene_text
+
 def test_reconnect_redirect_does_not_hijack_explicit_new_chat(
     orchestrator, mock_services, monkeypatch
 ):
