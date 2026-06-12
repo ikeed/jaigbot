@@ -1,3 +1,4 @@
+import asyncio
 from typing import Optional, Tuple, List, Dict, Any
 import logging
 import os
@@ -267,42 +268,25 @@ class VertexClient:
         response_schema: Optional[Dict[str, Any]] = None,
         thinking_budget: Optional[int] = None,
     ) -> str:
-        """Native async generation using the Gen AI SDK.
+        """Async wrapper over the continuation-capable sync generation path.
 
-        Returns text only (no metadata) — used by ClassifierService and other
-        async callers that only need the response body.
+        The sync `generate_text()` path already owns the reliable
+        MAX_TOKENS continuation behavior. Reusing it avoids divergence between
+        async and sync callers, which previously caused async JSON callers to
+        return truncated JSON and fall back unnecessarily.
         """
         try:
-            client = self._get_client()
-            config = self._build_config(
-                temperature, max_tokens, system_instruction,
-                response_mime_type, response_schema, thinking_budget,
+            text, _meta = await asyncio.to_thread(
+                self.generate_text,
+                prompt,
+                temperature,
+                max_tokens,
+                system_instruction,
+                response_mime_type,
+                response_schema,
+                thinking_budget,
             )
-
-            response = await client.aio.models.generate_content(
-                model=self.model_id,
-                contents=prompt,
-                config=config,
-            )
-
-            text, meta = self._extract_response(response)
-
-            self.logger.info(json.dumps({
-                "event": "genai_async_response",
-                "modelId": self.model_id,
-                "finishReason": meta.get("finishReason"),
-                "textLen": meta.get("textLen"),
-                "thoughtLen": meta.get("thoughtLen", 0),
-                "cachedContentTokens": meta.get("cachedContentTokens"),
-                "hasText": bool(text),
-            }))
-
-            if not text:
-                raise VertexAIError(
-                    "No text candidates returned from model (possibly safety blocked)"
-                )
             return text
-
         except VertexAIError:
             raise
         except APIError as e:

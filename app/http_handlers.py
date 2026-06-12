@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 import uuid
 from typing import Any, Optional
@@ -27,7 +28,7 @@ def get_request_id(request: Request) -> Optional[str]:
         return str(uuid.uuid4())
 
 
-def _extract_session_id(*, request: Request, body_logged: Any = None) -> Optional[str]:
+def _extract_session_id(*, request: Request, body_logged: Any = None, body_bytes: bytes | None = None) -> Optional[str]:
     try:
         state_session_id = getattr(request.state, "session_id", None)
         if state_session_id:
@@ -47,14 +48,23 @@ def _extract_session_id(*, request: Request, body_logged: Any = None) -> Optiona
         if raw:
             return str(raw)
 
+    if body_bytes:
+        extracted = _extract_json_field_from_bytes(body_bytes, "sessionId")
+        if extracted:
+            return extracted
+
     return None
 
 
-def _extract_module_id(*, body_logged: Any = None, settings: Any) -> Optional[str]:
+def _extract_module_id(*, body_logged: Any = None, body_bytes: bytes | None = None, settings: Any) -> Optional[str]:
     if isinstance(body_logged, dict):
         raw = body_logged.get("moduleId")
         if raw:
             return str(raw)
+    if body_bytes:
+        extracted = _extract_json_field_from_bytes(body_bytes, "moduleId")
+        if extracted:
+            return extracted
     return getattr(settings, "ACTIVE_MODULE", None)
 
 
@@ -72,6 +82,17 @@ def _safe_state_attr(request: Request, name: str) -> str | None:
     except Exception:
         return None
     return value if isinstance(value, str) else None
+
+
+def _extract_json_field_from_bytes(body_bytes: bytes, field_name: str) -> str | None:
+    try:
+        decoded = body_bytes.decode("utf-8", errors="ignore")
+    except Exception:
+        return None
+    match = re.search(rf'"{re.escape(field_name)}"\s*:\s*"([^"]+)"', decoded)
+    if match:
+        return match.group(1)
+    return None
 
 
 def _safe_app_state_attr(request: Request, name: str) -> str | None:
@@ -188,8 +209,16 @@ def install_http_handlers(app: FastAPI, *, settings: Any, logger: logging.Logger
 
         client_host = request.client.host if request.client is not None else None
         body_logged = _body_preview_for_log(body_bytes, settings=settings)
-        session_id = _extract_session_id(request=request, body_logged=body_logged)
-        module_id = _extract_module_id(body_logged=body_logged, settings=settings)
+        session_id = _extract_session_id(
+            request=request,
+            body_logged=body_logged,
+            body_bytes=body_bytes,
+        )
+        module_id = _extract_module_id(
+            body_logged=body_logged,
+            body_bytes=body_bytes,
+            settings=settings,
+        )
         request.state.session_id = session_id
         request.state.module_id = module_id
         app_env = _safe_app_env(settings)

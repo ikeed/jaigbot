@@ -38,6 +38,16 @@ def test_extract_session_id_prefers_state_then_query_then_body():
     assert http_handlers._extract_session_id(request=request, body_logged={"sessionId": "body-sid"}) == "body-sid"
 
 
+def test_extract_session_id_and_module_id_fall_back_to_raw_body_bytes():
+    request = MagicMock()
+    request.state.session_id = None
+    request.query_params.get.return_value = None
+    body_bytes = b'{"message":"hello","sessionId":"raw-sid","moduleId":"raw-module","character":"x"'
+
+    assert http_handlers._extract_session_id(request=request, body_logged="truncated", body_bytes=body_bytes) == "raw-sid"
+    assert http_handlers._extract_module_id(body_logged="truncated", body_bytes=body_bytes, settings=SimpleNamespace(ACTIVE_MODULE="aims")) == "raw-module"
+
+
 @pytest.mark.asyncio
 async def test_request_body_for_log_handles_json_text_binary_and_get():
     post_json = MagicMock(method="POST")
@@ -346,6 +356,31 @@ def test_request_logging_uses_new_session_id_after_new_conversation_starts():
         payload.get("event") == "inside_request"
         and payload.get("requestId") == "req-new"
         and payload.get("sessionId") == "session-new"
+        for payload in info_payloads
+    )
+
+
+def test_request_start_extracts_session_id_from_large_truncated_body():
+    logger = MagicMock()
+    client = TestClient(_app_with_handlers(logger), raise_server_exceptions=False)
+    long_character = "x" * 12000
+
+    client.post(
+        "/validate",
+        json={"message": "hi", "sessionId": "big-sid", "character": long_character},
+        headers={"x-request-id": "req-big"},
+    )
+
+    info_payloads = []
+    for call in logger.info.call_args_list:
+        arg = call.args[0]
+        if isinstance(arg, str) and arg.startswith("{"):
+            info_payloads.append(http_handlers.json.loads(arg))
+
+    assert any(
+        payload.get("event") == "request_start"
+        and payload.get("requestId") == "req-big"
+        and payload.get("sessionId") == "big-sid"
         for payload in info_payloads
     )
 
