@@ -153,6 +153,10 @@ class Settings(BaseSettings):
     def gcs_object_prefix(self) -> str:
         return f"env={self.APP_ENV}"
 
+    @property
+    def service_name(self) -> str:
+        return os.getenv("K_SERVICE") or f"aimsbot-{self.APP_ENV}"
+
     def gcs_path(self, *parts: str) -> str:
         clean_parts = [part.strip("/") for part in parts if part]
         return "/".join([self.gcs_object_prefix, *clean_parts])

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import time
+from datetime import UTC, datetime
 from typing import Any, Optional, cast
 
 from fastapi import HTTPException, Request, BackgroundTasks
@@ -23,9 +24,13 @@ from fastapi.responses import JSONResponse
 from app.core.interfaces import TrainingModule
 from app.models import ChatRequest, ReportRequest
 from app.services.chat_context import ChatContextBuilder, ChatContext
+from app.services.report_log_bundle_service import ReportLogBundleService
 from app.services.session_service import SessionService, CookieSettings
 from app.services.storage_service import storage_service
 from app.vertex import VertexAIError
+
+
+report_log_bundle_service = ReportLogBundleService(storage_service=storage_service)
 
 
 class ChatOrchestrator:
@@ -334,13 +339,14 @@ class ChatOrchestrator:
             # Record session_ended timestamp
             mem["session_ended"] = time.time()
             # Prepare archive data with the extra error_report key
+            reported_at = datetime.now(UTC)
             archive_data = {
                 **mem,
                 "session_id": session_id,
                 "user_id": user_id,
                 "game_over": True,
                 "error_report": body.reason,
-                "reported_at": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+                "reported_at": reported_at.isoformat().replace("+00:00", "Z")
             }
 
             # Trigger background archive
@@ -352,9 +358,22 @@ class ChatOrchestrator:
                     archive_data,
                     is_report=True
                 )
+                self.background_tasks.add_task(
+                    report_log_bundle_service.collect_and_store_report_logs,
+                    session_id=session_id,
+                    user_id=user_id,
+                    reported_at=reported_at,
+                    request_id=self._get_request_id(req),
+                )
             else:
                 # Fallback to synchronous if no background tasks (rare)
                 storage_service.upload_session(session_id, user_id, archive_data, is_report=True)
+                report_log_bundle_service.collect_and_store_report_logs(
+                    session_id=session_id,
+                    user_id=user_id,
+                    reported_at=reported_at,
+                    request_id=self._get_request_id(req),
+                )
 
             # Clear session from memory store
             self.memory_store.pop(session_id, None)

@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, Optional
 
+from app.telemetry.context import get_log_context
+
 
 def truncate_for_log(s: str, cap: int) -> str:
     """Safely truncate a string to a maximum length `cap`.
@@ -41,8 +43,13 @@ def log_event(logger, event_name: str, *, caps: Optional[Dict[str, int]] = None,
     - **fields: arbitrary event fields
     """
     payload: Dict[str, Any] = {"event": event_name}
-    if sessionId:
-        payload["sessionId"] = sessionId
+    context = get_log_context()
+    payload["requestId"] = fields.pop("requestId", None) or context.get("requestId")
+    payload["sessionId"] = sessionId or fields.pop("sessionId", None) or context.get("sessionId")
+    payload["moduleId"] = fields.pop("moduleId", None) or context.get("moduleId")
+    payload["appEnv"] = fields.pop("appEnv", None) or context.get("appEnv")
+    payload["serviceName"] = fields.pop("serviceName", None) or context.get("serviceName")
+    payload = {k: v for k, v in payload.items() if v is not None}
     if userInfo:
         payload["userInfo"] = userInfo
     payload.update(fields or {})

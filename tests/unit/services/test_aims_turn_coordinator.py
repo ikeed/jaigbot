@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 from unittest.mock import AsyncMock, Mock
 
@@ -145,3 +146,73 @@ async def test_run_uses_fallbacks_when_classifier_or_reply_are_rate_limited():
     assert result.classification_result is None
     assert "fallback" in result.cls_payload["reasons"]
     assert result.reply_payload == {"patient_reply": "I'm not sure — I have some questions, but I'd like to hear more."}
+
+
+class _ListHandler(logging.Handler):
+    def __init__(self):
+        super().__init__()
+        self.messages: list[str] = []
+
+    def emit(self, record):
+        self.messages.append(record.getMessage())
+
+
+@pytest.mark.asyncio
+async def test_run_logs_reply_timeout_fallback_reason_with_session_id():
+    classifier = Mock()
+    classifier.classify_turn = AsyncMock(
+        return_value=Mock(
+            aims=Mock(model_dump=lambda: {"step": "Mirror", "score": 3, "reasons": [], "tips": []}),
+            is_vaccine_relevant=True,
+            is_small_talk=False,
+        )
+    )
+
+    patient_reply = Mock()
+
+    async def slow_reply(**kwargs):
+        await asyncio.sleep(1)
+
+    patient_reply.generate = slow_reply
+    patient_reply.fallback_reply = Mock(return_value={"patient_reply": "fallback"})
+
+    logger = logging.getLogger("test.timeout.fallback")
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    handler = _ListHandler()
+    logger.handlers = [handler]
+
+    coordinator = AimsTurnCoordinator(
+        classifier_service=classifier,
+        patient_reply_service=patient_reply,
+        classify_budget_s=1.0,
+        reply_budget_s=0.001,
+        logger=logger,
+    )
+
+    await coordinator.run(
+        clinician_message="Can you tell me more about that?",
+        person_last="I'm worried about side effects.",
+        history=[],
+        prior_announced=True,
+        prior_phase="PostAnnounce",
+        mapping={},
+        context_turns=3,
+        max_concerns=3,
+        inquired_concerns_list=[],
+        mirrored_concerns_list=[],
+        history_text="",
+        session_id="sid-timeout",
+        character=None,
+        scene=None,
+        clinician_name=None,
+        concern_state_section="Open concerns: side effects.",
+    )
+
+    payloads = [json.loads(message) for message in handler.messages if message.startswith("{")]
+    assert any(
+        payload.get("event") == "aims_patient_reply_fallback"
+        and payload.get("reason") == "reply_timeout"
+        and payload.get("sessionId") == "sid-timeout"
+        for payload in payloads
+    )

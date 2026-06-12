@@ -7,6 +7,7 @@ from typing import Any
 
 from app.modules.aims.models import ClassifierResult
 from app.modules.aims.engine import evaluate_turn
+from app.telemetry.events import log_event as telemetry_log_event
 
 
 @dataclass
@@ -126,12 +127,26 @@ class AimsTurnCoordinator:
                 task_reply.cancel()
             except Exception as e:
                 self._logger.debug("Reply task cancellation failed: %s", e)
+            telemetry_log_event(
+                self._logger,
+                "aims_patient_reply_fallback",
+                sessionId=session_id,
+                reason="reply_timeout",
+                noOpenConcerns="open concerns: none" in (concern_state_section or "").lower(),
+            )
             reply_payload = self._patient_reply_service.fallback_reply(concern_state_section)
         except Exception as e:
             reply_duration_ms = int((time.monotonic() - started_at) * 1000)
             status_code = getattr(e, "status_code", None)
             if status_code == 429:
                 self._logger.warning("Patient reply rate-limited, using safe fallback")
+                telemetry_log_event(
+                    self._logger,
+                    "aims_patient_reply_fallback",
+                    sessionId=session_id,
+                    reason="reply_rate_limited",
+                    noOpenConcerns="open concerns: none" in (concern_state_section or "").lower(),
+                )
                 reply_payload = self._patient_reply_service.fallback_reply(concern_state_section)
             elif status_code and status_code in {403, 404}:
                 raise e

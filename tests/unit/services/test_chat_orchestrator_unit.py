@@ -286,7 +286,9 @@ async def test_handle_report_archives_memory_in_background(monkeypatch):
     orchestrator = _orchestrator(memory_store=memory_store)
     background = MagicMock()
     storage = MagicMock()
+    log_bundle = MagicMock()
     monkeypatch.setattr("app.services.chat_orchestrator.storage_service", storage)
+    monkeypatch.setattr("app.services.chat_orchestrator.report_log_bundle_service", log_bundle)
 
     response = await orchestrator.handle_report(
         _request(),
@@ -296,15 +298,20 @@ async def test_handle_report_archives_memory_in_background(monkeypatch):
 
     assert _body(response)["status"] == "ok"
     assert "sid" not in memory_store
-    background.add_task.assert_called_once()
-    assert background.add_task.call_args.args[1:3] == ("sid", "mem@example.com")
+    assert background.add_task.call_count == 2
+    assert background.add_task.call_args_list[0].args[1:3] == ("sid", "mem@example.com")
+    assert background.add_task.call_args_list[1].args[0] == log_bundle.collect_and_store_report_logs
+    assert background.add_task.call_args_list[1].kwargs["session_id"] == "sid"
+    assert background.add_task.call_args_list[1].kwargs["user_id"] == "mem@example.com"
 
 
 @pytest.mark.asyncio
 async def test_handle_report_downloads_missing_session_and_sync_uploads_without_background(monkeypatch):
     storage = MagicMock()
     storage.download_session.return_value = {"history": [{"role": "user", "content": "hi"}]}
+    log_bundle = MagicMock()
     monkeypatch.setattr("app.services.chat_orchestrator.storage_service", storage)
+    monkeypatch.setattr("app.services.chat_orchestrator.report_log_bundle_service", log_bundle)
     orchestrator = _orchestrator(memory_store={})
 
     response = await orchestrator.handle_report(
@@ -321,13 +328,16 @@ async def test_handle_report_downloads_missing_session_and_sync_uploads_without_
     storage.download_session.assert_called_once_with("sid", "body@example.com")
     storage.upload_session.assert_called_once()
     assert storage.upload_session.call_args.kwargs["is_report"] is True
+    log_bundle.collect_and_store_report_logs.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_handle_report_creates_report_only_archive_and_handles_errors(monkeypatch):
     storage = MagicMock()
     storage.download_session.return_value = None
+    log_bundle = MagicMock()
     monkeypatch.setattr("app.services.chat_orchestrator.storage_service", storage)
+    monkeypatch.setattr("app.services.chat_orchestrator.report_log_bundle_service", log_bundle)
     orchestrator = _orchestrator(memory_store={})
 
     response = await orchestrator.handle_report(

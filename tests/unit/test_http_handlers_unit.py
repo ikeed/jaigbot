@@ -7,10 +7,11 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
 from app import http_handlers
+from app.telemetry.events import log_event
 
 
 class BadStateRequest:
-    headers = {}
+    headers: dict[str, str] = {}
 
     @property
     def state(self):
@@ -21,6 +22,20 @@ def test_get_request_id_uses_uuid_when_state_unavailable(monkeypatch):
     monkeypatch.setattr(http_handlers.uuid, "uuid4", lambda: "generated-id")
 
     assert http_handlers.get_request_id(BadStateRequest()) == "generated-id"
+
+
+def test_extract_session_id_prefers_state_then_query_then_body():
+    request = MagicMock()
+    request.state.session_id = "state-sid"
+    request.query_params.get.return_value = "query-sid"
+
+    assert http_handlers._extract_session_id(request=request, body_logged={"sessionId": "body-sid"}) == "state-sid"
+
+    request.state.session_id = None
+    assert http_handlers._extract_session_id(request=request, body_logged={"sessionId": "body-sid"}) == "query-sid"
+
+    request.query_params.get.return_value = None
+    assert http_handlers._extract_session_id(request=request, body_logged={"sessionId": "body-sid"}) == "body-sid"
 
 
 @pytest.mark.asyncio
@@ -196,6 +211,143 @@ def test_installed_http_handlers_format_validation_and_unhandled_errors():
     assert validation.json()["error"]["requestId"] == "req-3"
     assert boom.status_code == 500
     assert boom.json()["error"]["requestId"] == "req-4"
+
+
+def test_request_logs_include_session_id_from_body_and_query():
+    logger = MagicMock()
+    client = TestClient(_app_with_handlers(logger), raise_server_exceptions=False)
+
+    @client.app.get("/query-echo")
+    async def query_echo():
+        return {"ok": True}
+
+    client.post("/validate", json={"message": "hi", "sessionId": "body-sid"}, headers={"x-request-id": "req-body"})
+    client.get("/query-echo", params={"sessionId": "query-sid"}, headers={"x-request-id": "req-query"})
+
+    info_payloads = []
+    for call in logger.info.call_args_list:
+        arg = call.args[0]
+        if isinstance(arg, str) and arg.startswith("{"):
+            info_payloads.append(http_handlers.json.loads(arg))
+
+    assert any(
+        payload.get("event") == "request_start"
+        and payload.get("requestId") == "req-body"
+        and payload.get("sessionId") == "body-sid"
+        for payload in info_payloads
+    )
+    assert any(
+        payload.get("event") == "request_end"
+        and payload.get("requestId") == "req-body"
+        and payload.get("sessionId") == "body-sid"
+        for payload in info_payloads
+    )
+    assert any(
+        payload.get("event") == "request_start"
+        and payload.get("requestId") == "req-query"
+        and payload.get("sessionId") == "query-sid"
+        for payload in info_payloads
+    )
+
+
+def test_request_logging_uses_new_session_id_when_thread_selection_changes_between_requests():
+    logger = MagicMock()
+    client = TestClient(_app_with_handlers(logger), raise_server_exceptions=False)
+
+    @client.app.get("/history-echo")
+    async def history_echo():
+        log_event(logger, "inside_request")
+        return {"ok": True}
+
+    client.get("/history-echo", params={"sessionId": "thread-a"}, headers={"x-request-id": "req-a"})
+    client.get("/history-echo", params={"sessionId": "thread-b"}, headers={"x-request-id": "req-b"})
+
+    info_payloads = []
+    for call in logger.info.call_args_list:
+        arg = call.args[0]
+        if isinstance(arg, str) and arg.startswith("{"):
+            info_payloads.append(http_handlers.json.loads(arg))
+
+    assert any(
+        payload.get("event") == "request_start"
+        and payload.get("requestId") == "req-a"
+        and payload.get("sessionId") == "thread-a"
+        for payload in info_payloads
+    )
+    assert any(
+        payload.get("event") == "request_start"
+        and payload.get("requestId") == "req-b"
+        and payload.get("sessionId") == "thread-b"
+        for payload in info_payloads
+    )
+    assert not any(
+        payload.get("event") == "request_start"
+        and payload.get("requestId") == "req-b"
+        and payload.get("sessionId") == "thread-a"
+        for payload in info_payloads
+    )
+    assert any(
+        payload.get("event") == "inside_request"
+        and payload.get("requestId") == "req-a"
+        and payload.get("sessionId") == "thread-a"
+        for payload in info_payloads
+    )
+    assert any(
+        payload.get("event") == "inside_request"
+        and payload.get("requestId") == "req-b"
+        and payload.get("sessionId") == "thread-b"
+        for payload in info_payloads
+    )
+
+
+def test_request_logging_uses_new_session_id_after_new_conversation_starts():
+    logger = MagicMock()
+    client = TestClient(_app_with_handlers(logger), raise_server_exceptions=False)
+
+    @client.app.post("/validate-with-log")
+    async def validate_with_log(payload: _Payload):
+        log_event(logger, "inside_request")
+        return payload.model_dump()
+
+    client.post("/validate-with-log", json={"message": "hi", "sessionId": "session-old"}, headers={"x-request-id": "req-old"})
+    client.post("/validate-with-log", json={"message": "hi again", "sessionId": "session-new"}, headers={"x-request-id": "req-new"})
+
+    info_payloads = []
+    for call in logger.info.call_args_list:
+        arg = call.args[0]
+        if isinstance(arg, str) and arg.startswith("{"):
+            info_payloads.append(http_handlers.json.loads(arg))
+
+    assert any(
+        payload.get("event") == "request_start"
+        and payload.get("requestId") == "req-old"
+        and payload.get("sessionId") == "session-old"
+        for payload in info_payloads
+    )
+    assert any(
+        payload.get("event") == "request_start"
+        and payload.get("requestId") == "req-new"
+        and payload.get("sessionId") == "session-new"
+        for payload in info_payloads
+    )
+    assert not any(
+        payload.get("event") == "request_start"
+        and payload.get("requestId") == "req-new"
+        and payload.get("sessionId") == "session-old"
+        for payload in info_payloads
+    )
+    assert any(
+        payload.get("event") == "inside_request"
+        and payload.get("requestId") == "req-old"
+        and payload.get("sessionId") == "session-old"
+        for payload in info_payloads
+    )
+    assert any(
+        payload.get("event") == "inside_request"
+        and payload.get("requestId") == "req-new"
+        and payload.get("sessionId") == "session-new"
+        for payload in info_payloads
+    )
 
 
 @pytest.mark.asyncio

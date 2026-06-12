@@ -57,8 +57,9 @@ def _service(caller, logger=None, jailbreak_guard=None):
 
 @pytest.mark.asyncio
 async def test_generate_passes_prompt_identity_and_rewrites_terse_ok():
+    logger = DummyLogger()
     caller = JsonCaller(json.dumps({"patient_reply": "ok"}))
-    service = _service(caller)
+    service = _service(caller, logger=logger)
 
     result = await service.generate(
         clinician_message="How are you today?",
@@ -76,6 +77,8 @@ async def test_generate_passes_prompt_identity_and_rewrites_terse_ok():
     assert "Resolved concerns: ingredients." in caller.calls[0]["prompt"]
     assert caller.calls[0]["log_path"] == "coach_reply"
     assert caller.calls[0]["kwargs"] == {"temperature": 0.3, "max_tokens": 123}
+    assert any("aims_patient_reply_normalized" in message for message in logger.info_messages)
+    assert any("terse_ok" in message for message in logger.info_messages)
 
 
 @pytest.mark.asyncio
@@ -113,8 +116,9 @@ async def test_generate_retries_invalid_json_then_returns_success():
 
 @pytest.mark.asyncio
 async def test_generate_invalid_json_twice_returns_safe_fallback():
+    logger = DummyLogger()
     caller = JsonCaller("{", "not json")
-    service = _service(caller)
+    service = _service(caller, logger=logger)
 
     result = await service.generate(
         clinician_message="Let's talk vaccines.",
@@ -124,6 +128,8 @@ async def test_generate_invalid_json_twice_returns_safe_fallback():
 
     assert result == {"patient_reply": "I'm not sure — I have some questions, but I'd like to hear more."}
     assert len(caller.calls) == 2
+    assert any("aims_patient_reply_fallback" in message for message in logger.info_messages)
+    assert any("invalid_json_twice" in message for message in logger.info_messages)
 
 
 @pytest.mark.asyncio
