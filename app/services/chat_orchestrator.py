@@ -215,8 +215,9 @@ class ChatOrchestrator:
     ) -> JSONResponse:
         """Handle VertexAI-specific errors with appropriate status codes."""
         req_id = self._get_request_id(req)
-        
-        if getattr(e, "status_code", None) == 404:
+        status_code = getattr(e, "status_code", None)
+
+        if status_code == 404:
             # Model not found
             guidance = (
                 "Publisher model not found or access denied. Verify MODEL_ID spelling and REGION; "
@@ -240,6 +241,19 @@ class ChatOrchestrator:
                 payload["error"]["upstream"] = str(e)
             
             resp = JSONResponse(status_code=404, content=payload)
+        elif status_code == 429:
+            payload = {
+                "error": {
+                    "message": "The AI model is temporarily rate-limited. Please try again in a moment.",
+                    "code": 503,
+                    "requestId": req_id,
+                }
+            }
+
+            if self.expose_upstream_error:
+                payload["error"]["upstream"] = str(e)
+
+            resp = JSONResponse(status_code=503, content=payload)
         else:
             # Other upstream errors -> 502
             payload = {

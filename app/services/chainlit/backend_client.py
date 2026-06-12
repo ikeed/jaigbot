@@ -17,6 +17,24 @@ from app.constants import (
 
 logger = logging.getLogger(__name__)
 
+
+class BackendClientError(Exception):
+    """Structured backend error surfaced to the Chainlit layer."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int,
+        request_id: Optional[str] = None,
+        payload: Optional[Dict[str, Any]] = None,
+    ):
+        super().__init__(message)
+        self.status_code = status_code
+        self.request_id = request_id
+        self.payload = payload or {}
+
+
 class BackendClient:
     """Encapsulates all communication with the FastAPI backend."""
 
@@ -33,6 +51,38 @@ class BackendClient:
             url = os.getenv(ENV_BACKEND_URL) or f"http://localhost:8080{PATH_CHAT}"
         
         return url[:-5] if url.endswith(PATH_CHAT) else url
+
+    @staticmethod
+    def _raise_for_status(resp: httpx.Response) -> None:
+        if resp.is_success:
+            return
+
+        message = f"Backend request failed with status {resp.status_code}."
+        request_id: Optional[str] = None
+        payload: Dict[str, Any] = {}
+
+        try:
+            body = resp.json()
+        except Exception:
+            body = None
+
+        if isinstance(body, dict):
+            payload = body
+            error = body.get("error")
+            if isinstance(error, dict):
+                error_message = error.get("message")
+                if isinstance(error_message, str) and error_message.strip():
+                    message = error_message.strip()
+                error_request_id = error.get("requestId")
+                if isinstance(error_request_id, str) and error_request_id.strip():
+                    request_id = error_request_id.strip()
+
+        raise BackendClientError(
+            message,
+            status_code=resp.status_code,
+            request_id=request_id,
+            payload=payload,
+        )
 
     async def fetch_history(self, session_id: str) -> List[Dict[str, Any]]:
         try:
@@ -80,7 +130,7 @@ class BackendClient:
                 f"{self.base_url}{ENDPOINT_SESSION}",
                 json=payload,
             )
-            resp.raise_for_status()
+            self._raise_for_status(resp)
             return resp.json()
 
     async def send_chat_message(
@@ -112,7 +162,7 @@ class BackendClient:
                 json=payload, 
                 headers={"Content-Type": "application/json"}
             )
-            resp.raise_for_status()
+            self._raise_for_status(resp)
             return resp.json()
 
     async def report_issue(self, session_id: str, reason: str, user_info: Optional[Dict[str, Any]]) -> None:
@@ -123,7 +173,7 @@ class BackendClient:
                 "userInfo": user_info
             }
             resp = await client.post(f"{self.base_url}{ENDPOINT_REPORT}", json=payload)
-            resp.raise_for_status()
+            self._raise_for_status(resp)
 
     async def deregister_session(self, session_id: str, connection_id: str) -> None:
         async with httpx.AsyncClient(timeout=5.0) as client:
@@ -150,11 +200,11 @@ class BackendClient:
     async def get_config(self) -> Dict[str, Any]:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             resp = await client.get(f"{self.base_url}{ENDPOINT_CONFIG}")
-            resp.raise_for_status()
+            self._raise_for_status(resp)
             return resp.json()
 
     async def check_model(self) -> Dict[str, Any]:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             resp = await client.get(f"{self.base_url}{ENDPOINT_MODELCHECK}")
-            resp.raise_for_status()
+            self._raise_for_status(resp)
             return resp.json()

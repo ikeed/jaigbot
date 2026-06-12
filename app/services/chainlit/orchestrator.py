@@ -27,7 +27,7 @@ from app.constants import (
     QUERY_NEW_CHAT,
 )
 from app.persona import DEFAULT_CHARACTER, DEFAULT_SCENE
-from app.services.chainlit.backend_client import BackendClient
+from app.services.chainlit.backend_client import BackendClient, BackendClientError
 from app.services.chainlit.session_manager import SessionManager
 from app.services.chainlit.ui_handler import UIHandler
 
@@ -126,6 +126,9 @@ class ChainlitOrchestrator:
             # Handle response components
             await self._process_backend_response(data)
 
+        except BackendClientError as e:
+            await self._report_error_silently(e, "handle_user_message")
+            await self.ui.show_error(str(e))
         except Exception as e:
             await self._report_error_silently(e, "handle_user_message")
             await self.ui.show_error(f"Error: {str(e)}")

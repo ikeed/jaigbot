@@ -1,10 +1,12 @@
 import sys
 from types import ModuleType, SimpleNamespace
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from app.constants import MSG_DUPLICATE_TAB, MSG_INTRO_REQUIRED, MSG_RESUME_THREAD
+from app.services.chainlit.backend_client import BackendClientError
 from app.services.chainlit.orchestrator import ChainlitOrchestrator
 
 
@@ -50,7 +52,7 @@ def orchestrator(mock_services):
 
 def test_chainlit_orchestrator_requires_active_module(mock_services):
     with pytest.raises(TypeError):
-        ChainlitOrchestrator(
+        cast(Any, ChainlitOrchestrator)(
             backend_client=mock_services["backend"],
             ui_handler=mock_services["ui"],
             session_manager=mock_services["session"],
@@ -343,6 +345,35 @@ async def test_handle_user_message_reports_backend_error(orchestrator, mock_serv
 
     orchestrator._report_error_silently.assert_awaited_once()
     mock_services["ui"].show_error.assert_awaited_once_with("Error: backend down")
+    assert mock_services["session"].history == [{"role": "user", "content": "Hello"}]
+
+
+@pytest.mark.asyncio
+async def test_handle_user_message_surfaces_structured_backend_error(orchestrator, mock_services):
+    mock_services["session"].session_ended = False
+    mock_services["session"].intro_pending = False
+    mock_services["session"].history = []
+    mock_services["session"].session_id = "sid"
+    mock_services["session"].character = "character"
+    mock_services["session"].scene = "scene"
+    mock_services["ui"].send_user_message_update = AsyncMock()
+    mock_services["ui"].show_error = AsyncMock()
+    mock_services["backend"].send_chat_message = AsyncMock(
+        side_effect=BackendClientError(
+            "The AI model is temporarily rate-limited. Please try again in a moment.",
+            status_code=503,
+            request_id="req-429",
+        )
+    )
+    orchestrator._report_error_silently = AsyncMock()
+    orchestrator._get_user_info = MagicMock(return_value=None)
+
+    await orchestrator.handle_user_message(MagicMock(content="Hello"))
+
+    orchestrator._report_error_silently.assert_awaited_once()
+    mock_services["ui"].show_error.assert_awaited_once_with(
+        "The AI model is temporarily rate-limited. Please try again in a moment."
+    )
     assert mock_services["session"].history == [{"role": "user", "content": "Hello"}]
 
 

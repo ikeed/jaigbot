@@ -1,5 +1,6 @@
 import json
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -97,7 +98,7 @@ def test_validate_request_rejects_invalid_encoding_and_oversized_message():
 
 def test_chat_orchestrator_requires_active_module():
     with pytest.raises(TypeError):
-        ChatOrchestrator(
+        cast(Any, ChatOrchestrator)(
             memory_store={},
             session_cookie_settings={"name": "sid", "secure": False, "samesite": "lax", "max_age": 3600},
             memory_config={"enabled": True, "max_turns": 8, "ttl_seconds": 3600},
@@ -252,12 +253,21 @@ def test_vertex_error_responses_include_cookie_and_optional_upstream():
         VertexAIError("upstream down", status_code=500),
         "sid",
     )
+    rate_limited = orchestrator._handle_vertex_error(
+        _request(**{"x-request-id": "req-429"}),
+        VertexAIError("capacity exhausted", status_code=429),
+        "sid",
+    )
 
     assert not_found.status_code == 404
     assert _body(not_found)["error"]["upstream"] == "missing model"
     assert upstream.status_code == 502
     assert _body(upstream)["error"]["upstream"] == "upstream down"
-    assert orchestrator.session_service.apply_cookie.call_count == 2
+    assert rate_limited.status_code == 503
+    assert _body(rate_limited)["error"]["message"] == "The AI model is temporarily rate-limited. Please try again in a moment."
+    assert _body(rate_limited)["error"]["requestId"] == "req-429"
+    assert _body(rate_limited)["error"]["upstream"] == "capacity exhausted"
+    assert orchestrator.session_service.apply_cookie.call_count == 3
 
 
 def test_vertex_error_cookie_failure_is_ignored():

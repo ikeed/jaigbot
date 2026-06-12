@@ -16,7 +16,7 @@ from app.constants import (
     SESSION_SESSION_ENDED,
     SESSION_USER,
 )
-from app.services.chainlit.backend_client import BackendClient
+from app.services.chainlit.backend_client import BackendClient, BackendClientError
 from app.services.chainlit.session_manager import SessionManager
 from app.services.chainlit.ui_handler import UIHandler
 
@@ -296,6 +296,37 @@ async def test_backend_client_send_chat_message_posts_expected_payload(respx_moc
         "userInfo": {"identifier": "user@example.com"},
         "moduleOptions": {"feedbackEnabled": True},
     }
+
+
+@pytest.mark.asyncio
+async def test_backend_client_send_chat_message_raises_structured_error(respx_mock):
+    client = BackendClient(base_url="http://test", timeout=15.0)
+    respx_mock.post("http://test/chat").mock(
+        return_value=httpx.Response(
+            503,
+            json={
+                "error": {
+                    "message": "The AI model is temporarily rate-limited. Please try again in a moment.",
+                    "code": 503,
+                    "requestId": "req-429",
+                }
+            },
+        )
+    )
+
+    with pytest.raises(BackendClientError) as excinfo:
+        await client.send_chat_message(
+            message="Hi",
+            session_id="sid",
+            character="character",
+            scene="scene",
+            user_info={"identifier": "user@example.com"},
+            coach_enabled=True,
+        )
+
+    assert str(excinfo.value) == "The AI model is temporarily rate-limited. Please try again in a moment."
+    assert excinfo.value.status_code == 503
+    assert excinfo.value.request_id == "req-429"
 
 
 @pytest.mark.asyncio
