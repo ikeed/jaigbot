@@ -36,6 +36,10 @@ class ClassifierDependency(Protocol):
 
 
 class PatientReplyDependency(Protocol):
+    @staticmethod
+    def fallback_reply(concern_state_section: str | None = None) -> dict[str, Any]:
+        ...
+
     async def generate(
         self,
         *,
@@ -136,6 +140,7 @@ class AimsTelemetryDependency(Protocol):
         session_id: str,
         request_id: str,
         started: float,
+        duration_ms: int | None = None,
         model_used: str,
         step: str | None,
         score: int | None,
@@ -148,6 +153,7 @@ class AimsTelemetryDependency(Protocol):
         session_id: str,
         request_id: str,
         started: float,
+        duration_ms: int | None = None,
         model_used: str,
         text_len: int,
     ) -> None:

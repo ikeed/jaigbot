@@ -63,6 +63,18 @@ def test_patient_reply_prompt_includes_concern_state_hints():
     assert 'do not give a vague placeholder reply like "ok"' in prompt.lower()
 
 
+def test_patient_reply_prompt_ends_with_strict_json_contract():
+    prompt = build_patient_reply_prompt(
+        history_text="Clinician: Hello",
+        clinician_last="Hello",
+    )
+
+    assert 'Return exactly one JSON object and nothing else' in prompt
+    assert 'The only allowed top-level key is "patient_reply".' in prompt
+    assert 'Keep patient_reply focused but natural: usually 1-3 sentences' in prompt
+    assert 'Do NOT include code fences, markdown, explanations' in prompt
+
+
 def test_endgame_detector_prompt_requires_both_literature_and_followup():
     prompt = build_endgame_detector_prompt(
         history_text="Doctor: We can keep talking.\nAssistant: I'd like something to read.",

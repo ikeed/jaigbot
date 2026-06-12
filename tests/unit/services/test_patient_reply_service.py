@@ -3,6 +3,7 @@ import json
 import pytest
 
 from app.modules.aims.services.patient_reply_service import PatientReplyService
+from app.modules.aims.services.patient_reply_service import REPLY_REPAIR_SUFFIX
 
 
 class DummyLogger:
@@ -106,6 +107,7 @@ async def test_generate_retries_invalid_json_then_returns_success():
 
     assert result == {"patient_reply": "Thanks, Doctor."}
     assert len(caller.calls) == 2
+    assert caller.calls[1]["prompt"].endswith(REPLY_REPAIR_SUFFIX)
     assert any("aims_patient_reply_invalid_json" in message for message in logger.info_messages)
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -15,6 +16,8 @@ class AimsTurnResult:
     is_small_talk: bool
     classification_result: ClassifierResult | None
     reply_payload: dict[str, Any]
+    classification_duration_ms: int = 0
+    reply_duration_ms: int = 0
     was_fallback: bool = False
 
 
@@ -27,11 +30,13 @@ class AimsTurnCoordinator:
         classifier_service: Any,
         patient_reply_service: Any,
         classify_budget_s: float,
+        reply_budget_s: float,
         logger: Any,
     ) -> None:
         self._classifier_service = classifier_service
         self._patient_reply_service = patient_reply_service
         self._classify_budget_s = classify_budget_s
+        self._reply_budget_s = reply_budget_s
         self._logger = logger
 
     async def run(
@@ -55,6 +60,7 @@ class AimsTurnCoordinator:
         concern_state_section: str | None = None,
     ) -> AimsTurnResult:
         _ = max_concerns
+        started_at = time.monotonic()
         task_cls = asyncio.create_task(
             self._classifier_service.classify_turn(clinician_message=clinician_message, person_last=person_last,
                                                    history=history, prior_announced=prior_announced,
@@ -76,30 +82,60 @@ class AimsTurnCoordinator:
         )
 
         classification_result: ClassifierResult | None = None
-        reply_payload: dict[str, Any] = {}
+        reply_payload: dict[str, Any] | None = None
+        classification_duration_ms = 0
+        reply_duration_ms = 0
 
         try:
+            classification_result = await asyncio.wait_for(
+                task_cls,
+                timeout=self._classify_budget_s,
+            )
+            classification_duration_ms = int((time.monotonic() - started_at) * 1000)
+        except asyncio.TimeoutError:
+            classification_duration_ms = int((time.monotonic() - started_at) * 1000)
+            self._logger.warning(
+                "Classification timed out after %s s, falling back",
+                self._classify_budget_s,
+            )
             try:
-                classification_result = await asyncio.wait_for(
-                    task_cls,
-                    timeout=self._classify_budget_s,
-                )
-            except asyncio.TimeoutError:
-                self._logger.warning(
-                    "Classification timed out after %s s, falling back",
-                    self._classify_budget_s,
-                )
-                try:
-                    task_cls.cancel()
-                except Exception as e:
-                    self._logger.debug("Classification task cancellation failed: %s", e)
-
-            reply_payload = await task_reply
-
+                task_cls.cancel()
+            except Exception as e:
+                self._logger.debug("Classification task cancellation failed: %s", e)
         except Exception as e:
-            self._logger.exception("Parallel tasks failed in handler")
+            classification_duration_ms = int((time.monotonic() - started_at) * 1000)
             status_code = getattr(e, "status_code", None)
-            if status_code and status_code in {403, 404, 429}:
+            if status_code == 429:
+                self._logger.warning("Classification rate-limited, falling back deterministically")
+            elif status_code and status_code in {403, 404}:
+                raise e
+            else:
+                raise e
+
+        try:
+            remaining_reply_budget = max(0.001, self._reply_budget_s - (time.monotonic() - started_at))
+            reply_payload = await asyncio.wait_for(task_reply, timeout=remaining_reply_budget)
+            reply_duration_ms = int((time.monotonic() - started_at) * 1000)
+        except asyncio.TimeoutError:
+            reply_duration_ms = int((time.monotonic() - started_at) * 1000)
+            self._logger.warning(
+                "Patient reply timed out after %s s budget, using safe fallback",
+                self._reply_budget_s,
+            )
+            try:
+                task_reply.cancel()
+            except Exception as e:
+                self._logger.debug("Reply task cancellation failed: %s", e)
+            reply_payload = self._patient_reply_service.fallback_reply(concern_state_section)
+        except Exception as e:
+            reply_duration_ms = int((time.monotonic() - started_at) * 1000)
+            status_code = getattr(e, "status_code", None)
+            if status_code == 429:
+                self._logger.warning("Patient reply rate-limited, using safe fallback")
+                reply_payload = self._patient_reply_service.fallback_reply(concern_state_section)
+            elif status_code and status_code in {403, 404}:
+                raise e
+            else:
                 raise e
 
         if classification_result:
@@ -108,7 +144,9 @@ class AimsTurnCoordinator:
                 is_vaccine_relevant=classification_result.is_vaccine_relevant,
                 is_small_talk=classification_result.is_small_talk,
                 classification_result=classification_result,
-                reply_payload=reply_payload,
+                reply_payload=reply_payload or self._patient_reply_service.fallback_reply(concern_state_section),
+                classification_duration_ms=classification_duration_ms,
+                reply_duration_ms=reply_duration_ms,
                 was_fallback=False,
             )
 
@@ -123,6 +161,8 @@ class AimsTurnCoordinator:
             is_vaccine_relevant=True,
             is_small_talk=False,
             classification_result=None,
-            reply_payload=reply_payload,
+            reply_payload=reply_payload or self._patient_reply_service.fallback_reply(concern_state_section),
+            classification_duration_ms=classification_duration_ms,
+            reply_duration_ms=reply_duration_ms,
             was_fallback=True,
         )

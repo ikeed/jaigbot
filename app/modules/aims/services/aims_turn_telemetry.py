@@ -39,6 +39,7 @@ class AimsTurnTelemetry:
         session_id: str,
         request_id: str,
         started: float,
+        duration_ms: int | None = None,
         model_used: str,
         step: str | None,
         score: int | None,
@@ -48,7 +49,7 @@ class AimsTurnTelemetry:
             "aims_classify_end",
             sessionId=session_id,
             requestId=request_id,
-            durationMs=int((time.time() - started) * 1000),
+            durationMs=duration_ms if duration_ms is not None else int((time.time() - started) * 1000),
             modelUsed=model_used,
             step=step,
             score=score,
@@ -60,6 +61,7 @@ class AimsTurnTelemetry:
         session_id: str,
         request_id: str,
         started: float,
+        duration_ms: int | None = None,
         model_used: str,
         text_len: int,
     ) -> None:
@@ -68,7 +70,7 @@ class AimsTurnTelemetry:
             "aims_reply_end",
             sessionId=session_id,
             requestId=request_id,
-            durationMs=int((time.time() - started) * 1000),
+            durationMs=duration_ms if duration_ms is not None else int((time.time() - started) * 1000),
             modelUsed=model_used,
             textLen=text_len,
         )

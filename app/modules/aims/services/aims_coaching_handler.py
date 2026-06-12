@@ -153,6 +153,7 @@ class AimsCoachingHandler:
         self.endgame_temperature = float(os.getenv("AIMS_ENDGAME_TEMPERATURE", "0.1"))
         self.endgame_max_tokens = int(os.getenv("AIMS_ENDGAME_MAX_TOKENS", "192"))
         self.classify_budget_s = float(os.getenv("AIMS_CLASSIFY_BUDGET_S", "30.0"))
+        self.reply_budget_s = float(os.getenv("AIMS_REPLY_BUDGET_S", "30.0"))
 
         # Allow tests to monkeypatch the client via app.main.VertexClient
         self.client_cls = self.vertex_config.client_cls or VertexClient
@@ -211,6 +212,7 @@ class AimsCoachingHandler:
             classifier_service=self.classifier_service,
             patient_reply_service=self.patient_reply_service,
             classify_budget_s=self.classify_budget_s,
+            reply_budget_s=self.reply_budget_s,
             logger=self.logger,
         )
     
@@ -333,6 +335,7 @@ class AimsCoachingHandler:
             session_id=ctx.session_id,
             request_id=request_id,
             started=cls_start,
+            duration_ms=turn.classification_duration_ms,
             model_used=model_used_cls,
             step=cls_payload.get("step"),
             score=cls_payload.get("score"),
@@ -393,6 +396,7 @@ class AimsCoachingHandler:
             session_id=ctx.session_id,
             request_id=request_id,
             started=reply_start,
+            duration_ms=turn.reply_duration_ms,
             model_used=model_used_reply,
             text_len=len((reply_payload.get("patient_reply") or "").strip()),
         )

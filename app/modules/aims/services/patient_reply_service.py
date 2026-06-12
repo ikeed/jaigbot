@@ -9,6 +9,12 @@ from app.modules.aims.prompts.aims import build_patient_reply_prompt
 from app.services.security_guard import JailbreakGuard
 from app.telemetry.events import log_event as telemetry_log_event
 
+REPLY_REPAIR_SUFFIX = (
+    "\n\nYour previous response was invalid JSON.\n"
+    "Return exactly one valid JSON object with the single top-level key "
+    '"patient_reply". Do not include markdown, code fences, labels, or any extra text.'
+)
+
 
 class PatientReplyService:
     """Generate the roleplayed patient reply for the AIMS coaching flow."""
@@ -27,6 +33,17 @@ class PatientReplyService:
         self._temperature = temperature
         self._max_tokens = max_tokens
         self._jailbreak_guard = jailbreak_guard or JailbreakGuard()
+
+    @staticmethod
+    def fallback_reply(concern_state_section: str | None = None) -> dict[str, Any]:
+        no_open_concerns = "open concerns: none" in (concern_state_section or "").lower()
+        return {
+            "patient_reply": (
+                "Yes, that helps. Thank you."
+                if no_open_concerns
+                else "I'm not sure — I have some questions, but I'd like to hear more."
+            )
+        }
 
     async def generate(
         self,
@@ -68,10 +85,11 @@ class PatientReplyService:
         )
         no_open_concerns = "open concerns: none" in (concern_state_section or "").lower()
 
+        prompt_for_attempt = reply_prompt
         for attempt in (1, 2):
             try:
                 raw = await self._model_json_caller(
-                    reply_prompt,
+                    prompt_for_attempt,
                     REPLY_SCHEMA,
                     "coach_reply",
                     temperature=self._temperature,
@@ -101,20 +119,9 @@ class PatientReplyService:
                 )
 
                 if attempt == 1:
+                    prompt_for_attempt = reply_prompt + REPLY_REPAIR_SUFFIX
                     continue
 
-                return {
-                    "patient_reply": (
-                        "Yes, that helps. Thank you."
-                        if no_open_concerns
-                        else "I'm not sure — I have some questions, but I'd like to hear more."
-                    )
-                }
+                return self.fallback_reply(concern_state_section)
 
-        return {
-            "patient_reply": (
-                "Yes, that helps. Thank you."
-                if no_open_concerns
-                else "Okay."
-            )
-        }
+        return self.fallback_reply(concern_state_section) if not no_open_concerns else {"patient_reply": "Yes, that helps. Thank you."}
