@@ -209,8 +209,16 @@ def install_http_handlers(app: FastAPI, *, settings: Any, logger: logging.Logger
 
         client_host = request.client.host if request.client is not None else None
         body_logged = _body_preview_for_log(body_bytes, settings=settings)
-        session_id = _extract_session_id(request=request, body_logged=body_logged)
-        module_id = _extract_module_id(body_logged=body_logged, settings=settings)
+        session_id = _extract_session_id(
+            request=request,
+            body_logged=body_logged,
+            body_bytes=body_bytes,
+        )
+        module_id = _extract_module_id(
+            body_logged=body_logged,
+            body_bytes=body_bytes,
+            settings=settings,
+        )
         request.state.session_id = session_id
         request.state.module_id = module_id
         app_env = _safe_app_env(settings)
