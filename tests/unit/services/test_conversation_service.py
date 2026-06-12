@@ -1,3 +1,5 @@
+import pytest
+
 from app.services.conversation_service import (
     topics_in,
     concern_topic,
@@ -6,6 +8,7 @@ from app.services.conversation_service import (
     mark_mirrored_multi,
     mark_secured_by_topic,
 )
+from app.modules.aims.services.aims_state_service import AimsStateService
 
 
 TOPICAL_CUES = {
@@ -200,6 +203,55 @@ def test_maybe_add_person_concern_merges_trust_aliases():
         "I want to understand whether the evidence is being presented honestly.",
         TOPICAL_CUES,
         llm_topic="evidence",
+    )
+
+    assert len(st["parent_concerns"]) == 1
+    assert st["parent_concerns"][0]["topic"] == "trust"
+    assert st["parent_concerns"][0]["desc"] == "wants evidence, uncertainty, and trust addressed"
+
+
+@pytest.mark.parametrize(
+    "person_text",
+    [
+        (
+            "I'd like to understand the specific data behind the recommendation for "
+            "someone in my profile. Is this a general public health recommendation, "
+            "or is there a particular benefit for me personally at this time?"
+        ),
+        (
+            "Can you walk me through the evidence for somebody like me? I'm trying "
+            "to figure out whether this is broadly recommended for everyone or if "
+            "there's a concrete reason it matters in my case."
+        ),
+        (
+            "I'm not rejecting it outright, but I want to see the actual basis for "
+            "why this would help a person with my risk profile rather than just the "
+            "average population."
+        ),
+        (
+            "What data says this is the right call for me personally? I'm trying to "
+            "separate the general public-health messaging from the benefit in my own situation."
+        ),
+        (
+            "I want to understand whether the recommendation really applies to "
+            "someone like me, or whether it's mostly a broad policy recommendation."
+        ),
+        (
+            "Could you explain the evidence behind this for a patient in my position? "
+            "I'm looking for the specific rationale, not just the general recommendation."
+        ),
+    ],
+)
+def test_maybe_add_person_concern_detects_personalized_evidence_requests_as_trust_without_llm_topic(
+    person_text: str,
+):
+    st = {"parent_concerns": []}
+
+    maybe_add_person_concern(
+        st,
+        person_text,
+        AimsStateService.TOPICAL_CUES,
+        llm_topic=None,
     )
 
     assert len(st["parent_concerns"]) == 1

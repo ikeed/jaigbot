@@ -16,6 +16,7 @@ Clinician_last: {clinician_last}
 Set `person_topic` only for an active vaccine concern in Person_last.
 Use `null` for acceptance/closure language, including agreeing to take written information home, read it over, process it, or schedule/attend a follow-up, unless the person also raises a distinct new concern in the same reply.
 Use `disease_risk` when the person says the disease feels gone, historical, rare, abstract, unlikely to affect their child, or not a real present-day threat. Do NOT force this into `effectiveness` unless they doubt that the vaccine itself works.
+Use `trust` when the person asks for specific data or evidence, asks whether the recommendation truly applies to them personally or to someone like them, contrasts a general public-health or broad policy recommendation with their own profile/risk, or questions the evidence basis or rationale behind the recommendation.
 
 ### OUTPUT — JSON only
 {{

@@ -100,6 +100,34 @@ class TestPromptContent:
             assert "historical" in lower or "feels gone" in lower
             assert "effectiveness" in lower
 
+    def test_person_topic_includes_personalized_evidence_requests_as_trust(self):
+        active = self._active_classifier_prompt(
+            person_last=(
+                "I'd like to understand the specific data behind the recommendation "
+                "for someone in my profile. Is this a general public health "
+                "recommendation, or is there a particular benefit for me personally "
+                "at this time?"
+            ),
+            clinician_last="What questions do you still have about the vaccine?",
+            prior_announced=True,
+            prior_phase="InquireMirror",
+        )
+        sys = get_classify_system_instruction()
+        for text in (active, sys):
+            lower = text.lower()
+            assert "trust" in lower
+            assert (
+                "someone in my profile" in lower
+                or "someone in their profile" in lower
+                or "for me personally" in lower
+                or "applies to them personally" in lower
+            )
+            assert (
+                "specific data" in lower
+                or "personal benefit" in lower
+                or "evidence basis" in lower
+            )
+
     def test_feedback_prompt_warns_against_overstating_followup_logistics(self):
         """Coach feedback should not say a follow-up was scheduled unless it was explicit."""
         active = self._active_classifier_prompt(

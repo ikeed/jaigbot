@@ -171,7 +171,7 @@ Classify a topic only when the person is raising or renewing a concern:
 - schedule_timing: worries about timing, spacing, delaying, or alternative schedules.
 - disease_risk: low perceived disease risk or susceptibility; the disease feels gone, historical, rare, abstract, or unlikely to affect the child.
 - effectiveness: doubts that vaccines work.
-- trust: distrust of clinicians, pharma, public health, data, studies, or confusing information sources.
+- trust: distrust of clinicians, pharma, public health, data, studies, or confusing information sources. Also use `trust` when the person asks for the specific data, evidence, or rationale behind the recommendation, asks whether the recommendation truly applies to them personally or to someone in their profile/position, or contrasts a general public-health or broad policy recommendation with their own individual benefit/risk.
 - autonomy: concern about being pressured, pushed, forced, cornered, lectured, or not having the right to decide.
 
 Return `person_topic: null` when the person is accepting a plan, acknowledging information, or agreeing to take written information home/read it over/follow up later, unless they also raise a distinct active concern in the same reply. Do NOT label a literature/follow-up agreement as `autonomy` merely because it involves time, choice, or processing.
