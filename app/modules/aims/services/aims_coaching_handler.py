@@ -65,6 +65,7 @@ from app.modules.aims.services.coach_feedback_history_service import CoachFeedba
 from app.modules.aims.services.coach_post import (
     VaccineRelevanceGate,
     AimsPostProcessor,
+    EndGameDetector,
 )
 from app.services.vertex_helpers import (
     avertex_call_with_fallback_json,
@@ -77,6 +78,9 @@ class AimsCoachingHandler:
     """Handles the full AIMS coaching flow."""
     
     _TOPICAL_CUES = AimsStateService.TOPICAL_CUES
+    _FOLLOWUP_TIP = (
+        "Suggest a follow-up appointment so the person has a concrete plan after reviewing the literature."
+    )
 
     @staticmethod
     def _build_reply_concern_state_section(state: dict[str, Any] | None) -> str:
@@ -115,6 +119,69 @@ class AimsCoachingHandler:
                 "Focus on open concerns; do not reopen resolved concerns as if unanswered."
             )
         return f"Open concerns: {', '.join(open_topics)}."
+
+    @classmethod
+    def _should_suggest_followup_tip(
+        cls,
+        *,
+        aims_state: dict[str, Any] | None,
+        clinician_message: str,
+        patient_reply: str,
+    ) -> bool:
+        state = aims_state or {}
+        concerns = state.get("parent_concerns") or []
+        if not concerns or not state.get("first_inquire_done", False):
+            return False
+        if any(not concern.get("is_mirrored") or not concern.get("is_secured") for concern in concerns):
+            return False
+
+        clinician_lower = (clinician_message or "").lower()
+        if any(cue in clinician_lower for cue in EndGameDetector.FOLLOWUP_CUES):
+            return False
+
+        reply_lower = (patient_reply or "").lower()
+        if not reply_lower:
+            return False
+        if any(cue in reply_lower for cue in EndGameDetector.FOLLOWUP_CUES):
+            return False
+        if any(cue in reply_lower for cue in EndGameDetector.PLAN_NEGATIVE_CUES):
+            return False
+        if any(cue in reply_lower for cue in EndGameDetector.PLAN_ACTIVE_CONCERN_CUES):
+            return False
+        if not any(cue in reply_lower for cue in EndGameDetector.LITERATURE_CUES):
+            return False
+
+        literature_acceptance_cues = tuple(EndGameDetector.PLAN_ACCEPTANCE_CUES) + (
+            "i'll read",
+            "i will read",
+            "read it over",
+            "look it over",
+            "take it home",
+            "take that home",
+            "review it at home",
+        )
+        return any(cue in reply_lower for cue in literature_acceptance_cues)
+
+    @classmethod
+    def _maybe_add_followup_tip(
+        cls,
+        *,
+        cls_payload: dict[str, Any],
+        aims_state: dict[str, Any] | None,
+        clinician_message: str,
+        reply_payload: dict[str, Any],
+    ) -> None:
+        if not cls._should_suggest_followup_tip(
+            aims_state=aims_state,
+            clinician_message=clinician_message,
+            patient_reply=reply_payload.get("patient_reply", ""),
+        ):
+            return
+
+        tips = list(cls_payload.get("tips") or [])
+        if any("follow-up" in tip.lower() or "follow up" in tip.lower() for tip in tips):
+            return
+        cls_payload["tips"] = [*tips, cls._FOLLOWUP_TIP]
     
     def __init__(
         self,
@@ -370,6 +437,13 @@ class AimsCoachingHandler:
             self.metrics_service.persist(mem, cls_payload)
         except Exception as e:
             self.logger.debug("AIMS metrics persist failed: %s", e)
+
+        self._maybe_add_followup_tip(
+            cls_payload=cls_payload,
+            aims_state=mem.get(KEY_AIMS_STATE) if mem else None,
+            clinician_message=body.message,
+            reply_payload=reply_payload,
+        )
 
         # Record the clinician turn before any coaching note so replay keeps
         # the same order the live UI showed: user -> coach -> assistant.

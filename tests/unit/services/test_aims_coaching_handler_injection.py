@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from app.constants import KEY_COACH_POST, KEY_GAME_OVER, SESSION_HISTORY
+from app.constants import KEY_AIMS_STATE, KEY_COACH_POST, KEY_GAME_OVER, SESSION_HISTORY
 from app.models import ChatRequest
 from app.modules.aims.models import ClassifierResult, Coaching
 from app.modules.aims.services.aims_coaching_handler import AimsCoachingHandler
@@ -471,6 +471,132 @@ async def test_handle_sets_coach_post_and_game_over_for_ethan_style_literature_f
     assert result["coach_post"]["title"] == "\U0001f389 Great job!"
     assert ctx.mem[KEY_GAME_OVER] is True
     assert ctx.mem[KEY_COACH_POST]["title"] == "\U0001f389 Great job!"
+
+
+@pytest.mark.asyncio
+async def test_handle_adds_followup_tip_when_literature_is_accepted_after_all_concerns_resolved(monkeypatch):
+    feedback = _feedback()
+    endgame = _endgame()
+    turn_coordinator = Mock()
+    turn_coordinator.run = AsyncMock(
+        return_value=_turn(
+            step="Secure",
+            score=3,
+            reasons=["You addressed the trust concern and offered written information."],
+            tips=["Affirm that it's okay to take time to review the material."],
+            patient_reply=(
+                "Yes, I can take the written information home and read it over."
+            ),
+        )
+    )
+
+    handler = _handler(
+        classifier=Mock(),
+        patient_reply=Mock(),
+        metrics=_metrics(),
+        feedback=feedback,
+        endgame=endgame,
+        turn_coordinator=turn_coordinator,
+    )
+
+    async def fake_mapping():
+        return {}
+
+    monkeypatch.setattr(handler, "_load_aims_mapping", fake_mapping)
+
+    ctx = _basic_context()
+    ctx.mem[KEY_AIMS_STATE] = {
+        "phase": "Secure",
+        "announced": True,
+        "first_inquire_done": True,
+        "parent_concerns": [
+            {
+                "id": "trust",
+                "topic": "trust",
+                "summary": "wants evidence, uncertainty, and trust addressed",
+                "desc": "wants evidence, uncertainty, and trust addressed",
+                "is_mirrored": True,
+                "is_secured": True,
+                "status": "resolved",
+            }
+        ],
+    }
+
+    result = await handler.handle(
+        req=Mock(headers={}),
+        body=ChatRequest(
+            message="I can send you home with the evidence summary.",
+            sessionId="sid",
+            moduleOptions={"feedbackEnabled": True},
+        ),
+        ctx=ctx,
+    )
+
+    assert result["coaching"]["tips"][-1] == (
+        "Suggest a follow-up appointment so the person has a concrete plan to revisit the decision after reviewing the literature."
+    )
+
+
+@pytest.mark.asyncio
+async def test_handle_does_not_add_followup_tip_when_followup_already_in_plan(monkeypatch):
+    feedback = _feedback()
+    endgame = _endgame()
+    turn_coordinator = Mock()
+    turn_coordinator.run = AsyncMock(
+        return_value=_turn(
+            step="Secure",
+            score=3,
+            reasons=["You created a review plan."],
+            tips=["Keep anchoring the plan to the person's concern."],
+            patient_reply=(
+                "That sounds good. I can read the information at home and a follow-up in a few weeks would help."
+            ),
+        )
+    )
+
+    handler = _handler(
+        classifier=Mock(),
+        patient_reply=Mock(),
+        metrics=_metrics(),
+        feedback=feedback,
+        endgame=endgame,
+        turn_coordinator=turn_coordinator,
+    )
+
+    async def fake_mapping():
+        return {}
+
+    monkeypatch.setattr(handler, "_load_aims_mapping", fake_mapping)
+
+    ctx = _basic_context()
+    ctx.mem[KEY_AIMS_STATE] = {
+        "phase": "Secure",
+        "announced": True,
+        "first_inquire_done": True,
+        "parent_concerns": [
+            {
+                "id": "trust",
+                "topic": "trust",
+                "summary": "wants evidence, uncertainty, and trust addressed",
+                "desc": "wants evidence, uncertainty, and trust addressed",
+                "is_mirrored": True,
+                "is_secured": True,
+                "status": "resolved",
+            }
+        ],
+    }
+
+    result = await handler.handle(
+        req=Mock(headers={}),
+        body=ChatRequest(
+            message="I can send you home with the vaccine evidence summary and we can revisit it in two weeks.",
+            sessionId="sid",
+            moduleOptions={"feedbackEnabled": True},
+        ),
+        ctx=ctx,
+    )
+
+    assert result["coaching"]["tips"] == ["Keep anchoring the plan to the person's concern."]
 
 
 @pytest.mark.asyncio
