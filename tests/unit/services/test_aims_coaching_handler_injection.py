@@ -82,7 +82,7 @@ def test_build_reply_concern_state_section_distinguishes_open_and_resolved_conce
     assert "do not reopen resolved concerns as if unanswered" in section
 
 
-def test_primary_for_json_uses_pro_for_classify_and_reply():
+def test_primary_for_json_matches_main_branch_reply_routing():
     handler = _handler(
         classifier=Mock(),
         patient_reply=Mock(),
@@ -96,10 +96,10 @@ def test_primary_for_json_uses_pro_for_classify_and_reply():
     other_primary, other_fallbacks = handler._primary_for_json("endgame_detect")
 
     assert classify_primary == "model"
-    assert reply_primary == "model"
+    assert reply_primary == "gemini-2.5-flash"
     assert other_primary == "gemini-2.5-flash"
     assert classify_fallbacks[0] == "gemini-2.5-flash"
-    assert reply_fallbacks[0] == "gemini-2.5-flash"
+    assert reply_fallbacks[0] == "model"
     assert other_fallbacks[0] == "model"
 
 
