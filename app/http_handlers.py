@@ -25,6 +25,29 @@ def get_request_id(request: Request) -> Optional[str]:
         return str(uuid.uuid4())
 
 
+def _extract_session_id(*, request: Request, body_logged: Any = None) -> Optional[str]:
+    try:
+        state_session_id = getattr(request.state, "session_id", None)
+        if state_session_id:
+            return str(state_session_id)
+    except Exception:
+        pass
+
+    try:
+        query_session_id = request.query_params.get("sessionId")
+        if query_session_id:
+            return query_session_id
+    except Exception:
+        pass
+
+    if isinstance(body_logged, dict):
+        raw = body_logged.get("sessionId")
+        if raw:
+            return str(raw)
+
+    return None
+
+
 def install_http_handlers(app: FastAPI, *, settings: Any, logger: logging.Logger) -> None:
     # Use the provided logger for request/response logging
     # We rename it to avoid conflict with module-level logger if needed,
@@ -32,11 +55,13 @@ def install_http_handlers(app: FastAPI, *, settings: Any, logger: logging.Logger
     @app.exception_handler(HTTPException)
     async def on_http_exception(request: Request, exc: HTTPException):
         req_id = get_request_id(request)
+        session_id = _extract_session_id(request=request)
         logger.warning(json.dumps({
             "event": "http_exception",
             "status": exc.status_code,
             "detail": exc.detail,
             "requestId": req_id,
+            "sessionId": session_id,
             "path": request.url.path,
             "method": request.method,
         }))
@@ -60,6 +85,7 @@ def install_http_handlers(app: FastAPI, *, settings: Any, logger: logging.Logger
     async def on_validation_error(request: Request, exc: RequestValidationError):
         req_id = get_request_id(request)
         body_logged = await _request_body_for_log(request)
+        session_id = _extract_session_id(request=request, body_logged=body_logged)
         errors = json.loads(json.dumps(exc.errors(), default=str))
 
         logger.warning(json.dumps({
@@ -67,6 +93,7 @@ def install_http_handlers(app: FastAPI, *, settings: Any, logger: logging.Logger
             "errors": errors,
             "body": body_logged,
             "requestId": req_id,
+            "sessionId": session_id,
             "path": request.url.path,
             "method": request.method,
         }))
@@ -77,11 +104,13 @@ def install_http_handlers(app: FastAPI, *, settings: Any, logger: logging.Logger
     @app.exception_handler(Exception)
     async def on_unhandled_exception(request: Request, exc: Exception):
         req_id = get_request_id(request)
+        session_id = _extract_session_id(request=request)
         logger.exception("Unhandled application exception: %s", exc)
         logger.error(json.dumps({
             "event": "unhandled_exception",
             "error": str(exc),
             "requestId": req_id,
+            "sessionId": session_id,
             "path": request.url.path,
             "method": request.method,
         }))
@@ -109,14 +138,18 @@ def install_http_handlers(app: FastAPI, *, settings: Any, logger: logging.Logger
             pass
 
         client_host = request.client.host if request.client is not None else None
+        body_logged = _body_preview_for_log(body_bytes, settings=settings)
+        session_id = _extract_session_id(request=request, body_logged=body_logged)
+        request.state.session_id = session_id
         logger.info(json.dumps({
             "event": "request_start",
             "method": request.method,
             "path": request.url.path,
             "client": client_host,
             "requestId": req_id,
+            "sessionId": session_id,
             "bodySize": len(body_bytes) if body_bytes else 0,
-            "body": _body_preview_for_log(body_bytes, settings=settings),
+            "body": body_logged,
             "headers": _headers_for_log(request, settings=settings),
         }))
 
@@ -128,6 +161,7 @@ def install_http_handlers(app: FastAPI, *, settings: Any, logger: logging.Logger
             logger.error(json.dumps({
                 "event": "request_error",
                 "requestId": req_id,
+                "sessionId": session_id,
                 "latencyMs": latency_ms,
                 "error": str(exc),
             }))
@@ -213,6 +247,7 @@ def _log_request_end(
         "status": status_code,
         "latencyMs": latency_ms,
         "requestId": req_id,
+        "sessionId": _extract_session_id(request=request),
     })
     try:
         if isinstance(status_code, int) and status_code >= 500:

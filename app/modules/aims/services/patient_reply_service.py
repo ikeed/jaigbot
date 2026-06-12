@@ -45,6 +45,23 @@ class PatientReplyService:
             )
         }
 
+    def _emit_fallback_event(
+        self,
+        *,
+        session_id: str,
+        reason: str,
+        concern_state_section: str | None = None,
+        attempt: int | None = None,
+    ) -> None:
+        telemetry_log_event(
+            self._logger,
+            "aims_patient_reply_fallback",
+            sessionId=session_id,
+            reason=reason,
+            attempt=attempt,
+            noOpenConcerns="open concerns: none" in (concern_state_section or "").lower(),
+        )
+
     async def generate(
         self,
         *,
@@ -101,6 +118,13 @@ class PatientReplyService:
                 text = cand.get("patient_reply", "").strip()
 
                 if text.lower() == "ok":
+                    telemetry_log_event(
+                        self._logger,
+                        "aims_patient_reply_normalized",
+                        sessionId=session_id,
+                        reason="terse_ok",
+                        noOpenConcerns=no_open_concerns,
+                    )
                     text = (
                         "Yes, that helps. Thank you."
                         if no_open_concerns
@@ -122,6 +146,19 @@ class PatientReplyService:
                     prompt_for_attempt = reply_prompt + REPLY_REPAIR_SUFFIX
                     continue
 
+                self._emit_fallback_event(
+                    session_id=session_id,
+                    reason="invalid_json_twice",
+                    concern_state_section=concern_state_section,
+                    attempt=attempt,
+                )
                 return self.fallback_reply(concern_state_section)
 
-        return self.fallback_reply(concern_state_section) if not no_open_concerns else {"patient_reply": "Yes, that helps. Thank you."}
+        if not no_open_concerns:
+            self._emit_fallback_event(
+                session_id=session_id,
+                reason="exhausted_without_valid_reply",
+                concern_state_section=concern_state_section,
+            )
+            return self.fallback_reply(concern_state_section)
+        return {"patient_reply": "Yes, that helps. Thank you."}

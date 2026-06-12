@@ -555,7 +555,8 @@ class AimsCoachingHandler:
     
     def _primary_for_json(self, log_path: str) -> tuple[str, list[str]]:
         """Select primary and fallback models for JSON tasks based on call path.
-        - coach_classify: Pro primary (better semantics), Flash as fallback(s)
+        - coach_classify / coach_reply: Pro primary (better semantics and JSON reliability),
+          Flash as fallback(s)
         - otherwise (e.g., endgame_detect): Flash primary, Pro as fallback
         """
         lp = (log_path or "").lower()
@@ -567,7 +568,7 @@ class AimsCoachingHandler:
             self.logger.debug(f"Failed to resolve model fallbacks: {e}")
             cfg_fallbacks = []
         flash = DEFAULT_MODEL_FLASH
-        if lp == "coach_classify":
+        if lp in {"coach_classify", "coach_reply"}:
             # Pro primary, ensure Flash is in fallbacks
             fb = [x for x in ([flash] + cfg_fallbacks) if x]
             return pro_primary, fb
