@@ -1,7 +1,5 @@
 from types import SimpleNamespace
 
-from google.genai.errors import APIError
-
 from app.vertex import VertexAIError, VertexClient, extract_status_code, get_usage_count
 
 
@@ -139,30 +137,13 @@ def test_merge_with_overlap_covers_no_space_before_and_no_progress():
 
 
 def test_generate_text_async_raises_vertex_error_when_empty(monkeypatch):
-    class FakeResponse:
-        candidates = []
-        usage_metadata = None
-
-    class FakeModels:
-        @staticmethod
-        async def generate_content(**kwargs):
-            return FakeResponse()
-
-    class FakeAio:
-        models = FakeModels()
-
-    class FakeClient:
-        def __init__(self, **kwargs):
-            self.aio = FakeAio()
-
-    monkeypatch.setattr("app.vertex.genai.Client", FakeClient)
-
     client = VertexClient(project="proj", region="us-central1", model_id="model")
+    monkeypatch.setattr(client, "generate_text", lambda *args, **kwargs: (_ for _ in ()).throw(VertexAIError("No text in response")))
 
     import asyncio
     import pytest
 
-    with pytest.raises(VertexAIError, match="No text candidates returned from model"):
+    with pytest.raises(VertexAIError, match="No text in response"):
         asyncio.run(client.generate_text_async(prompt="hello"))
 
 
@@ -270,24 +251,33 @@ def test_generate_text_autocontinues_and_marks_no_progress_break(monkeypatch):
     assert meta["noProgressBreak"] is True
 
 
-def test_generate_text_async_wraps_api_error(monkeypatch):
-    class FakeAioModels:
-        async def generate_content(self, **kwargs):
-            raise APIError(429, {"message": "rate limited", "status": "RESOURCE_EXHAUSTED"})
-
-    class FakeClient:
-        def __init__(self, **kwargs):
-            self.aio = SimpleNamespace(models=FakeAioModels())
-
-    monkeypatch.setattr("app.vertex.genai.Client", FakeClient)
-
+def test_generate_text_async_delegates_to_sync_generation(monkeypatch):
     client = VertexClient(project="proj", region="us-central1", model_id="model")
+    seen = {}
+
+    def fake_generate_text(*args, **kwargs):
+        seen["args"] = args
+        seen["kwargs"] = kwargs
+        return "continued text", {"finishReason": "STOP"}
+
+    monkeypatch.setattr(client, "generate_text", fake_generate_text)
 
     import asyncio
-    import pytest
 
-    with pytest.raises(VertexAIError, match="Gemini API error"):
-        asyncio.run(client.generate_text_async(prompt="hello"))
+    out = asyncio.run(
+        client.generate_text_async(
+            prompt="hello",
+            temperature=0.3,
+            max_tokens=222,
+            system_instruction="sys",
+            response_mime_type="application/json",
+            response_schema={"type": "object"},
+            thinking_budget=11,
+        )
+    )
+
+    assert out == "continued text"
+    assert seen["args"] == ("hello", 0.3, 222, "sys", "application/json", {"type": "object"}, 11)
 
 
 def test_generate_text_wraps_empty_response_and_api_error(monkeypatch):
