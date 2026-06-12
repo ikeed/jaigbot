@@ -79,7 +79,7 @@ class AimsCoachingHandler:
     
     _TOPICAL_CUES = AimsStateService.TOPICAL_CUES
     _FOLLOWUP_TIP = (
-        "Suggest a follow-up appointment so the person has a concrete plan to revisit the decision after reviewing the literature."
+        "Suggest a follow-up appointment so the person has a concrete plan after reviewing the literature."
     )
 
     @staticmethod
