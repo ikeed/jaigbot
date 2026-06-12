@@ -224,6 +224,27 @@ def test_storage_service_reports_bucket_uses_reports_bucket_name(monkeypatch):
     report_blob.upload_from_string.assert_called_once()
 
 
+def test_storage_service_upload_report_artifact_uses_reports_bucket_path():
+    service = StorageService(bucket_name="session-bucket")
+    service.reports_bucket_name = "reports-bucket"
+    report_bucket = MagicMock()
+    report_blob = MagicMock()
+    report_bucket.blob.return_value = report_blob
+    service._reports_bucket = report_bucket
+
+    assert service.upload_report_artifact(
+        session_id="sid",
+        user_id="uid",
+        artifact_suffix="logs.json",
+        payload={"entries": []},
+    ) is True
+
+    report_bucket.blob.assert_called_once_with(
+        "env=local/sessions/v1/user_id=uid/session_id=sid.logs.json"
+    )
+    report_blob.upload_from_string.assert_called_once()
+
+
 def test_storage_service_download_session_handles_missing_and_legacy_prod_path(monkeypatch):
     service = StorageService(bucket_name="test-bucket")
     bucket = MagicMock()

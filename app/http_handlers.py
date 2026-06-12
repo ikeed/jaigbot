@@ -10,6 +10,8 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from app.telemetry.context import clear_log_context, set_log_context
+
 module_logger = logging.getLogger(__name__)
 
 
@@ -48,7 +50,42 @@ def _extract_session_id(*, request: Request, body_logged: Any = None) -> Optiona
     return None
 
 
+def _extract_module_id(*, body_logged: Any = None, settings: Any) -> Optional[str]:
+    if isinstance(body_logged, dict):
+        raw = body_logged.get("moduleId")
+        if raw:
+            return str(raw)
+    return getattr(settings, "ACTIVE_MODULE", None)
+
+
+def _safe_service_name(settings: Any) -> str | None:
+    return getattr(settings, "service_name", None)
+
+
+def _safe_app_env(settings: Any) -> str | None:
+    return getattr(settings, "APP_ENV", None)
+
+
+def _safe_state_attr(request: Request, name: str) -> str | None:
+    try:
+        value = getattr(request.state, name, None)
+    except Exception:
+        return None
+    return value if isinstance(value, str) else None
+
+
+def _safe_app_state_attr(request: Request, name: str) -> str | None:
+    try:
+        app_state = getattr(request.app, "state", None)
+        value = getattr(app_state, name, None)
+    except Exception:
+        return None
+    return value if isinstance(value, str) else None
+
+
 def install_http_handlers(app: FastAPI, *, settings: Any, logger: logging.Logger) -> None:
+    app.state.app_env = _safe_app_env(settings)
+    app.state.service_name = _safe_service_name(settings)
     # Use the provided logger for request/response logging
     # We rename it to avoid conflict with module-level logger if needed,
     # but nested functions will prefer the local one.
@@ -56,12 +93,16 @@ def install_http_handlers(app: FastAPI, *, settings: Any, logger: logging.Logger
     async def on_http_exception(request: Request, exc: HTTPException):
         req_id = get_request_id(request)
         session_id = _extract_session_id(request=request)
+        module_id = _safe_state_attr(request, "module_id")
         logger.warning(json.dumps({
             "event": "http_exception",
             "status": exc.status_code,
             "detail": exc.detail,
             "requestId": req_id,
             "sessionId": session_id,
+            "moduleId": module_id,
+            "appEnv": _safe_app_env(settings),
+            "serviceName": _safe_service_name(settings),
             "path": request.url.path,
             "method": request.method,
         }))
@@ -86,6 +127,7 @@ def install_http_handlers(app: FastAPI, *, settings: Any, logger: logging.Logger
         req_id = get_request_id(request)
         body_logged = await _request_body_for_log(request)
         session_id = _extract_session_id(request=request, body_logged=body_logged)
+        module_id = _extract_module_id(body_logged=body_logged, settings=settings)
         errors = json.loads(json.dumps(exc.errors(), default=str))
 
         logger.warning(json.dumps({
@@ -94,6 +136,9 @@ def install_http_handlers(app: FastAPI, *, settings: Any, logger: logging.Logger
             "body": body_logged,
             "requestId": req_id,
             "sessionId": session_id,
+            "moduleId": module_id,
+            "appEnv": _safe_app_env(settings),
+            "serviceName": _safe_service_name(settings),
             "path": request.url.path,
             "method": request.method,
         }))
@@ -105,12 +150,16 @@ def install_http_handlers(app: FastAPI, *, settings: Any, logger: logging.Logger
     async def on_unhandled_exception(request: Request, exc: Exception):
         req_id = get_request_id(request)
         session_id = _extract_session_id(request=request)
+        module_id = _safe_state_attr(request, "module_id")
         logger.exception("Unhandled application exception: %s", exc)
         logger.error(json.dumps({
             "event": "unhandled_exception",
             "error": str(exc),
             "requestId": req_id,
             "sessionId": session_id,
+            "moduleId": module_id,
+            "appEnv": _safe_app_env(settings),
+            "serviceName": _safe_service_name(settings),
             "path": request.url.path,
             "method": request.method,
         }))
@@ -140,7 +189,18 @@ def install_http_handlers(app: FastAPI, *, settings: Any, logger: logging.Logger
         client_host = request.client.host if request.client is not None else None
         body_logged = _body_preview_for_log(body_bytes, settings=settings)
         session_id = _extract_session_id(request=request, body_logged=body_logged)
+        module_id = _extract_module_id(body_logged=body_logged, settings=settings)
         request.state.session_id = session_id
+        request.state.module_id = module_id
+        app_env = _safe_app_env(settings)
+        service_name = _safe_service_name(settings)
+        context_token = set_log_context(
+            requestId=req_id,
+            sessionId=session_id,
+            moduleId=module_id,
+            appEnv=app_env,
+            serviceName=service_name,
+        )
         logger.info(json.dumps({
             "event": "request_start",
             "method": request.method,
@@ -148,11 +208,15 @@ def install_http_handlers(app: FastAPI, *, settings: Any, logger: logging.Logger
             "client": client_host,
             "requestId": req_id,
             "sessionId": session_id,
+            "moduleId": module_id,
+            "appEnv": app_env,
+            "serviceName": service_name,
             "bodySize": len(body_bytes) if body_bytes else 0,
             "body": body_logged,
             "headers": _headers_for_log(request, settings=settings),
         }))
 
+        response = None
         try:
             response = await call_next(request)
         except Exception as exc:
@@ -162,18 +226,23 @@ def install_http_handlers(app: FastAPI, *, settings: Any, logger: logging.Logger
                 "event": "request_error",
                 "requestId": req_id,
                 "sessionId": session_id,
+                "moduleId": module_id,
+                "appEnv": app_env,
+                "serviceName": service_name,
                 "latencyMs": latency_ms,
                 "error": str(exc),
             }))
             raise
+        finally:
+            if response is not None:
+                try:
+                    response.headers["x-request-id"] = req_id
+                except Exception as e:
+                    logger.debug("Failed to set x-request-id header: %s", e)
 
-        try:
-            response.headers["x-request-id"] = req_id
-        except Exception as e:
-            logger.debug("Failed to set x-request-id header: %s", e)
-            pass
+                _log_request_end(logger, request=request, response=response, req_id=req_id, start=start)
+            clear_log_context(context_token)
 
-        _log_request_end(logger, request=request, response=response, req_id=req_id, start=start)
         return response
 
 
@@ -248,6 +317,9 @@ def _log_request_end(
         "latencyMs": latency_ms,
         "requestId": req_id,
         "sessionId": _extract_session_id(request=request),
+        "moduleId": _safe_state_attr(request, "module_id"),
+        "appEnv": _safe_app_state_attr(request, "app_env"),
+        "serviceName": _safe_app_state_attr(request, "service_name"),
     })
     try:
         if isinstance(status_code, int) and status_code >= 500:

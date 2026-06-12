@@ -91,6 +91,34 @@ class StorageService:
             logger.error(f"Failed to upload session {session_id} to GCS: {upload_exc}", exc_info=True)
             return False
 
+    def upload_report_artifact(
+        self,
+        *,
+        session_id: str,
+        user_id: str,
+        artifact_suffix: str,
+        payload: Dict[str, Any],
+    ) -> bool:
+        """Upload an additional report artifact next to the reported session archive."""
+        if not self.reports_bucket_name:
+            logger.debug("Reports bucket not configured; skipping report artifact upload.")
+            return False
+
+        bucket = self.reports_bucket
+        if not bucket:
+            logger.error("GCS reports bucket %s not available for artifact upload.", self.reports_bucket_name)
+            return False
+
+        path = settings.gcs_path("sessions/v1", f"user_id={user_id}", f"session_id={session_id}.{artifact_suffix}")
+        try:
+            blob = bucket.blob(path)
+            blob.upload_from_string(json.dumps(payload, indent=2), content_type="application/json")
+            logger.info("Successfully uploaded report artifact for session %s to %s", session_id, path)
+            return True
+        except Exception as exc:
+            logger.error("Failed to upload report artifact for session %s: %s", session_id, exc, exc_info=True)
+            return False
+
     @staticmethod
     def _transform_to_logical_schema(session_id: str, user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """Convert internal memory to a module-aware logical archive schema."""
