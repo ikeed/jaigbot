@@ -302,9 +302,7 @@ class AimsStateService:
             recent.append("secure_before_inquire")
             state["recent_coaching"] = recent[-3:]
 
-        needs_mirror = any(
-            not concern.get("is_mirrored") for concern in (state.get("parent_concerns") or [])
-        )
+        needs_mirror = self._has_material_unmirrored_concern(state)
 
         if needs_mirror and first_inquire_done:
             self._add_secure_before_mirror_feedback(cls_payload, state, character)
@@ -321,11 +319,7 @@ class AimsStateService:
     ) -> None:
         recent = state.get("recent_coaching") or []
 
-        unmirrored_topics = [
-            concern.get("topic", "unknown")
-            for concern in (state.get("parent_concerns") or [])
-            if not concern.get("is_mirrored")
-        ]
+        unmirrored_topics = self._unmirrored_topics_requiring_feedback(state)
         first_unmirrored = unmirrored_topics[0] if unmirrored_topics else None
         secure_before_mirror_key = self._secure_before_mirror_key(first_unmirrored)
         repeat_count = self._secure_before_mirror_repeat_count(recent, first_unmirrored)
@@ -357,6 +351,44 @@ class AimsStateService:
 
         recent.append(secure_before_mirror_key)
         state["recent_coaching"] = recent[-3:]
+
+    @classmethod
+    def _has_material_unmirrored_concern(cls, state: dict[str, Any]) -> bool:
+        return bool(cls._unmirrored_topics_requiring_feedback(state))
+
+    @classmethod
+    def _unmirrored_topics_requiring_feedback(cls, state: dict[str, Any]) -> list[str]:
+        concerns = state.get("parent_concerns") or []
+        mirrored_evidence: set[str] = set()
+        for concern in concerns:
+            if concern.get("is_mirrored"):
+                mirrored_evidence.update(cls._evidence_set(concern))
+
+        topics: list[str] = []
+        for concern in concerns:
+            if concern.get("is_mirrored"):
+                continue
+            evidence = cls._evidence_set(concern)
+            if evidence and evidence.issubset(mirrored_evidence):
+                continue
+            topics.append(str(concern.get("topic", "unknown")))
+        return topics
+
+    @staticmethod
+    def _evidence_set(concern: dict[str, Any]) -> set[str]:
+        raw_evidence = concern.get("evidence")
+        if raw_evidence is None:
+            raw_evidence = concern.get("desc")
+
+        values: list[Any]
+        if isinstance(raw_evidence, str):
+            values = [raw_evidence]
+        elif isinstance(raw_evidence, (list, tuple, set)):
+            values = list(raw_evidence)
+        else:
+            values = []
+
+        return {str(item).strip().lower() for item in values if str(item).strip()}
 
     @staticmethod
     def _secure_before_mirror_key(topic: str | None) -> str:
