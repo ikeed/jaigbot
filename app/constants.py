@@ -128,7 +128,6 @@ MSG_LOGOUT = "on_logout"
 MSG_REPORT_ISSUE = "report_issue"
 MSG_NEW_CHAT = "new_chat"
 MSG_INTRO_CONTINUE = "aims_intro_continue"
-MSG_RESUME_THREAD = "aims_resume_thread"
 MSG_PERSONA_NAME = "aims_persona_name"
 
 # OAuth Providers
