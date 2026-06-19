@@ -491,8 +491,8 @@ def test_accepted_vaccine_allows_when_all_concerns_are_secured():
     assert result["lines"][0].startswith("Outcome:")
 
 
-def test_accepted_vaccine_gate_does_not_block_literature_outcome():
-    """The secured-concerns vaccine gate only applies to accepted_vaccine."""
+def test_accepted_literature_requires_literature_and_followup_evidence():
+    """LLM accepted_literature still needs both closure pieces in the transcript."""
     mock_svc = _MockClassifierService(
         {
             "is_endgame": True,
@@ -512,8 +512,7 @@ def test_accepted_vaccine_gate_does_not_block_literature_outcome():
     }
     service = _make_endgame_service(mock_svc)
     result = _run(service.check(store["s10"], {}, None, "s10"))
-    assert result is not None, "accepted_literature should bypass the accepted_vaccine gate"
-    assert "Great job" in result["title"]
+    assert result is None
 
 
 def test_accepted_literature_requires_inquiry_and_surfaced_concern():
@@ -978,11 +977,8 @@ def test_no_concerns_allows_endgame():
 # Tests — LLM-trust endgame design
 # ---------------------------------------------------------------------------
 
-def test_llm_accepted_literature_trusted_without_keyword_match():
-    """LLM says accepted_literature — we now trust the LLM, so endgame fires
-    even when the person didn't use exact literature keywords.
-    Natural language like 'I'll take a look at the information' should be
-    detected by the improved prompt, not by a heuristic gate."""
+def test_llm_accepted_literature_without_followup_evidence_is_blocked():
+    """LLM accepted_literature cannot close when the transcript lacks a follow-up plan."""
     mock_svc = _MockClassifierService(
         {
             "is_endgame": True,
@@ -1002,8 +998,87 @@ def test_llm_accepted_literature_trusted_without_keyword_match():
     }
     service = _make_endgame_service(mock_svc)
     result = _run(service.check(store["s15"], {}, None, "s15"))
-    assert result is not None, "LLM accepted_literature should fire without requiring keyword match"
+    assert result is None
+
+
+def test_llm_accepted_literature_with_literature_and_followup_evidence_is_endgame():
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_literature",
+            "summary": "Person agreed to take information home and return for follow-up.",
+            "reason": "",
+        }
+    )
+    store = {
+        "s15a": {
+            "history": [
+                {
+                    "role": "user",
+                    "content": "I'll send written information home and book a follow-up appointment.",
+                },
+                {
+                    "role": "assistant",
+                    "content": "That sounds good. I will read it at home and come back for the follow-up.",
+                },
+            ],
+            "aims_state": _literature_ready_state(),
+        }
+    }
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s15a"], {}, None, "s15a"))
+    assert result is not None
     assert result["title"] == "\U0001f389 Great job!"
+
+
+def test_followup_after_spouse_discussion_without_literature_does_not_end():
+    """Prod regression: follow-up alone should show a nudge, not game over."""
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_literature",
+            "summary": "The person agreed to discuss vaccines with her husband and return for follow-up.",
+            "reason": "",
+        }
+    )
+    store = {
+        "s15prod": {
+            "history": [
+                {
+                    "role": "user",
+                    "content": (
+                        "Perfect. Let's book a follow-up appointment where we can talk "
+                        "about any questions you still have after talking with Gabriel."
+                    ),
+                },
+                {
+                    "role": "assistant",
+                    "content": (
+                        "Yes, Doctor. I will talk to my husband Gabriel about the vaccines. "
+                        "We can come back for the follow-up appointment to talk more."
+                    ),
+                },
+            ],
+            "aims_state": {
+                "phase": "Secure",
+                "announced": True,
+                "first_inquire_done": True,
+                "parent_concerns": [
+                    {
+                        "id": "trust",
+                        "topic": "trust",
+                        "desc": "wants evidence, uncertainty, and trust addressed",
+                        "is_mirrored": True,
+                        "is_secured": True,
+                        "status": "resolved",
+                    }
+                ],
+            },
+        }
+    }
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s15prod"], {}, None, "s15prod"))
+    assert result is None
 
 
 def test_mixed_resolution_vaccine_today_and_literature_for_others_is_endgame():
