@@ -12,6 +12,7 @@ class AuthRedirectMiddleware(BaseHTTPMiddleware):
     Middleware to intercept Chainlit's default login page and redirect to root,
     and to redirect chat refreshes to the current thread if one exists.
     """
+
     async def dispatch(self, request: Request, call_next):
         # 1. Intercept Chainlit login and redirect to our custom landing page
         if request.url.path == ROUTE_CHAT_LOGIN:
@@ -24,7 +25,8 @@ class AuthRedirectMiddleware(BaseHTTPMiddleware):
         chat_slash_path = f"{PATH_CHAT}/"
         if (
             request.method == "GET"
-            and request.url.path in {
+            and request.url.path
+            in {
                 chat_path,
                 chat_slash_path,
                 ROUTE_CHAT_LOGIN_CALLBACK,
@@ -34,6 +36,12 @@ class AuthRedirectMiddleware(BaseHTTPMiddleware):
             user_identifier = authenticated_user_identifier(request)
             thread_id = get_current_thread_id(user_identifier)
             if thread_id:
-                return RedirectResponse(url=f"{PATH_CHAT}/thread/{thread_id}", status_code=307)
+                target_url = f"{PATH_CHAT}/thread/{thread_id}"
+                if (
+                    request.url.path in {chat_path, chat_slash_path}
+                    and request.query_params
+                ):
+                    target_url += f"?{request.query_params}"
+                return RedirectResponse(url=target_url, status_code=307)
 
         return await call_next(request)
