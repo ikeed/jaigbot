@@ -321,6 +321,54 @@ def test_secure_before_mirror_is_not_suppressed_by_earlier_other_mirror():
     assert state.get("recent_coaching") == ["secure_before_mirror:trust"]
 
 
+def test_secure_before_mirror_ignores_same_evidence_sibling_concern():
+    """A leftover sibling topic from the same mirrored utterance should not trigger false feedback."""
+    h = _state_service()
+    evidence = (
+        "I just want to understand how it works here, Doctor. "
+        "And... I want to be sure it is safe for my son, Nathaniel."
+    )
+    state = _make_state(phase="InquireMirror", concerns=[
+        {
+            "desc": evidence,
+            "evidence": evidence,
+            "topic": "effectiveness",
+            "is_mirrored": True,
+            "is_secured": True,
+        },
+        {
+            "desc": evidence,
+            "evidence": evidence,
+            "topic": "side_effects",
+            "is_mirrored": True,
+            "is_secured": True,
+        },
+        {
+            "desc": evidence,
+            "evidence": evidence,
+            "topic": "trust",
+            "is_mirrored": False,
+            "is_secured": False,
+        },
+    ])
+    state["recent_coaching"] = ["secure_before_mirror:trust"]
+    cls = {"step": "Secure", "score": 3, "reasons": [], "tips": []}
+
+    h.apply_coaching_guidance(
+        cls,
+        "Secure",
+        state,
+        "These vaccines mostly cause mild side effects, and serious reactions are rare.",
+        evidence,
+    )
+
+    feedback = " ".join(cls["reasons"] + cls["tips"]).lower()
+    assert "reflecting" not in feedback
+    assert "mirroring" not in feedback
+    assert "before educating" not in feedback
+    assert state.get("recent_coaching") == []
+
+
 # ---------------------------------------------------------------------------
 # Persona-adaptive coaching tip tests (Fix 4)
 # ---------------------------------------------------------------------------
