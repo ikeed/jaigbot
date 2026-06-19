@@ -369,6 +369,65 @@ def test_secure_before_mirror_ignores_same_evidence_sibling_concern():
     assert state.get("recent_coaching") == []
 
 
+def test_secure_followup_closure_missing_literature_gets_tip():
+    h = _state_service()
+    state = _make_state(
+        phase="Secure",
+        concerns=[
+            {
+                "desc": "wants rules, requirements, and consequences explained",
+                "topic": "requirements",
+                "is_mirrored": True,
+                "is_secured": True,
+            }
+        ],
+    )
+    cls = {"step": "Secure+Inquire", "score": 3, "reasons": [], "tips": []}
+
+    h.apply_coaching_guidance(
+        cls,
+        "Secure+Inquire",
+        state,
+        (
+            "We can make a plan for a follow-up appointment after you talk with Gabriel. "
+            "For today, let's focus on Nathaniel's ear."
+        ),
+        "I feel good about this plan.",
+    )
+
+    assert cls["tips"] == [
+        "You have a follow-up plan; add take-home information or written resources so the deferral has both AIMS closure pieces."
+    ]
+
+
+def test_secure_literature_closure_missing_followup_gets_tip():
+    h = _state_service()
+    state = _make_state(
+        phase="Secure",
+        concerns=[
+            {
+                "desc": "wants evidence, uncertainty, and trust addressed",
+                "topic": "trust",
+                "is_mirrored": True,
+                "is_secured": True,
+            }
+        ],
+    )
+    cls = {"step": "Secure", "score": 3, "reasons": [], "tips": []}
+
+    h.apply_coaching_guidance(
+        cls,
+        "Secure",
+        state,
+        "I can send you home with written information and resources to review with your family.",
+        "That would help.",
+    )
+
+    assert cls["tips"] == [
+        "You offered take-home information; add a concrete follow-up plan so the conversation has a clear return point."
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Persona-adaptive coaching tip tests (Fix 4)
 # ---------------------------------------------------------------------------

@@ -1135,6 +1135,68 @@ def test_deferred_llm_endgame_blocked():
     assert result is None, "Deferred endgame should be blocked even when LLM and language agree"
 
 
+def test_spouse_discussion_followup_and_ear_plan_without_literature_does_not_end():
+    """A follow-up plan without take-home information should nudge, not end."""
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "deferred",
+            "summary": "Person will discuss vaccines with spouse later.",
+            "reason": "",
+        }
+    )
+    store = {
+        "s17b": {
+            "history": [
+                {
+                    "role": "user",
+                    "content": (
+                        "Based on what we've talked about today, I'm comfortable with you "
+                        "taking some time to discuss the vaccines together and making a plan "
+                        "for a follow-up appointment. For today, let's focus on getting "
+                        "Nathaniel's ear feeling better."
+                    ),
+                },
+                {
+                    "role": "assistant",
+                    "content": (
+                        "Yes, Doctor, I feel good about this plan. We can focus on Nathaniel's "
+                        "ear today, and I will talk to my husband Gabriel about the vaccines "
+                        "when I go home."
+                    ),
+                },
+            ],
+            "aims_state": {
+                "phase": "InquireMirror",
+                "announced": True,
+                "first_inquire_done": True,
+                "parent_concerns": [
+                    {
+                        "id": "requirements",
+                        "topic": "requirements",
+                        "desc": "wants rules, requirements, and consequences explained",
+                        "is_mirrored": True,
+                        "is_secured": False,
+                        "status": "mirrored",
+                    },
+                    {
+                        "id": "side-effects",
+                        "topic": "side_effects",
+                        "desc": "wants side effect risk addressed",
+                        "is_mirrored": True,
+                        "is_secured": False,
+                        "status": "mirrored",
+                    },
+                ],
+            },
+        }
+    }
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s17b"], {}, None, "s17b"))
+    assert result is None
+    assert mock_svc.last_history_text != ""
+
+
 def test_endgame_uses_summary_analysis_bullets_when_available():
     mock_svc = _MockClassifierService(
         {
