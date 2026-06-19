@@ -29,6 +29,15 @@
       if (app.messageRoles && app.messageRoles.injectDataAuthors) {
         app.messageRoles.injectDataAuthors();
       }
+    } else if (type === "aims_thread_bound" && data.threadId) {
+      const path = window.location.pathname;
+      if (path === "/chat" || path === "/chat/") {
+        window.history.replaceState(
+          null,
+          "",
+          window.location.origin + "/chat/thread/" + encodeURIComponent(String(data.threadId))
+        );
+      }
     }
   }
 

@@ -38,3 +38,4 @@ console.log
 /docs/aims_videos/
 /tests/.chainlit/translations/
 /tests/.chainlit/config.toml
+/coverage.xml
