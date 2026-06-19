@@ -4,7 +4,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.constants import MSG_DUPLICATE_TAB, MSG_INTRO_REQUIRED
+from app import chainlit_thread_state
+from app.constants import MSG_DUPLICATE_TAB, MSG_INTRO_REQUIRED, MSG_THREAD_BOUND
 from app.services.chainlit.orchestrator import ChainlitOrchestrator
 
 
@@ -88,6 +89,66 @@ async def test_handle_chat_start_does_not_emit_client_side_resume_redirect(
 
     mock_services["ui"].send_window_message.assert_not_awaited()
     orchestrator._start_scenario_flow.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_handle_chat_start_noops_when_reconnect_has_existing_history(
+    orchestrator, mock_services
+):
+    mock_services["session"].get_user_identifier.return_value = "user1"
+    mock_services["session"].session_id = "existing-session"
+    mock_services["session"].history = [
+        {"role": "system", "content": "Person: Zia"},
+        {"role": "assistant", "content": "I have a question."},
+    ]
+    orchestrator._has_seen_intro_locally_or_persistently = MagicMock(return_value=True)
+    orchestrator._start_scenario_flow = AsyncMock()
+    mock_services["ui"].send_window_message = AsyncMock()
+
+    await orchestrator.handle_chat_start()
+
+    mock_services["ui"].send_window_message.assert_not_awaited()
+    orchestrator._start_scenario_flow.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.xfail(
+    reason=(
+        "Redeploy/new-thread recovery is not implemented yet: an empty Chainlit "
+        "user_session with a fresh thread id still starts a fresh scenario even "
+        "when the user has a persisted current thread."
+    ),
+    strict=True,
+)
+async def test_handle_chat_start_recovers_persisted_thread_after_redeploy_gap(
+    orchestrator, mock_services, monkeypatch
+):
+    user_id = "user@example.com"
+    store = {
+        "chainlit:local:thread:old-thread": {
+            "id": "old-thread",
+            "userIdentifier": user_id,
+            "metadata": {"session_id": "old-session"},
+        }
+    }
+    monkeypatch.setattr("app.main.MEMORY_STORE", store)
+    chainlit_thread_state.set_current_thread_id(user_id, "old-thread")
+
+    mock_services["session"].get_user_identifier.return_value = user_id
+    mock_services["session"].session_id = None
+    mock_services["session"].history = []
+    orchestrator._has_seen_intro_locally_or_persistently = MagicMock(return_value=True)
+    orchestrator._get_thread_id = MagicMock(return_value="fresh-thread-after-redeploy")
+    orchestrator._start_scenario_flow = AsyncMock()
+    orchestrator.handle_session_resume = AsyncMock()
+
+    await orchestrator.handle_chat_start()
+
+    orchestrator._start_scenario_flow.assert_not_awaited()
+    orchestrator.handle_session_resume.assert_awaited_once()
+    resumed_thread = orchestrator.handle_session_resume.await_args.args[0]
+    assert resumed_thread["id"] == "old-thread"
+    assert resumed_thread["metadata"]["session_id"] == "old-session"
 
 
 @pytest.mark.asyncio
@@ -470,6 +531,7 @@ async def test_start_scenario_flow_presents_new_card_and_runs_preflight(
         }
     )
     mock_services["ui"].present_scenario_card = AsyncMock()
+    mock_services["ui"].send_window_message = AsyncMock()
 
     await orchestrator._start_scenario_flow()
 
@@ -486,7 +548,38 @@ async def test_start_scenario_flow_presents_new_card_and_runs_preflight(
     assert (
         mock_services["backend"].initialize_session.await_args.kwargs["force"] is True
     )
+    mock_services["ui"].send_window_message.assert_awaited_once_with(
+        {"type": MSG_THREAD_BOUND, "threadId": "thread-1"}
+    )
     orchestrator._run_preflight_checks.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_start_scenario_flow_does_not_canonicalize_without_thread_id(
+    orchestrator, mock_services
+):
+    mock_services["session"].connection_id = None
+    mock_services["session"].session_id = None
+    mock_services["session"].history = []
+    mock_services["session"].query_params = {}
+    orchestrator._get_thread_id = MagicMock(return_value=None)
+    orchestrator._bind_thread = AsyncMock()
+    orchestrator._get_user_info = MagicMock(return_value=None)
+    orchestrator._run_preflight_checks = AsyncMock()
+    mock_services["backend"].fetch_history = AsyncMock(return_value=[])
+    mock_services["backend"].initialize_session = AsyncMock(
+        return_value={
+            "character": "Character",
+            "scene": "Scene",
+            "initialCard": "Person: Zia\nReason for visit: Ear pain",
+        }
+    )
+    mock_services["ui"].present_scenario_card = AsyncMock()
+    mock_services["ui"].send_window_message = AsyncMock()
+
+    await orchestrator._start_scenario_flow()
+
+    mock_services["ui"].send_window_message.assert_not_awaited()
 
 
 @pytest.mark.asyncio

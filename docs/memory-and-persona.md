@@ -66,7 +66,7 @@ You can verify the connection via `GET /config` when the backend is running.
 
 Behavior and diagnostics:
 - If Redis is unavailable at startup, the app falls back to in‑memory storage and logs a warning.
-- Redis keys are JSON blobs under the environment prefix; TTL is applied on write.
+- Redis keys are JSON blobs under the environment prefix; TTL is applied on write. The default TTL is 15 days (`1296000` seconds), overrideable with `MEMORY_TTL_SECONDS`.
 - GET `/config` and `/diagnostics` show `memoryBackend`/`backend` and `storeSize`.
 
 ## Persona (character) and scene

@@ -39,6 +39,7 @@ env:
   OAUTH_GOOGLE_CLIENT_SECRET: ${{ secrets.OAUTH_GOOGLE_CLIENT_SECRET }}
   # Optional runtime tuning and memory settings
   MEMORY_BACKEND: ${{ vars.MEMORY_BACKEND }}
+  MEMORY_TTL_SECONDS: ${{ vars.MEMORY_TTL_SECONDS }}
   REDIS_URL: ${{ vars.REDIS_URL }}
   REDIS_HOST: ${{ vars.REDIS_HOST }}
   REDIS_PORT: ${{ vars.REDIS_PORT }}
@@ -59,7 +60,7 @@ jobs:
       GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Select deployment environment
         run: |
@@ -171,11 +172,11 @@ jobs:
             --region "$REGION" \
             --allow-unauthenticated \
             --service-account "cr-vertex-runtime@${PROJECT_ID}.iam.gserviceaccount.com" \
-            --set-env-vars "APP_ENV=${APP_ENV},PROJECT_ID=${PROJECT_ID},REGION=${REGION},MODEL_ID=${MODEL_ID:-gemini-2.5-pro},TEMPERATURE=${TEMPERATURE:-0.2},MAX_TOKENS=${MAX_TOKENS:-768},HOST=${HOST:-0.0.0.0},AIMS_COACHING_ENABLED=true,AIMS_COACHING_DEFAULT=true,MEMORY_BACKEND=${MEMORY_BACKEND:-memory},REDIS_URL=${REDIS_URL:-},REDIS_HOST=${REDIS_HOST:-},REDIS_PORT=${REDIS_PORT:-6379},CHAINLIT_URL=${CHAINLIT_URL:-},CHAINLIT_AUTH_SECRET=${CHAINLIT_AUTH_SECRET:-},OAUTH_GOOGLE_CLIENT_ID=${OAUTH_GOOGLE_CLIENT_ID:-},OAUTH_GOOGLE_CLIENT_SECRET=${OAUTH_GOOGLE_CLIENT_SECRET:-},VALIDATE_MODEL_ON_STARTUP=false,SESSIONS_BUCKET_NAME=${{ vars.SESSIONS_BUCKET_NAME || 'aimsbot-chat-sessions' }},REPORTS_BUCKET_NAME=${{ vars.REPORTS_BUCKET_NAME || 'aimsbot-bug-reports' }}" \
+            --set-env-vars "APP_ENV=${APP_ENV},PROJECT_ID=${PROJECT_ID},REGION=${REGION},MODEL_ID=${MODEL_ID:-gemini-2.5-pro},TEMPERATURE=${TEMPERATURE:-0.2},MAX_TOKENS=${MAX_TOKENS:-768},HOST=${HOST:-0.0.0.0},AIMS_COACHING_ENABLED=true,AIMS_COACHING_DEFAULT=true,MEMORY_BACKEND=${MEMORY_BACKEND:-memory},MEMORY_TTL_SECONDS=${MEMORY_TTL_SECONDS:-1296000},REDIS_URL=${REDIS_URL:-},REDIS_HOST=${REDIS_HOST:-},REDIS_PORT=${REDIS_PORT:-6379},CHAINLIT_URL=${CHAINLIT_URL:-},CHAINLIT_AUTH_SECRET=${CHAINLIT_AUTH_SECRET:-},OAUTH_GOOGLE_CLIENT_ID=${OAUTH_GOOGLE_CLIENT_ID:-},OAUTH_GOOGLE_CLIENT_SECRET=${OAUTH_GOOGLE_CLIENT_SECRET:-},VALIDATE_MODEL_ON_STARTUP=false,SESSIONS_BUCKET_NAME=${{ vars.SESSIONS_BUCKET_NAME || 'aimsbot-chat-sessions' }},REPORTS_BUCKET_NAME=${{ vars.REPORTS_BUCKET_NAME || 'aimsbot-bug-reports' }}" \
             ${VPC_CONNECTOR:+--vpc-connector="$VPC_CONNECTOR" --vpc-egress=private-ranges-only} \
             --memory=512Mi --cpu=1 --concurrency=20 --max-instances=2 --min-instances=1 --timeout=3600 \
             --cpu-throttling \
-            --startup-probe="httpGet.path=/api/healthz,periodSeconds=10,timeoutSeconds=9,failureThreshold=5"
+            --startup-probe="httpGet.path=/api/healthz,periodSeconds=10,timeoutSeconds=9,failureThreshold=12"
 
       - name: Show service URL and health check
         run: |

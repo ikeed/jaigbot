@@ -104,5 +104,5 @@ This is slower than traffic rollback but keeps `main`, production, and future de
 
 - Cloud Run revisions are immutable. A traffic rollback restores the previous revision's image and runtime configuration.
 - Redis and GCS data are environment-partitioned by `APP_ENV`; rollback does not switch namespaces.
-- Current session data has a one-hour Redis TTL by default. Avoid data migrations that would make existing Redis session documents unreadable without a compatible fallback.
+- Current Cloud Run deploys set Redis session TTL to 15 days by default. Avoid data migrations that would make existing Redis session documents unreadable without a compatible fallback.
 - If an incident involves secrets, OAuth settings, Redis connectivity, or VPC connector configuration, confirm `/api/config` after rollback.
