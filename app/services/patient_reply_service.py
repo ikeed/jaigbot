@@ -83,10 +83,16 @@ class PatientReplyService:
                 text = cand.get("patient_reply", "").strip()
 
                 if text.lower() == "ok":
+                    telemetry_log_event(
+                        self._logger,
+                        "aims_patient_reply_terse_ok_rewrite",
+                        sessionId=session_id,
+                        noOpenConcerns=no_open_concerns,
+                    )
                     text = (
                         "Yes, that helps. Thank you."
                         if no_open_concerns
-                        else "I'm not sure — I have some questions, but I'd like to hear more."
+                        else "Okay, thank you."
                     )
                 return {"patient_reply": text}
 
@@ -103,6 +109,13 @@ class PatientReplyService:
                 if attempt == 1:
                     continue
 
+                telemetry_log_event(
+                    self._logger,
+                    "aims_patient_reply_fallback",
+                    sessionId=session_id,
+                    reason="invalid_json",
+                    noOpenConcerns=no_open_concerns,
+                )
                 return {
                     "patient_reply": (
                         "Yes, that helps. Thank you."

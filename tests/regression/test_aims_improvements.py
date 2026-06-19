@@ -396,7 +396,7 @@ def test_secure_followup_closure_missing_literature_gets_tip():
     )
 
     assert cls["tips"] == [
-        "You have a follow-up plan; add take-home information or written resources so the deferral has both AIMS closure pieces."
+        "You have a follow-up plan; offer some information to review at home so they can come back with specific questions."
     ]
 
 
@@ -424,7 +424,7 @@ def test_secure_literature_closure_missing_followup_gets_tip():
     )
 
     assert cls["tips"] == [
-        "You offered take-home information; add a concrete follow-up plan so the conversation has a clear return point."
+        "You offered take-home information; also book a follow-up so they know when they can bring questions back."
     ]
 
 

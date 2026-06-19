@@ -78,6 +78,23 @@ async def test_generate_passes_prompt_identity_and_rewrites_terse_ok():
 
 
 @pytest.mark.asyncio
+async def test_generate_rewrites_terse_ok_to_neutral_acknowledgment_when_concerns_open():
+    logger = DummyLogger()
+    caller = JsonCaller(json.dumps({"patient_reply": "ok"}))
+    service = _service(caller, logger=logger)
+
+    result = await service.generate(
+        clinician_message="Let's talk vaccines.",
+        history_text="Clinician: Hello",
+        session_id="sid",
+        concern_state_section="Open concerns: side_effects.",
+    )
+
+    assert result == {"patient_reply": "Okay, thank you."}
+    assert any("aims_patient_reply_terse_ok_rewrite" in message for message in logger.info_messages)
+
+
+@pytest.mark.asyncio
 async def test_generate_rewrites_terse_ok_to_acknowledgment_when_no_open_concerns():
     caller = JsonCaller(json.dumps({"patient_reply": "ok"}))
     service = _service(caller)

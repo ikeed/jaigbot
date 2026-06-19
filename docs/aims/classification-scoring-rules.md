@@ -407,8 +407,9 @@ three weeks should give me enough time to look things over"* = `accepted_literat
 - **`accepted_vaccine`**: requires heuristic confirmation via `EndGameDetector.detect()` (checks
   `ACCEPT_NOW_CUES` like *"let's do it"*, *"i consent"*, *"go ahead"*).  This gate is retained
   because consenting to vaccinate today is irreversible.
-- **`accepted_literature`**: trusted from the LLM when hard guards pass. Natural language for
-  literature plus follow-up is too varied for reliable keyword matching.
+- **`accepted_literature`**: requires both LLM intent and deterministic transcript evidence that
+  literature/materials plus a follow-up or return plan were offered/accepted. Natural language
+  still reaches the LLM, but follow-up alone or literature alone cannot end the session.
 - **`deferred`**: never ends the scenario. If the LLM returns `deferred`, the runtime forces
   `is_endgame` to false so coaching can continue with a nudge or next-step suggestion.
 
