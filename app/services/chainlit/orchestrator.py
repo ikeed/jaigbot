@@ -18,6 +18,7 @@ from app.constants import (
     MSG_INTRO_REQUIRED,
     MSG_DUPLICATE_TAB,
     MSG_PERSONA_NAME,
+    MSG_THREAD_BOUND,
 )
 from app.persona import DEFAULT_CHARACTER, DEFAULT_SCENE
 from app.services.chainlit.backend_client import BackendClient
@@ -51,6 +52,13 @@ class ChainlitOrchestrator:
                 return
 
             self.session.intro_pending = False
+            if self.session.session_id and self.session.history:
+                logger.info(
+                    "Ignoring chat_start for existing Chainlit session: session_id=%s history_count=%s",
+                    self.session.session_id,
+                    len(self.session.history),
+                )
+                return
             await self._start_scenario_flow()
         except Exception as e:
             await self._report_error_silently(e, "handle_chat_start")
@@ -239,6 +247,7 @@ class ChainlitOrchestrator:
         self.session.session_id = session_id
 
         await self._bind_thread(session_id)
+        await self._canonicalize_thread_url()
 
         # Fetch history & recover persona
         history = await self.backend.fetch_history(session_id)
@@ -369,6 +378,17 @@ class ChainlitOrchestrator:
         except Exception as e:
             logger.debug(f"Failed to bind thread (non-fatal): {e}")
             pass
+
+    async def _canonicalize_thread_url(self):
+        thread_id = self._get_thread_id()
+        if not thread_id:
+            return
+        try:
+            await self.ui.send_window_message(
+                {"type": MSG_THREAD_BOUND, "threadId": thread_id}
+            )
+        except Exception as e:
+            logger.debug("Failed to canonicalize thread URL (non-fatal): %s", e)
 
     @staticmethod
     def _recover_persona_from_history(history: List[Dict[str, Any]]) -> Optional[str]:

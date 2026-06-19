@@ -54,7 +54,7 @@ DEFAULT_MODEL_ID = "gemini-2.5-pro"
 DEFAULT_MODEL_FLASH = "gemini-2.5-flash"
 DEFAULT_APP_ENV = "local"
 DEFAULT_PORT = 8080
-DEFAULT_MEMORY_TTL = 3600
+DEFAULT_MEMORY_TTL = 1296000  # 15 days
 DEFAULT_MAX_TURNS = 8
 DEFAULT_TEMPERATURE = 0.2
 DEFAULT_MAX_TOKENS = 2048
@@ -129,6 +129,7 @@ MSG_REPORT_ISSUE = "report_issue"
 MSG_NEW_CHAT = "new_chat"
 MSG_INTRO_CONTINUE = "aims_intro_continue"
 MSG_PERSONA_NAME = "aims_persona_name"
+MSG_THREAD_BOUND = "aims_thread_bound"
 
 # OAuth Providers
 PROVIDER_GOOGLE = "google"
