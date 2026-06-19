@@ -6,6 +6,7 @@ from app.services.conversation_service import (
     mark_mirrored_multi,
     mark_secured_by_topic,
 )
+from app.services.aims_state_service import AimsStateService
 
 
 TOPICAL_CUES = {
@@ -629,3 +630,45 @@ def test_mark_secured_by_topic_does_not_guess_on_ambiguous_single_overlap():
     )
 
     assert not any(c["is_secured"] for c in st["parent_concerns"])
+
+
+def test_secure_topical_cues_resolve_natural_expectations_and_followup_wording():
+    st = {"parent_concerns": [
+        {
+            "id": "requirements",
+            "topic": "requirements",
+            "canonical_label": "wants rules, requirements, and consequences explained",
+            "summary": "wants rules, requirements, and consequences explained",
+            "desc": "wants rules, requirements, and consequences explained",
+            "evidence": [
+                "If we do the vaccines today, what will happen? I need to tell my husband Gabriel."
+            ],
+            "is_mirrored": True,
+            "is_secured": False,
+        },
+        {
+            "id": "side-effects",
+            "topic": "side_effects",
+            "canonical_label": "wants side effect risk addressed",
+            "summary": "wants side effect risk addressed",
+            "desc": "wants side effect risk addressed",
+            "evidence": [
+                "If we do the vaccines today, what will happen? I need to tell my husband Gabriel."
+            ],
+            "is_mirrored": True,
+            "is_secured": False,
+        },
+    ]}
+
+    mark_secured_by_topic(
+        st,
+        clinician_text=(
+            "If Nathaniel gets his vaccines today, the most common thing you might notice "
+            "afterward is soreness where the needle went in, and sometimes children feel "
+            "tired or have a mild fever. If you wait, we can book a follow-up appointment "
+            "or connect you with the vaccination clinic."
+        ),
+        topical_cues=AimsStateService.secure_topical_cues(),
+    )
+
+    assert all(concern["is_secured"] for concern in st["parent_concerns"])

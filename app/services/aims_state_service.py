@@ -142,6 +142,39 @@ class AimsStateService:
         "research",
     )
 
+    CLOSURE_FOLLOWUP_CUES = (
+        "follow-up",
+        "follow up",
+        "future visit",
+        "next visit",
+        "revisit",
+        "book",
+        "appointment",
+        "vaccination clinic",
+        "come back",
+    )
+
+    CLOSURE_LITERATURE_CUES = (
+        "handout",
+        "handouts",
+        "brochure",
+        "pamphlet",
+        "literature",
+        "written information",
+        "written info",
+        "information to take home",
+        "take-home information",
+        "take home information",
+        "materials",
+        "resource",
+        "resources",
+        "printout",
+        "printed information",
+        "info sheet",
+        "read over",
+        "look over",
+    )
+
     COMPOUND_EXPANSIONS = AimsMetricsService.COMPOUND_EXPANSIONS
     VALID_STEPS = AimsMetricsService.VALID_STEPS
 
@@ -186,7 +219,7 @@ class AimsStateService:
                     llm_topic=llm_topic,
                 )
             if STEP_SECURE in steps:
-                mark_secured_by_topic(state, clinician_message, self.TOPICAL_CUES)
+                mark_secured_by_topic(state, clinician_message, self.secure_topical_cues())
 
             character = mem.get(SESSION_CHARACTER)
             self.apply_coaching_guidance(
@@ -275,9 +308,10 @@ class AimsStateService:
             mark_mirrored_multi(state, clinician_message, person_last, self.TOPICAL_CUES)
 
         if STEP_SECURE in component_steps and step_current != STEP_SECURE:
-            mark_secured_by_topic(state, clinician_message, self.TOPICAL_CUES)
+            mark_secured_by_topic(state, clinician_message, self.secure_topical_cues())
         elif step_current == STEP_SECURE:
             self._apply_secure_guidance(cls_payload, state, clinician_message, person_last, character)
+        self._add_closure_plan_tip(cls_payload, state, clinician_message)
 
     def _apply_secure_guidance(
         self,
@@ -309,7 +343,69 @@ class AimsStateService:
         else:
             state["recent_coaching"] = []
 
-        mark_secured_by_topic(state, clinician_message, self.TOPICAL_CUES)
+        mark_secured_by_topic(state, clinician_message, self.secure_topical_cues())
+
+    @classmethod
+    def secure_topical_cues(cls) -> dict[str, list[str]]:
+        cues = {topic: list(topic_cues) for topic, topic_cues in cls.TOPICAL_CUES.items()}
+        cues.setdefault("requirements", []).extend(
+            [
+                "what happens",
+                "consequence",
+                "consequences",
+                "necessary",
+                "must happen",
+                "must do",
+                "must postpone",
+                "not an emergency decision",
+                "recommended today",
+                "right this minute",
+                "future visit",
+                "follow-up appointment",
+                "vaccination clinic",
+            ]
+        )
+        cues.setdefault("side_effects", []).extend(
+            [
+                "what to expect afterward",
+                "afterward",
+                "soreness",
+                "sore",
+                "tired",
+                "mild fever",
+                "needle went in",
+                "common thing you might notice",
+            ]
+        )
+        return cues
+
+    @classmethod
+    def _add_closure_plan_tip(
+        cls,
+        cls_payload: dict[str, Any],
+        state: dict[str, Any],
+        clinician_message: str,
+    ) -> None:
+        if cls_payload.get("tips"):
+            return
+        if STEP_SECURE not in cls.component_steps(cls_payload.get("step"), cls_payload.get("steps")):
+            return
+
+        concerns = state.get("parent_concerns") or []
+        if concerns and not all(concern.get("is_mirrored") for concern in concerns):
+            return
+
+        text = (clinician_message or "").lower()
+        has_literature = any(cue in text for cue in cls.CLOSURE_LITERATURE_CUES)
+        has_followup = any(cue in text for cue in cls.CLOSURE_FOLLOWUP_CUES)
+        if has_followup and not has_literature:
+            cls_payload["tips"] = [
+                "You have a follow-up plan; add take-home information or written resources so the deferral has both AIMS closure pieces."
+            ]
+        elif has_literature and not has_followup:
+            cls_payload["tips"] = [
+                "You offered take-home information; add a concrete follow-up plan so the conversation has a clear return point."
+            ]
 
     def _add_secure_before_mirror_feedback(
         self,
