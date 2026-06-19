@@ -247,7 +247,6 @@ class ChainlitOrchestrator:
         self.session.session_id = session_id
 
         await self._bind_thread(session_id)
-        await self._canonicalize_thread_url()
 
         # Fetch history & recover persona
         history = await self.backend.fetch_history(session_id)
@@ -266,6 +265,7 @@ class ChainlitOrchestrator:
         if session_data.get("alreadyActive"):
             await self.ui.send_window_message({"type": MSG_DUPLICATE_TAB})
             return
+        await self._canonicalize_thread_url()
 
         logger.info("Session data received from backend.")
         logger.debug(
