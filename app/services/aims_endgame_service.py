@@ -40,6 +40,15 @@ class AimsEndgameService:
         has_active_concern = any(cue in text for cue in EndGameDetector.PLAN_ACTIVE_CONCERN_CUES)
         return has_followup and has_literature and not has_negative and not has_active_concern
 
+    @staticmethod
+    def _recent_exchange_text(history: list[dict[str, Any]]) -> str:
+        return " ".join(
+            item.get("content", "")
+            for item in history[-10:]
+            if item.get("role") in (ROLE_USER, ROLE_ASSISTANT)
+            and (item.get("content") or "").strip()
+        )[:1500]
+
     async def check(
         self,
         mem: dict[str, Any] | None,
@@ -138,6 +147,10 @@ class AimsEndgameService:
                 if any(cue in combined_lower for cue in EndGameDetector.PLAN_NEGATIVE_CUES):
                     is_endgame = False
                 elif not first_inquire_done or not concerns:
+                    is_endgame = False
+                elif not self._could_be_literature_followup_closure(
+                    self._recent_exchange_text(history)
+                ):
                     is_endgame = False
 
             if outcome == "deferred":

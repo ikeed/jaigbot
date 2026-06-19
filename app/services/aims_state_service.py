@@ -400,11 +400,11 @@ class AimsStateService:
         has_followup = any(cue in text for cue in cls.CLOSURE_FOLLOWUP_CUES)
         if has_followup and not has_literature:
             cls_payload["tips"] = [
-                "You have a follow-up plan; add take-home information or written resources so the deferral has both AIMS closure pieces."
+                "You have a follow-up plan; offer some information to review at home so they can come back with specific questions."
             ]
         elif has_literature and not has_followup:
             cls_payload["tips"] = [
-                "You offered take-home information; add a concrete follow-up plan so the conversation has a clear return point."
+                "You offered take-home information; also book a follow-up so they know when they can bring questions back."
             ]
 
     def _add_secure_before_mirror_feedback(
