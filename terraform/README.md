@@ -32,6 +32,8 @@ What it does NOT create:
 - wif_pool_id (default: github-pool)
 - wif_provider_id (default: github-provider)
 - cloud_run_timeout_seconds (default: 1800) — Cloud Run request timeout applied post-deploy via gcloud
+- cloud_run_max_instances (default: 1) — maximum Cloud Run instances applied post-deploy via gcloud
+- cloud_run_min_instances (default: 1) — minimum Cloud Run instances applied post-deploy via gcloud
 
 Override via `-var` flags or a tfvars file.
 
@@ -212,14 +214,16 @@ Once roles are fixed and resources are imported if needed:
 - The deploy workflow expects the runtime service account to exist and will set env vars during `gcloud run deploy`.
 
 
-## Optional: Update Cloud Run timeout via Terraform
+## Optional: Update Cloud Run runtime config via Terraform
 
-This repo intentionally does not manage the Cloud Run service (CI deploys it). However, you can still set the service request timeout via Terraform using a post-deploy step that invokes gcloud.
+This repo intentionally does not manage the Cloud Run service (CI deploys it). However, you can still set the service request timeout and scaling limits via Terraform using a post-deploy step that invokes gcloud.
 
 How it works:
 - Variable: `cloud_run_timeout_seconds` (default: 1800)
-- Resource: `null_resource.update_cloud_run_timeout` runs:
-  - `gcloud run services update ${var.service_name} --region=${var.region} --timeout=${var.cloud_run_timeout_seconds}`
+- Variable: `cloud_run_max_instances` (default: 1)
+- Variable: `cloud_run_min_instances` (default: 1)
+- Resource: `null_resource.update_cloud_run_config` runs:
+  - `gcloud run services update ${var.service_name} --region=${var.region} --timeout=${var.cloud_run_timeout_seconds} --max-instances=${var.cloud_run_max_instances} --min-instances=${var.cloud_run_min_instances}`
 
 Requirements:
 - `gcloud` must be available in the environment running `terraform apply`.
@@ -227,10 +231,11 @@ Requirements:
 - The Cloud Run service must already exist (deployed by CI or manually) before this step runs. If it doesn’t exist yet, the apply will fail at this step; re-run after the first deployment.
 
 Usage:
-- Adjust the timeout by setting a variable:
+- Adjust the timeout or scaling by setting variables:
   - `-var cloud_run_timeout_seconds=3600` (max allowed by Cloud Run)
+  - `-var cloud_run_min_instances=1`
 - Re-run `terraform apply` after your service is deployed.
-- Changing `cloud_run_timeout_seconds` will re-trigger the `null_resource` and update the service.
+- Changing `cloud_run_timeout_seconds`, `cloud_run_max_instances`, or `cloud_run_min_instances` will re-trigger the `null_resource` and update the service.
 
 Notes:
 - This approach avoids TF taking ownership of the Cloud Run service, so it won’t fight with your CI deploys.

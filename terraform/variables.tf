@@ -73,7 +73,7 @@ variable "cloud_run_max_instances" {
 variable "cloud_run_min_instances" {
   type        = number
   description = "Minimum number of Cloud Run instances. Set to 1 to avoid cold starts and reaping."
-  default     = 0
+  default     = 1
 }
 
 variable "enable_redis" {

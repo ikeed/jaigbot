@@ -39,6 +39,25 @@ def test_chat_login_callback_redirects_to_current_thread(monkeypatch):
     assert response.headers["location"] == "/chat/thread/existing-thread"
 
 
+def test_chat_redirect_to_current_thread_preserves_force_query(monkeypatch):
+    monkeypatch.setattr(
+        "app.middleware.authenticated_user_identifier",
+        lambda request: "clinician@example.com",
+    )
+    monkeypatch.setattr(
+        "app.middleware.get_current_thread_id",
+        lambda user_id: "existing-thread",
+    )
+
+    response = _middleware_client().get(
+        "/chat?force=true",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 307
+    assert response.headers["location"] == "/chat/thread/existing-thread?force=true"
+
+
 def test_chat_login_callback_without_current_thread_reaches_chainlit(monkeypatch):
     monkeypatch.setattr(
         "app.middleware.authenticated_user_identifier",
