@@ -2,7 +2,7 @@ from fastapi import Request
 from fastapi.responses import RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.chainlit_thread_state import get_current_thread_id
+from app.chainlit_thread_state import clear_current_thread_id, get_current_thread_id
 from app.constants import PATH_CHAT, ROUTE_CHAT_LOGIN, ROUTE_CHAT_LOGIN_CALLBACK
 from app.security.auth import authenticated_user_identifier
 
@@ -23,6 +23,15 @@ class AuthRedirectMiddleware(BaseHTTPMiddleware):
         # a blank conversation client-side without requesting /chat first.
         chat_path = PATH_CHAT
         chat_slash_path = f"{PATH_CHAT}/"
+        is_new_scenario_request = request.query_params.get("aims_new") == "1"
+        if (
+            request.method == "GET"
+            and request.url.path in {chat_path, chat_slash_path}
+            and is_new_scenario_request
+        ):
+            user_identifier = authenticated_user_identifier(request)
+            clear_current_thread_id(user_identifier)
+
         if (
             request.method == "GET"
             and request.url.path
@@ -31,7 +40,7 @@ class AuthRedirectMiddleware(BaseHTTPMiddleware):
                 chat_slash_path,
                 ROUTE_CHAT_LOGIN_CALLBACK,
             }
-            and request.query_params.get("aims_new") != "1"
+            and not is_new_scenario_request
         ):
             user_identifier = authenticated_user_identifier(request)
             thread_id = get_current_thread_id(user_identifier)
