@@ -67,7 +67,6 @@ def test_build_persona_session_fields_includes_interaction_guidance():
             "visit_reason": "Clinic visit.",
             "detailed_instructions": "Stay in role.",
             "user_sketch": "At the clinic.",
-            "vaccine_related": True,
         },
         "interaction": {
             "communication_needs": ["Needs plain language."],
@@ -75,7 +74,7 @@ def test_build_persona_session_fields_includes_interaction_guidance():
             "voice": "Brief and practical.",
             "response_style": "Answers directly.",
             "decision_style": "Wants time to think.",
-            "non_vaccine_agenda": "Also wants help with today's symptoms.",
+            "secondary_agenda": "Also wants help with today's symptoms.",
             "emotional_triggers": ["Being rushed."],
             "rapport_signals": ["Asks follow-up questions."],
             "shutdown_signals": ["Becomes very brief."],
@@ -95,6 +94,7 @@ def test_build_persona_session_fields_includes_interaction_guidance():
     assert "Communication needs:" in fields["character"]
     assert "Opening posture: Guarded but polite." in fields["character"]
     assert "Voice: Brief and practical." in fields["character"]
+    assert "Secondary agenda: Also wants help with today's symptoms." in fields["character"]
     assert "Emotional triggers:" in fields["character"]
     assert "- Being rushed." in fields["character"]
     assert "- Needs plain language." in fields["character"]
@@ -114,7 +114,6 @@ def test_build_persona_session_fields_handles_string_and_invalid_interaction_typ
             "visit_reason": "Clinic visit.",
             "detailed_instructions": "Stay in role.",
             "user_sketch": "At the clinic.",
-            "vaccine_related": True,
         },
         "interaction": {
             "communication_needs": "Needs plain language.",
@@ -132,6 +131,38 @@ def test_build_persona_session_fields_handles_string_and_invalid_interaction_typ
     assert "Voice:" not in fields["character"]
     assert "Response style examples: Use these as style guides only, not lines to copy verbatim." in fields["character"]
     assert "- I just need to understand it." in fields["character"]
+
+
+def test_persona_scenarios_use_vaccine_relevant_entry_points():
+    persona_service._load_personas_cached.cache_clear()
+    personas = {persona["name"]: persona for persona in persona_service.load_personas()}
+
+    georgina = personas["Georgina"]
+    assert georgina["patient_name"] == "Dakota"
+    georgina_text = " ".join(str(value) for value in georgina["scenario"].values())
+    assert "HPV vaccine" in georgina_text
+    assert "diarrhea" not in georgina_text
+    assert "Rotavirus" not in georgina_text
+    assert "Carter" not in georgina_text
+
+    ethan_text = " ".join(str(value) for value in personas["Ethan"]["scenario"].values())
+    assert "General mid-age health check" in ethan_text
+    assert "immunization review" in ethan_text
+    assert "prostate" not in ethan_text.lower()
+
+    zia_text = " ".join(str(value) for value in personas["Zia"]["scenario"].values())
+    assert "vaccine protocol" in zia_text
+    assert "new country" in zia_text
+    assert "ear infection" not in zia_text
+
+    sarah_text = " ".join(str(value) for value in personas["Sarah"]["scenario"].values())
+    assert "measles" in sarah_text
+    assert "MMR booster" in sarah_text
+    assert "fever" not in sarah_text
+    assert "cough" not in sarah_text
+    assert "watery eyes" not in sarah_text
+
+    persona_service._load_personas_cached.cache_clear()
 
 
 def test_load_personas_falls_back_when_persona_file_is_unreadable(monkeypatch):
@@ -224,7 +255,7 @@ def test_select_and_record_persona_edge_cases(monkeypatch):
     assert persona_service.record_persona_interaction_once("doctor@example.com", "sid", {"name": ""}, store) is False
 
 
-def test_build_persona_session_fields_adds_non_pediatric_vaccine_note(monkeypatch):
+def test_build_persona_session_fields_omits_vaccine_transition_note(monkeypatch):
     monkeypatch.setattr(persona_service.settings, "CHARACTER_SYSTEM", "Base character")
     monkeypatch.setattr(persona_service.settings, "SCENE_OBJECTIVES", "Base scene")
     persona = {
@@ -236,7 +267,6 @@ def test_build_persona_session_fields_adds_non_pediatric_vaccine_note(monkeypatc
             "visit_reason": "Annual visit.",
             "detailed_instructions": "Stay in role.",
             "user_sketch": "At the clinic.",
-            "vaccine_related": False,
         },
         "interaction": "not-a-dict",
     }
@@ -245,4 +275,4 @@ def test_build_persona_session_fields_adds_non_pediatric_vaccine_note(monkeypatc
 
     assert "Base character" in fields["character"]
     assert "Base scene" in fields["scene"]
-    assert "You might want to mention vaccines" in fields["initial_card"]
+    assert "You might want to mention vaccines" not in fields["initial_card"]
