@@ -23,19 +23,37 @@
             .icon { font-size: 48px; margin-bottom: 1rem; }
         </style>
     </head>
-    <body>
+    <body class="aimsbot-native-page">
         <div class="card">
             <img src="/public/aimsbot.png" alt="AIMSBot" style="width: 256px; height: 256px; margin: 0 auto 1rem; display: block;" />
-            <div class="icon">⚠️</div>
-            <h2>Duplicate Tab Detected</h2>
-            <p>
-                It looks like you've got another tab open already. 
-                To ensure the accuracy of the simulation, only one active tab is allowed at a time.
-            </p>
-            <p style="font-size: 0.9em; color: #888;">
-                Please use your other open tab, or close it and click the button below to resume here.
-            </p>
-            <button onclick="window.location.href='/chat?force=true'" class="btn">Refresh This Tab</button>
+
+            <noscript>
+                <div style="color: #a94442; background-color: #f2dede; border: 1px solid #ebccd1; padding: 20px; border-radius: 8px; margin-bottom: 24px; font-size: 16px; text-align: left; line-height: 1.5;">
+                    <strong>JavaScript Required</strong><br>
+                    AIMSBot requires JavaScript to be enabled to function correctly.
+                    Please enable JavaScript in your browser settings and reload this page to continue.
+                    <br><br>
+                    <a href="https://www.enable-javascript.com/" target="_blank" style="color: #a94442; text-decoration: underline; font-weight: 600;">
+                        Help: enable-javascript.com
+                    </a>
+                </div>
+                <style>
+                    #duplicate-controls { display: none !important; }
+                </style>
+            </noscript>
+
+            <div id="duplicate-controls">
+                <div class="icon">⚠️</div>
+                <h2>Duplicate Tab Detected</h2>
+                <p>
+                    It looks like you've got another tab open already.
+                    To ensure the accuracy of the simulation, only one active tab is allowed at a time.
+                </p>
+                <p style="font-size: 0.9em; color: #888;">
+                    Please use your other open tab, or close it and click the button below to resume here.
+                </p>
+                <a href="/chat?force=true" class="btn">Refresh This Tab</a>
+            </div>
         </div>
     </body>
 </html>

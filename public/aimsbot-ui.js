@@ -10,7 +10,7 @@
   if (window.__aimsbotCustomJsInitialized) return;
   window.__aimsbotCustomJsInitialized = true;
 
-  const assetVersion = "20260609-dialogs-2";
+  const assetVersion = "20260728-startup-recovery";
   window.AIMSBotUI = window.AIMSBotUI || {};
   window.AIMSBotUI.pendingWindowMessages = window.AIMSBotUI.pendingWindowMessages || [];
   window.AIMSBotUI.handleWindowMessagePayload =

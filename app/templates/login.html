@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
     <head>
         <title>AIMSBot Login</title>
         <style>
@@ -38,54 +38,72 @@
             });
         </script>
     </head>
-    <body>
+    <body class="aimsbot-native-page">
         <div class="card">
             <img src="/public/aimsbot.png" alt="AIMSBot" style="width: 512px; height: 512px; margin: 0 auto 1rem; display: block;" />
-            <p>Welcome! Please sign in.</p>
-            <div style="margin-top: 1rem; display: flex; flex-direction: column; align-items: center;">
-                {% if providers %}
-                    {% for p in providers %}
-                        <a href="/chat/auth/oauth/{{ p.id }}" class="sso-button" style="background: {{ p.color }};">
-                            Sign in with {{ p.name }}
-                        </a>
-                    {% endfor %}
-                {% else %}
-                    {% if not auth_secret_set %}
-                        <div style="color: #a94442; background-color: #f2dede; border: 1px solid #ebccd1; padding: 10px; border-radius: 4px; margin-bottom: 20px; font-size: 14px; text-align: left;">
-                            <strong>Configuration Error:</strong><br>
-                            CHAINLIT_AUTH_SECRET is not set or is a placeholder. 
-                            Please generate one with <code>chainlit create-secret</code> and add it to your <code>.env</code> file.
-                        </div>
-                    {% else %}
-                        <div style="color: #a94442; background-color: #f2dede; border: 1px solid #ebccd1; padding: 10px; border-radius: 4px; margin-bottom: 20px; font-size: 14px; text-align: left;">
-                            <strong>Configuration Warning:</strong><br>
-                            SSO providers were not detected in the environment. 
-                            Authentication secret is set, but no OAUTH_*_CLIENT_ID variables found.
-                        </div>
-                    {% endif %}
-                    
-                    <form action="/chat" style="width: 50%;">
-                        <button type="submit" id="continue-btn" {% if not auth_secret_set %}disabled{% endif %} style="
-                            width: 100%;
-                            background: {% if not auth_secret_set %}#ccc{% else %}#007bff{% endif %};
-                            color: white;
-                            border: none;
-                            padding: 16px 25px;
-                            border-radius: 8px;
-                            cursor: {% if not auth_secret_set %}not-allowed{% else %}pointer{% endif %};
-                            font-size: 20px;
-                            font-weight: 600;
-                            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                        ">Continue to Chat</button>
-                    </form>
-                    <script>
-                        document.getElementById('continue-btn').disabled = {% if not auth_secret_set %}true{% else %}false{% endif %};
-                    </script>
-                {% endif %}
 
-                <p style="font-size: 11px; color: #999; margin-top: 10px;">
-                    Secure SSO authentication enforced.
-                </p>
+            <noscript>
+                <div style="color: #a94442; background-color: #f2dede; border: 1px solid #ebccd1; padding: 20px; border-radius: 8px; margin-bottom: 24px; font-size: 16px; text-align: left; line-height: 1.5;">
+                    <strong>JavaScript Required</strong><br>
+                    AIMSBot is a highly interactive simulation that requires JavaScript to function properly.
+                    Please enable JavaScript in your browser settings and reload this page to continue.
+                    <br><br>
+                    <a href="https://www.enable-javascript.com/" target="_blank" style="color: #a94442; text-decoration: underline; font-weight: 600;">
+                        Help: enable-javascript.com
+                    </a>
+                </div>
+                <style>
+                    #login-controls { display: none !important; }
+                </style>
+            </noscript>
+
+            <div id="login-controls">
+                <p>Welcome! Please sign in.</p>
+                <div style="margin-top: 1rem; display: flex; flex-direction: column; align-items: center;">
+                    {% if providers %}
+                        {% for p in providers %}
+                            <a href="/chat/auth/oauth/{{ p.id }}" class="sso-button" style="background: {{ p.color }};">
+                                Sign in with {{ p.name }}
+                            </a>
+                        {% endfor %}
+                    {% else %}
+                        {% if not auth_secret_set %}
+                            <div style="color: #a94442; background-color: #f2dede; border: 1px solid #ebccd1; padding: 10px; border-radius: 4px; margin-bottom: 20px; font-size: 14px; text-align: left;">
+                                <strong>Configuration Error:</strong><br>
+                                CHAINLIT_AUTH_SECRET is not set or is a placeholder.
+                                Please generate one with <code>chainlit create-secret</code> and add it to your <code>.env</code> file.
+                            </div>
+                        {% else %}
+                            <div style="color: #a94442; background-color: #f2dede; border: 1px solid #ebccd1; padding: 10px; border-radius: 4px; margin-bottom: 20px; font-size: 14px; text-align: left;">
+                                <strong>Configuration Warning:</strong><br>
+                                SSO providers were not detected in the environment.
+                                Authentication secret is set, but no OAUTH_*_CLIENT_ID variables found.
+                            </div>
+                        {% endif %}
+
+                        <form action="/chat" style="width: 50%;">
+                            <button type="submit" id="continue-btn" {% if not auth_secret_set %}disabled{% endif %} style="
+                                width: 100%;
+                                background: {% if not auth_secret_set %}#ccc{% else %}#007bff{% endif %};
+                                color: white;
+                                border: none;
+                                padding: 16px 25px;
+                                border-radius: 8px;
+                                cursor: {% if not auth_secret_set %}not-allowed{% else %}pointer{% endif %};
+                                font-size: 20px;
+                                font-weight: 600;
+                                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                            ">Continue to Chat</button>
+                        </form>
+                        <script>
+                            document.getElementById('continue-btn').disabled = {% if not auth_secret_set %}true{% else %}false{% endif %};
+                        </script>
+                    {% endif %}
+
+                    <p style="font-size: 11px; color: #999; margin-top: 10px;">
+                        Secure SSO authentication enforced.
+                    </p>
+                </div>
             </div>
         </div>
     </body>
