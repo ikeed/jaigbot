@@ -62,8 +62,9 @@ def sanitize_coaching_tips(
         cls_payload.get("step"),
         cls_payload.get("steps"),
     )
+    raw_score = cls_payload.get("score")
     try:
-        score = int(cls_payload.get("score"))
+        score = None if raw_score is None else int(raw_score)
     except (TypeError, ValueError):
         score = None
 
