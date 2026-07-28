@@ -28,7 +28,6 @@ FALLBACK_PERSONA = {
         "visit_reason": "Well-baby check",
         "detailed_instructions": "Assure her of vaccine safety.",
         "user_sketch": "You are at the clinic for a well-baby checkup.",
-        "vaccine_related": True,
     },
 }
 
@@ -254,7 +253,7 @@ def _format_interaction_guidance(persona: dict) -> str:
     add_text("Voice", "voice")
     add_text("Response style", "response_style")
     add_text("Decision style", "decision_style")
-    add_text("Non-vaccine agenda", "non_vaccine_agenda")
+    add_text("Secondary agenda", "secondary_agenda")
     add_list("Emotional triggers", "emotional_triggers")
     add_list("Rapport signals", "rapport_signals")
     add_list("Shutdown signals", "shutdown_signals")
@@ -293,9 +292,6 @@ def build_persona_session_fields(persona: dict) -> dict:
         f"Background: {persona['brief']}",
         f"Reason for visit: {persona['scenario']['user_sketch']}",
     ]
-    is_pediatric = any(k in persona["brief"].lower() for k in ["parent", "child", "son", "daughter"])
-    if not persona["scenario"].get("vaccine_related") and not is_pediatric:
-        lines.append("\n(Note: You might want to mention vaccines during this visit.)")
     return {
         "character": character,
         "scene": scene,
