@@ -438,6 +438,10 @@ a fallback.  It requires both `FOLLOWUP_CUES` and `LITERATURE_CUES` to match, or
 ## 10. Scoring Tip Policy
 
 - At most **one tip** per turn (enforced by `classify_turn`).
+- Tips must target a missing or weak behavior in the current turn. If the clinician already
+  asked an open concern question, the coach should not say to lead with an open question; it
+  should coach the actual gap instead, such as pausing, avoiding stacked questions, or keeping
+  the question neutral.
 - Tips are suppressed when all known concerns have already been mirrored (tip would be stale
   advice to mirror a concern that was already addressed).
 - "Secure before mirror" tips escalate on repetition: first occurrence = standard nudge; second

@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from app.constants import KEY_COACH_POST, KEY_GAME_OVER, SESSION_HISTORY
+from app.constants import KEY_AIMS_STATE, KEY_COACH_POST, KEY_GAME_OVER, SESSION_HISTORY
 from app.models import ChatRequest, ClassifierResult, Coaching
 from app.services.aims_coaching_handler import AimsCoachingHandler
 from app.services.aims_turn_coordinator import AimsTurnResult
@@ -111,6 +111,7 @@ def _turn(
     score=2,
     reasons=None,
     tips=None,
+    step_feedback=None,
     is_small_talk=False,
     patient_reply="Thanks, Doctor.",
     was_fallback=False,
@@ -122,8 +123,9 @@ def _turn(
             step=step,
             steps=[step] if step else [],
             score=score,
-            reasons=reasons or ["Clear recommendation."],
-            tips=tips or ["Ask what questions they have."],
+            reasons=["Clear recommendation."] if reasons is None else reasons,
+            tips=["Ask what questions they have."] if tips is None else tips,
+            step_feedback=step_feedback or [],
         ),
         safety_flags=[],
         person_topic=None,
@@ -290,6 +292,74 @@ async def test_handle_refines_fallback_coaching_when_available(monkeypatch):
     handler.feedback_service.refine_fallback_feedback.assert_awaited_once()
     assert result["coaching"]["tips"] == ["Name that it is her decision before offering the fact."]
     assert result["coaching"]["step_feedback"][0]["feedback"] == "You gave reassurance before naming her choice."
+
+
+@pytest.mark.asyncio
+async def test_handle_sanitizes_stale_step_feedback_after_state_guidance(monkeypatch):
+    feedback = _feedback()
+    endgame = _endgame()
+    turn_coordinator = Mock()
+    turn_coordinator.run = AsyncMock(
+        return_value=_turn(
+            step="Secure",
+            score=3,
+            reasons=["LLM classified as Secure."],
+            tips=[],
+            step_feedback=[
+                {
+                    "step": "Secure",
+                    "tone": "improvement",
+                    "feedback": "Try leading with an open question before reassurance.",
+                }
+            ],
+        )
+    )
+
+    handler = _handler(
+        classifier=Mock(),
+        patient_reply=Mock(),
+        metrics=_metrics(),
+        feedback=feedback,
+        endgame=endgame,
+        turn_coordinator=turn_coordinator,
+    )
+
+    async def fake_mapping():
+        return {}
+
+    monkeypatch.setattr(handler, "_load_aims_mapping", fake_mapping)
+
+    ctx = _basic_context()
+    ctx.mem[KEY_AIMS_STATE] = {
+        "phase": "PreAnnounce",
+        "announced": True,
+        "first_inquire_done": False,
+        "parent_concerns": [],
+        "recent_coaching": [],
+    }
+
+    result = await handler.handle(
+        req=Mock(headers={}),
+        body=ChatRequest(
+            message="What concerns do you have about the MMR vaccine? It is safe and effective.",
+            sessionId="sid",
+            coach=True,
+        ),
+        ctx=ctx,
+    )
+
+    assert result["coaching"]["tips"] == [
+        "After asking what's on their mind, pause before offering reassurance."
+    ]
+    assert result["coaching"]["step_feedback"] == [
+        {
+            "step": "Secure",
+            "tone": "improvement",
+            "feedback": "After asking what's on their mind, pause before offering reassurance.",
+        }
+    ]
+    feedback_payload = feedback.append.call_args.kwargs["cls_payload"]
+    assert "Try leading with an open question" not in str(feedback_payload)
 
 
 @pytest.mark.asyncio
