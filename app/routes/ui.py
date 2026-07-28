@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from chainlit.auth import clear_auth_cookie
@@ -21,6 +22,7 @@ from app.security.auth import authenticated_user_identifier, clear_persistent_se
 from app.security.oauth import get_enabled_oauth_providers, is_valid_env_val
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 # Base directory for templates relative to this file (app/routes/ui.py)
 BASE_DIR = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
@@ -75,10 +77,14 @@ async def unified_logout(request: Request):
     Handle logout at the FastAPI layer so both GET and POST logout flows clear
     the auth cookie and return the browser to the SSO page.
     """
+    reason = request.query_params.get("reason")
+    user_id = authenticated_user_identifier(request)
+    if reason:
+        logger.info(f"User {user_id or 'anonymous'} logged out. Reason: {reason}")
+
     response = RedirectResponse(url=ROUTE_ROOT, status_code=303)
     clear_auth_cookie(request, response)
 
-    user_id = authenticated_user_identifier(request)
     if user_id:
         clear_persistent_session_id(user_id)
 

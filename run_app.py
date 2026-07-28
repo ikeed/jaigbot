@@ -27,7 +27,7 @@ from app.constants import (
 )
 # Import the existing backend app and modular components
 from app.main import app as backend_app
-from app.middleware import AuthRedirectMiddleware
+from app.middleware import AuthRedirectMiddleware, JavaScriptRequiredMiddleware
 from app.routes.ui import router as ui_router
 from app.security.oauth import is_valid_env_val
 
@@ -74,6 +74,7 @@ if not is_valid_env_val(os.getenv(ENV_CHAINLIT_AUTH_SECRET)):
 
 # 4. Add Middlewares
 app.add_middleware(AuthRedirectMiddleware)
+app.add_middleware(JavaScriptRequiredMiddleware)
 
 # 5. Serve static assets (CSS, JS, avatars, images)
 if os.path.exists(DIR_PUBLIC):
