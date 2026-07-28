@@ -488,6 +488,44 @@ async def test_process_backend_response_dispatches_coaching_reply_and_coach_post
 
 
 @pytest.mark.asyncio
+async def test_process_backend_response_prefers_step_feedback_over_raw_tip(
+    orchestrator, mock_services
+):
+    mock_services["session"].history = []
+    mock_services["session"].persona_name = "Sarah"
+    mock_services["ui"].send_coach_message = AsyncMock()
+    mock_services["ui"].send_assistant_reply = AsyncMock()
+
+    await orchestrator._process_backend_response(
+        {
+            "coaching": {
+                "step": "Secure",
+                "reasons": ["You asked and then reassured."],
+                "tips": ["Try leading with an open question."],
+                "step_feedback": [
+                    {
+                        "step": "Inquire",
+                        "tone": "praise",
+                        "feedback": "You opened with a broad concern question.",
+                    },
+                    {
+                        "step": "Secure",
+                        "tone": "improvement",
+                        "feedback": "Pause before moving into reassurance.",
+                    },
+                ],
+            },
+            "reply": "I need to understand more.",
+        }
+    )
+
+    coach_text = mock_services["session"].history[0]["content"]
+    assert "Inquire: Great job: You opened with a broad concern question." in coach_text
+    assert "Secure: Try: Pause before moving into reassurance." in coach_text
+    assert "Tip: Try leading with an open question." not in coach_text
+
+
+@pytest.mark.asyncio
 async def test_process_backend_response_handles_empty_coaching_and_default_coach_post_title(
     orchestrator, mock_services
 ):
