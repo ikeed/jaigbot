@@ -18,6 +18,7 @@ from app.constants import (
     STEP_SECURE_INQUIRE,
 )
 from app.services.aims_metrics_service import AimsMetricsService
+from app.services.coaching_tip_sanitizer import opens_with_open_concern_question
 from app.services.conversation_service import (
     mark_mirrored_multi,
     mark_secured_by_topic,
@@ -323,8 +324,12 @@ class AimsStateService:
     ) -> None:
         first_inquire_done = state.get("first_inquire_done", False)
         if not first_inquire_done:
-            reason = "You moved into reassurance before asking about their concerns — try an open question first"
-            tip = "Ask what's on their mind (e.g., 'What are your thoughts about the vaccines we discussed?') before offering reassurance."
+            if opens_with_open_concern_question(clinician_message):
+                reason = "You asked an open question, then moved into reassurance before giving them space to answer."
+                tip = "After asking what's on their mind, pause before offering reassurance."
+            else:
+                reason = "You moved into reassurance before asking about their concerns — try an open question first"
+                tip = "Ask what's on their mind (e.g., 'What are your thoughts about the vaccines we discussed?') before offering reassurance."
             cls_payload["reasons"] = [reason] + (cls_payload.get("reasons") or [])
             cls_payload.setdefault("tips", []).append(tip)
             try:

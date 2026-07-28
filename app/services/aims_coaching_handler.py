@@ -41,6 +41,7 @@ from app.services.chat_context import ChatContext
 from app.services.chat_helpers import strip_appointment_headers
 from app.services.classifier_service import ClassifierService
 from app.services.clinician_identity import clinician_display_name_from_user_info
+from app.services.coaching_tip_sanitizer import sanitize_coaching_tips
 from app.services.aims_dependencies import (
     AimsEndgameDependency,
     AimsFeedbackDependency,
@@ -361,6 +362,8 @@ class AimsCoachingHandler:
                 )
             except Exception as e:
                 self.logger.debug("AIMS feedback refinement failed: %s", e)
+
+        sanitize_coaching_tips(cls_payload, clinician_message=body.message)
 
         # Step 4: Persist AIMS metrics (after state update)
         try:
