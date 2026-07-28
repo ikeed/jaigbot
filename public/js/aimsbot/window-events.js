@@ -18,10 +18,13 @@
     }
 
     if (type === "on_duplicate_tab") {
+      if (app.splash && app.splash.markStartupLoaded) app.splash.markStartupLoaded();
       window.location.href = "/duplicate";
     } else if (type === "on_logout") {
+      if (app.splash && app.splash.markStartupLoaded) app.splash.markStartupLoaded();
       window.location.href = "/";
     } else if (type === "aims_intro_required") {
+      if (app.splash && app.splash.markStartupLoaded) app.splash.markStartupLoaded();
       app.infographic.show(true);
     } else if (type === "aims_persona_name" && data.personaName) {
       app.state = app.state || {};
