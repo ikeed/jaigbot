@@ -135,7 +135,7 @@ async def test_generate_retries_invalid_json_then_returns_success():
         "fallback_reply_code": None,
     }
     assert len(caller.calls) == 2
-    assert "not valid JSON" in caller.calls[1]["prompt"]
+    assert "not displayable as a complete JSON object" in caller.calls[1]["prompt"]
     assert any("aims_patient_reply_invalid_json" in message for message in logger.info_messages)
 
 
@@ -153,7 +153,7 @@ async def test_generate_invalid_json_twice_returns_neutral_open_acknowledgment()
     assert result["patient_reply"] == "Okay, thank you."
     assert result["reply_validation"]["fallback_reply_code"] == "acknowledge_open"
     assert len(caller.calls) == 2
-    assert "not valid JSON" in caller.calls[1]["prompt"]
+    assert "not displayable as a complete JSON object" in caller.calls[1]["prompt"]
 
 
 @pytest.mark.asyncio
@@ -231,7 +231,7 @@ async def test_generate_retries_metadata_label_leak_then_returns_success():
         "fallback_reply_code": None,
     }
     assert len(caller.calls) == 2
-    assert "previous JSON was valid" in caller.calls[1]["prompt"]
+    assert "included scenario metadata or speaker labels" in caller.calls[1]["prompt"]
     assert any("aims_patient_reply_invalid_text" in message for message in logger.info_messages)
 
 
@@ -255,3 +255,71 @@ async def test_generate_returns_neutral_fallback_after_repeated_metadata_leak():
         "metadata_leak_detected": True,
         "fallback_reply_code": "acknowledge_open",
     }
+
+
+@pytest.mark.asyncio
+async def test_generate_retries_instruction_echo_then_returns_success():
+    logger = DummyLogger()
+    caller = JsonCaller(
+        json.dumps({
+            "patient_reply": (
+                "I understand. I'll try to be more careful with my responses from "
+                "now on. Thank you for the clarification."
+            )
+        }),
+        json.dumps({"patient_reply": "I'm mostly wondering whether Emily really needs another shot."}),
+    )
+    service = _service(caller, logger=logger)
+
+    result = await service.generate(
+        clinician_message="Let's talk vaccines.",
+        history_text="",
+        session_id="sid",
+    )
+
+    assert result["patient_reply"] == "I'm mostly wondering whether Emily really needs another shot."
+    assert result["reply_validation"] == {
+        "reply_valid": True,
+        "metadata_leak_detected": False,
+        "fallback_reply_code": None,
+    }
+    assert len(caller.calls) == 2
+    assert any(
+        "patient_reply_invalid_instruction_echo" in message
+        for message in logger.info_messages
+    )
+
+
+@pytest.mark.asyncio
+async def test_generate_falls_back_after_json_retry_instruction_echo():
+    logger = DummyLogger()
+    caller = JsonCaller(
+        "{",
+        json.dumps({
+            "patient_reply": (
+                "I understand. I'll make sure to provide a complete and valid JSON "
+                "object this time, with one or two conversational sentences as the "
+                "value for 'patient_reply'."
+            )
+        }),
+    )
+    service = _service(caller, logger=logger)
+
+    result = await service.generate(
+        clinician_message="Let's talk vaccines.",
+        history_text="",
+        session_id="sid",
+        concern_state_section="Open concerns: measles risk.",
+    )
+
+    assert result["patient_reply"] == "Okay, thank you."
+    assert result["reply_validation"] == {
+        "reply_valid": False,
+        "metadata_leak_detected": False,
+        "fallback_reply_code": "acknowledge_open",
+    }
+    assert len(caller.calls) == 2
+    assert any(
+        "patient_reply_invalid_instruction_echo" in message
+        for message in logger.info_messages
+    )
