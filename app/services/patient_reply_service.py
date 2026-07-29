@@ -94,7 +94,12 @@ class PatientReplyService:
                 text = cand.get("patient_reply", "").strip()
                 validation = self._validate_reply_text(text)
                 if not validation["reply_valid"]:
-                    raise ReplyValidationError("patient_reply_invalid_metadata", validation)
+                    reason = (
+                        "patient_reply_invalid_metadata"
+                        if validation["metadata_leak_detected"]
+                        else "patient_reply_invalid_instruction_echo"
+                    )
+                    raise ReplyValidationError(reason, validation)
 
                 if text.lower() == "ok":
                     fallback_code = (
@@ -121,6 +126,7 @@ class PatientReplyService:
                     "aims_patient_reply_invalid_text",
                     attempt=attempt,
                     sessionId=session_id,
+                    reason=str(ve),
                     **ve.validation,
                 )
 
@@ -192,8 +198,15 @@ class PatientReplyService:
             if lowered.startswith(tuple(message_list("validation.metadata_label_prefixes"))):
                 metadata_leak_detected = True
                 break
+        normalized_text = " ".join((text or "").lower().split())
+        instruction_echo_detected = any(
+            marker in normalized_text
+            for marker in message_list("validation.instruction_echo_markers")
+        )
         return {
-            "reply_valid": bool(text) and not metadata_leak_detected,
+            "reply_valid": bool(text)
+            and not metadata_leak_detected
+            and not instruction_echo_detected,
             "metadata_leak_detected": metadata_leak_detected,
             "fallback_reply_code": None,
         }

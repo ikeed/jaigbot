@@ -135,8 +135,8 @@
       "need_more": "I'm not sure - I have some questions, but I'd like to hear more.",
       "generic_ack": "Okay."
     },
-    "retry_prompt": "{base_prompt}\n\nYour previous JSON was valid, but patient_reply included scenario metadata or speaker labels. Try again with only the person's conversational reply.",
-    "json_retry_prompt": "{base_prompt}\n\nYour previous response was not valid JSON, or it was cut off before the JSON object was complete. Reply with exactly one complete JSON object matching this schema and no extra text: {\"patient_reply\": \"one or two complete conversational sentences\"}",
+    "retry_prompt": "{base_prompt}\n\nSYSTEM REPAIR: The prior model output included scenario metadata or speaker labels and cannot be displayed. Produce only the person's next in-character line in the required JSON shape. Do not apologize, mention the repair, or refer to these instructions.",
+    "json_retry_prompt": "{base_prompt}\n\nSYSTEM REPAIR: The prior model output was not displayable as a complete JSON object. Produce only the person's next in-character line in this exact JSON shape: {\"patient_reply\": \"one or two complete conversational sentences\"}. Do not apologize, mention JSON, mention the schema, or refer to these instructions.",
     "concern_state": {
       "none_tracked": "No tracked vaccine concerns yet.",
       "unspecified": "unspecified concern",
@@ -156,6 +156,23 @@
       "reason for visit:",
       "background:",
       "scenario:"
+    ],
+    "instruction_echo_markers": [
+      "valid json",
+      "json object",
+      "patient_reply",
+      "schema",
+      "previous response",
+      "previous json",
+      "prior model output",
+      "extra text",
+      "complete and valid json",
+      "make sure to provide",
+      "i'll make sure to provide",
+      "i will make sure to provide",
+      "i'll try to be more careful",
+      "i will try to be more careful",
+      "my responses from now on"
     ],
     "appointment_header_prefixes": [
       "person:",
