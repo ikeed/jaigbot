@@ -12,9 +12,9 @@ Covers:
 import asyncio
 import logging
 
-from app.services.coach_post import EndGameDetector
 from app.services.aims_endgame_service import AimsEndgameService
 from app.services.aims_state_service import AimsStateService
+from app.services.coach_post import EndGameDetector
 
 
 # ---------------------------------------------------------------------------
@@ -107,6 +107,15 @@ def test_endgame_detector_accepts_same_message_literature_followup():
     reply = (
         "Yes, some written information would be helpful and a planned follow-up "
         "appointment in a few weeks sounds good."
+    )
+    assert EndGameDetector.detect(reply) == {"reason": "followup_literature"}
+
+
+def test_endgame_detector_accepts_resources_and_talk_again_plan():
+    """Natural 'talk again' wording is a follow-up plan when resources are accepted."""
+    reply = (
+        "Yeah, that sounds fair. I'll take a look at those resources, "
+        "and we can talk again in two weeks."
     )
     assert EndGameDetector.detect(reply) == {"reason": "followup_literature"}
 
@@ -731,6 +740,56 @@ def test_unmirrored_concern_allows_natural_language_review_and_followup_closure(
     }
     service = _make_endgame_service(mock_svc)
     result = _run(service.check(store["s12b2"], {}, None, "s12b2"))
+    assert result is not None
+    assert mock_svc.last_history_text != ""
+
+
+def test_unmirrored_concern_allows_resources_and_talk_again_closure():
+    """Georgina-style resources plus 'talk again in two weeks' should be endgame-eligible."""
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_literature",
+            "summary": "Person agreed to review resources and talk again in two weeks.",
+            "reason": "",
+        }
+    )
+    store = {
+        "s12b_georgina": {
+            "history": [
+                {
+                    "role": "user",
+                    "content": (
+                        "I'll give you the safety resources and book a two-week follow-up."
+                    ),
+                },
+                {
+                    "role": "assistant",
+                    "content": (
+                        "Yeah, that sounds fair. I'll take a look at those resources, "
+                        "and we can talk again in two weeks."
+                    ),
+                },
+            ],
+            "aims_state": {
+                "phase": "Secure",
+                "announced": True,
+                "first_inquire_done": True,
+                "parent_concerns": [
+                    {
+                        "id": "trust",
+                        "desc": "wants evidence, uncertainty, and trust addressed",
+                        "topic": "trust",
+                        "is_mirrored": False,
+                        "is_secured": False,
+                        "status": "open",
+                    },
+                ],
+            },
+        }
+    }
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s12b_georgina"], {}, None, "s12b_georgina"))
     assert result is not None
     assert mock_svc.last_history_text != ""
 

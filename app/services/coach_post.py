@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from typing import Dict, List
-
 import logging
+from typing import Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -178,6 +177,8 @@ class EndGameDetector:
         "follow up", "follow-up", "another appointment", "next visit", "come back",
         "schedule", "set up an appointment", "later appointment", "book an appointment",
         "make an appointment", "schedule something", "make another", "appointment",
+        "talk again", "talk about it again", "talk it over again", "talk more",
+        "revisit this", "revisit it", "review this in", "review it in",
     ]
 
     LITERATURE_CUES = [

@@ -398,9 +398,17 @@ _MATERIALS_OR_FOLLOWUP_CUES = (
     "handout",
     "pamphlet",
     "materials",
+    "resource",
+    "resources",
     "follow-up",
     "follow up",
-    "another appointment"
+    "another appointment",
+    "talk again",
+    "talk about it again",
+    "talk it over again",
+    "talk more",
+    "review this in",
+    "review it in",
 )
 
 _PLAN_ACCEPTANCE_CUES = (
@@ -416,6 +424,10 @@ _PLAN_ACCEPTANCE_CUES = (
     "i appreciate",
     "that helps",
     "that would help",
+    "that sounds fair",
+    "sounds fair",
+    "that works",
+    "works for me",
 )
 
 _ACTIVE_CONCERN_CUES = (

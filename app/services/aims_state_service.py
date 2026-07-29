@@ -153,6 +153,12 @@ class AimsStateService:
         "appointment",
         "vaccination clinic",
         "come back",
+        "talk again",
+        "talk about it again",
+        "talk it over again",
+        "talk more",
+        "review this in",
+        "review it in",
     )
 
     CLOSURE_LITERATURE_CUES = (
