@@ -10,7 +10,7 @@
   if (window.__aimsbotCustomJsInitialized) return;
   window.__aimsbotCustomJsInitialized = true;
 
-  const assetVersion = "20260728-startup-recovery";
+  const assetVersion = "20260729-rename-dialog";
   window.AIMSBotUI = window.AIMSBotUI || {};
   window.AIMSBotUI.pendingWindowMessages = window.AIMSBotUI.pendingWindowMessages || [];
   window.AIMSBotUI.handleWindowMessagePayload =

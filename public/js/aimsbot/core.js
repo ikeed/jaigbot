@@ -15,6 +15,7 @@
     "#logout-modal",
     "#aims-infographic-modal"
   ].join(", ");
+  app.nativeDialogSelector = '[role="alertdialog"], [role="dialog"]';
 
   app.chainlitIconButtonClass = [
     "inline-flex",
@@ -108,7 +109,8 @@
   };
 
   app.decorateNativeDialogs = function () {
-    document.querySelectorAll('[role="alertdialog"]').forEach(function (dialog) {
+    document.querySelectorAll(app.nativeDialogSelector).forEach(function (dialog) {
+      if (dialog.closest && dialog.closest(app.managedModalSelector)) return;
       if (dialog.dataset.aimsStyled === "true") return;
       dialog.dataset.aimsStyled = "true";
 
@@ -128,32 +130,61 @@
       }
 
       const heading = dialog.querySelector("h2, h3");
-      if (heading) heading.style.color = "#132238";
+      if (heading) {
+        heading.classList.add("aims-native-dialog-title");
+        heading.style.color = "#132238";
+      }
 
       const description = dialog.querySelector("p");
       if (description) {
+        description.classList.add("aims-native-dialog-description");
         description.style.padding = "3px 0 5px";
         description.style.lineHeight = "1.55";
         description.style.color = "#43556f";
       }
 
-      const buttons = dialog.querySelectorAll("button");
-      if (buttons[0]) {
-        buttons[0].classList.add("aims-native-dialog-cancel");
-        buttons[0].style.borderRadius = "4px";
-        buttons[0].style.border = "1px solid rgba(128, 153, 195, 0.24)";
-        buttons[0].style.background = "rgba(255, 255, 255, 0.86)";
-        buttons[0].style.color = "#26405f";
-        buttons[0].style.boxShadow = "none";
+      dialog.querySelectorAll("label").forEach(function (label) {
+        label.classList.add("aims-native-dialog-label");
+      });
+
+      dialog.querySelectorAll("input, textarea, select").forEach(function (field) {
+        field.classList.add("aims-native-dialog-input");
+      });
+
+      const buttons = Array.prototype.slice.call(dialog.querySelectorAll("button"));
+      const isCloseButton = function (button) {
+        const ariaLabel = String(button.getAttribute("aria-label") || "");
+        const text = String(button.textContent || "").trim();
+        return !text || /close/i.test(ariaLabel) || /^[x×]$/i.test(text);
+      };
+      const actionButtons = buttons.filter(function (button) {
+        return !isCloseButton(button) && !!String(button.textContent || "").trim();
+      });
+
+      buttons.forEach(function (button) {
+        if (isCloseButton(button)) button.classList.add("aims-native-dialog-close");
+        button.style.borderRadius = "4px";
+        button.style.boxShadow = "none";
+      });
+
+      if (actionButtons.length === 1) {
+        actionButtons[0].classList.add("aims-native-dialog-confirm");
       }
-      if (buttons[1]) {
-        buttons[1].classList.add("aims-native-dialog-confirm");
-        buttons[1].style.borderRadius = "4px";
-        buttons[1].style.border = "none";
-        buttons[1].style.background = "linear-gradient(135deg, #2563eb 0%, #0ea5e9 100%)";
-        buttons[1].style.backgroundColor = "#2563eb";
-        buttons[1].style.color = "#ffffff";
-        buttons[1].style.boxShadow = "none";
+
+      if (actionButtons.length > 1) {
+        const cancelButton = actionButtons[0];
+        const confirmButton = actionButtons[actionButtons.length - 1];
+
+        cancelButton.classList.add("aims-native-dialog-cancel");
+        cancelButton.style.border = "1px solid rgba(128, 153, 195, 0.24)";
+        cancelButton.style.background = "rgba(255, 255, 255, 0.86)";
+        cancelButton.style.color = "#26405f";
+
+        confirmButton.classList.add("aims-native-dialog-confirm");
+        confirmButton.style.border = "none";
+        confirmButton.style.background = "linear-gradient(135deg, #2563eb 0%, #0ea5e9 100%)";
+        confirmButton.style.backgroundColor = "#2563eb";
+        confirmButton.style.color = "#ffffff";
       }
     });
   };
