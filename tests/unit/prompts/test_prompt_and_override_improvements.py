@@ -65,9 +65,12 @@ class TestPromptContent:
     def test_system_instruction_has_feedback_tone_rules(self):
         """aims_system_instruction.txt must define praise/improvement tone rules."""
         instruction = get_classify_system_instruction()
-        assert "tone" in instruction.lower()
-        assert "praise" in instruction.lower()
-        assert "improvement" in instruction.lower()
+        lower = instruction.lower()
+        assert "tone" in lower
+        assert "praise" in lower
+        assert "improvement" in lower
+        assert "past-tense second-person" in lower
+        assert "ui labels it with `tip:`" in lower
 
     def test_system_instruction_prevents_tips_for_behavior_already_done(self):
         """Tips should target actual gaps, not already-successful behavior."""
@@ -151,6 +154,7 @@ class TestPromptContent:
         assert "preserve the detected step and the score" in lower
         assert "step_feedback" in lower
         assert "do not suggest a behavior the clinician already performed" in lower
+        assert 'ui labels it with "tip:"' in lower
 
     def test_classify_turn_prompt_renders_context_and_concern_lists(self):
         prompt = build_classify_turn_prompt(
