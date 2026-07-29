@@ -342,6 +342,16 @@ def _apply_concern_presence_event(
 
     concerns: list[Concern] = state.setdefault("parent_concerns", [])  # type: ignore[assignment]
     evidence_items = _event_evidence(event, person_text)
+    if (
+        _is_acceptance_message(person_text or "")
+        or _is_confirmation_restatement_without_new_question(person_text or "")
+    ):
+        restated = _find_restated_existing_concern(concerns, evidence_items, person_text)
+        if restated:
+            _merge_evidence(restated, evidence_items)
+            _sync_concern_status(restated)
+        return
+
     existing = _find_event_target(concerns, event)
     if existing:
         _merge_evidence(existing, evidence_items)
@@ -466,6 +476,10 @@ _ACCEPTANCE_STARTS = tuple(message_list("lexicon.concerns.acceptance_starts"))
 # message may still contain a genuine concern despite the positive opener.
 _HEDGING_CUES = tuple(message_list("lexicon.concerns.hedging_cues"))
 
+_CONFIRMATION_REOPENING_CUES = tuple(
+    message_list("lexicon.concerns.confirmation_reopening_cues")
+)
+
 _CONCERN_AFTER_ACCEPTANCE_CUES = tuple(
     message_list("lexicon.concerns.concern_after_acceptance_cues")
 )
@@ -498,6 +512,15 @@ def _is_acceptance_message(text: str) -> bool:
     if "?" in lt and any(cue in lt for cue in message_list("lexicon.concerns.question_starts")):
         return False
     return True
+
+
+def _is_confirmation_restatement_without_new_question(text: str) -> bool:
+    lt = (text or "").strip().lower()
+    if not _looks_like_confirmation_restatement(lt):
+        return False
+    if "?" in lt:
+        return False
+    return not any(cue in lt for cue in _CONFIRMATION_REOPENING_CUES)
 
 
 def _is_materials_or_followup_acceptance(text: str) -> bool:
