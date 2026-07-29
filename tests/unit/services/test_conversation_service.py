@@ -1,3 +1,4 @@
+from app.services.aims_state_service import AimsStateService
 from app.services.conversation_service import (
     topics_in,
     concern_topic,
@@ -6,8 +7,6 @@ from app.services.conversation_service import (
     mark_mirrored_multi,
     mark_secured_by_topic,
 )
-from app.services.aims_state_service import AimsStateService
-
 
 TOPICAL_CUES = {
     "sleep": ["sleep", "bedtime"],
@@ -165,6 +164,23 @@ def test_maybe_add_person_concern_keeps_need_to_understand_after_yes_preamble():
     concern = st["parent_concerns"][0]
     assert concern["topic"] == "requirements"
     assert concern["evidence"][0].startswith("I just want to understand")
+
+
+def test_maybe_add_person_concern_does_not_turn_need_to_worry_into_requirements():
+    st = {"parent_concerns": []}
+
+    maybe_add_person_concern(
+        st,
+        (
+            "Yes, exactly. I just want to understand if it's something we actually "
+            "need to worry about here in Moncton, for my daughter Emily, or if "
+            "it's just a general warning for other places."
+        ),
+        AimsStateService.TOPICAL_CUES,
+    )
+
+    assert len(st["parent_concerns"]) == 1
+    assert st["parent_concerns"][0]["topic"] == "disease_risk"
 
 
 def test_maybe_add_person_concern_merges_same_topic_paraphrases_and_cleans_evidence():
