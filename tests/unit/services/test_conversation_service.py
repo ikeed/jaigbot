@@ -131,6 +131,42 @@ def test_maybe_add_person_concern_skips_empty_acceptance_and_duplicates():
     assert len(st["parent_concerns"]) == 1
 
 
+def test_maybe_add_person_concern_keeps_question_after_polite_acceptance():
+    st = {"parent_concerns": []}
+
+    maybe_add_person_concern(
+        st,
+        (
+            "Thank you, Doctor. I want to understand what vaccines my son needs here. "
+            "Is it required for school?"
+        ),
+        AimsStateService.TOPICAL_CUES,
+    )
+
+    assert len(st["parent_concerns"]) == 1
+    concern = st["parent_concerns"][0]
+    assert concern["topic"] == "requirements"
+    assert concern["evidence"][0].startswith("I want to understand")
+
+
+def test_maybe_add_person_concern_keeps_need_to_understand_after_yes_preamble():
+    st = {"parent_concerns": []}
+
+    maybe_add_person_concern(
+        st,
+        (
+            "Yes, Doctor. That is right. I just want to understand clearly "
+            "so I can tell my husband Gabriel what we need to do for Nathaniel."
+        ),
+        AimsStateService.TOPICAL_CUES,
+    )
+
+    assert len(st["parent_concerns"]) == 1
+    concern = st["parent_concerns"][0]
+    assert concern["topic"] == "requirements"
+    assert concern["evidence"][0].startswith("I just want to understand")
+
+
 def test_maybe_add_person_concern_merges_same_topic_paraphrases_and_cleans_evidence():
     st = {"parent_concerns": []}
 

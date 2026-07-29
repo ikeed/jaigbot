@@ -161,6 +161,8 @@ def _clean_evidence_snippet(text: str) -> str:
 
     concern_starts = (
         "i want",
+        "i just want",
+        "i need",
         "i'm trying",
         "i am trying",
         "i'm still",
@@ -385,6 +387,26 @@ _HEDGING_CUES = (
     "what about", "what if",
 )
 
+_CONCERN_AFTER_ACCEPTANCE_CUES = (
+    "i want to understand",
+    "i just want to understand",
+    "i need to understand",
+    "i'm trying to understand",
+    "i am trying to understand",
+    "can you tell me",
+    "could you tell me",
+    "help me understand",
+    "is it required",
+    "is it mandatory",
+    "required for school",
+    "mandatory for school",
+    "need to explain",
+    "need to do",
+    "what vaccines",
+    "what shots",
+    "what happens",
+)
+
 _MATERIALS_OR_FOLLOWUP_CUES = (
     "take information home",
     "take some information home",
@@ -485,6 +507,12 @@ def _is_acceptance_message(text: str) -> bool:
         return False
     # Override: hedging language means there may be a real concern embedded
     if any(h in lt for h in _HEDGING_CUES):
+        return False
+    # Polite openers can introduce a substantive concern immediately after the
+    # acknowledgement, as in "Thank you. Can you tell me what is required?"
+    if any(cue in lt for cue in _CONCERN_AFTER_ACCEPTANCE_CUES):
+        return False
+    if "?" in lt and any(cue in lt for cue in ("what ", "how ", "why ", "is it ", "are they ", "do we ", "do i ")):
         return False
     return True
 
