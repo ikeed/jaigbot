@@ -217,22 +217,71 @@
     document.querySelectorAll('[data-step-type="user_message"]').forEach(tagDoctorMessage);
   }
 
+  function findComposer() {
+    return (
+      document.getElementById("message-composer") ||
+      document.querySelector("form.aimsbot-composer") ||
+      document.querySelector("textarea[placeholder]")?.closest("form")
+    );
+  }
+
+  function decorateMessageLayout() {
+    const composer = findComposer();
+    const main = composer ? composer.closest("main") : document.querySelector("main");
+    const scrollArea = main ? main.querySelector(".overflow-y-auto") : null;
+    if (!scrollArea || !composer) return null;
+
+    const messageList =
+      scrollArea.querySelector(".flex.flex-col.mx-auto.w-full.flex-grow") ||
+      scrollArea.firstElementChild;
+    const composerHeight = Math.ceil(composer.getBoundingClientRect().height || 144);
+    const clearance = Math.max(208, composerHeight + 80);
+
+    scrollArea.classList.add("aimsbot-message-scroll");
+    scrollArea.style.setProperty("--aims-composer-clearance", clearance + "px");
+    if (messageList) {
+      messageList.classList.add("aimsbot-message-list");
+      messageList.style.setProperty("--aims-composer-clearance", clearance + "px");
+    }
+
+    return { scrollArea, clearance };
+  }
+
+  function keepLatestMessageVisible() {
+    const layout = decorateMessageLayout();
+    if (!layout) return;
+
+    const distanceFromBottom =
+      layout.scrollArea.scrollHeight -
+      layout.scrollArea.scrollTop -
+      layout.scrollArea.clientHeight;
+    const nearBottomThreshold = Math.max(layout.clearance + 420, 640);
+    if (distanceFromBottom <= nearBottomThreshold) {
+      layout.scrollArea.scrollTop = layout.scrollArea.scrollHeight;
+    }
+  }
+
+  function refreshMessages() {
+    injectDataAuthors();
+    keepLatestMessageVisible();
+  }
+
     let debounce = null;
     const observer = new MutationObserver(function () {
         if (debounce) return;
         debounce = window.setTimeout(function () {
             debounce = null;
-            injectDataAuthors();
+            refreshMessages();
         }, 100);
     });
 
     observer.observe(document.body, { childList: true, subtree: true });
-  injectDataAuthors();
-  window.setTimeout(injectDataAuthors, 300);
-  window.setTimeout(injectDataAuthors, 1000);
-  window.setTimeout(injectDataAuthors, 3000);
+  refreshMessages();
+  window.setTimeout(refreshMessages, 300);
+  window.setTimeout(refreshMessages, 1000);
+  window.setTimeout(refreshMessages, 3000);
 
   app.messageRoles = {
-    injectDataAuthors: injectDataAuthors
+    injectDataAuthors: refreshMessages
   };
 })(window, document);
