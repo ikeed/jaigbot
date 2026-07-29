@@ -28,11 +28,13 @@ class AimsTurnCoordinator:
         patient_reply_service: Any,
         classify_budget_s: float,
         logger: Any,
+        heuristic_fallback_enabled: bool = True,
     ) -> None:
         self._classifier_service = classifier_service
         self._patient_reply_service = patient_reply_service
         self._classify_budget_s = classify_budget_s
         self._logger = logger
+        self._heuristic_fallback_enabled = heuristic_fallback_enabled
 
     async def run(
         self,
@@ -108,6 +110,28 @@ class AimsTurnCoordinator:
                 is_vaccine_relevant=classification_result.is_vaccine_relevant,
                 is_small_talk=classification_result.is_small_talk,
                 classification_result=classification_result,
+                reply_payload=reply_payload,
+                was_fallback=False,
+            )
+
+        if not self._heuristic_fallback_enabled:
+            return AimsTurnResult(
+                cls_payload={
+                    "step": None,
+                    "score": 0,
+                    "reasons": ["AIMS coaching is temporarily unavailable for this turn."],
+                    "tips": [],
+                    "feedback_items": [
+                        {
+                            "code": "classification_unavailable",
+                            "text": "AIMS coaching is temporarily unavailable for this turn.",
+                            "tone": "improvement",
+                        }
+                    ],
+                },
+                is_vaccine_relevant=True,
+                is_small_talk=False,
+                classification_result=None,
                 reply_payload=reply_payload,
                 was_fallback=False,
             )

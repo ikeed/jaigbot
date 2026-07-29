@@ -1,6 +1,7 @@
 from app.services.coach_post import (
     AimsPostProcessor,
     EndGameDetector,
+    VaccineRelevanceGate,
     build_endgame_bullets_fallback,
     endgame_title,
     sanitize_endgame_bullets,
@@ -77,6 +78,59 @@ def test_aims_post_processor_keeps_non_aims_score_and_filters_mixed_reasons():
 
     assert processed["score"] == 0
     assert processed["reasons"] == ["Useful feedback."]
+
+
+def test_aims_post_processor_preserves_reasons_when_structured_feedback_exists():
+    payload = {
+        "step": "Secure",
+        "score": 0,
+        "reasons": ["This sounds leading."],
+        "feedback_items": [
+            {
+                "step": "Secure",
+                "tone": "improvement",
+                "code": "add_autonomy_support",
+                "text": "Name that it is their decision.",
+            }
+        ],
+    }
+
+    processed = AimsPostProcessor.post_process(payload, "It's up to you.")
+
+    assert processed["score"] == 1
+    assert processed["reasons"] == ["This sounds leading."]
+
+
+def test_vaccine_relevance_gate_prefers_semantic_relevance_true():
+    payload = {"step": "Mirror", "score": 3, "reasons": ["Reflected."], "tips": []}
+
+    result = VaccineRelevanceGate.gate(
+        cls_payload=payload,
+        clinician_text="I hear that this feels like a lot.",
+        person_last="Yes.",
+        parent_recent_concerns=[],
+        prior_announced=False,
+        semantic_is_vaccine_relevant=True,
+    )
+
+    assert result is payload
+    assert result["step"] == "Mirror"
+
+
+def test_vaccine_relevance_gate_prefers_semantic_relevance_false():
+    payload = {"step": "Announce", "score": 3, "reasons": ["Clear."], "tips": []}
+
+    result = VaccineRelevanceGate.gate(
+        cls_payload=payload,
+        clinician_text="I recommend the MMR today.",
+        person_last="Okay.",
+        parent_recent_concerns=[],
+        prior_announced=False,
+        semantic_is_vaccine_relevant=False,
+    )
+
+    assert result["step"] is None
+    assert result["score"] == 0
 
 
 def test_endgame_detector_guards_conditional_and_question_acceptance():

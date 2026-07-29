@@ -353,6 +353,31 @@ def test_heuristic_fallback_requires_patient_acceptance_not_clinician_offer():
     assert result is None
 
 
+def test_heuristic_does_not_override_successful_not_resolved_result():
+    """English cues are only fallback authority when model detection failed."""
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": False,
+            "resolution_type": "not_resolved",
+            "summary": "",
+            "reason": "active_concern_remains",
+        }
+    )
+    store = {
+        "s7b_model_not_resolved": {
+            "history": [
+                {"role": "user", "content": "MMR is recommended today."},
+                {"role": "assistant", "content": "Okay, let's do it today. I consent."},
+            ],
+            "aims_state": _announced_state(),
+        }
+    }
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s7b_model_not_resolved"], {}, None, "s7b_model_not_resolved"))
+    assert result is None
+    assert mock_svc.last_history_text != ""
+
+
 def test_separate_patient_messages_can_complete_literature_followup_endgame():
     """Literature and follow-up acceptance can be expressed across two person replies."""
     mock_svc = _MockClassifierService(
@@ -666,8 +691,7 @@ def test_unmirrored_concerns_block_endgame():
     service = _make_endgame_service(mock_svc)
     result = _run(service.check(store["s12"], {}, None, "s12"))
     assert result is None, "Endgame should be blocked when unmirrored concerns exist"
-    # The LLM should never have been called
-    assert mock_svc.last_history_text == ""
+    assert mock_svc.last_history_text != ""
 
 
 def test_unmirrored_concern_does_not_block_literature_followup_closure():
@@ -861,10 +885,10 @@ def test_unmirrored_concern_with_natural_review_plan_and_active_concern_still_bl
     service = _make_endgame_service(mock_svc)
     result = _run(service.check(store["s12b3"], {}, None, "s12b3"))
     assert result is None
-    assert mock_svc.last_history_text == ""
+    assert mock_svc.last_history_text != ""
 
 
-def test_unmirrored_concern_with_literature_only_blocks_before_llm():
+def test_unmirrored_concern_with_literature_only_blocks_after_semantic_check():
     """Take-home material without a return plan should not bypass unmirrored concerns."""
     mock_svc = _MockClassifierService(
         {
@@ -900,10 +924,10 @@ def test_unmirrored_concern_with_literature_only_blocks_before_llm():
     service = _make_endgame_service(mock_svc)
     result = _run(service.check(store["s12c"], {}, None, "s12c"))
     assert result is None
-    assert mock_svc.last_history_text == ""
+    assert mock_svc.last_history_text != ""
 
 
-def test_unmirrored_concern_with_active_concern_and_followup_blocks_before_llm():
+def test_unmirrored_concern_with_active_concern_and_followup_blocks_after_semantic_check():
     """Follow-up wording cannot close the session when the final reply is still concern-bearing."""
     mock_svc = _MockClassifierService(
         {
@@ -947,7 +971,7 @@ def test_unmirrored_concern_with_active_concern_and_followup_blocks_before_llm()
     service = _make_endgame_service(mock_svc)
     result = _run(service.check(store["s12d"], {}, None, "s12d"))
     assert result is None
-    assert mock_svc.last_history_text == ""
+    assert mock_svc.last_history_text != ""
 
 
 def test_all_concerns_mirrored_allows_endgame():
@@ -1110,6 +1134,155 @@ def test_llm_accepted_literature_with_literature_and_followup_evidence_is_endgam
     result = _run(service.check(store["s15a"], {}, None, "s15a"))
     assert result is not None
     assert result["title"] == "\U0001f389 Great job!"
+
+
+def test_structured_accepted_literature_fields_bypass_english_cue_validation():
+    """Structured booleans should carry closure intent when wording is not English."""
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_literature",
+            "summary": "Person agreed to review materials and continue later.",
+            "accepted_materials": True,
+            "accepted_followup": True,
+            "remaining_active_concern": False,
+            "evidence_spans": ["Si, lo revisare y volvemos a hablar."],
+            "reason": "",
+        }
+    )
+    store = {
+        "s15_structured_lit": {
+            "history": [
+                {"role": "user", "content": "Le puedo dar la informacion y volvemos a hablar."},
+                {"role": "assistant", "content": "Si, lo revisare y volvemos a hablar."},
+            ],
+            "aims_state": _literature_ready_state(),
+        }
+    }
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s15_structured_lit"], {}, None, "s15_structured_lit"))
+    assert result is not None
+    assert result["lines"][0] == "Outcome: Person agreed to review materials and continue later."
+
+
+def test_structured_literature_closure_reaches_detector_with_unmirrored_concern():
+    """Unmirrored concerns should not block semantic non-English closure before the LLM."""
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_literature",
+            "summary": "Person agreed to review materials and continue later.",
+            "accepted_materials": True,
+            "accepted_followup": True,
+            "remaining_active_concern": False,
+            "evidence_spans": ["Si, lo revisare y volvemos a hablar."],
+            "reason": "",
+        }
+    )
+    state = _literature_ready_state()
+    state["parent_concerns"][0]["is_mirrored"] = False
+    state["parent_concerns"][0]["status"] = "open"
+    store = {
+        "s15_structured_lit_unmirrored": {
+            "history": [
+                {"role": "user", "content": "Le puedo dar la informacion y volvemos a hablar."},
+                {"role": "assistant", "content": "Si, lo revisare y volvemos a hablar."},
+            ],
+            "aims_state": state,
+        }
+    }
+    service = _make_endgame_service(mock_svc)
+    result = _run(
+        service.check(
+            store["s15_structured_lit_unmirrored"],
+            {},
+            None,
+            "s15_structured_lit_unmirrored",
+        )
+    )
+    assert result is not None
+    assert mock_svc.last_history_text != ""
+
+
+def test_structured_accepted_literature_blocks_remaining_active_concern():
+    """A semantic unresolved-concern signal should block closure without text cues."""
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_literature",
+            "summary": "Person agreed to review materials later.",
+            "accepted_materials": True,
+            "accepted_followup": True,
+            "remaining_active_concern": True,
+            "evidence_spans": ["Lo revisare, pero todavia tengo dudas."],
+            "reason": "",
+        }
+    )
+    store = {
+        "s15_structured_lit_active": {
+            "history": [
+                {"role": "user", "content": "Le puedo dar la informacion y volvemos a hablar."},
+                {"role": "assistant", "content": "Lo revisare, pero todavia tengo dudas."},
+            ],
+            "aims_state": _literature_ready_state(),
+        }
+    }
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s15_structured_lit_active"], {}, None, "s15_structured_lit_active"))
+    assert result is None
+
+
+def test_structured_literature_fields_override_english_heuristic_when_inconsistent():
+    """If the structured result says a closure element is absent, do not recover it from prose."""
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_literature",
+            "summary": "Person accepted follow-up only.",
+            "accepted_materials": False,
+            "accepted_followup": True,
+            "remaining_active_concern": False,
+            "reason": "",
+        }
+    )
+    store = {
+        "s15_structured_lit_false": {
+            "history": [
+                {"role": "user", "content": "I'll send written information home and book a follow-up appointment."},
+                {"role": "assistant", "content": "That sounds good. I will read it at home and come back for the follow-up."},
+            ],
+            "aims_state": _literature_ready_state(),
+        }
+    }
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s15_structured_lit_false"], {}, None, "s15_structured_lit_false"))
+    assert result is None
+
+
+def test_structured_vaccine_fields_block_remaining_active_concern():
+    """accepted_vaccine still needs semantic no-active-concern when the field is present."""
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_vaccine",
+            "summary": "Person appeared to accept vaccination.",
+            "accepted_vaccine": True,
+            "remaining_active_concern": True,
+            "reason": "",
+        }
+    )
+    store = {
+        "s15_structured_vax_active": {
+            "history": [
+                {"role": "user", "content": "We can vaccinate today."},
+                {"role": "assistant", "content": "Yes."},
+            ],
+            "aims_state": _announced_state(phase="Secure", announced=True),
+        }
+    }
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s15_structured_vax_active"], {}, None, "s15_structured_vax_active"))
+    assert result is None
 
 
 def test_accepted_literature_closure_uses_latest_exchange_not_old_safety_risk_mirror():

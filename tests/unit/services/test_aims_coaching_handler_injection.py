@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from app.constants import KEY_AIMS_STATE, KEY_COACH_POST, KEY_GAME_OVER, SESSION_HISTORY
-from app.models import ChatRequest, ClassifierResult, Coaching
+from app.models import AimsObservations, ChatRequest, ClassifierResult, Coaching, FeedbackItem
 from app.services.aims_coaching_handler import AimsCoachingHandler
 from app.services.aims_turn_coordinator import AimsTurnResult
 from app.services.chat_context import ChatContext
@@ -115,6 +115,8 @@ def _turn(
     is_small_talk=False,
     patient_reply="Thanks, Doctor.",
     was_fallback=False,
+    observations=None,
+    feedback_items=None,
 ):
     classification_result = ClassifierResult(
         is_small_talk=is_small_talk,
@@ -126,6 +128,8 @@ def _turn(
             reasons=["Clear recommendation."] if reasons is None else reasons,
             tips=["Ask what questions they have."] if tips is None else tips,
             step_feedback=step_feedback or [],
+            observations=observations,
+            feedback_items=feedback_items or [],
         ),
         safety_flags=[],
         person_topic=None,
@@ -231,6 +235,67 @@ async def test_handle_uses_injected_services(monkeypatch):
     assert feedback_call["reply_payload"] == {"patient_reply": "Thanks, Doctor."}
 
     endgame.check.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_handle_passes_optional_semantic_coaching_fields(monkeypatch):
+    feedback = _feedback()
+    endgame = _endgame()
+    turn_coordinator = Mock()
+    turn_coordinator.run = AsyncMock(
+        return_value=_turn(
+            step="Mirror",
+            observations=AimsObservations(
+                reflection_present=True,
+                accuracy_check_present=False,
+                question_count=1,
+            ),
+            feedback_items=[
+                FeedbackItem(
+                    step="Mirror",
+                    tone="praise",
+                    code="mirror_reflection",
+                    text="You reflected the concern clearly.",
+                    evidence_spans=["worried about side effects"],
+                )
+            ],
+        )
+    )
+
+    handler = _handler(
+        classifier=Mock(),
+        patient_reply=Mock(),
+        metrics=_metrics(),
+        feedback=feedback,
+        endgame=endgame,
+        turn_coordinator=turn_coordinator,
+    )
+
+    async def fake_mapping():
+        return {}
+
+    monkeypatch.setattr(handler, "_load_aims_mapping", fake_mapping)
+
+    result = await handler.handle(
+        req=Mock(headers={}),
+        body=ChatRequest(message="It sounds like side effects worry you.", sessionId="sid", coach=True),
+        ctx=_basic_context(),
+    )
+
+    assert result["coaching"]["observations"] == {
+        "question_count": 1,
+        "reflection_present": True,
+        "accuracy_check_present": False,
+    }
+    assert result["coaching"]["feedback_items"] == [
+        {
+            "text": "You mirrored the concern clearly.",
+            "step": "Mirror",
+            "tone": "praise",
+            "code": "mirror_reflection",
+            "evidence_spans": ["worried about side effects"],
+        }
+    ]
 
 
 @pytest.mark.asyncio

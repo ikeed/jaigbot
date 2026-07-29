@@ -341,6 +341,162 @@ def _find_matching_concern(concerns: List[Concern], topic: Optional[str]) -> Con
     return None
 
 
+def _event_dict(event: object) -> dict[str, object]:
+    if isinstance(event, dict):
+        return event
+    if hasattr(event, "model_dump"):
+        dumped = event.model_dump()
+        return dumped if isinstance(dumped, dict) else {}
+    return {}
+
+
+def _event_type(event: dict[str, object]) -> str:
+    return _as_text(event.get("event_type")).strip().lower().replace("-", "_")
+
+
+def _event_confidence_allows_apply(event: dict[str, object]) -> bool:
+    confidence = _as_text(event.get("confidence")).strip().lower()
+    return confidence not in {"low", "very_low", "none"}
+
+
+def _event_has_concern_target(event: dict[str, object]) -> bool:
+    return bool(
+        _as_text(event.get("topic")).strip()
+        or _as_text(event.get("target_concern_id")).strip()
+    )
+
+
+def _event_evidence(event: dict[str, object], person_text: str | None) -> list[str]:
+    spans = _string_list(event.get("evidence_spans"))
+    if not spans and person_text:
+        spans = [person_text]
+
+    cleaned: list[str] = []
+    for span in spans:
+        evidence = _clean_evidence_snippet(span)
+        if evidence:
+            cleaned.append(evidence)
+    return cleaned
+
+
+def _find_event_target(concerns: list[Concern], event: dict[str, object]) -> Concern | None:
+    target_id = _canonical_id(_as_text(event.get("target_concern_id")))
+    if target_id and target_id != "general":
+        for concern in concerns or []:
+            _normalize_existing_concern(concern)
+            if _as_text(concern.get("id")) == target_id:
+                return concern
+    return _find_matching_concern(concerns, _as_text(event.get("topic")))
+
+
+def _merge_evidence(concern: Concern, evidence_items: list[str]) -> None:
+    evidence_list = _string_list(concern.get("evidence"))
+    for evidence in evidence_items:
+        if not _is_redundant_evidence(evidence_list, evidence):
+            evidence_list.append(evidence)
+    concern["evidence"] = evidence_list[-5:]
+
+
+def _apply_concern_presence_event(
+    state: dict,
+    event: dict[str, object],
+    person_text: str | None,
+) -> None:
+    if not _event_confidence_allows_apply(event):
+        return
+
+    concerns: list[Concern] = state.setdefault("parent_concerns", [])  # type: ignore[assignment]
+    evidence_items = _event_evidence(event, person_text)
+    existing = _find_event_target(concerns, event)
+    if existing:
+        _merge_evidence(existing, evidence_items)
+        _sync_concern_status(existing)
+        return
+
+    topic = _canonical_topic(_as_text(event.get("topic")))
+    if not topic or topic == "general":
+        return
+
+    first_evidence = evidence_items[0] if evidence_items else _clean_evidence_snippet(person_text or "")
+    label = _concern_label(topic, first_evidence)
+    concerns.append({
+        "id": _canonical_id(topic),
+        "topic": topic,
+        "canonical_label": label,
+        "summary": label,
+        "desc": label,
+        "evidence": evidence_items[:5],
+        "is_mirrored": False,
+        "is_secured": False,
+        "status": "open",
+        "mirror_count": 0,
+        "secure_count": 0,
+    })
+
+
+def _apply_mirrored_event(state: dict, event: dict[str, object]) -> None:
+    if not _event_confidence_allows_apply(event):
+        return
+
+    concern = _find_event_target(state.get("parent_concerns") or [], event)
+    if not concern or concern.get("is_mirrored"):
+        return
+
+    concern["is_mirrored"] = True
+    concern["mirror_count"] = _count(concern.get("mirror_count")) + 1
+    _sync_concern_status(concern)
+
+
+def _apply_secured_event(state: dict, event: dict[str, object]) -> None:
+    if not _event_confidence_allows_apply(event):
+        return
+
+    concern = _find_event_target(state.get("parent_concerns") or [], event)
+    if not concern or not concern.get("is_mirrored") or concern.get("is_secured"):
+        return
+
+    concern["is_secured"] = True
+    concern["secure_count"] = _count(concern.get("secure_count")) + 1
+    _sync_concern_status(concern)
+
+
+def apply_concern_events(
+    state: dict,
+    events: Iterable[object] | None,
+    *,
+    person_text: str | None = None,
+) -> set[str]:
+    """Apply model-supplied semantic concern events.
+
+    Returns handled action groups so callers can skip English keyword fallback
+    for the same semantic decision.
+    """
+    handled: set[str] = set()
+
+    for raw_event in events or []:
+        event = _event_dict(raw_event)
+        event_kind = _event_type(event)
+        if event_kind in {"raised", "renewed", "concern_raised", "concern_renewed", "active_concern"}:
+            if not _event_has_concern_target(event):
+                continue
+            handled.add("concern_presence")
+            _apply_concern_presence_event(state, event, person_text)
+        elif event_kind in {"accepted", "resolved", "no_active_concern"}:
+            handled.add("concern_presence")
+        elif event_kind in {"mirrored", "concern_mirrored"}:
+            if not _event_has_concern_target(event):
+                continue
+            handled.add("mirrored")
+            _apply_mirrored_event(state, event)
+        elif event_kind in {"secured", "concern_secured"}:
+            if not _event_has_concern_target(event):
+                continue
+            handled.add("secured")
+            _apply_secured_event(state, event)
+
+    return handled
+
+
 def is_duplicate_concern(concerns: List[Concern], desc: str, topic: Optional[str]) -> bool:
     """Return True when a concern has the same canonical topic/meaning."""
     if _find_matching_concern(concerns, topic):
@@ -738,6 +894,7 @@ __all__ = [
     "topics_in",
     "concern_topic",
     "is_duplicate_concern",
+    "apply_concern_events",
     "maybe_add_person_concern",
     "mark_mirrored_multi",
     "mark_secured_by_topic",

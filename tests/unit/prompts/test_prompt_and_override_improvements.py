@@ -59,6 +59,10 @@ class TestPromptContent:
         """Active classifier prompts must use the step_feedback JSON structure."""
         prompt = self._active_classifier_prompt()
         assert "step_feedback" in prompt
+        assert "observations" in prompt
+        assert "feedback_items" in prompt
+        assert "person_events" in prompt
+        assert "resolution" in prompt
         assert "tone" in prompt
         assert "praise|improvement" in prompt or "praise" in prompt
 
@@ -71,6 +75,15 @@ class TestPromptContent:
         assert "improvement" in lower
         assert "past-tense second-person" in lower
         assert "ui labels it with `tip:`" in lower
+
+    def test_system_instruction_contains_optional_semantic_contract(self):
+        """Structured optional fields should be available for non-regex decisions."""
+        instruction = get_classify_system_instruction().lower()
+        assert "optional semantic fields" in instruction
+        assert "open_concern_question_present" in instruction
+        assert "feedback_items" in instruction
+        assert "person_events" in instruction
+        assert "remaining_active_concern" in instruction
 
     def test_system_instruction_prevents_tips_for_behavior_already_done(self):
         """Tips should target actual gaps, not already-successful behavior."""
@@ -199,4 +212,7 @@ class TestPromptContent:
         assert "never claim a step was" in lower
         assert "stepcoverage[step] > 0" in lower
         assert "do not invent concerns" in lower
-        assert "6–8 plain" in prompt or "6-8 plain" in lower
+        assert "strict json only" in lower
+        assert "overall_commentary" in prompt
+        assert "metric_notes" in prompt
+        assert "status" in prompt

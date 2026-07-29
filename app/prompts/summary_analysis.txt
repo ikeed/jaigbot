@@ -8,13 +8,30 @@ GROUNDEDNESS RULES (must follow):
 - If a step’s average score is low, critique technique and provide examples; do not say it didn’t happen.
 - Evaluate if the clinician slowed down to Mirror enough ("Process over content") to make the person "feel felt".
 - Tie all points to concerns in the transcript; do not invent concerns.
-- Output plain text only; no code blocks, no JSON, no fenced sections.
+- Output strict JSON only; no code blocks, markdown, or explanatory text.
 
 When writing the analysis, follow these content rules:
 - Start with a 1‑sentence appraisal of the outcome and overall AIMS execution quality.
 - For each AIMS step (Announce, Inquire, Mirror, Secure): briefly explain what went well vs. what could be better.
 - For any weaker step, include 1–2 concrete example phrases the clinician could try next time.
-- Keep to 6–8 plain‑text bullet lines total. Each bullet must start with a single dash and a space.
+- Keep the rendered analysis to 6–8 concise lines total.
+
+Return this exact JSON shape:
+{{
+  "overall_commentary": <string>,
+  "strengths": [<string>],
+  "growth_areas": [<string>],
+  "metric_notes": [
+    {{
+      "step": "Announce" | "Inquire" | "Mirror" | "Secure",
+      "status": "not_used" | "used" | "low" | "solid" | "strong",
+      "text": <string>
+    }}
+  ]
+}}
+
+Use `metric_notes[].status`, not prose, to state whether a step was not used.
+If stepCoverage[STEP] > 0, do not set that step's status to "not_used".
 
 Session metrics (JSON):
 {metrics_blob}
@@ -25,4 +42,4 @@ AIMS mapping (JSON):
 Transcript:
 {transcript}
 
-Now write the bullet list, following the rules above.
+Now write the JSON object, following the rules above.

@@ -17,6 +17,7 @@ from app.constants import (
 )
 from app.prompts.aims import build_fallback_feedback_prompt
 from app.services.aims_state_service import AimsStateService
+from app.services.coaching_tip_sanitizer import normalize_aims_feedback_terms
 from app.services.vertex_gateway import VertexGateway
 
 
@@ -204,7 +205,7 @@ class AimsFeedbackService:
         out: list[str] = []
         seen: set[str] = set()
         for value in values or []:
-            text = str(value or "").strip()
+            text = normalize_aims_feedback_terms(value)
             if not text or text in seen:
                 continue
             seen.add(text)
@@ -225,7 +226,7 @@ class AimsFeedbackService:
                 if not isinstance(item, dict):
                     continue
                 sf_step = AimsFeedbackService._text_value(item.get("step"), step or "").strip()
-                feedback = AimsFeedbackService._text_value(item.get("feedback")).strip()
+                feedback = normalize_aims_feedback_terms(item.get("feedback"))
                 tone = AimsFeedbackService._text_value(item.get("tone"), "improvement").strip().lower()
                 if not sf_step or not feedback:
                     continue
@@ -240,7 +241,9 @@ class AimsFeedbackService:
         if normalized:
             return normalized
 
-        fallback_text = reasons[0] if reasons else (tips[0] if tips else "")
+        fallback_text = normalize_aims_feedback_terms(
+            reasons[0] if reasons else (tips[0] if tips else "")
+        )
         if fallback_text and step:
             return [{
                 "step": step,

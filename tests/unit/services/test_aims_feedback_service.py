@@ -312,7 +312,7 @@ def test_normalize_step_feedback_falls_back_to_reason_or_tip():
     ) == [
         {
             "step": "Mirror",
-            "feedback": "Use a more specific reflection.",
+            "feedback": "Use a more specific mirroring.",
             "tone": "improvement",
         }
     ]

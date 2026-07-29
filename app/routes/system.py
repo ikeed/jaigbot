@@ -58,7 +58,11 @@ def create_system_router(
                     role = it.get("role")
                     content = it.get("content")
                     if isinstance(role, str) and isinstance(content, str):
-                        out.append({"role": role, "content": content})
+                        item = {"role": role, "content": content}
+                        coaching = it.get("coaching_data") or it.get("coaching")
+                        if isinstance(coaching, dict):
+                            item["coaching"] = coaching
+                        out.append(item)
                 except Exception as e:
                     logger.debug("Failed to parse history item: %s. Error: %s", it, e)
                     continue

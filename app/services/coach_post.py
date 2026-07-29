@@ -65,17 +65,21 @@ class VaccineRelevanceGate:
         person_last: str,
         parent_recent_concerns: List[str],
         prior_announced: bool,
+        semantic_is_vaccine_relevant: bool | None = None,
     ) -> Dict:
         lt_msg = (clinician_text or "").strip().lower()
         pt_msg = (person_last or "").strip().lower()
         ctx_blob = ("\n".join(parent_recent_concerns) if parent_recent_concerns else "").lower()
 
-        is_vax_related = (
-            any(cue in lt_msg for cue in VaccineRelevanceGate.VAX_CUES)
-            or any(cue in pt_msg for cue in VaccineRelevanceGate.VAX_CUES)
-            or any(cue in ctx_blob for cue in VaccineRelevanceGate.VAX_CUES)
-            or bool(prior_announced)
-        )
+        if semantic_is_vaccine_relevant is None:
+            is_vax_related = (
+                any(cue in lt_msg for cue in VaccineRelevanceGate.VAX_CUES)
+                or any(cue in pt_msg for cue in VaccineRelevanceGate.VAX_CUES)
+                or any(cue in ctx_blob for cue in VaccineRelevanceGate.VAX_CUES)
+                or bool(prior_announced)
+            )
+        else:
+            is_vax_related = bool(semantic_is_vaccine_relevant) or bool(prior_announced)
 
         if not is_vax_related and (cls_payload.get("step") in VaccineRelevanceGate.VALID_STEPS):
             return {
@@ -111,6 +115,8 @@ class AimsPostProcessor:
     @staticmethod
     def post_process(cls_payload: Dict, clinician_text: str) -> Dict:
         cls_payload = AimsPostProcessor.normalize_score(cls_payload)
+        if cls_payload.get("feedback_items"):
+            return cls_payload
         # Soften overly harsh feedback when autonomy-respecting language is present
         try:
             lt = (clinician_text or "").lower()
@@ -416,9 +422,9 @@ def build_endgame_bullets_fallback(session_obj: Dict | None) -> List[str]:
             "absent": f"ask at least one open-ended question to discover {persona_label} specific concerns before educating.",
         },
         "Mirror": {
-            "high": "excellent reflections — you consistently captured the concern before moving forward.",
-            "mid":  "good reflections; make sure to capture the underlying value (not just the stated concern) and check for accuracy.",
-            "low":  f"reflect {persona_label} concern before educating (e.g., \"It sounds like you want to be sure this is safe — did I get that right?\").",
+            "high": "excellent mirroring — you consistently captured the concern before moving forward.",
+            "mid":  "good mirroring; make sure to capture the underlying value (not just the stated concern) and check for accuracy.",
+            "low":  f"mirror {persona_label} concern before educating (e.g., \"It sounds like you want to be sure this is safe — did I get that right?\").",
             "absent": f"mirror {persona_label} concern back to them before offering any education — it makes them feel heard.",
         },
         "Secure": {
@@ -433,7 +439,7 @@ def build_endgame_bullets_fallback(session_obj: Dict | None) -> List[str]:
         return [
             "Announce: lead with a short, non-pushy recommendation and invite input.",
             "Inquire: ask open-ended questions to surface the parent's specific concerns.",
-            "Mirror: reflect their words and emotions before educating.",
+            "Mirror: mirror their words and emotions before educating.",
             "Secure: share one tailored fact linked to the concern, then check understanding.",
         ]
 

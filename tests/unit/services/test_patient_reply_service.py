@@ -69,7 +69,12 @@ async def test_generate_passes_prompt_identity_and_rewrites_terse_ok():
         concern_state_section="Open concerns: none. Resolved concerns: ingredients.",
     )
 
-    assert result == {"patient_reply": "Yes, that helps. Thank you."}
+    assert result["patient_reply"] == "Yes, that helps. Thank you."
+    assert result["reply_validation"] == {
+        "reply_valid": True,
+        "metadata_leak_detected": False,
+        "fallback_reply_code": "acknowledge_resolved",
+    }
     assert len(caller.calls) == 1
     assert "you may use Doctor or Dr. Burnett" in caller.calls[0]["prompt"]
     assert "Resolved concerns: ingredients." in caller.calls[0]["prompt"]
@@ -90,7 +95,8 @@ async def test_generate_rewrites_terse_ok_to_neutral_acknowledgment_when_concern
         concern_state_section="Open concerns: side_effects.",
     )
 
-    assert result == {"patient_reply": "Okay, thank you."}
+    assert result["patient_reply"] == "Okay, thank you."
+    assert result["reply_validation"]["fallback_reply_code"] == "acknowledge_open"
     assert any("aims_patient_reply_terse_ok_rewrite" in message for message in logger.info_messages)
 
 
@@ -106,7 +112,8 @@ async def test_generate_rewrites_terse_ok_to_acknowledgment_when_no_open_concern
         concern_state_section="Open concerns: none. Resolved concerns: ingredients.",
     )
 
-    assert result == {"patient_reply": "Yes, that helps. Thank you."}
+    assert result["patient_reply"] == "Yes, that helps. Thank you."
+    assert result["reply_validation"]["fallback_reply_code"] == "acknowledge_resolved"
 
 
 @pytest.mark.asyncio
@@ -121,7 +128,12 @@ async def test_generate_retries_invalid_json_then_returns_success():
         session_id="sid",
     )
 
-    assert result == {"patient_reply": "Thanks, Doctor."}
+    assert result["patient_reply"] == "Thanks, Doctor."
+    assert result["reply_validation"] == {
+        "reply_valid": True,
+        "metadata_leak_detected": False,
+        "fallback_reply_code": None,
+    }
     assert len(caller.calls) == 2
     assert any("aims_patient_reply_invalid_json" in message for message in logger.info_messages)
 
@@ -137,7 +149,8 @@ async def test_generate_invalid_json_twice_returns_safe_fallback():
         session_id="sid",
     )
 
-    assert result == {"patient_reply": "I'm not sure — I have some questions, but I'd like to hear more."}
+    assert result["patient_reply"] == "I'm not sure — I have some questions, but I'd like to hear more."
+    assert result["reply_validation"]["fallback_reply_code"] == "need_more"
     assert len(caller.calls) == 2
 
 
@@ -153,7 +166,8 @@ async def test_generate_invalid_json_twice_returns_acknowledgment_when_no_open_c
         concern_state_section="Open concerns: none. Resolved concerns: ingredients.",
     )
 
-    assert result == {"patient_reply": "Yes, that helps. Thank you."}
+    assert result["patient_reply"] == "Yes, that helps. Thank you."
+    assert result["reply_validation"]["fallback_reply_code"] == "acknowledge_resolved"
     assert len(caller.calls) == 2
 
 
@@ -171,7 +185,8 @@ async def test_generate_allows_medical_language_without_advice_guard():
         session_id="sid",
     )
 
-    assert result == {"patient_reply": "So he should get the vaccines today? And for his ear, you mentioned acetaminophen?"}
+    assert result["patient_reply"] == "So he should get the vaccines today? And for his ear, you mentioned acetaminophen?"
+    assert result["reply_validation"]["fallback_reply_code"] is None
     assert logger.info_messages == []
 
 
@@ -190,3 +205,51 @@ async def test_generate_jailbreak_returns_confused_reply_without_model_call():
     assert "checkup today" in result["patient_reply"]
     assert caller.calls == []
     assert any("aims_patient_reply_jailbreak_intercept" in message for message in logger.info_messages)
+
+
+@pytest.mark.asyncio
+async def test_generate_retries_metadata_label_leak_then_returns_success():
+    logger = DummyLogger()
+    caller = JsonCaller(
+        json.dumps({"patient_reply": "Person: Taylor Lopez\nPurpose: Flu vaccination\nHere is my reply."}),
+        json.dumps({"patient_reply": "Here is my reply."}),
+    )
+    service = _service(caller, logger=logger)
+
+    result = await service.generate(
+        clinician_message="How are things going?",
+        history_text="",
+        session_id="sid",
+    )
+
+    assert result["patient_reply"] == "Here is my reply."
+    assert result["reply_validation"] == {
+        "reply_valid": True,
+        "metadata_leak_detected": False,
+        "fallback_reply_code": None,
+    }
+    assert len(caller.calls) == 2
+    assert "previous JSON was valid" in caller.calls[1]["prompt"]
+    assert any("aims_patient_reply_invalid_text" in message for message in logger.info_messages)
+
+
+@pytest.mark.asyncio
+async def test_generate_returns_coded_fallback_after_repeated_metadata_leak():
+    caller = JsonCaller(
+        json.dumps({"patient_reply": "Person: Taylor Lopez\nPurpose: Flu vaccination"}),
+        json.dumps({"patient_reply": "Parent: Sarah Jenkins\nNotes: Still leaking."}),
+    )
+    service = _service(caller)
+
+    result = await service.generate(
+        clinician_message="Let's talk vaccines.",
+        history_text="",
+        session_id="sid",
+    )
+
+    assert result["patient_reply"] == "I'm not sure — I have some questions, but I'd like to hear more."
+    assert result["reply_validation"] == {
+        "reply_valid": False,
+        "metadata_leak_detected": True,
+        "fallback_reply_code": "need_more",
+    }

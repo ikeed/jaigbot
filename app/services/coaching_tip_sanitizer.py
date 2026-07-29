@@ -30,6 +30,51 @@ _LEADING_QUESTION_RE = re.compile(
     re.IGNORECASE,
 )
 
+_ADD_BEHAVIOR_CODE_TARGETS = {
+    "ask_open_question": "open_concern_question_present",
+    "ask_open_concern_question": "open_concern_question_present",
+    "open_question_missing": "open_concern_question_present",
+    "open_concern_question_missing": "open_concern_question_present",
+    "add_reflection": "reflection_present",
+    "mirror_concern": "reflection_present",
+    "reflect_concern": "reflection_present",
+    "add_accuracy_check": "accuracy_check_present",
+    "check_accuracy": "accuracy_check_present",
+    "add_autonomy_support": "autonomy_support_present",
+    "affirm_autonomy": "autonomy_support_present",
+    "add_safety_net": "safety_net_present",
+    "offer_followup_or_materials": "followup_or_materials_present",
+}
+
+_ABSENT_BEHAVIOR_CODE_TARGETS = {
+    "avoid_leading_question": "leading_question_present",
+    "avoid_why_framing": "why_framing_present",
+    "use_what_or_how": "why_framing_present",
+}
+
+_STACKED_QUESTION_CODES = {
+    "ask_one_question",
+    "ask_one_question_at_a_time",
+    "reduce_question_stack",
+}
+
+_MIRROR_TERM_REPLACEMENTS = (
+    (re.compile(r"\bReflections\b"), "Mirroring"),
+    (re.compile(r"\breflections\b"), "mirroring"),
+    (re.compile(r"\bReflected\b"), "Mirrored"),
+    (re.compile(r"\breflected\b"), "mirrored"),
+    (re.compile(r"\bReflecting\b"), "Mirroring"),
+    (re.compile(r"\breflecting\b"), "mirroring"),
+    (re.compile(r"\bReflective listening\b"), "Mirroring"),
+    (re.compile(r"\breflective listening\b"), "mirroring"),
+    (re.compile(r"\bReflection\b"), "Mirroring"),
+    (re.compile(r"\breflection\b"), "mirroring"),
+    (re.compile(r"\bReflects\b"), "Mirrors"),
+    (re.compile(r"\breflects\b"), "mirrors"),
+    (re.compile(r"\bReflect\b"), "Mirror"),
+    (re.compile(r"\breflect\b"), "mirror"),
+)
+
 
 def has_open_concern_question(text: str | None) -> bool:
     """Return True when the current turn asks an open concern-surfacing question."""
@@ -50,12 +95,26 @@ def is_open_question_tip(tip: str | None) -> bool:
     return bool(_OPEN_QUESTION_TIP_RE.search(tip or ""))
 
 
+def normalize_aims_feedback_terms(text: str | None) -> str:
+    """Use AIMS step language in user-facing coaching text."""
+    normalized = str(text or "").strip()
+    for pattern, replacement in _MIRROR_TERM_REPLACEMENTS:
+        normalized = pattern.sub(replacement, normalized)
+    return normalized
+
+
 def sanitize_coaching_tips(
     cls_payload: dict[str, Any],
     *,
     clinician_message: str | None,
 ) -> dict[str, Any]:
     """Drop or replace feedback that criticizes a behavior already present this turn."""
+    cls_payload["reasons"] = _sanitize_text_list(cls_payload.get("reasons") or [])
+    cls_payload["feedback_items"] = _sanitize_feedback_items(
+        cls_payload.get("feedback_items") or [],
+        observations=_mapping_dict(cls_payload.get("observations")) or {},
+    )
+
     tips = cls_payload.get("tips") or []
 
     components = AimsMetricsService.component_steps(
@@ -74,7 +133,7 @@ def sanitize_coaching_tips(
 
     sanitized: list[str] = []
     for raw_tip in tips:
-        tip = str(raw_tip or "").strip()
+        tip = normalize_aims_feedback_terms(raw_tip)
         if not tip:
             continue
         if already_opened and is_open_question_tip(tip):
@@ -95,6 +154,98 @@ def sanitize_coaching_tips(
     return cls_payload
 
 
+def _sanitize_text_list(raw_items: list[Any]) -> list[str]:
+    sanitized: list[str] = []
+    for raw_item in raw_items:
+        text = normalize_aims_feedback_terms(raw_item)
+        if text and text not in sanitized:
+            sanitized.append(text)
+    return sanitized
+
+
+def _sanitize_feedback_items(
+    raw_feedback_items: list[Any],
+    *,
+    observations: dict[str, Any],
+) -> list[dict[str, Any]]:
+    sanitized: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str, str]] = set()
+
+    for raw_item in raw_feedback_items:
+        item = _mapping_dict(raw_item)
+        if not item:
+            continue
+
+        text = str(item.get("text") or "").strip()
+        if not text:
+            continue
+
+        item = dict(item)
+        item["text"] = normalize_aims_feedback_terms(text)
+        item["tone"] = str(item.get("tone") or "improvement").strip().lower()
+        if item["tone"] not in {"praise", "improvement"}:
+            item["tone"] = "improvement"
+        if "code" in item:
+            item["code"] = str(item.get("code") or "").strip().lower()
+        if "target_observation" in item:
+            item["target_observation"] = str(item.get("target_observation") or "").strip()
+
+        if _feedback_item_contradicted(item, observations):
+            continue
+
+        if "step" in item:
+            item["step"] = str(item.get("step") or "").strip()
+        if "evidence_spans" in item:
+            item["evidence_spans"] = [
+                str(span).strip()
+                for span in (item.get("evidence_spans") or [])
+                if str(span or "").strip()
+            ]
+
+        key = (
+            str(item.get("step") or ""),
+            str(item.get("code") or ""),
+            str(item.get("target_observation") or ""),
+            item["text"],
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        sanitized.append(item)
+
+    return sanitized
+
+
+def _feedback_item_contradicted(item: dict[str, Any], observations: dict[str, Any]) -> bool:
+    if not observations or item.get("tone") == "praise":
+        return False
+
+    code = str(item.get("code") or "").strip().lower()
+    if code in _STACKED_QUESTION_CODES:
+        return _observation_count(observations.get("question_count")) <= 1
+
+    add_target = _ADD_BEHAVIOR_CODE_TARGETS.get(code)
+    if add_target:
+        return observations.get(add_target) is True
+
+    absent_target = _ABSENT_BEHAVIOR_CODE_TARGETS.get(code)
+    if absent_target:
+        return observations.get(absent_target) is False
+
+    target = str(item.get("target_observation") or "").strip()
+    return bool(target and observations.get(target) is True)
+
+
+def _observation_count(value: Any) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.strip().isdigit():
+        return int(value.strip())
+    return 0
+
+
 def _sanitize_step_feedback(
     raw_step_feedback: list[Any],
     *,
@@ -112,6 +263,7 @@ def _sanitize_step_feedback(
         feedback = str(item.get("feedback") or "").strip()
         if not feedback:
             continue
+        feedback = normalize_aims_feedback_terms(feedback)
 
         if already_opened and is_open_question_tip(feedback):
             replacement = (
@@ -140,6 +292,11 @@ def _sanitize_step_feedback(
 
 
 def _step_feedback_dict(raw_item: Any) -> dict[str, str] | None:
+    item = _mapping_dict(raw_item)
+    return dict(item) if item else None
+
+
+def _mapping_dict(raw_item: Any) -> dict[str, Any] | None:
     if isinstance(raw_item, dict):
         return dict(raw_item)
     if hasattr(raw_item, "model_dump"):

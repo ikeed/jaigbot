@@ -48,6 +48,165 @@ def test_sanitize_ignores_blank_tip_and_invalid_score():
     assert payload["tips"] == ["Keep the wording neutral."]
 
 
+def test_sanitize_feedback_items_drops_contradicted_add_behavior_code():
+    payload = {
+        "step": "Secure",
+        "score": 2,
+        "observations": {"open_concern_question_present": True},
+        "feedback_items": [
+            {
+                "step": "Inquire",
+                "tone": "improvement",
+                "code": "ASK_OPEN_QUESTION",
+                "text": "Ask an open concern question.",
+            },
+            {
+                "step": "Secure",
+                "tone": "improvement",
+                "code": "pause_after_question",
+                "text": "Pause after asking so they have room to answer.",
+                "evidence_spans": [" What concerns do you have? "],
+            },
+        ],
+        "tips": [],
+    }
+
+    sanitize_coaching_tips(
+        payload,
+        clinician_message="What concerns do you have about MMR? It is very safe.",
+    )
+
+    assert payload["feedback_items"] == [
+        {
+            "step": "Secure",
+            "tone": "improvement",
+            "code": "pause_after_question",
+            "text": "Pause after asking so they have room to answer.",
+            "evidence_spans": ["What concerns do you have?"],
+        }
+    ]
+
+
+def test_sanitize_feedback_items_drops_absent_behavior_codes_and_keeps_praise():
+    payload = {
+        "step": "Mirror",
+        "score": 3,
+        "observations": {
+            "leading_question_present": False,
+            "question_count": 1,
+            "reflection_present": True,
+            "safety_net_present": False,
+        },
+        "feedback_items": [
+            {
+                "step": "Inquire",
+                "tone": "improvement",
+                "code": "avoid_leading_question",
+                "text": "Make the question less leading.",
+            },
+            {
+                "step": "Inquire",
+                "tone": "improvement",
+                "code": "ask_one_question_at_a_time",
+                "text": "Ask one question at a time.",
+            },
+            {
+                "step": "Mirror",
+                "tone": "praise",
+                "code": "add_reflection",
+                "text": "You reflected the concern clearly.",
+            },
+            {
+                "step": "Secure",
+                "tone": "improvement",
+                "code": "add_safety_net",
+                "text": "Add a safety net.",
+            },
+        ],
+        "tips": [],
+    }
+
+    sanitize_coaching_tips(
+        payload,
+        clinician_message="What concerns do you have about MMR?",
+    )
+
+    assert payload["feedback_items"] == [
+        {
+            "step": "Mirror",
+            "tone": "praise",
+            "code": "add_reflection",
+            "text": "You mirrored the concern clearly.",
+        },
+        {
+            "step": "Secure",
+            "tone": "improvement",
+            "code": "add_safety_net",
+            "text": "Add a safety net.",
+        },
+    ]
+
+
+def test_sanitize_feedback_items_drops_target_observation_when_already_present():
+    payload = {
+        "step": "Mirror",
+        "score": 3,
+        "observations": {"reflection_present": True},
+        "feedback_items": [
+            {
+                "step": "Mirror",
+                "tone": "improvement",
+                "target_observation": "reflection_present",
+                "text": "Reflect the concern.",
+            }
+        ],
+        "tips": [],
+    }
+
+    sanitize_coaching_tips(
+        payload,
+        clinician_message="It sounds like you are worried.",
+    )
+
+    assert payload["feedback_items"] == []
+
+
+def test_sanitize_normalizes_mirror_terms_in_public_coaching_fields():
+    payload = {
+        "step": "Mirror",
+        "score": 3,
+        "observations": {"reflection_present": True},
+        "reasons": ["Reflected concern well"],
+        "tips": ["Reflect the exact timing concern before educating."],
+        "step_feedback": [
+            {
+                "step": "Mirror",
+                "tone": "praise",
+                "feedback": "You reflected the concern clearly.",
+            }
+        ],
+        "feedback_items": [
+            {
+                "step": "Mirror",
+                "tone": "praise",
+                "code": "mirror_reflection",
+                "text": "You reflected the timing concern clearly.",
+                "target_observation": "reflection_present",
+            }
+        ],
+    }
+
+    sanitize_coaching_tips(
+        payload,
+        clinician_message="It sounds like the timing feels hard.",
+    )
+
+    assert payload["reasons"] == ["Mirrored concern well"]
+    assert payload["tips"] == ["Mirror the exact timing concern before educating."]
+    assert payload["step_feedback"][0]["feedback"] == "You mirrored the concern clearly."
+    assert payload["feedback_items"][0]["text"] == "You mirrored the timing concern clearly."
+
+
 def test_sanitize_keeps_pause_tip_after_open_question():
     payload = {
         "step": "Secure",

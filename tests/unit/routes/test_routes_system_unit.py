@@ -73,7 +73,11 @@ def test_history_filters_malformed_working_history_items():
                     {"role": "user", "content": "hello"},
                     {"role": "assistant", "content": 123},
                     "not-a-dict",
-                    {"role": "coach", "content": "hint"},
+                    {
+                        "role": "coach",
+                        "content": "hint",
+                        "coaching_data": {"step": "Secure"},
+                    },
                 ],
                 "full_history": [{"role": "user", "content": "hello", "time": 1}],
             }
@@ -86,7 +90,7 @@ def test_history_filters_malformed_working_history_items():
     assert response.json() == {
         "history": [
             {"role": "user", "content": "hello"},
-            {"role": "coach", "content": "hint"},
+            {"role": "coach", "content": "hint", "coaching": {"step": "Secure"}},
         ]
     }
     assert store["sid"]["full_history"][0]["time"] == 1
