@@ -42,12 +42,24 @@ class AimsEndgameService:
 
     @staticmethod
     def _recent_exchange_text(history: list[dict[str, Any]]) -> str:
-        return " ".join(
+        text = " ".join(
             item.get("content", "")
             for item in history[-10:]
             if item.get("role") in (ROLE_USER, ROLE_ASSISTANT)
             and (item.get("content") or "").strip()
-        )[:1500]
+        )
+        return text[-1500:]
+
+    @staticmethod
+    def _latest_closure_exchange_text(history: list[dict[str, Any]]) -> str:
+        """Return the latest clinician/person exchange for closure validation."""
+        exchange = [
+            item.get("content", "")
+            for item in history
+            if item.get("role") in (ROLE_USER, ROLE_ASSISTANT)
+            and (item.get("content") or "").strip()
+        ][-2:]
+        return " ".join(exchange)[-1500:]
 
     async def check(
         self,
@@ -148,8 +160,11 @@ class AimsEndgameService:
                     is_endgame = False
                 elif not first_inquire_done or not concerns:
                     is_endgame = False
-                elif not self._could_be_literature_followup_closure(
-                    self._recent_exchange_text(history)
+                elif not (
+                    literature_followup_closure
+                    or self._could_be_literature_followup_closure(
+                        self._latest_closure_exchange_text(history)
+                    )
                 ):
                     is_endgame = False
 
