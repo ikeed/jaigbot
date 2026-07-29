@@ -418,8 +418,9 @@ class AimsStateService:
     @staticmethod
     def _observed_open_concern_question(cls_payload: dict[str, Any]) -> bool | None:
         observations = cls_payload.get("observations")
-        if hasattr(observations, "model_dump"):
-            observations = observations.model_dump()
+        model_dump = getattr(observations, "model_dump", None)
+        if callable(model_dump):
+            observations = model_dump()
         if not isinstance(observations, dict):
             return None
         value = observations.get("open_concern_question_present")
