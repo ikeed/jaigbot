@@ -521,8 +521,54 @@ async def test_process_backend_response_prefers_step_feedback_over_raw_tip(
 
     coach_text = mock_services["session"].history[0]["content"]
     assert "Inquire: Great job: You opened with a broad concern question." in coach_text
-    assert "Secure: Try: Pause before moving into reassurance." in coach_text
+    assert "Secure: Tip: Pause before moving into reassurance." in coach_text
     assert "Tip: Try leading with an open question." not in coach_text
+
+
+@pytest.mark.asyncio
+async def test_process_backend_response_rotates_praise_step_feedback_labels(
+    orchestrator, mock_services
+):
+    mock_services["session"].history = []
+    mock_services["ui"].send_coach_message = AsyncMock()
+    mock_services["ui"].send_assistant_reply = AsyncMock()
+
+    await orchestrator._process_backend_response(
+        {
+            "coaching": {
+                "step": "Mirror+Secure+Inquire+Announce",
+                "step_feedback": [
+                    {
+                        "step": "Mirror",
+                        "tone": "praise",
+                        "feedback": "You reflected the parent's core worry.",
+                    },
+                    {
+                        "step": "Secure",
+                        "tone": "praise",
+                        "feedback": "You supported the parent's choice.",
+                    },
+                    {
+                        "step": "Inquire",
+                        "tone": "praise",
+                        "feedback": "You asked a collaborative open question.",
+                    },
+                    {
+                        "step": "Announce",
+                        "tone": "praise",
+                        "feedback": "You made a clear recommendation.",
+                    },
+                ],
+            },
+            "reply": "I appreciate that.",
+        }
+    )
+
+    coach_text = mock_services["session"].history[0]["content"]
+    assert "Mirror: Great job: You reflected the parent's core worry." in coach_text
+    assert "Secure: Well done: You supported the parent's choice." in coach_text
+    assert "Inquire: Nice work: You asked a collaborative open question." in coach_text
+    assert "Announce: Strong move: You made a clear recommendation." in coach_text
 
 
 @pytest.mark.asyncio
