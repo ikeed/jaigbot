@@ -23,9 +23,8 @@ from app.services.chainlit.ui_handler import UIHandler
 
 
 def _has_praise_line(text: str, step: str, feedback: str) -> bool:
-    return any(
-        f"{step}: {label} {feedback}" in text
-        for label in message_list("coaching.labels.praise")
+    return f"- {step}\n" in text and any(
+        f"{label} {feedback}" in text for label in message_list("coaching.labels.praise")
     )
 
 
@@ -149,7 +148,7 @@ def test_ui_handler_format_coaching_message_uses_structured_payload():
     assert "- Detected step: Secure" in formatted
     assert _has_praise_line(formatted, "Secure", "You affirmed autonomy clearly.")
     assert "secure: praise:" not in formatted.lower()
-    assert "- Tip: Offer a concrete next step." in formatted
+    assert "  - Tip: Offer a concrete next step." in formatted
 
 
 def test_ui_handler_format_coaching_message_prefers_feedback_items():
@@ -171,12 +170,12 @@ def test_ui_handler_format_coaching_message_prefers_feedback_items():
         }
     )
 
-    assert "- Inquire: Tip: Ask one open concern question, then pause." in formatted
+    assert "- Inquire\n  - Tip: Ask one open concern question, then pause." in formatted
     assert "Legacy reason should not be shown" not in formatted
     assert "Legacy tip should not show" not in formatted
 
 
-def test_ui_handler_format_coaching_message_collapses_duplicate_step_praise():
+def test_ui_handler_format_coaching_message_groups_multiple_step_feedback_items():
     ui = UIHandler()
 
     formatted = ui.format_coaching_message(
@@ -216,15 +215,21 @@ def test_ui_handler_format_coaching_message_collapses_duplicate_step_praise():
         "Mirror",
         "You captured the person's desire for individualized data.",
     )
-    assert "You checked for accuracy." not in formatted
+    assert any(
+        f"{label} You checked for accuracy." in formatted
+        for label in message_list("coaching.labels.praise")
+    )
     assert _has_praise_line(
         formatted,
         "Secure",
         "You tailored the education to their question.",
     )
-    assert "You ended with a collaborative check-in question." not in formatted
-    assert formatted.count("- Mirror:") == 1
-    assert formatted.count("- Secure:") == 1
+    assert any(
+        f"{label} You ended with a collaborative check-in question." in formatted
+        for label in message_list("coaching.labels.praise")
+    )
+    assert formatted.count("- Mirror\n") == 1
+    assert formatted.count("- Secure\n") == 1
 
 
 def test_ui_handler_format_coaching_message_keeps_step_improvement_with_praise():
@@ -251,10 +256,29 @@ def test_ui_handler_format_coaching_message_keeps_step_improvement_with_praise()
     )
 
     assert _has_praise_line(formatted, "Mirror", "You named the person's concern.")
-    assert (
-        "- Mirror: Tip: Mirror the timing concern before offering education."
-        in formatted
+    assert "- Mirror\n" in formatted
+    assert "  - Tip: Mirror the timing concern before offering education." in formatted
+
+
+def test_ui_handler_format_coaching_message_labels_secure_before_mirror_as_important():
+    ui = UIHandler()
+
+    formatted = ui.format_coaching_message(
+        {
+            "step": "Secure",
+            "feedback_items": [
+                {
+                    "step": "Secure",
+                    "tone": "improvement",
+                    "code": "secure_before_mirror",
+                    "text": "Mirror the active concern before offering more education.",
+                }
+            ],
+        }
     )
+
+    assert "- Secure\n  - Important: Mirror the active concern before offering more education." in formatted
+    assert "Tip: Mirror the active concern" not in formatted
 
 
 def test_ui_handler_render_scenario_card_html_labels_and_notes():

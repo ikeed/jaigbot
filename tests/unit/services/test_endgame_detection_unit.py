@@ -1203,6 +1203,49 @@ def test_structured_accepted_literature_fields_bypass_english_cue_validation():
     assert result["lines"][0] == "Outcome: Person agreed to review materials and continue later."
 
 
+def test_endgame_personalizes_generic_summary_subject_when_persona_known():
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_literature",
+            "summary": "The person agreed to take home an information sheet and return for follow-up.",
+            "accepted_materials": True,
+            "accepted_followup": True,
+            "remaining_active_concern": False,
+            "reason": "",
+        }
+    )
+    store = {
+        "s15_structured_lit_named": {
+            "history": [
+                {
+                    "role": "user",
+                    "content": "I can send you home with an information sheet and book a follow-up.",
+                },
+                {
+                    "role": "assistant",
+                    "content": "Yes, I can take the sheet home and come back for follow-up.",
+                },
+            ],
+            "aims_state": _literature_ready_state(),
+        }
+    }
+    service = _make_endgame_service(mock_svc)
+    result = _run(
+        service.check(
+            store["s15_structured_lit_named"],
+            {},
+            {"personaName": "Sarah"},
+            "s15_structured_lit_named",
+        )
+    )
+
+    assert result is not None
+    assert result["lines"][0] == (
+        "Outcome: Sarah agreed to take home an information sheet and return for follow-up."
+    )
+
+
 def test_structured_literature_closure_reaches_detector_with_unmirrored_concern():
     """Unmirrored concerns should not block semantic non-English closure before the LLM."""
     mock_svc = _MockClassifierService(

@@ -308,6 +308,22 @@ def _find_event_target(concerns: list[Concern], event: dict[str, object]) -> Con
     return _find_matching_concern(concerns, _as_text(event.get("topic")))
 
 
+def _looks_like_confirmation_restatement(text: str) -> bool:
+    lt = (text or "").strip().lower()
+    return bool(lt and any(lt.startswith(start) for start in _ACCEPTANCE_STARTS))
+
+
+def _find_restated_existing_concern(
+    concerns: list[Concern],
+    evidence_items: list[str],
+    person_text: str | None,
+) -> Concern | None:
+    text = " ".join(evidence_items).strip() or (person_text or "").strip()
+    if not text or not _looks_like_confirmation_restatement(person_text or text):
+        return None
+    return _best_matching_concern(concerns, text, min_score=2)
+
+
 def _merge_evidence(concern: Concern, evidence_items: list[str]) -> None:
     evidence_list = _string_list(concern.get("evidence"))
     for evidence in evidence_items:
@@ -330,6 +346,12 @@ def _apply_concern_presence_event(
     if existing:
         _merge_evidence(existing, evidence_items)
         _sync_concern_status(existing)
+        return
+
+    restated = _find_restated_existing_concern(concerns, evidence_items, person_text)
+    if restated:
+        _merge_evidence(restated, evidence_items)
+        _sync_concern_status(restated)
         return
 
     topic = _canonical_topic(_as_text(event.get("topic")))

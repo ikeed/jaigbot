@@ -160,6 +160,53 @@ def test_apply_concern_events_mirror_and_secure_targeted_concern():
     assert concern["status"] == "resolved"
 
 
+def test_apply_concern_events_merges_confirmation_restatement_into_existing_mirrored_concern():
+    st = {
+        "parent_concerns": [
+            {
+                "id": "immune-load",
+                "topic": "immune_load",
+                "summary": "wants immune load or spacing addressed",
+                "desc": "wants immune load or spacing addressed",
+                "evidence": [
+                    "I'm worried too many shots at once will overload her immune system."
+                ],
+                "is_mirrored": True,
+                "is_secured": False,
+                "mirror_count": 1,
+                "secure_count": 0,
+                "status": "mirrored",
+            }
+        ]
+    }
+
+    handled = apply_concern_events(
+        st,
+        [
+            {
+                "event_type": "concern_renewed",
+                "topic": "schedule_timing",
+                "evidence_spans": [
+                    "Exactly, it still feels like too many vaccines at the same time for her immune system."
+                ],
+                "confidence": "high",
+            }
+        ],
+        person_text=(
+            "Exactly, it still feels like too many vaccines at the same time "
+            "for her immune system."
+        ),
+    )
+
+    assert handled == {"concern_presence"}
+    assert len(st["parent_concerns"]) == 1
+    concern = st["parent_concerns"][0]
+    assert concern["topic"] == "immune_load"
+    assert concern["is_mirrored"] is True
+    assert concern["status"] == "mirrored"
+    assert "too many vaccines at the same time" in concern["evidence"][-1]
+
+
 def test_state_update_prefers_no_active_concern_event_over_keyword_fallback():
     mem = {}
 

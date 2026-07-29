@@ -100,6 +100,25 @@ class AimsEndgameService:
             return True
         return None
 
+    @staticmethod
+    def _personalize_summary_subject(
+        summary: str,
+        session_obj: dict[str, Any] | None,
+    ) -> str:
+        text = (summary or "").strip()
+        persona_name = str((session_obj or {}).get("personaName") or "").strip()
+        if not text or not persona_name:
+            return text
+
+        pattern = message("endgame.generic_summary_subject_pattern", default="")
+        if not pattern:
+            return text
+
+        try:
+            return re.sub(pattern, persona_name, text, count=1, flags=re.IGNORECASE)
+        except re.error:
+            return text
+
     async def check(
         self,
         mem: dict[str, Any] | None,
@@ -169,7 +188,10 @@ class AimsEndgameService:
 
             is_endgame = result.get("is_endgame", False)
             outcome = result.get("resolution_type", "not_resolved")
-            summary = result.get("summary", "")
+            summary = self._personalize_summary_subject(
+                str(result.get("summary") or ""),
+                session_obj,
+            )
 
             if (
                 self._heuristic_fallback_enabled

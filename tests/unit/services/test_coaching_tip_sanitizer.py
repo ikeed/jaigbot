@@ -172,18 +172,18 @@ def test_sanitize_feedback_items_drops_target_observation_when_already_present()
     assert payload["feedback_items"] == []
 
 
-def test_sanitize_does_not_rewrite_model_authored_mirror_terms_in_public_coaching_fields():
+def test_sanitize_normalizes_model_authored_mirror_terms_in_public_coaching_fields():
     payload = {
         "step": "Mirror",
         "score": 3,
         "observations": {"reflection_present": True},
-        "reasons": ["Mirrored concern well"],
-        "tips": ["Mirror the exact timing concern before educating."],
+        "reasons": ["Reflected concern well"],
+        "tips": ["Reflect the exact timing concern before educating."],
         "step_feedback": [
             {
                 "step": "Mirror",
                 "tone": "praise",
-                "feedback": "You mirrored the concern clearly.",
+                "feedback": "You reflected the concern clearly.",
             }
         ],
         "feedback_items": [
@@ -191,7 +191,7 @@ def test_sanitize_does_not_rewrite_model_authored_mirror_terms_in_public_coachin
                 "step": "Mirror",
                 "tone": "praise",
                 "code": "mirror_reflection",
-                "text": "You mirrored the timing concern clearly.",
+                "text": "You were reflecting the timing concern clearly.",
                 "target_observation": "reflection_present",
             }
         ],
@@ -205,7 +205,7 @@ def test_sanitize_does_not_rewrite_model_authored_mirror_terms_in_public_coachin
     assert payload["reasons"] == ["Mirrored concern well"]
     assert payload["tips"] == ["Mirror the exact timing concern before educating."]
     assert payload["step_feedback"][0]["feedback"] == "You mirrored the concern clearly."
-    assert payload["feedback_items"][0]["text"] == "You mirrored the timing concern clearly."
+    assert payload["feedback_items"][0]["text"] == "You were mirroring the timing concern clearly."
 
 
 def test_sanitize_keeps_pause_tip_after_open_question():

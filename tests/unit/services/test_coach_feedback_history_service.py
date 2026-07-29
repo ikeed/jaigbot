@@ -5,9 +5,8 @@ from app.services.coach_feedback_history_service import CoachFeedbackHistoryServ
 
 
 def _has_praise_line(text: str, step: str, feedback: str) -> bool:
-    return any(
-        f"{step}: {label} {feedback}" in text
-        for label in message_list("coaching.labels.praise")
+    return f"{step}\n" in text and any(
+        f"{label} {feedback}" in text for label in message_list("coaching.labels.praise")
     )
 
 
@@ -129,9 +128,9 @@ def test_append_uses_step_feedback_and_deferred_nudge():
     )
 
     text = mem[SESSION_HISTORY][0]["content"]
-    assert "Mirror:" in text
+    assert "Mirror\n" in text
     assert "You mirrored the concern." in text
-    assert "Inquire:" in text
+    assert "Inquire\n" in text
     assert "Ask what worries them most." in text
     assert "Nudge: The patient is deferring." in text
     assert "This should not show" not in text
@@ -164,7 +163,7 @@ def test_append_shows_tip_when_step_feedback_is_praise_only():
     text = mem[SESSION_HISTORY][0]["content"]
     assert _has_praise_line(text, "Secure", "You affirmed autonomy clearly.")
     assert "praise:" not in text.lower()
-    assert "Tip: Ask one open-ended check-in question." in text
+    assert "  - Tip: Ask one open-ended check-in question." in text
 
 
 def test_append_prefers_feedback_items_over_legacy_reasons():
@@ -194,12 +193,12 @@ def test_append_prefers_feedback_items_over_legacy_reasons():
     )
 
     text = mem[SESSION_HISTORY][0]["content"]
-    assert "Inquire: Tip: Ask one open concern question, then pause." in text
+    assert "Inquire\n  - Tip: Ask one open concern question, then pause." in text
     assert "Legacy reason should not drive display" not in text
     assert "Legacy tip should not show" not in text
 
 
-def test_append_collapses_duplicate_step_praise_in_display_only():
+def test_append_groups_multiple_same_step_praise_in_display_only():
     service = _service()
     mem = {}
 
@@ -248,13 +247,15 @@ def test_append_collapses_duplicate_step_praise_in_display_only():
         "Mirror",
         "You captured the person's desire for individualized data.",
     )
-    assert "You checked for accuracy." not in text
+    assert "You checked for accuracy." in text
     assert _has_praise_line(
         text,
         "Secure",
         "You tailored the education to their question.",
     )
-    assert "You ended with a collaborative check-in question." not in text
+    assert "You ended with a collaborative check-in question." in text
+    assert text.count("Mirror\n") == 1
+    assert text.count("Secure\n") == 1
     assert len(coach_entry["coaching_data"]["feedback_items"]) == 4
 
 
