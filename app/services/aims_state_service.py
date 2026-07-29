@@ -77,6 +77,8 @@ class AimsStateService:
             "still around",
             "catching it",
             "actually catching it",
+            "need to worry",
+            "general warning",
         ],
         "effectiveness": ["effective", "efficacy", "works", "breakthrough"],
         "trust": [
@@ -122,9 +124,17 @@ class AimsStateService:
             "required",
             "requirement",
             "mandatory",
-            "have to",
-            "need to",
-            "supposed to",
+            "do we have to",
+            "do i have to",
+            "does he have to",
+            "does she have to",
+            "have to get",
+            "have to do",
+            "need to do",
+            "need to explain",
+            "need to tell",
+            "supposed to get",
+            "supposed to do",
             "allowed",
             "okay here",
             "okay in canada",
@@ -439,6 +449,18 @@ class AimsStateService:
     @classmethod
     def _has_closure_literature(cls, text: str) -> bool:
         if any(cue in text for cue in cls.CLOSURE_LITERATURE_CUES):
+            return True
+        if re.search(
+            r"\b(?:review|read|look over|look through|go over|take|bring|send|give|print)\b"
+            r"[\w\s'-]{0,80}\b(?:papers|paperwork|printed schedule|printed materials)\b",
+            text,
+        ):
+            return True
+        if re.search(
+            r"\b(?:papers|paperwork|printed schedule|printed materials)\b"
+            r"[\w\s'-]{0,80}\b(?:review|read|look over|look through|go over|take home|bring home)\b",
+            text,
+        ):
             return True
         return bool(
             re.search(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Dict, List
 
 logger = logging.getLogger(__name__)
@@ -165,7 +166,6 @@ class EndGameDetector:
         "comfortable proceeding", "i'm comfortable proceeding", "i am comfortable proceeding",
         "comfortable with proceeding", "comfortable going ahead", "comfortable with the",
         "i feel good about proceeding", "feel confident in proceeding",
-        "sounds good to me", "plan sounds good", "that sounds like a plan",
         "i'm on board", "i am on board", "on board with",
         "comfortable moving forward", "comfortable with moving forward", "happy to move forward",
         "move forward with it", "move forward today", "happy to proceed",
@@ -188,6 +188,14 @@ class EndGameDetector:
         "look over", "at home", "read over", "information",
     ]
 
+    MATERIAL_REVIEW_RE = re.compile(
+        r"\b(?:review|read|look over|look through|go over|take|bring|send|give|print)\b"
+        r"[\w\s'-]{0,80}\b(?:papers|paperwork|printed schedule|printed materials)\b"
+        r"|"
+        r"\b(?:papers|paperwork|printed schedule|printed materials)\b"
+        r"[\w\s'-]{0,80}\b(?:review|read|look over|look through|go over|take home|bring home)\b"
+    )
+
     PLAN_ACCEPTANCE_CUES = [
         "sounds good", "sounds like a plan", "that would help", "would be helpful",
         "would be very helpful", "that would be helpful", "excellent approach",
@@ -195,6 +203,8 @@ class EndGameDetector:
         "yes,", "yes ", "helpful", "sounds reasonable", "works for me",
         "i'll take", "i will take", "talk about it at the next appointment",
         "talk about it at the next visit", "we can talk about it",
+        "decide at the next appointment", "decide at the next visit",
+        "we can decide",
     ]
 
     PLAN_NEGATIVE_CUES = [
@@ -209,6 +219,13 @@ class EndGameDetector:
         "don't trust", "safety risk", "unsafe", "still a risk",
     ]
 
+    @classmethod
+    def has_literature_cue(cls, text: str) -> bool:
+        lt = (text or "").lower()
+        if any(cue in lt for cue in cls.LITERATURE_CUES):
+            return True
+        return bool(cls.MATERIAL_REVIEW_RE.search(lt))
+
     @staticmethod
     def detect(patient_reply: str) -> dict | None:
         lt = (patient_reply or "").strip().lower()
@@ -216,7 +233,6 @@ class EndGameDetector:
             return None
 
         # Helper: split into simple sentences by ., !, ? while keeping end char
-        import re
         # Normalize whitespace
         lt_norm = re.sub(r"\s+", " ", lt)
         # Split into sentences; keep punctuation to check questions
@@ -265,7 +281,7 @@ class EndGameDetector:
 
         # Follow-up AND literature require explicit positive acceptance and no negation.
         has_followup = any(c in lt for c in EndGameDetector.FOLLOWUP_CUES)
-        has_literature = any(c in lt for c in EndGameDetector.LITERATURE_CUES)
+        has_literature = EndGameDetector.has_literature_cue(lt)
         has_positive_acceptance = any(c in lt for c in EndGameDetector.PLAN_ACCEPTANCE_CUES)
         has_negative_acceptance = any(c in lt for c in EndGameDetector.PLAN_NEGATIVE_CUES)
         has_active_concern = any(c in lt for c in EndGameDetector.PLAN_ACTIVE_CONCERN_CUES)

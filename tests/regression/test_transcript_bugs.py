@@ -61,13 +61,16 @@ class TestEndGameNaturalisticAcceptance:
         "That plan sounds good to me. I'm comfortable proceeding with the Tdap booster.",
         "I feel good about proceeding with the vaccine today.",
         "That sounds good to me. Let's go ahead.",
-        "Plan sounds good to me.",
         "I'm on board with doing the booster today.",
     ])
     def test_naturalistic_acceptance_detected(self, reply):
         result = EndGameDetector.detect(reply)
         assert result is not None, f"EndGameDetector should match: {reply!r}"
         assert result["reason"] == "accepted_now"
+
+    def test_plan_agreement_alone_is_not_vaccine_acceptance(self):
+        result = EndGameDetector.detect("Plan sounds good to me.")
+        assert result is None
 
     def test_comfortable_proceeding_in_longer_reply(self):
         """The full reply from the transcript should trigger endgame."""
