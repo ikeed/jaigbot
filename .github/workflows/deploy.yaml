@@ -178,6 +178,12 @@ jobs:
             --cpu-throttling \
             --startup-probe="httpGet.path=/api/healthz,periodSeconds=10,timeoutSeconds=9,failureThreshold=12"
 
+      - name: Route traffic to latest revision
+        run: |
+          gcloud run services update-traffic "$SERVICE_NAME" \
+            --region "$REGION" \
+            --to-latest
+
       - name: Show service URL and health check
         run: |
           URL=$(gcloud run services describe "$SERVICE_NAME" --region "$REGION" --format 'value(status.url)')
