@@ -443,6 +443,8 @@ class ChainlitOrchestrator:
             if coaching.get("step"):
                 parts.append(f"Detected step: {coaching['step']}")
             step_feedback = coaching.get("step_feedback") or []
+            displayed_step_feedback = 0
+            has_improvement_step_feedback = False
             if step_feedback:
                 feedback_index = 0
                 for sf in step_feedback:
@@ -451,14 +453,20 @@ class ChainlitOrchestrator:
                     feedback = (sf.get("feedback") or "").strip()
                     if not feedback:
                         continue
-                    label = self._step_feedback_label(sf.get("tone"), feedback_index)
+                    tone = sf.get("tone")
+                    label = self._step_feedback_label(tone, feedback_index)
                     sf_step = (sf.get("step") or "").strip()
                     prefix = f"{sf_step}: " if sf_step else ""
                     parts.append(f"{prefix}{label}: {feedback}")
+                    displayed_step_feedback += 1
+                    if tone != "praise":
+                        has_improvement_step_feedback = True
                     feedback_index += 1
             elif coaching.get("reasons"):
                 parts.append(f"Feedback: {coaching['reasons'][0]}")
-            if coaching.get("tips") and not step_feedback:
+            if coaching.get("tips") and (
+                not displayed_step_feedback or not has_improvement_step_feedback
+            ):
                 parts.append(f"Tip: {coaching['tips'][0]}")
 
             if parts:
