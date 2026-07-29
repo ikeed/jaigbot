@@ -176,6 +176,87 @@ def test_ui_handler_format_coaching_message_prefers_feedback_items():
     assert "Legacy tip should not show" not in formatted
 
 
+def test_ui_handler_format_coaching_message_collapses_duplicate_step_praise():
+    ui = UIHandler()
+
+    formatted = ui.format_coaching_message(
+        {
+            "step": "Mirror+Secure",
+            "feedback_items": [
+                {
+                    "step": "Mirror",
+                    "tone": "praise",
+                    "code": "mirror_concern",
+                    "text": "You captured the person's desire for individualized data.",
+                },
+                {
+                    "step": "Mirror",
+                    "tone": "praise",
+                    "code": "mirror_accuracy_check",
+                    "text": "You checked for accuracy.",
+                },
+                {
+                    "step": "Secure",
+                    "tone": "praise",
+                    "code": "secure_tailored",
+                    "text": "You tailored the education to their question.",
+                },
+                {
+                    "step": "Secure",
+                    "tone": "praise",
+                    "code": "secure_check_in",
+                    "text": "You ended with a collaborative check-in question.",
+                },
+            ],
+        }
+    )
+
+    assert _has_praise_line(
+        formatted,
+        "Mirror",
+        "You captured the person's desire for individualized data.",
+    )
+    assert "You checked for accuracy." not in formatted
+    assert _has_praise_line(
+        formatted,
+        "Secure",
+        "You tailored the education to their question.",
+    )
+    assert "You ended with a collaborative check-in question." not in formatted
+    assert formatted.count("- Mirror:") == 1
+    assert formatted.count("- Secure:") == 1
+
+
+def test_ui_handler_format_coaching_message_keeps_step_improvement_with_praise():
+    ui = UIHandler()
+
+    formatted = ui.format_coaching_message(
+        {
+            "step": "Mirror",
+            "feedback_items": [
+                {
+                    "step": "Mirror",
+                    "tone": "praise",
+                    "code": "mirror_attempt",
+                    "text": "You named the person's concern.",
+                },
+                {
+                    "step": "Mirror",
+                    "tone": "improvement",
+                    "code": "mirror_timing",
+                    "text": "Mirror the timing concern before offering education.",
+                },
+            ],
+        }
+    )
+
+    assert _has_praise_line(formatted, "Mirror", "You named the person's concern.")
+    assert (
+        "- Mirror: Tip: Mirror the timing concern before offering education."
+        in formatted
+    )
+
+
 def test_ui_handler_render_scenario_card_html_labels_and_notes():
     ui = UIHandler()
 

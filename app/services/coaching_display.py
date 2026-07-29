@@ -62,6 +62,33 @@ def _feedback_line(prefix: str, tone: Any, label: str, feedback: str) -> str:
     return f"{prefix}{label}: {feedback}"
 
 
+def _display_feedback_items(raw_items: Any, text_key: str) -> list[dict[str, Any]]:
+    if not isinstance(raw_items, list):
+        return []
+
+    displayed: list[dict[str, Any]] = []
+    praised_steps: set[str] = set()
+    for raw_item in raw_items:
+        item = _as_dict(raw_item)
+        if not item:
+            continue
+        feedback = str(item.get(text_key) or "").strip()
+        if not feedback:
+            continue
+
+        tone = item.get("tone")
+        step = str(item.get("step") or "").strip()
+        if tone == "praise":
+            praise_key = step or "__global__"
+            if praise_key in praised_steps:
+                continue
+            praised_steps.add(praise_key)
+
+        displayed.append(item)
+
+    return displayed
+
+
 def coaching_message_parts(
     coaching: Mapping[str, Any] | None,
     *,
@@ -79,15 +106,11 @@ def coaching_message_parts(
     feedback_items = coaching.get("feedback_items") or []
     displayed_feedback_items = 0
     has_improvement_feedback_item = False
-    if isinstance(feedback_items, list) and feedback_items:
+    displayed_items = _display_feedback_items(feedback_items, "text")
+    if displayed_items:
         feedback_index = 0
-        for raw_item in feedback_items:
-            item = _as_dict(raw_item)
-            if not item:
-                continue
+        for item in displayed_items:
             feedback = str(item.get("text") or "").strip()
-            if not feedback:
-                continue
             tone = item.get("tone")
             label = step_feedback_label(tone, feedback_index, item)
             item_step = str(item.get("step") or "").strip()
@@ -101,15 +124,11 @@ def coaching_message_parts(
     step_feedback = coaching.get("step_feedback") or []
     displayed_step_feedback = 0
     has_improvement_step_feedback = False
-    if not displayed_feedback_items and isinstance(step_feedback, list) and step_feedback:
+    displayed_step_items = _display_feedback_items(step_feedback, "feedback")
+    if not displayed_feedback_items and displayed_step_items:
         feedback_index = 0
-        for raw_item in step_feedback:
-            item = _as_dict(raw_item)
-            if not item:
-                continue
+        for item in displayed_step_items:
             feedback = str(item.get("feedback") or "").strip()
-            if not feedback:
-                continue
             tone = item.get("tone")
             label = step_feedback_label(tone, feedback_index, item)
             sf_step = str(item.get("step") or "").strip()
