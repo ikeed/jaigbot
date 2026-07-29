@@ -199,6 +199,65 @@ def test_append_prefers_feedback_items_over_legacy_reasons():
     assert "Legacy tip should not show" not in text
 
 
+def test_append_collapses_duplicate_step_praise_in_display_only():
+    service = _service()
+    mem = {}
+
+    service.append(
+        mem=mem,
+        memory_enabled=True,
+        session_id="sid",
+        cls_payload={
+            "step": "Mirror+Secure",
+            "score": 3,
+            "phase": "Secure",
+            "feedback_items": [
+                {
+                    "step": "Mirror",
+                    "tone": "praise",
+                    "code": "mirror_concern",
+                    "text": "You captured the person's desire for individualized data.",
+                },
+                {
+                    "step": "Mirror",
+                    "tone": "praise",
+                    "code": "mirror_accuracy_check",
+                    "text": "You checked for accuracy.",
+                },
+                {
+                    "step": "Secure",
+                    "tone": "praise",
+                    "code": "secure_tailored",
+                    "text": "You tailored the education to their question.",
+                },
+                {
+                    "step": "Secure",
+                    "tone": "praise",
+                    "code": "secure_check_in",
+                    "text": "You ended with a collaborative check-in question.",
+                },
+            ],
+        },
+        reply_payload={},
+    )
+
+    coach_entry = mem[SESSION_HISTORY][0]
+    text = coach_entry["content"]
+    assert _has_praise_line(
+        text,
+        "Mirror",
+        "You captured the person's desire for individualized data.",
+    )
+    assert "You checked for accuracy." not in text
+    assert _has_praise_line(
+        text,
+        "Secure",
+        "You tailored the education to their question.",
+    )
+    assert "You ended with a collaborative check-in question." not in text
+    assert len(coach_entry["coaching_data"]["feedback_items"]) == 4
+
+
 def test_filter_user_facing_reasons_and_first_reason():
     reasons = [
         "LLM flagged internal condition",
