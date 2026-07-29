@@ -27,6 +27,8 @@ from app.services.chainlit.ui_handler import UIHandler
 
 logger = logging.getLogger(__name__)
 
+_PRAISE_FEEDBACK_LABELS = ("Great job", "Well done", "Nice work", "Strong move")
+
 
 class ChainlitOrchestrator:
     """Orchestrates the high-level flow of the Chainlit application."""
@@ -442,16 +444,18 @@ class ChainlitOrchestrator:
                 parts.append(f"Detected step: {coaching['step']}")
             step_feedback = coaching.get("step_feedback") or []
             if step_feedback:
+                feedback_index = 0
                 for sf in step_feedback:
                     if not isinstance(sf, dict):
                         continue
                     feedback = (sf.get("feedback") or "").strip()
                     if not feedback:
                         continue
-                    label = "Great job" if sf.get("tone") == "praise" else "Try"
+                    label = self._step_feedback_label(sf.get("tone"), feedback_index)
                     sf_step = (sf.get("step") or "").strip()
                     prefix = f"{sf_step}: " if sf_step else ""
                     parts.append(f"{prefix}{label}: {feedback}")
+                    feedback_index += 1
             elif coaching.get("reasons"):
                 parts.append(f"Feedback: {coaching['reasons'][0]}")
             if coaching.get("tips") and not step_feedback:
@@ -478,6 +482,14 @@ class ChainlitOrchestrator:
             await self.ui.send_coach_message(combined)
 
         self.session.history = history
+
+    @staticmethod
+    def _step_feedback_label(tone: Any, feedback_index: int) -> str:
+        if tone == "praise":
+            return _PRAISE_FEEDBACK_LABELS[
+                feedback_index % len(_PRAISE_FEEDBACK_LABELS)
+            ]
+        return "Tip"
 
     async def _run_preflight_checks(self):
         if not await self.backend.check_health():

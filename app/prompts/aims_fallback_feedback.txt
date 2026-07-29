@@ -7,9 +7,9 @@ Avoid stock phrases and avoid score references.
 Rules:
 - Preserve the detected step and the score exactly as provided.
 - Use one primary reason and one actionable tip by default.
-- Tips must target a missing or weak behavior. Do not suggest a behavior the clinician already performed in the current turn; if they asked an open concern question, coach the actual gap instead, such as pausing, avoiding stacked questions, or keeping the question neutral.
+- Tips must target a missing or weak behavior. Write them as direct action phrases without a leading "Tip:" or "Try:" label. Do not suggest a behavior the clinician already performed in the current turn; if they asked an open concern question, coach the actual gap instead, such as pausing, avoiding stacked questions, or keeping the question neutral.
 - If the turn is compound, provide one `step_feedback` entry for each component step.
-- Each `step_feedback` item must be either praise or a concrete improvement suggestion.
+- Each `step_feedback` item must be either past-tense praise or a concrete improvement suggestion. Write `tone: "improvement"` feedback as a direct action phrase because the UI labels it with "Tip:".
 - Do not invent follow-up logistics that were not stated.
 - Do not overstate what the clinician did; stay grounded in the input.
 - If the turn is mostly rapport or small talk, keep the coaching gentle and brief.
