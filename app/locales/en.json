@@ -22,8 +22,10 @@
         "Beautifully handled!",
         "That landed well!"
       ],
-      "tip": "Tip"
+      "tip": "Tip",
+      "important": "Important"
     },
+    "feedback_group": "Feedback",
     "tip": "Tip: {tip}",
     "phase_prefix": "Conversation phase:",
     "section_title": "Coaching",
@@ -89,7 +91,7 @@
       "Announce": {
         "high": "clear, non-pressuring recommendation - well done.",
         "mid": "the recommendation was present; try making it more concise and following immediately with an open question.",
-        "low": "lead with a brief presumptive recommendation, then invite input (e.g., \"{patient_label} due for MMR today - what are your thoughts?\").",
+        "low": "lead with a brief presumptive recommendation, then invite input (e.g., \"{patient_label} due for the recommended vaccine today - what are your thoughts?\").",
         "absent": "introduce vaccines with a clear, non-pushy recommendation before asking for concerns."
       },
       "Inquire": {
@@ -122,7 +124,8 @@
       "secure ",
       "secure:",
       "outcome:"
-    ]
+    ],
+    "generic_summary_subject_pattern": "^(?:the\\s+)?(?:person|parent)\\b"
   },
   "patient_reply": {
     "fallbacks": {
@@ -652,7 +655,29 @@
         "stacked": "Ask one neutral question at a time, then pause so they have room to answer.",
         "leading": "Keep the question neutral so it does not signal the answer you prefer.",
         "why": "Use what or how phrasing instead of why, which can feel accusatory."
-      }
+      },
+      "aims_term_replacements": [
+        {
+          "pattern": "\\breflected\\b",
+          "replacement": "mirrored"
+        },
+        {
+          "pattern": "\\breflecting\\b",
+          "replacement": "mirroring"
+        },
+        {
+          "pattern": "\\breflects\\b",
+          "replacement": "mirrors"
+        },
+        {
+          "pattern": "\\breflect\\b",
+          "replacement": "mirror"
+        },
+        {
+          "pattern": "\\breflection\\b",
+          "replacement": "mirror"
+        }
+      ]
     },
     "concerns": {
       "labels": {

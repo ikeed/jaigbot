@@ -11,9 +11,8 @@ from app.services.chainlit.orchestrator import ChainlitOrchestrator
 
 
 def _has_praise_line(text: str, step: str, feedback: str) -> bool:
-    return any(
-        f"{step}: {label} {feedback}" in text
-        for label in message_list("coaching.labels.praise")
+    return f"{step}\n" in text and any(
+        f"{label} {feedback}" in text for label in message_list("coaching.labels.praise")
     )
 
 
@@ -535,7 +534,7 @@ async def test_process_backend_response_prefers_step_feedback_over_raw_tip(
     coach_text = mock_services["session"].history[0]["content"]
     assert _has_praise_line(coach_text, "Inquire", "You opened with a broad concern question.")
     assert "praise:" not in coach_text.lower()
-    assert "Secure: Tip: Pause before moving into reassurance." in coach_text
+    assert "Secure\n  - Tip: Pause before moving into reassurance." in coach_text
     assert "Tip: Try leading with an open question." not in coach_text
 
 

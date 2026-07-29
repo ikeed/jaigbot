@@ -51,6 +51,31 @@ _STACKED_QUESTION_CODES = {
     "reduce_question_stack",
 }
 
+def _compile_aims_term_replacements() -> tuple[tuple[re.Pattern[str], str], ...]:
+    replacements = catalog_value(
+        "lexicon.coaching_tip_sanitizer.aims_term_replacements",
+        default=[],
+    )
+    compiled: list[tuple[re.Pattern[str], str]] = []
+    if not isinstance(replacements, list):
+        return ()
+    for item in replacements:
+        if not isinstance(item, dict):
+            continue
+        pattern = str(item.get("pattern") or "").strip()
+        replacement = str(item.get("replacement") or "").strip()
+        if not pattern or not replacement:
+            continue
+        try:
+            compiled.append((re.compile(pattern, re.IGNORECASE), replacement))
+        except re.error:
+            continue
+    return tuple(compiled)
+
+
+_AIMS_TERM_REPLACEMENTS = _compile_aims_term_replacements()
+
+
 def has_open_concern_question(text: str | None) -> bool:
     """Return True when the current turn asks an open concern-surfacing question."""
     return bool(_OPEN_CONCERN_QUESTION_RE.search(text or ""))
@@ -71,8 +96,32 @@ def is_open_question_tip(tip: str | None) -> bool:
 
 
 def normalize_aims_feedback_terms(text: str | None) -> str:
-    """Normalize whitespace without rewriting model-authored feedback text."""
-    return str(text or "").strip()
+    """Normalize user-facing AIMS terminology in model-authored feedback."""
+    normalized = str(text or "").strip()
+    for pattern, replacement in _AIMS_TERM_REPLACEMENTS:
+        normalized = _apply_term_replacement(pattern, replacement, normalized)
+    return normalized
+
+
+def _apply_term_replacement(
+    pattern: re.Pattern[str],
+    replacement: str,
+    text: str,
+) -> str:
+    def replace(match: re.Match[str]) -> str:
+        return _match_case(replacement, match.group(0))
+
+    return pattern.sub(replace, text)
+
+
+def _match_case(replacement: str, original: str) -> str:
+    if not original:
+        return replacement
+    if original.isupper():
+        return replacement.upper()
+    if original[0].isupper():
+        return replacement[:1].upper() + replacement[1:]
+    return replacement
 
 
 def sanitize_coaching_tips(

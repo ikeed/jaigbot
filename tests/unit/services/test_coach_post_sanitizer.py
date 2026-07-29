@@ -222,7 +222,7 @@ def test_build_endgame_bullets_fallback_personalizes_with_persona_and_patient_na
     inquire = next(b for b in bullets if b.startswith("Inquire "))
     mirror = next(b for b in bullets if b.startswith("Mirror "))
 
-    assert "Nathaniel's due for MMR today" in announce
+    assert "Nathaniel's due for the recommended vaccine today" in announce
     assert "Carter" not in announce
     assert "Zia's real concerns" in inquire
     assert "Zia's concern" in mirror
