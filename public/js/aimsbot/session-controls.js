@@ -8,10 +8,10 @@
 
   app.modals.newSession = app.createModal({
     id: "new-session-modal",
-    title: "New Scenario",
-    description: "This will clear your current chat history and start a fresh session. Are you sure you want to continue?",
+    title: app.t("session.newTitle"),
+    description: app.t("session.newDescription"),
     showTextarea: false,
-    confirmText: "Confirm",
+    confirmText: app.t("session.confirm"),
     onConfirm: function () {
       app.postToChainlit({ type: "new_chat" });
       window.setTimeout(function () {
@@ -22,10 +22,10 @@
 
   app.modals.logout = app.createModal({
     id: "logout-modal",
-    title: "Logout",
-    description: "Are you sure you want to logout? This will end your current session.",
+    title: app.t("session.logoutTitle"),
+    description: app.t("session.logoutDescription"),
     showTextarea: false,
-    confirmText: "Logout",
+    confirmText: app.t("session.logoutConfirm"),
     onConfirm: leaveChatForLogout
   });
 
@@ -38,7 +38,7 @@
       if (confirmBtn) {
       confirmBtn.disabled = true;
       confirmBtn.style.cursor = "default";
-      confirmBtn.textContent = "Logging out";
+      confirmBtn.textContent = app.t("session.loggingOut");
     }
 
     window.location.assign("/chat/logout");
@@ -115,7 +115,10 @@
       const role = control.getAttribute("role");
 
       if (href.indexOf("logout") !== -1 || id.indexOf("logout") !== -1) return true;
-    return role === "menuitem" && (text.indexOf("logout") !== -1 || text.indexOf("sign out") !== -1);
+    const matchers = app.t("session.logoutMatchers") || [];
+    return role === "menuitem" && matchers.some(function (matcher) {
+      return text.indexOf(matcher) !== -1;
+    });
   }
 
   function interceptLogout() {

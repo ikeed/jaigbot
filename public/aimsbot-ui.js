@@ -27,6 +27,7 @@
   });
 
     const modules = [
+        "/public/js/aimsbot/i18n.js?v=" + assetVersion,
         "/public/js/aimsbot/core.js?v=" + assetVersion,
         "/public/js/aimsbot/modal.js?v=" + assetVersion,
         "/public/js/aimsbot/report-issue.js?v=" + assetVersion,

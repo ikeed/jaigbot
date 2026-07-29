@@ -200,6 +200,7 @@ class TestSecuringBeforeInquiringCoaching:
             "score": 3,
             "reasons": ["LLM classified as Secure"],
             "tips": [],
+            "observations": {"open_concern_question_present": True},
         }
 
         AimsStateService(logger=MagicMock()).apply_coaching_guidance(

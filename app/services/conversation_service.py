@@ -13,6 +13,8 @@ from __future__ import annotations
 import re
 from typing import Dict, Iterable, List, Mapping, Optional, Set
 
+from app.message_catalog import message, message_list, message_map
+
 TopicalCues = Mapping[str, Iterable[str]]
 Concern = Dict[str, object]
 
@@ -53,68 +55,8 @@ def concern_topic(text: Optional[str], topical_cues: TopicalCues) -> Optional[st
     return None
 
 
-_CONCERN_LABELS = {
-    "autism": "wants autism risk addressed",
-    "immune_load": "wants immune load or spacing addressed",
-    "side_effects": "wants side effect risk addressed",
-    "ingredients": "wants vaccine ingredients addressed",
-    "schedule_timing": "wants timing or schedule addressed",
-    "disease_risk": "wants disease risk addressed",
-    "effectiveness": "wants effectiveness and benefit addressed",
-    "trust": "wants evidence, uncertainty, and trust addressed",
-    "autonomy": "wants decision authority respected",
-    "requirements": "wants rules, requirements, and consequences explained",
-}
-
-
-_CONCERN_TOPIC_ALIASES = {
-    "adverse_events": "side_effects",
-    "adverse_reactions": "side_effects",
-    "reaction": "side_effects",
-    "reactions": "side_effects",
-    "safety": "side_effects",
-    "side_effect": "side_effects",
-    "side_effects": "side_effects",
-    "vaccine_safety": "side_effects",
-    "chemical": "ingredients",
-    "chemicals": "ingredients",
-    "ingredient": "ingredients",
-    "ingredients": "ingredients",
-    "metal": "ingredients",
-    "metals": "ingredients",
-    "aluminum": "ingredients",
-    "immune": "immune_load",
-    "immune_load": "immune_load",
-    "too_many": "immune_load",
-    "spacing": "immune_load",
-    "schedule": "schedule_timing",
-    "schedule_timing": "schedule_timing",
-    "timing": "schedule_timing",
-    "disease": "disease_risk",
-    "disease_risk": "disease_risk",
-    "low_disease_risk": "disease_risk",
-    "measles_gone": "disease_risk",
-    "effectiveness": "effectiveness",
-    "benefit": "effectiveness",
-    "benefits": "effectiveness",
-    "conflicting_information": "trust",
-    "evidence": "trust",
-    "pharma": "trust",
-    "trust": "trust",
-    "uncertainty": "trust",
-    "who_to_believe": "trust",
-    "choice": "autonomy",
-    "decision_authority": "autonomy",
-    "pressure": "autonomy",
-    "autonomy": "autonomy",
-    "required": "requirements",
-    "requirement": "requirements",
-    "requirements": "requirements",
-    "mandatory": "requirements",
-    "obligatory": "requirements",
-    "rules": "requirements",
-    "system_expectations": "requirements",
-}
+_CONCERN_LABELS = message_map("lexicon.concerns.labels")
+_CONCERN_TOPIC_ALIASES = message_map("lexicon.concerns.topic_aliases")
 
 
 def _topic_key(topic: Optional[str]) -> str:
@@ -139,14 +81,7 @@ def _clean_evidence_snippet(text: str) -> str:
     if not cleaned:
         return ""
 
-    preamble_patterns = (
-        r"^that lands (?:very )?well,\s*dr\.?\s+\w+\.\s*",
-        r"^you(?:'ve| have) articulated my position precisely\.\s*",
-        r"^that's (?:a )?(?:very )?(?:helpful|clear|fair|good|reasonable|candid) (?:way to frame it|explanation|point|approach),?\s*dr\.?\s+\w+\.?\s*",
-        r"^i appreciate (?:you|the) [^.]+\.?\s*",
-        r"^thank you,?\s*dr\.?\s+\w+\.?\s*",
-        r"^thanks,?\s*dr\.?\s+\w+\.?\s*",
-    )
+    preamble_patterns = message_list("lexicon.concerns.evidence_preamble_patterns")
     lowered = cleaned.lower()
     changed = True
     while changed:
@@ -159,21 +94,7 @@ def _clean_evidence_snippet(text: str) -> str:
                 changed = True
                 break
 
-    concern_starts = (
-        "i want",
-        "i just want",
-        "i need",
-        "i'm trying",
-        "i am trying",
-        "i'm still",
-        "i am still",
-        "i'd like",
-        "i would like",
-        "when we talk",
-        "if the",
-        "it's not",
-        "it is not",
-    )
+    concern_starts = message_list("lexicon.concerns.concern_starts")
     lowered = cleaned.lower()
     for marker in concern_starts:
         idx = lowered.find(marker)
@@ -190,7 +111,7 @@ def _concern_label(topic: Optional[str], evidence: str) -> str:
         return _CONCERN_LABELS[topic]
     if evidence:
         return evidence[:120]
-    return "wants a concern addressed"
+    return message("lexicon.concerns.default_label")
 
 
 def _sync_concern_status(concern: Concern) -> None:
@@ -212,14 +133,7 @@ def _string_list(value: object) -> list[str]:
     return []
 
 
-_SEMANTIC_STOPWORDS = {
-    "a", "an", "and", "are", "as", "at", "about", "be", "been", "but", "by",
-    "do", "for", "from", "get", "got", "had", "has", "have", "how", "i",
-    "if", "in", "into", "is", "it", "its", "itself", "just", "like", "me",
-    "my", "of", "on", "or", "our", "really", "so", "that", "the", "their",
-    "them", "there", "they", "this", "to", "understand", "very", "want",
-    "what", "when", "why", "with", "you", "your",
-}
+_SEMANTIC_STOPWORDS = set(message_list("lexicon.concerns.semantic_stopwords"))
 
 
 def _semantic_tokens(text: str) -> set[str]:
@@ -232,7 +146,12 @@ def _semantic_tokens(text: str) -> set[str]:
 
 
 def _evidence_key(text: str) -> str:
-    tokens = [token for token in re.findall(r"[a-z0-9]+", (text or "").lower()) if token not in {"still"}]
+    ignored = set(message_list("lexicon.concerns.evidence_key_stopwords"))
+    tokens = [
+        token
+        for token in re.findall(r"[a-z0-9]+", (text or "").lower())
+        if token not in ignored
+    ]
     return " ".join(tokens)
 
 
@@ -519,139 +438,25 @@ def is_duplicate_concern(concerns: List[Concern], desc: str, topic: Optional[str
 # positively, NOT raising a new concern.  If a message starts with one of
 # these AND contains no hedging language, it should not be registered as a
 # concern even if it incidentally contains topic keywords.
-_ACCEPTANCE_STARTS = (
-    "yes,", "yes ", "yes.", "exactly", "precisely", "absolutely",
-    "that's precisely", "that's exactly", "that's very",
-    "that's a very", "that's a great", "that's a good", "that's a fair",
-    "that's a clear", "that's a balanced",
-    "that's helpful", "that's very helpful", "that would be",
-    "that makes sense", "that sounds", "that's clear",
-    "that's reassuring", "that explanation",
-    "i appreciate", "thank you", "thanks",
-    "i'm comfortable", "i'm satisfied", "i'm convinced",
-    "i agree", "i understand", "i see",
-    "ok,", "okay,", "good to know", "fair enough",
-)
+_ACCEPTANCE_STARTS = tuple(message_list("lexicon.concerns.acceptance_starts"))
 
 # Hedging language that overrides acceptance detection — if present, the
 # message may still contain a genuine concern despite the positive opener.
-_HEDGING_CUES = (
-    " but ", " however ", " though ", " although ",
-    "still worry", "still concern", "still not sure",
-    "not sure", "not certain", "not convinced",
-    "wonder if", "wonder about", "wondering",
-    "what about", "what if",
+_HEDGING_CUES = tuple(message_list("lexicon.concerns.hedging_cues"))
+
+_CONCERN_AFTER_ACCEPTANCE_CUES = tuple(
+    message_list("lexicon.concerns.concern_after_acceptance_cues")
 )
 
-_CONCERN_AFTER_ACCEPTANCE_CUES = (
-    "i want to understand",
-    "i just want to understand",
-    "i need to understand",
-    "i'm trying to understand",
-    "i am trying to understand",
-    "can you tell me",
-    "could you tell me",
-    "help me understand",
-    "is it required",
-    "is it mandatory",
-    "required for school",
-    "mandatory for school",
-    "need to explain",
-    "need to do",
-    "what vaccines",
-    "what shots",
-    "what happens",
+_MATERIALS_OR_FOLLOWUP_CUES = tuple(
+    message_list("lexicon.concerns.materials_or_followup_cues")
 )
 
-_MATERIALS_OR_FOLLOWUP_CUES = (
-    "take information home",
-    "take some information home",
-    "information home",
-    "something to read",
-    "read over",
-    "read through",
-    "look over",
-    "look through",
-    "written information",
-    "handout",
-    "pamphlet",
-    "materials",
-    "resource",
-    "resources",
-    "follow-up",
-    "follow up",
-    "another appointment",
-    "talk again",
-    "talk about it again",
-    "talk it over again",
-    "talk more",
-    "review this in",
-    "review it in",
-)
+_PLAN_ACCEPTANCE_CUES = tuple(message_list("lexicon.concerns.plan_acceptance_cues"))
 
-_PLAN_ACCEPTANCE_CUES = (
-    "sounds good",
-    "sounds really good",
-    "would help",
-    "would help a lot",
-    "would be great",
-    "that's okay",
-    "if that's okay",
-    "thank you",
-    "thanks",
-    "i appreciate",
-    "that helps",
-    "that would help",
-    "that sounds fair",
-    "sounds fair",
-    "that works",
-    "works for me",
-)
+_ACTIVE_CONCERN_CUES = tuple(message_list("lexicon.concerns.active_concern_cues"))
 
-_ACTIVE_CONCERN_CUES = (
-    "worried",
-    "worry",
-    "concern",
-    "concerns",
-    "nervous",
-    "scared",
-    "afraid",
-    "unsafe",
-    "harm",
-    "risk",
-    "risks",
-    "not sure",
-    "not certain",
-    "not convinced",
-    "pressured",
-    "pressure",
-    "pushed",
-    "forced",
-    "required",
-    "mandatory",
-    "have to",
-    "cornered",
-    "lectured",
-    "trust",
-    "pharma",
-    "conflicting information",
-    "hard to know what to believe",
-)
-
-_PLAN_NEGATION_CUES = (
-    "don't want",
-    "do not want",
-    "not going to read",
-    "won't read",
-    "will not read",
-    "rather not",
-    "not ready to plan",
-    "not ready to schedule",
-    "no follow-up",
-    "no follow up",
-    "without follow-up",
-    "without follow up",
-)
+_PLAN_NEGATION_CUES = tuple(message_list("lexicon.concerns.plan_negation_cues"))
 
 
 def _is_acceptance_message(text: str) -> bool:
@@ -668,7 +473,7 @@ def _is_acceptance_message(text: str) -> bool:
     # acknowledgement, as in "Thank you. Can you tell me what is required?"
     if any(cue in lt for cue in _CONCERN_AFTER_ACCEPTANCE_CUES):
         return False
-    if "?" in lt and any(cue in lt for cue in ("what ", "how ", "why ", "is it ", "are they ", "do we ", "do i ")):
+    if "?" in lt and any(cue in lt for cue in message_list("lexicon.concerns.question_starts")):
         return False
     return True
 
@@ -757,7 +562,7 @@ def mark_mirrored_multi(
     topical_cues: TopicalCues,
     llm_topic: Optional[str] = None,
 ) -> None:
-    """Mark concerns as mirrored based on clinician reflection.
+    """Mark concerns as mirrored based on clinician mirroring.
 
     Preference order:
     1) Topics detected in clinician_text (keyword match)
@@ -794,7 +599,7 @@ def mark_mirrored_multi(
 
     # If keyword matching still found nothing, use the LLM's detected parent topic
     # as a semantic tiebreaker.  This covers cases where the clinician used natural
-    # reflective language ("Wanting to look into things yourself is reasonable") that
+    # mirroring language ("Wanting to look into things yourself is reasonable") that
     # doesn't contain any of the topical keywords.
     if not marked_any and llm_topic:
         semantic_topic = _canonical_topic(llm_topic)

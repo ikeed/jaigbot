@@ -16,9 +16,17 @@ from app.constants import (
     SESSION_SESSION_ENDED,
     SESSION_USER,
 )
+from app.message_catalog import message_list
 from app.services.chainlit.backend_client import BackendClient
 from app.services.chainlit.session_manager import SessionManager
 from app.services.chainlit.ui_handler import UIHandler
+
+
+def _has_praise_line(text: str, step: str, feedback: str) -> bool:
+    return any(
+        f"{step}: {label} {feedback}" in text
+        for label in message_list("coaching.labels.praise")
+    )
 
 
 @pytest.fixture
@@ -139,7 +147,8 @@ def test_ui_handler_format_coaching_message_uses_structured_payload():
 
     assert "**Coaching**" in formatted
     assert "- Detected step: Secure" in formatted
-    assert "- Secure: Great job: You affirmed autonomy clearly." in formatted
+    assert _has_praise_line(formatted, "Secure", "You affirmed autonomy clearly.")
+    assert "secure: praise:" not in formatted.lower()
     assert "- Tip: Offer a concrete next step." in formatted
 
 

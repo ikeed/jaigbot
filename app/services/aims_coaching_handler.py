@@ -2,8 +2,8 @@
 AIMS coaching path handler.
 
 This service handles the full coaching flow:
-1. Load AIMS mapping and evaluate deterministic classification
-2. Perform LLM-based classification with fallbacks
+1. Load supporting AIMS mapping data
+2. Perform LLM-based structured classification with model fallbacks
 3. Apply vaccine relevance gating 
 4. Update AIMS state and metrics
 5. Generate patient reply with safety checks
@@ -21,7 +21,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import Request
 
-from app.aims_engine import load_mapping
+from app.aims_mapping_loader import load_mapping
 from app.chat_roles import ROLE_USER, ROLE_ASSISTANT
 from app.config import settings
 from app.constants import (
@@ -36,6 +36,7 @@ from app.constants import (
     SESSION_SCENE,
     DEFAULT_MODEL_FLASH
 )
+from app.message_catalog import message
 from app.models import ChatRequest
 from app.services.chat_context import ChatContext
 from app.services.chat_helpers import strip_appointment_headers
@@ -83,7 +84,7 @@ class AimsCoachingHandler:
     def _build_reply_concern_state_section(state: dict[str, Any] | None) -> str:
         concerns = (state or {}).get("parent_concerns") or []
         if not concerns:
-            return "No tracked vaccine concerns yet."
+            return message("patient_reply.concern_state.none_tracked")
 
         open_topics: list[str] = []
         resolved_topics: list[str] = []
@@ -92,7 +93,7 @@ class AimsCoachingHandler:
                 concern.get("canonical_label")
                 or concern.get("summary")
                 or concern.get("topic")
-                or "unspecified concern"
+                or message("patient_reply.concern_state.unspecified")
             ).strip()
             if not topic:
                 continue
@@ -104,18 +105,17 @@ class AimsCoachingHandler:
                     open_topics.append(topic)
 
         if not open_topics and resolved_topics:
-            return (
-                "Open concerns: none. "
-                f"Resolved concerns: {', '.join(resolved_topics)}. "
-                "Do not reopen resolved concerns as if unanswered."
+            return message(
+                "patient_reply.concern_state.open_none_resolved",
+                resolved=", ".join(resolved_topics),
             )
         if open_topics and resolved_topics:
-            return (
-                f"Open concerns: {', '.join(open_topics)}. "
-                f"Resolved concerns: {', '.join(resolved_topics)}. "
-                "Focus on open concerns; do not reopen resolved concerns as if unanswered."
+            return message(
+                "patient_reply.concern_state.open_and_resolved",
+                open=", ".join(open_topics),
+                resolved=", ".join(resolved_topics),
             )
-        return f"Open concerns: {', '.join(open_topics)}."
+        return message("patient_reply.concern_state.open_only", open=", ".join(open_topics))
     
     def __init__(
         self,
@@ -155,7 +155,7 @@ class AimsCoachingHandler:
         self.endgame_max_tokens = int(os.getenv("AIMS_ENDGAME_MAX_TOKENS", "192"))
         self.classify_budget_s = float(os.getenv("AIMS_CLASSIFY_BUDGET_S", "30.0"))
         self.heuristic_fallback_enabled = (
-            os.getenv("AIMS_HEURISTIC_FALLBACK_ENABLED", "true").strip().lower()
+            os.getenv("AIMS_HEURISTIC_FALLBACK_ENABLED", "false").strip().lower()
             not in {"0", "false", "no", "off"}
         )
 
@@ -183,7 +183,10 @@ class AimsCoachingHandler:
             max_tokens=self.max_tokens,
         )
         self.metrics_service = metrics_service or AimsMetricsService(logger=self.logger)
-        self.state_service = state_service or AimsStateService(logger=self.logger)
+        self.state_service = state_service or AimsStateService(
+            logger=self.logger,
+            heuristic_fallback_enabled=self.heuristic_fallback_enabled,
+        )
         self.feedback_service = feedback_service or AimsFeedbackService(
             project_id=self.project_id,
             region=self.vertex_location,
@@ -201,6 +204,7 @@ class AimsCoachingHandler:
         self.endgame_service = endgame_service or AimsEndgameService(
             logger=self.logger,
             classifier_service_getter=lambda: self.classifier_service,
+            heuristic_fallback_enabled=self.heuristic_fallback_enabled,
             summary_bullets_builder=lambda mem: build_summary_analysis_bullets(
                 mem=mem,
                 settings=settings,
@@ -244,7 +248,8 @@ class AimsCoachingHandler:
         # Load AIMS mapping (cached at app level)
         mapping = await self._load_aims_mapping()
         
-        # Step 1 & 2: Unified Classification (LLM with deterministic fallback)
+        # Step 1 & 2: Unified Classification (LLM structured output; legacy
+        # heuristic fallback only when explicitly enabled)
         cls_start = time.time()
         reply_start = time.time()
         self._emit_telemetry(
@@ -318,6 +323,7 @@ class AimsCoachingHandler:
                 if classification_result
                 else None
             ),
+            allow_keyword_fallback=self.heuristic_fallback_enabled,
         )
         
         # Only apply small-talk override when no AIMS step was detected.
@@ -326,10 +332,16 @@ class AimsCoachingHandler:
         if is_small_talk and not cls_payload.get("step"):
             cls_payload["step"] = None
             cls_payload["score"] = 0
-            cls_payload["reasons"] = (cls_payload.get("reasons") or []) + ["LLM flagged as small talk"]
+            cls_payload["reasons"] = (cls_payload.get("reasons") or []) + [
+                message("aims.small_talk_reason")
+            ]
             
         # Legacy AimsPostProcessor (score normalization, score capping)
-        cls_payload = AimsPostProcessor.post_process(cls_payload, body.message)
+        cls_payload = AimsPostProcessor.post_process(
+            cls_payload,
+            body.message,
+            allow_text_softening=self.heuristic_fallback_enabled,
+        )
 
         # Populate current phase for UI transparency
         cls_payload["phase"] = aims_state.get("phase", PHASE_PRE_ANNOUNCE)
@@ -381,7 +393,11 @@ class AimsCoachingHandler:
             except Exception as e:
                 self.logger.debug("AIMS feedback refinement failed: %s", e)
 
-        sanitize_coaching_tips(cls_payload, clinician_message=body.message)
+        sanitize_coaching_tips(
+            cls_payload,
+            clinician_message=body.message,
+            allow_text_rewrite=self.heuristic_fallback_enabled,
+        )
 
         # Step 4: Persist AIMS metrics (after state update)
         try:

@@ -1,6 +1,14 @@
 from app.chat_roles import ROLE_COACH
 from app.constants import KEY_AIMS_STATE, KEY_FULL_HISTORY, SESSION_HISTORY
+from app.message_catalog import message_list
 from app.services.coach_feedback_history_service import CoachFeedbackHistoryService
+
+
+def _has_praise_line(text: str, step: str, feedback: str) -> bool:
+    return any(
+        f"{step}: {label} {feedback}" in text
+        for label in message_list("coaching.labels.praise")
+    )
 
 
 class DummyLogger:
@@ -75,7 +83,8 @@ def test_append_persists_feedback_and_filters_internal_reasons_and_announce_tip(
     coach_entry = mem[SESSION_HISTORY][0]
     assert coach_entry["role"] == ROLE_COACH
     assert "Detected step: Secure" in coach_entry["content"]
-    assert "Secure: Great job: You supported the decision." in coach_entry["content"]
+    assert _has_praise_line(coach_entry["content"], "Secure", "You supported the decision.")
+    assert "praise:" not in coach_entry["content"].lower()
     assert "Announce the vaccine again" not in coach_entry["content"]
     assert "Offer a concrete next step" in coach_entry["content"]
     assert coach_entry["coaching_data"]["step"] == "Secure"
@@ -111,7 +120,7 @@ def test_append_uses_step_feedback_and_deferred_nudge():
             "score": 3,
             "phase": "InquireMirror",
             "step_feedback": [
-                {"step": "Mirror", "tone": "praise", "feedback": "You reflected the concern."},
+                {"step": "Mirror", "tone": "praise", "feedback": "You mirrored the concern."},
                 {"step": "Inquire", "tone": "improvement", "feedback": "Ask what worries them most."},
             ],
             "tips": ["This should not show when step feedback exists."],
@@ -153,7 +162,8 @@ def test_append_shows_tip_when_step_feedback_is_praise_only():
     )
 
     text = mem[SESSION_HISTORY][0]["content"]
-    assert "Secure: Great job: You affirmed autonomy clearly." in text
+    assert _has_praise_line(text, "Secure", "You affirmed autonomy clearly.")
+    assert "praise:" not in text.lower()
     assert "Tip: Ask one open-ended check-in question." in text
 
 

@@ -24,6 +24,7 @@ async def test_run_uses_deterministic_fallback_when_classification_times_out():
         patient_reply_service=patient_reply,
         classify_budget_s=0.001,
         logger=logging.getLogger("test"),
+        heuristic_fallback_enabled=True,
     )
 
     result = await coordinator.run(
@@ -70,10 +71,9 @@ async def test_run_can_disable_deterministic_fallback_when_classification_times_
         patient_reply_service=patient_reply,
         classify_budget_s=0.001,
         logger=logging.getLogger("test"),
-        heuristic_fallback_enabled=False,
     )
 
-    with patch("app.services.aims_turn_coordinator.evaluate_turn") as evaluate_turn:
+    with patch("app.aims_engine.evaluate_turn") as evaluate_turn:
         result = await coordinator.run(
             clinician_message="I recommend the MMR today.",
             person_last="Okay.",

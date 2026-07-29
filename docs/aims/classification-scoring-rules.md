@@ -393,6 +393,8 @@ Vaccine relevance is True if any of the following apply:
 - Any concerns tracked with `is_mirrored == False` → no endgame, except when the person's latest
   replies clearly accept literature/materials plus follow-up. That closure is allowed because
   residual uncertainty plus a follow-up plan is a valid AIMS outcome.
+- For vaccine acceptance, stale concern state can be overridden only by the structured endgame
+  detector when it reports clear same-day consent and `remaining_active_concern == false`.
 
 ### 8.2 LLM detector (`endgame_detector.txt` prompt)
 Called when hard guards pass.  Returns:
@@ -404,9 +406,11 @@ The LLM is instructed to judge **intent, not exact wording**.  Natural language 
 three weeks should give me enough time to look things over"* = `accepted_literature`.
 
 ### 8.3 Confirmation gates
-- **`accepted_vaccine`**: requires heuristic confirmation via `EndGameDetector.detect()` (checks
-  `ACCEPT_NOW_CUES` like *"let's do it"*, *"i consent"*, *"go ahead"*).  This gate is retained
-  because consenting to vaccinate today is irreversible.
+- **`accepted_vaccine`**: requires the LLM detector to resolve the transcript as same-day vaccine
+  consent. If the structured fields are present, `accepted_vaccine == true` and
+  `remaining_active_concern == false` are sufficient to close even when the local concern tracker
+  still contains stale unsecured entries. If those structured fields are absent, unresolved concern
+  state still blocks closure.
 - **`accepted_literature`**: requires both LLM intent and deterministic transcript evidence that
   literature/materials plus a follow-up or return plan were offered/accepted. Natural language
   still reaches the LLM, but follow-up alone or literature alone cannot end the session.

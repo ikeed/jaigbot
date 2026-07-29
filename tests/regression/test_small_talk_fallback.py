@@ -20,7 +20,10 @@ def local_aims_mapping_mock():
             }
         }
     }
-    with patch("app.aims_engine.load_mapping", return_value=mock_mapping):
+    with (
+        patch("app.aims_engine.load_mapping", return_value=mock_mapping),
+        patch("app.aims_mapping_loader.load_mapping", return_value=mock_mapping),
+    ):
         yield mock_mapping
 
 
@@ -72,7 +75,8 @@ def enable_coaching(monkeypatch):
     yield
 
 
-def test_small_talk_fallback_produces_friendly_reply(caplog):
+def test_small_talk_fallback_produces_friendly_reply(caplog, monkeypatch):
+    monkeypatch.setenv("AIMS_HEURISTIC_FALLBACK_ENABLED", "true")
     caplog.set_level(logging.INFO)
     # Small talk / pleasantries that should classify as non-step
     msg = "Hello Sarah and Liam! So good to see you both — wow, he's getting so big!"
@@ -84,7 +88,7 @@ def test_small_talk_fallback_produces_friendly_reply(caplog):
     reply = data["reply"]
     # Should not be a bland "Okay." and should be the expected fallback response
     assert reply.strip() != "Okay."
-    assert reply == "I'm not sure — I have some questions, but I'd like to hear more."
+    assert reply == "I'm not sure - I have some questions, but I'd like to hear more."
 
     # Coaching should indicate rapport allowed anytime
     coaching = data.get("coaching") or {}

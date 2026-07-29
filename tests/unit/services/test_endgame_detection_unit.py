@@ -5,9 +5,8 @@ Covers:
 - Coach-role entries are filtered from history_text sent to the LLM
 - Assistant role is labelled "Person", not "Parent"
 - Heuristic fallback fires when detect_endgame returns detection_error
-- Dual-consent gate blocks accepted_vaccine when heuristic disagrees
-- Dual-consent gate allows accepted_vaccine when both LLM and heuristic agree
-- Non-vaccine outcomes (accepted_literature, deferred) bypass the dual-consent gate
+- Semantic accepted_vaccine gates handle stale concern state safely
+- Non-vaccine outcomes (accepted_literature, deferred) use their own guards
 """
 import asyncio
 import logging
@@ -21,11 +20,17 @@ from app.services.coach_post import EndGameDetector
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_endgame_service(classifier_service, summary_bullets_builder=None) -> AimsEndgameService:
+def _make_endgame_service(
+    classifier_service,
+    summary_bullets_builder=None,
+    *,
+    heuristic_fallback_enabled: bool = True,
+) -> AimsEndgameService:
     return AimsEndgameService(
         logger=logging.getLogger("test"),
         classifier_service_getter=lambda: classifier_service,
         summary_bullets_builder=summary_bullets_builder,
+        heuristic_fallback_enabled=heuristic_fallback_enabled,
     )
 
 
@@ -307,6 +312,27 @@ def test_heuristic_fallback_fires_on_detection_error():
     result = _run(service.check(store["s6"], {}, None, "s6"))
     assert result is not None, "Heuristic fallback should produce a result on detection_error"
     assert "Great job" in result.get("title", "")
+
+
+def test_heuristic_fallback_is_disabled_by_default_on_detection_error():
+    mock_svc = _MockClassifierService(
+        {"is_endgame": False, "resolution_type": "not_resolved", "summary": "", "reason": "detection_error"}
+    )
+    store = {
+        "s6-default": {
+            "history": [
+                {"role": "user", "content": "Vaccines recommended today."},
+                {"role": "assistant", "content": "Okay, let's do it today. I consent."},
+            ],
+            "aims_state": _announced_state(),
+        }
+    }
+    service = AimsEndgameService(
+        logger=logging.getLogger("test"),
+        classifier_service_getter=lambda: mock_svc,
+    )
+    result = _run(service.check(store["s6-default"], {}, None, "s6-default"))
+    assert result is None
 
 
 def test_heuristic_fallback_silent_on_no_endgame_match():
@@ -1042,6 +1068,18 @@ def test_compound_turn_resolving_final_concern_allows_endgame():
         "You're worried about side effects. Serious side effects are rare. What else would help?",
         "I'm worried about side effects.",
         llm_topic="side_effects",
+        person_events=[
+            {
+                "event_type": "concern_mirrored",
+                "topic": "side_effects",
+                "confidence": "high",
+            },
+            {
+                "event_type": "concern_secured",
+                "topic": "side_effects",
+                "confidence": "high",
+            },
+        ],
     )
 
     concern = store["s13b"]["aims_state"]["parent_concerns"][0]
@@ -1283,6 +1321,64 @@ def test_structured_vaccine_fields_block_remaining_active_concern():
     service = _make_endgame_service(mock_svc)
     result = _run(service.check(store["s15_structured_vax_active"], {}, None, "s15_structured_vax_active"))
     assert result is None
+
+
+def test_structured_vaccine_closure_overrides_stale_unsecured_state():
+    """Sarah-style consent should not deadlock on stale tracked concerns."""
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_vaccine",
+            "summary": "Person agreed to give the MMR booster today.",
+            "accepted_vaccine": True,
+            "remaining_active_concern": False,
+            "evidence_spans": ["if she's due, then yes, let's go ahead with it today"],
+            "reason": "",
+        }
+    )
+    store = {
+        "s15_structured_vax_stale_state": {
+            "history": [
+                {
+                    "role": "user",
+                    "content": (
+                        "I checked Emily's record: she is due for the MMR booster. "
+                        "With your agreement, we'll give it today."
+                    ),
+                },
+                {
+                    "role": "assistant",
+                    "content": "Okay, if she's due, then yes, let's go ahead with it today.",
+                },
+            ],
+            "aims_state": {
+                "phase": "Secure",
+                "announced": True,
+                "first_inquire_done": True,
+                "parent_concerns": [
+                    {
+                        "id": "relevance",
+                        "topic": "relevance",
+                        "desc": "wants to know whether measles is still a current risk",
+                        "is_mirrored": False,
+                        "is_secured": False,
+                        "status": "open",
+                    }
+                ],
+            },
+        }
+    }
+    service = _make_endgame_service(mock_svc, heuristic_fallback_enabled=False)
+    result = _run(
+        service.check(
+            store["s15_structured_vax_stale_state"],
+            {},
+            None,
+            "s15_structured_vax_stale_state",
+        )
+    )
+    assert result is not None
+    assert result["lines"][0] == "Outcome: Person agreed to give the MMR booster today."
 
 
 def test_accepted_literature_closure_uses_latest_exchange_not_old_safety_risk_mirror():

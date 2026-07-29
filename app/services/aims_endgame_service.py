@@ -7,6 +7,7 @@ from typing import Any
 
 from app.chat_roles import ROLE_ASSISTANT, ROLE_USER, get_ui_attributes
 from app.constants import KEY_AIMS_STATE, PHASE_PRE_ANNOUNCE, SESSION_HISTORY
+from app.message_catalog import message, message_list
 from app.services.coach_post import (
     EndGameDetector,
     build_endgame_bullets_fallback,
@@ -34,10 +35,12 @@ class AimsEndgameService:
         logger: Any,
         classifier_service_getter: Callable[[], Any],
         summary_bullets_builder: Callable[[dict[str, Any]], Any] | None = None,
+        heuristic_fallback_enabled: bool = False,
     ) -> None:
         self._logger = logger
         self._classifier_service_getter = classifier_service_getter
         self._summary_bullets_builder = summary_bullets_builder
+        self._heuristic_fallback_enabled = heuristic_fallback_enabled
 
     @staticmethod
     def _could_be_literature_followup_closure(reply_text: str) -> bool:
@@ -104,7 +107,7 @@ class AimsEndgameService:
         session_obj: dict[str, Any] | None,
         session_id: str,
     ) -> dict[str, Any] | None:
-        """Check for end-game scenarios using LLM-centric detection with heuristic fallback."""
+        """Check for end-game scenarios using structured semantic detection."""
         started = time.time()
         try:
             if mem is None:
@@ -131,7 +134,11 @@ class AimsEndgameService:
                 for item in reversed(history[-6:])
                 if item.get("role") == ROLE_ASSISTANT and (item.get("content") or "").strip()
             )[:500]
-            heuristic = EndGameDetector.detect(combined_reply_text)
+            heuristic = (
+                EndGameDetector.detect(combined_reply_text)
+                if self._heuristic_fallback_enabled
+                else None
+            )
 
             concerns = aims_state.get("parent_concerns") or []
             first_inquire_done = bool(aims_state.get("first_inquire_done", False))
@@ -164,7 +171,12 @@ class AimsEndgameService:
             outcome = result.get("resolution_type", "not_resolved")
             summary = result.get("summary", "")
 
-            if not is_endgame and heuristic and result.get("reason") == "detection_error":
+            if (
+                self._heuristic_fallback_enabled
+                and not is_endgame
+                and heuristic
+                and result.get("reason") == "detection_error"
+            ):
                 is_endgame = True
                 heuristic_reason = heuristic.get("reason", "")
                 outcome = (
@@ -180,7 +192,9 @@ class AimsEndgameService:
                     is_endgame = False
 
                 has_unsecured = any(not concern.get("is_secured") for concern in concerns)
-                if is_endgame and concerns and has_unsecured:
+                # The detector reads the transcript; stale local concern state must not
+                # deadlock explicit same-day consent when no active concern remains.
+                if is_endgame and concerns and has_unsecured and structured_vaccine is not True:
                     is_endgame = False
 
             if is_endgame and outcome == "accepted_literature":
@@ -190,6 +204,8 @@ class AimsEndgameService:
                 elif structured_literature is True:
                     pass
                 elif structured_literature is False:
+                    is_endgame = False
+                elif not self._heuristic_fallback_enabled:
                     is_endgame = False
                 else:
                     combined_lower = combined_reply_text.lower()
@@ -212,7 +228,7 @@ class AimsEndgameService:
                 return None
 
             title = endgame_title(session_obj, outcome=outcome)
-            lines = [f"Outcome: {summary}"] if summary else []
+            lines = [message("coaching.outcome", summary=summary)] if summary else []
             llm_commentary: list[str] = []
 
             try:
@@ -243,18 +259,7 @@ class AimsEndgameService:
         if not summary_bullets:
             return []
 
-        structural_prefixes = (
-            "overall aims score:",
-            "announce ",
-            "announce:",
-            "inquire ",
-            "inquire:",
-            "mirror ",
-            "mirror:",
-            "secure ",
-            "secure:",
-            "outcome:",
-        )
+        structural_prefixes = tuple(message_list("endgame.summary_structural_prefixes"))
         filtered: list[str] = []
         seen: set[str] = set()
 

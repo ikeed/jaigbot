@@ -11,6 +11,29 @@ fallbacks, and rendering. The problem is that too many deterministic layers stil
 make semantic decisions by searching English prose, and several display layers
 reshape generated text after the API returns it.
 
+## Execution Boundary
+
+The cleanup should not mean "move English regex classifiers into a localized
+catalog." Localized catalogs are acceptable for display copy, prompt text,
+browser UI strings, and explicitly quarantined legacy fixtures. They are not a
+replacement for semantic classification.
+
+Default runtime behavior should be:
+
+- AIMS step, concern events, mirror/secure state, vaccine relevance, and
+  endgame resolution come from LLM-returned structured fields.
+- Deterministic code validates schemas, enum values, score ranges, state
+  transitions, deduplication, persistence, and rendering.
+- If the semantic classifier is unavailable, the app fails closed with neutral
+  coaching-unavailable feedback or uses a model fallback. It does not silently
+  guess with English regex classifiers.
+- Regex/keyword classifiers may remain only behind an explicit legacy fallback
+  switch for historical regression tests, diagnostics, and emergency fallback
+  experiments.
+- Model-authored feedback text is not rewritten at display time. Wording
+  consistency, including "Mirror" rather than "Reflect," belongs in prompts,
+  schemas, and regression tests.
+
 ## Guiding Principles
 
 1. Text is not state.
@@ -105,7 +128,7 @@ English stem lists, regexes, punctuation, and cue matching. Examples:
 - Announce fallback markers such as "i recommend", "routine vaccines", and
   "vaccination status".
 - Inquire detection based on question marks and English question starters.
-- Mirror detection based on English reflective stems.
+- Mirror detection based on English mirror-language stems.
 - Secure detection based on English autonomy, option, and safety-net phrases.
 - Scoring tips chosen by English checks such as `why`, `right?`, `but`, `how
   does that sound`, and `call if`.
@@ -397,8 +420,8 @@ Candidate fields:
       {
         "step": "Mirror",
         "tone": "praise",
-        "code": "specific_reflection_present",
-        "text": "You reflected the trust concern clearly.",
+        "code": "specific_mirror_present",
+        "text": "You mirrored the trust concern clearly.",
         "evidence_spans": ["You want to feel confident in the evidence"]
       },
       {

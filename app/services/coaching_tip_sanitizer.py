@@ -4,29 +4,22 @@ import re
 from typing import Any
 
 from app.constants import STEP_INQUIRE
+from app.message_catalog import catalog_value, message, message_map
 from app.services.aims_metrics_service import AimsMetricsService
 
 
 _OPEN_QUESTION_TIP_RE = re.compile(
-    r"\b(?:try\s+)?(?:lead|leading|start|starting|begin|beginning)\s+with\s+(?:an?\s+)?open[- ]?(?:ended[- ]?)?question\b"
-    r"|\b(?:try\s+)?(?:ask|use)\s+(?:an?\s+)?open[- ]?(?:ended[- ]?)?question\b"
-    r"|\bprefer\s+(?:what\s+and\s+how|what/how)\s+questions\b"
-    r"|\b(?:ask|try asking)\s+what'?s on (?:their|your) mind\b"
-    r"|\b(?:ask|try asking)\s+what is on (?:their|your) mind\b",
+    str(catalog_value("lexicon.coaching_tip_sanitizer.open_question_tip_pattern", default="$^")),
     re.IGNORECASE,
 )
 
 _OPEN_CONCERN_QUESTION_RE = re.compile(
-    r"\b("
-    r"what|how|tell me|help me understand|could you share|can you share|would you share"
-    r")\b[^?.!]*(?:"
-    r"thought|concern|worr|heard|feel|mind|question|hesitan|matter|understand"
-    r")",
+    str(catalog_value("lexicon.coaching_tip_sanitizer.open_concern_question_pattern", default="$^")),
     re.IGNORECASE,
 )
 
 _LEADING_QUESTION_RE = re.compile(
-    r"\b(don't you|wouldn't you|isn't it|right\?|myth|misinformation)\b",
+    str(catalog_value("lexicon.coaching_tip_sanitizer.leading_question_pattern", default="$^")),
     re.IGNORECASE,
 )
 
@@ -58,24 +51,6 @@ _STACKED_QUESTION_CODES = {
     "reduce_question_stack",
 }
 
-_MIRROR_TERM_REPLACEMENTS = (
-    (re.compile(r"\bReflections\b"), "Mirroring"),
-    (re.compile(r"\breflections\b"), "mirroring"),
-    (re.compile(r"\bReflected\b"), "Mirrored"),
-    (re.compile(r"\breflected\b"), "mirrored"),
-    (re.compile(r"\bReflecting\b"), "Mirroring"),
-    (re.compile(r"\breflecting\b"), "mirroring"),
-    (re.compile(r"\bReflective listening\b"), "Mirroring"),
-    (re.compile(r"\breflective listening\b"), "mirroring"),
-    (re.compile(r"\bReflection\b"), "Mirroring"),
-    (re.compile(r"\breflection\b"), "mirroring"),
-    (re.compile(r"\bReflects\b"), "Mirrors"),
-    (re.compile(r"\breflects\b"), "mirrors"),
-    (re.compile(r"\bReflect\b"), "Mirror"),
-    (re.compile(r"\breflect\b"), "mirror"),
-)
-
-
 def has_open_concern_question(text: str | None) -> bool:
     """Return True when the current turn asks an open concern-surfacing question."""
     return bool(_OPEN_CONCERN_QUESTION_RE.search(text or ""))
@@ -96,17 +71,15 @@ def is_open_question_tip(tip: str | None) -> bool:
 
 
 def normalize_aims_feedback_terms(text: str | None) -> str:
-    """Use AIMS step language in user-facing coaching text."""
-    normalized = str(text or "").strip()
-    for pattern, replacement in _MIRROR_TERM_REPLACEMENTS:
-        normalized = pattern.sub(replacement, normalized)
-    return normalized
+    """Normalize whitespace without rewriting model-authored feedback text."""
+    return str(text or "").strip()
 
 
 def sanitize_coaching_tips(
     cls_payload: dict[str, Any],
     *,
     clinician_message: str | None,
+    allow_text_rewrite: bool = False,
 ) -> dict[str, Any]:
     """Drop or replace feedback that criticizes a behavior already present this turn."""
     cls_payload["reasons"] = _sanitize_text_list(cls_payload.get("reasons") or [])
@@ -127,7 +100,9 @@ def sanitize_coaching_tips(
     except (TypeError, ValueError):
         score = None
 
-    message_has_open_question = has_open_concern_question(clinician_message)
+    message_has_open_question = (
+        has_open_concern_question(clinician_message) if allow_text_rewrite else False
+    )
     detected_solid_inquire = STEP_INQUIRE in components and (score is None or score >= 2)
     already_opened = message_has_open_question or detected_solid_inquire
 
@@ -136,7 +111,7 @@ def sanitize_coaching_tips(
         tip = normalize_aims_feedback_terms(raw_tip)
         if not tip:
             continue
-        if already_opened and is_open_question_tip(tip):
+        if allow_text_rewrite and already_opened and is_open_question_tip(tip):
             replacement = _replacement_for_open_question_tip(clinician_message)
             if replacement and replacement not in sanitized:
                 sanitized.append(replacement)
@@ -150,6 +125,7 @@ def sanitize_coaching_tips(
         already_opened=already_opened,
         clinician_message=clinician_message,
         replacement_tips=cls_payload["tips"],
+        allow_text_rewrite=allow_text_rewrite,
     )
     return cls_payload
 
@@ -252,6 +228,7 @@ def _sanitize_step_feedback(
     already_opened: bool,
     clinician_message: str | None,
     replacement_tips: list[str],
+    allow_text_rewrite: bool,
 ) -> list[dict[str, str]]:
     sanitized: list[dict[str, str]] = []
     seen: set[tuple[str, str, str]] = set()
@@ -265,7 +242,7 @@ def _sanitize_step_feedback(
             continue
         feedback = normalize_aims_feedback_terms(feedback)
 
-        if already_opened and is_open_question_tip(feedback):
+        if allow_text_rewrite and already_opened and is_open_question_tip(feedback):
             replacement = (
                 _replacement_for_open_question_tip(clinician_message)
                 or _first_non_open_question_tip(replacement_tips)
@@ -315,9 +292,10 @@ def _first_non_open_question_tip(tips: list[str]) -> str | None:
 def _replacement_for_open_question_tip(clinician_message: str | None) -> str | None:
     text = clinician_message or ""
     if text.count("?") > 1:
-        return "Ask one neutral question at a time, then pause so they have room to answer."
+        return str(message_map("lexicon.coaching_tip_sanitizer.open_question_replacements").get("stacked") or "")
     if _LEADING_QUESTION_RE.search(text):
-        return "Keep the question neutral so it does not signal the answer you prefer."
-    if re.search(r"(^|\s)why\s", text, re.IGNORECASE):
-        return "Use what or how phrasing instead of why, which can feel accusatory."
+        return str(message_map("lexicon.coaching_tip_sanitizer.open_question_replacements").get("leading") or "")
+    why_pattern = str(catalog_value("lexicon.coaching_tip_sanitizer.why_question_pattern", default="$^"))
+    if re.search(why_pattern, text, re.IGNORECASE):
+        return message("lexicon.coaching_tip_sanitizer.open_question_replacements.why")
     return None

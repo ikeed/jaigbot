@@ -5,32 +5,10 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from app.json_schemas import REPLY_SCHEMA, validate_json
+from app.message_catalog import message, message_list
 from app.prompts.aims import build_patient_reply_prompt
 from app.services.security_guard import JailbreakGuard
 from app.telemetry.events import log_event as telemetry_log_event
-
-
-FALLBACK_REPLIES = {
-    "confused_jailbreak": (
-        "Um… I'm just a parent here for my child's visit. I'm not sure what you mean — "
-        "are we still talking about the checkup today?"
-    ),
-    "acknowledge_resolved": "Yes, that helps. Thank you.",
-    "acknowledge_open": "Okay, thank you.",
-    "need_more": "I'm not sure — I have some questions, but I'd like to hear more.",
-    "generic_ack": "Okay.",
-}
-
-METADATA_LABEL_PREFIXES = (
-    "person:",
-    "parent:",
-    "patient:",
-    "purpose:",
-    "notes:",
-    "reason for visit:",
-    "background:",
-    "scenario:",
-)
 
 
 class ReplyValidationError(ValueError):
@@ -95,7 +73,10 @@ class PatientReplyService:
             clinician_name=clinician_name,
             concern_state_section=concern_state_section,
         )
-        no_open_concerns = "open concerns: none" in (concern_state_section or "").lower()
+        no_open_concerns = (
+            message("patient_reply.concern_state.open_none_marker")
+            in (concern_state_section or "").lower()
+        )
         prompt_for_attempt = reply_prompt
 
         for attempt in (1, 2):
@@ -113,7 +94,7 @@ class PatientReplyService:
                 text = cand.get("patient_reply", "").strip()
                 validation = self._validate_reply_text(text)
                 if not validation["reply_valid"]:
-                    raise ReplyValidationError("patient_reply leaked metadata labels", validation)
+                    raise ReplyValidationError("patient_reply_invalid_metadata", validation)
 
                 if text.lower() == "ok":
                     fallback_code = (
@@ -208,7 +189,7 @@ class PatientReplyService:
             lowered = line.strip().lower()
             if not lowered:
                 continue
-            if lowered.startswith(METADATA_LABEL_PREFIXES):
+            if lowered.startswith(tuple(message_list("validation.metadata_label_prefixes"))):
                 metadata_leak_detected = True
                 break
         return {
@@ -224,7 +205,7 @@ class PatientReplyService:
         validation: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         return {
-            "patient_reply": FALLBACK_REPLIES[fallback_code],
+            "patient_reply": message(f"patient_reply.fallbacks.{fallback_code}"),
             "reply_validation": validation
             or {
                 "reply_valid": True,
@@ -235,8 +216,4 @@ class PatientReplyService:
 
     @staticmethod
     def _retry_prompt(base_prompt: str) -> str:
-        return (
-            f"{base_prompt}\n\n"
-            "Your previous JSON was valid, but patient_reply included scenario metadata "
-            "or speaker labels. Try again with only the person's conversational reply."
-        )
+        return message("patient_reply.retry_prompt", base_prompt=base_prompt)
