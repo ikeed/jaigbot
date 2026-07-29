@@ -104,7 +104,7 @@ def test_secure_before_mirror_adds_reason_tip_and_caps_score(monkeypatch):
     # Score capped and reason/tip injected
     assert data["coaching"]["score"] <= 2
     reasons = " ".join(data["coaching"]["reasons"]).lower()
-    assert "reflecting" in reasons or "mirroring" in reasons
+    assert "mirroring" in reasons
     assert any("before educating" in t.lower() for t in data["coaching"]["tips"])
 
 
@@ -185,7 +185,7 @@ def test_zia_style_required_and_safe_reply_seeds_distinct_concerns_and_flags_sec
     data = r2.json()
 
     reasons = " ".join(data["coaching"]["reasons"]).lower()
-    assert "reflecting" in reasons or "mirroring" in reasons
+    assert "mirroring" in reasons
 
     concerns = m.MEMORY_STORE[sess]["aims_state"]["parent_concerns"]
     assert {c["topic"] for c in concerns} == {"requirements", "side_effects"}

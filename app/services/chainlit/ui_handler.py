@@ -10,11 +10,21 @@ from app.chat_roles import (
     ROLE_USER,
     get_ui_attributes,
 )
+from app.services.coaching_display import (
+    coaching_message_parts,
+    coaching_summary_text as build_coaching_summary_text,
+)
 
 logger = logging.getLogger(__name__)
 
 class UIHandler:
     """Handles all formatting and sending of messages to the Chainlit frontend."""
+
+    @staticmethod
+    def _format_parts(title: str, parts: list[str]) -> str:
+        clean_parts = [p for p in parts if p and p != title]
+        bullets = "\n".join(f"- {p}" for p in clean_parts)
+        return f"**{title}**\n\n{bullets}" if bullets else f"**{title}**"
 
     @staticmethod
     def format_coach_message(text: str) -> str:
@@ -32,9 +42,18 @@ class UIHandler:
         if not parts:
             return txt
         title = "Scenario complete" if any("Scenario complete" in p for p in parts) else "Coaching"
-        clean_parts = [p for p in parts if p != title]
-        bullets = "\n".join(f"- {p}" for p in clean_parts)
-        return f"**{title}**\n\n{bullets}" if bullets else f"**{title}**"
+        return UIHandler._format_parts(title, parts)
+
+    @staticmethod
+    def format_coaching_message(coaching: dict[str, Any]) -> str:
+        parts = coaching_message_parts(coaching)
+        if not parts:
+            return ""
+        return UIHandler._format_parts("Coaching", parts)
+
+    @staticmethod
+    def coaching_summary_text(coaching: dict[str, Any]) -> str:
+        return build_coaching_summary_text(coaching)
 
     @staticmethod
     def render_scenario_card_html(card_text: str) -> str:
@@ -93,4 +112,13 @@ class UIHandler:
         await cl.Message(
             content=self.format_coach_message(content), 
             **get_ui_attributes(ROLE_COACH)
+        ).send()
+
+    async def send_coaching_message(self, coaching: dict[str, Any]):
+        content = self.format_coaching_message(coaching)
+        if not content:
+            return
+        await cl.Message(
+            content=content,
+            **get_ui_attributes(ROLE_COACH),
         ).send()

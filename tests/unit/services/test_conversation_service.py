@@ -1,5 +1,6 @@
 from app.services.aims_state_service import AimsStateService
 from app.services.conversation_service import (
+    apply_concern_events,
     topics_in,
     concern_topic,
     is_duplicate_concern,
@@ -63,6 +64,139 @@ def test_maybe_add_person_concern_uses_llm_topic():
     assert st["parent_concerns"][0]["topic"] == "diet"
     assert st["parent_concerns"][0]["desc"] == "I'm worried about what he eats."
     assert st["parent_concerns"][0]["evidence"] == ["I'm worried about what he eats."]
+
+
+def test_apply_concern_events_adds_concern_without_keyword_text():
+    st = {"parent_concerns": []}
+
+    handled = apply_concern_events(
+        st,
+        [
+            {
+                "event_type": "concern_raised",
+                "topic": "trust",
+                "evidence_spans": ["Tengo dudas sobre lo que dicen."],
+                "confidence": "high",
+            }
+        ],
+        person_text="Tengo dudas sobre lo que dicen.",
+    )
+
+    assert handled == {"concern_presence"}
+    assert len(st["parent_concerns"]) == 1
+    concern = st["parent_concerns"][0]
+    assert concern["topic"] == "trust"
+    assert concern["evidence"] == ["Tengo dudas sobre lo que dicen."]
+
+
+def test_apply_concern_events_low_confidence_suppresses_keyword_fallback_group():
+    st = {"parent_concerns": []}
+
+    handled = apply_concern_events(
+        st,
+        [
+            {
+                "event_type": "concern_raised",
+                "topic": "trust",
+                "evidence_spans": ["Maybe."],
+                "confidence": "low",
+            }
+        ],
+        person_text="Maybe.",
+    )
+
+    assert handled == {"concern_presence"}
+    assert st["parent_concerns"] == []
+
+
+def test_apply_concern_events_ignores_untargeted_action_events():
+    st = {"parent_concerns": []}
+
+    handled = apply_concern_events(
+        st,
+        [
+            {"event_type": "concern_raised", "confidence": "high"},
+            {"event_type": "concern_mirrored", "confidence": "high"},
+            {"event_type": "concern_secured", "confidence": "high"},
+        ],
+        person_text="I'm worried about safety.",
+    )
+
+    assert handled == set()
+    assert st["parent_concerns"] == []
+
+
+def test_apply_concern_events_mirror_and_secure_targeted_concern():
+    st = {
+        "parent_concerns": [
+            {
+                "id": "trust",
+                "topic": "trust",
+                "summary": "wants evidence, uncertainty, and trust addressed",
+                "desc": "wants evidence, uncertainty, and trust addressed",
+                "evidence": ["I do not know who to believe."],
+                "is_mirrored": False,
+                "is_secured": False,
+                "mirror_count": 0,
+                "secure_count": 0,
+            }
+        ]
+    }
+
+    handled = apply_concern_events(
+        st,
+        [
+            {"event_type": "concern_mirrored", "target_concern_id": "trust"},
+            {"event_type": "concern_secured", "target_concern_id": "trust"},
+        ],
+    )
+
+    concern = st["parent_concerns"][0]
+    assert handled == {"mirrored", "secured"}
+    assert concern["is_mirrored"] is True
+    assert concern["is_secured"] is True
+    assert concern["mirror_count"] == 1
+    assert concern["secure_count"] == 1
+    assert concern["status"] == "resolved"
+
+
+def test_state_update_prefers_no_active_concern_event_over_keyword_fallback():
+    mem = {}
+
+    AimsStateService(logger=None).update(
+        mem,
+        cls_payload={"step": "Inquire", "steps": ["Inquire"], "score": 2, "reasons": [], "tips": []},
+        clinician_message="What questions do you have?",
+        person_last="That sounds helpful, and safety makes sense.",
+        llm_topic="side_effects",
+        person_events=[{"event_type": "no_active_concern", "confidence": "high"}],
+    )
+
+    assert mem["aims_state"]["parent_concerns"] == []
+
+
+def test_state_update_applies_person_event_when_text_has_no_topic_keywords():
+    mem = {}
+
+    AimsStateService(logger=None).update(
+        mem,
+        cls_payload={"step": "Inquire", "steps": ["Inquire"], "score": 2, "reasons": [], "tips": []},
+        clinician_message="Tell me what is on your mind.",
+        person_last="Tengo dudas sobre lo que dicen.",
+        llm_topic=None,
+        person_events=[
+            {
+                "event_type": "concern_raised",
+                "topic": "trust",
+                "evidence_spans": ["Tengo dudas sobre lo que dicen."],
+                "confidence": "high",
+            }
+        ],
+    )
+
+    concern = mem["aims_state"]["parent_concerns"][0]
+    assert concern["topic"] == "trust"
+    assert concern["evidence"] == ["Tengo dudas sobre lo que dicen."]
 
 
 def test_maybe_add_person_concern_can_seed_multiple_topics_from_one_reply():

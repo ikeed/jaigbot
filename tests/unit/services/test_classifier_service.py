@@ -47,7 +47,123 @@ async def test_classify_turn_success(classifier_service, mock_vertex_client):
     assert result.is_small_talk is False
     assert result.aims.step == "Mirror"
     assert result.aims.score == 3
-    assert "Reflected concern well" in result.aims.reasons
+    assert "Mirrored concern well" in result.aims.reasons
+    assert "observations" not in result.aims.model_dump()
+    assert "feedback_items" not in result.aims.model_dump()
+    assert "person_events" not in result.model_dump()
+    assert "resolution" not in result.model_dump()
+
+
+@pytest.mark.asyncio
+async def test_classify_turn_preserves_optional_semantic_contract_fields(
+    classifier_service, mock_vertex_client
+):
+    mock_response = {
+        "is_small_talk": False,
+        "is_vaccine_relevant": True,
+        "aims": {
+            "step": "Mirror",
+            "score": 3,
+            "reasons": ["Reflected concern well"],
+            "tips": [],
+            "observations": {
+                "reflection_present": True,
+                "accuracy_check_present": False,
+                "question_count": 1,
+            },
+            "feedback_items": [
+                {
+                    "step": "Mirror",
+                    "tone": "praise",
+                    "code": "mirror_reflection",
+                    "text": "You reflected the side-effect concern clearly.",
+                    "evidence_spans": ["worried about side effects"],
+                    "target_observation": "reflection_present",
+                }
+            ],
+        },
+        "person_events": [
+            {
+                "event_type": "concern_raised",
+                "topic": "side_effects",
+                "evidence_spans": ["scared of the shots causing a fever"],
+                "confidence": "high",
+            }
+        ],
+        "resolution": {
+            "is_endgame": False,
+            "remaining_active_concern": True,
+            "evidence_spans": ["I'm scared of the shots causing a fever."],
+        },
+        "safety_flags": [],
+        "person_topic": "side_effects",
+        "reasoning": "Optional semantic fields are present.",
+    }
+    mock_vertex_client.generate_text_async.return_value = json.dumps(mock_response)
+
+    result = await classifier_service.classify_turn(
+        clinician_message="It sounds like you're worried about side effects.",
+        person_last="I'm scared of the shots causing a fever.",
+        history=[],
+        prior_announced=True,
+        prior_phase="InquireMirror",
+        mapping={},
+    )
+
+    assert result.aims.observations is not None
+    assert result.aims.observations.reflection_present is True
+    assert result.aims.observations.accuracy_check_present is False
+    assert result.aims.observations.question_count == 1
+    assert result.aims.feedback_items[0].code == "mirror_reflection"
+    assert result.aims.feedback_items[0].text == "You mirrored the side-effect concern clearly."
+    assert result.aims.feedback_items[0].evidence_spans == ["worried about side effects"]
+    assert result.person_events[0].event_type == "concern_raised"
+    assert result.person_events[0].topic == "side_effects"
+    assert result.resolution is not None
+    assert result.resolution.is_endgame is False
+    assert result.resolution.remaining_active_concern is True
+
+
+@pytest.mark.asyncio
+async def test_classify_turn_ignores_malformed_optional_semantic_fields(
+    classifier_service, mock_vertex_client
+):
+    mock_response = {
+        "is_small_talk": False,
+        "is_vaccine_relevant": True,
+        "aims": {
+            "step": "Inquire",
+            "score": 2,
+            "reasons": ["Asked about concerns"],
+            "tips": [],
+            "observations": {"question_count": "not-a-number"},
+            "feedback_items": [
+                {"text": ""},
+                {"text": "Ask one open concern question.", "evidence_spans": ["What worries you?"]},
+            ],
+        },
+        "person_events": [{"topic": "trust"}, "bad event"],
+        "resolution": ["bad resolution"],
+        "safety_flags": [],
+        "person_topic": "trust",
+    }
+    mock_vertex_client.generate_text_async.return_value = json.dumps(mock_response)
+
+    result = await classifier_service.classify_turn(
+        clinician_message="What worries you most about vaccines?",
+        person_last="I do not really trust the process.",
+        history=[],
+        prior_announced=True,
+        prior_phase="InquireMirror",
+        mapping={},
+    )
+
+    assert result.aims.step == "Inquire"
+    assert result.aims.observations is None
+    assert len(result.aims.feedback_items) == 1
+    assert result.aims.feedback_items[0].text == "Ask one open concern question."
+    assert result.person_events == []
+    assert result.resolution is None
 
 
 @pytest.mark.asyncio
@@ -127,6 +243,36 @@ async def test_classify_turn_fallback_on_error(classifier_service, mock_vertex_c
     assert result.aims.step == "Announce"
     # reasons contains "fallback" because our service explicitly adds it in _get_deterministic_fallback
     assert "fallback" in result.aims.reasons
+
+
+@pytest.mark.asyncio
+async def test_classify_turn_can_disable_deterministic_fallback(mock_vertex_client):
+    service = ClassifierService(
+        project_id="test-project",
+        location="us-central1",
+        model_id="gemini-pro",
+        client_cls=lambda **kwargs: mock_vertex_client,
+        heuristic_fallback_enabled=False,
+    )
+    mock_vertex_client.generate_text_async.side_effect = Exception("Gemini down")
+
+    with patch("app.services.classifier_service.evaluate_turn") as evaluate_turn:
+        result = await service.classify_turn(
+            clinician_message="I recommend the MMR today.",
+            person_last="Okay.",
+            history=[],
+            prior_announced=False,
+            prior_phase="PreAnnounce",
+            mapping={},
+        )
+
+    evaluate_turn.assert_not_called()
+    assert isinstance(result, ClassifierResult)
+    assert result.aims.step is None
+    assert result.aims.score == 0
+    assert result.aims.reasons == ["AIMS coaching is temporarily unavailable for this turn."]
+    assert result.aims.feedback_items[0].code == "classification_unavailable"
+    assert result.reasoning == "classification unavailable"
 
 @pytest.mark.asyncio
 async def test_triple_move_detection(classifier_service, mock_vertex_client):
@@ -256,7 +402,7 @@ def test_get_deterministic_fallback_defaults_score_and_appends_fallback(classifi
 
     assert result.aims.step == "Mirror"
     assert result.aims.score == 2
-    assert result.aims.reasons == ["Reflected concern", "fallback"]
+    assert result.aims.reasons == ["Mirrored concern", "fallback"]
     assert result.aims.tips == ["Ask if you got that right."]
     assert result.reasoning == "deterministic fallback"
 

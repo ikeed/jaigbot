@@ -18,6 +18,16 @@ from app.telemetry.events import log_event as telemetry_log_event
 class AimsEndgameService:
     """Detects completed AIMS sessions and builds final coach posts."""
 
+    _LITERATURE_SIGNAL_FIELDS = (
+        "accepted_materials",
+        "accepted_followup",
+        "remaining_active_concern",
+    )
+    _VACCINE_SIGNAL_FIELDS = (
+        "accepted_vaccine",
+        "remaining_active_concern",
+    )
+
     def __init__(
         self,
         *,
@@ -61,6 +71,32 @@ class AimsEndgameService:
         ][-2:]
         return " ".join(exchange)[-1500:]
 
+    @classmethod
+    def _structured_literature_resolution(cls, result: dict[str, Any]) -> bool | None:
+        """Return semantic accepted_literature support when fields are present."""
+        if not any(field in result for field in cls._LITERATURE_SIGNAL_FIELDS):
+            return None
+        if result.get("remaining_active_concern") is True:
+            return False
+        if result.get("accepted_materials") is False or result.get("accepted_followup") is False:
+            return False
+        if result.get("accepted_materials") is True and result.get("accepted_followup") is True:
+            return True
+        return None
+
+    @classmethod
+    def _structured_vaccine_resolution(cls, result: dict[str, Any]) -> bool | None:
+        """Return semantic accepted_vaccine support when fields are present."""
+        if not any(field in result for field in cls._VACCINE_SIGNAL_FIELDS):
+            return None
+        if result.get("remaining_active_concern") is True:
+            return False
+        if result.get("accepted_vaccine") is False:
+            return False
+        if result.get("accepted_vaccine") is True:
+            return True
+        return None
+
     async def check(
         self,
         mem: dict[str, Any] | None,
@@ -99,21 +135,10 @@ class AimsEndgameService:
 
             concerns = aims_state.get("parent_concerns") or []
             first_inquire_done = bool(aims_state.get("first_inquire_done", False))
-            has_unmirrored = any(not concern.get("is_mirrored") for concern in concerns)
             literature_followup_closure = (
                 heuristic is not None
                 and heuristic.get("reason") == "followup_literature"
             )
-            possible_literature_followup_closure = self._could_be_literature_followup_closure(
-                combined_reply_text
-            )
-            if (
-                concerns
-                and has_unmirrored
-                and not literature_followup_closure
-                and not possible_literature_followup_closure
-            ):
-                return None
 
             history_text = "\n".join(
                 f"{get_ui_attributes(item.get('role'))['author']}: {item.get('content')}"
@@ -139,7 +164,7 @@ class AimsEndgameService:
             outcome = result.get("resolution_type", "not_resolved")
             summary = result.get("summary", "")
 
-            if not is_endgame and heuristic:
+            if not is_endgame and heuristic and result.get("reason") == "detection_error":
                 is_endgame = True
                 heuristic_reason = heuristic.get("reason", "")
                 outcome = (
@@ -150,23 +175,33 @@ class AimsEndgameService:
                 summary = ""
 
             if is_endgame and outcome == "accepted_vaccine":
+                structured_vaccine = self._structured_vaccine_resolution(result)
+                if structured_vaccine is False:
+                    is_endgame = False
+
                 has_unsecured = any(not concern.get("is_secured") for concern in concerns)
-                if concerns and has_unsecured:
+                if is_endgame and concerns and has_unsecured:
                     is_endgame = False
 
             if is_endgame and outcome == "accepted_literature":
-                combined_lower = combined_reply_text.lower()
-                if any(cue in combined_lower for cue in EndGameDetector.PLAN_NEGATIVE_CUES):
+                structured_literature = self._structured_literature_resolution(result)
+                if not first_inquire_done or not concerns:
                     is_endgame = False
-                elif not first_inquire_done or not concerns:
+                elif structured_literature is True:
+                    pass
+                elif structured_literature is False:
                     is_endgame = False
-                elif not (
-                    literature_followup_closure
-                    or self._could_be_literature_followup_closure(
-                        self._latest_closure_exchange_text(history)
-                    )
-                ):
-                    is_endgame = False
+                else:
+                    combined_lower = combined_reply_text.lower()
+                    if any(cue in combined_lower for cue in EndGameDetector.PLAN_NEGATIVE_CUES):
+                        is_endgame = False
+                    elif not (
+                        literature_followup_closure
+                        or self._could_be_literature_followup_closure(
+                            self._latest_closure_exchange_text(history)
+                        )
+                    ):
+                        is_endgame = False
 
             if outcome == "deferred":
                 is_endgame = False

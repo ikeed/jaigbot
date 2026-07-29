@@ -2,13 +2,26 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TypeVar
+
+from pydantic import BaseModel
 
 from app.aims_engine import evaluate_turn
-from app.models import ClassifierResult, Coaching, StepFeedback
+from app.models import (
+    AimsObservations,
+    ClassifierResult,
+    Coaching,
+    ConcernEvent,
+    FeedbackItem,
+    ResolutionSignals,
+    StepFeedback,
+)
 from app.services.chat_helpers import recent_context as build_recent_context
+from app.services.coaching_tip_sanitizer import normalize_aims_feedback_terms
 from app.services.prompt_builders import AimsPromptBuilder
 from app.vertex import VertexClient
+
+ParsedModel = TypeVar("ParsedModel", bound=BaseModel)
 
 
 class ClassifierService:
@@ -29,6 +42,7 @@ class ClassifierService:
         temperature: float = 0.0,
         max_tokens: int = 500,
         client_cls: Any = VertexClient,
+        heuristic_fallback_enabled: bool = True,
     ):
         self.project_id = project_id
         self.location = location
@@ -37,6 +51,7 @@ class ClassifierService:
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.client_cls = client_cls
+        self.heuristic_fallback_enabled = heuristic_fallback_enabled
 
     async def classify_turn(self, *, clinician_message: str, person_last: str, history: List[Dict[str, str]],
                             prior_announced: bool, prior_phase: str, mapping: Dict[str, Any], context_turns: int = 3,
@@ -104,17 +119,50 @@ class ClassifierService:
                 if isinstance(sf, dict) and sf.get("step") and sf.get("feedback"):
                     step_feedback.append(StepFeedback(
                         step=sf["step"],
-                        feedback=sf["feedback"],
+                        feedback=normalize_aims_feedback_terms(sf["feedback"]),
                         tone=sf.get("tone", "praise"),
                     ))
+
+            observations = self._parse_optional_model(
+                AimsObservations,
+                aims_data.get("observations"),
+                "aims.observations",
+            )
+            feedback_items = self._parse_model_list(
+                FeedbackItem,
+                aims_data.get("feedback_items"),
+                "aims.feedback_items",
+                required_fields=("text",),
+            )
+            person_events = self._parse_model_list(
+                ConcernEvent,
+                data.get("person_events"),
+                "person_events",
+                required_fields=("event_type",),
+            )
+            resolution = self._parse_optional_model(
+                ResolutionSignals,
+                data.get("resolution"),
+                "resolution",
+            )
 
             aims_coaching = Coaching(
                 step=step,
                 steps=steps,
                 score=aims_data.get("score"),
-                reasons=aims_data.get("reasons") or [],
-                tips=aims_data.get("tips") or [],
+                reasons=[
+                    normalize_aims_feedback_terms(reason)
+                    for reason in (aims_data.get("reasons") or [])
+                    if str(reason or "").strip()
+                ],
+                tips=[
+                    normalize_aims_feedback_terms(tip)
+                    for tip in (aims_data.get("tips") or [])
+                    if str(tip or "").strip()
+                ],
                 step_feedback=step_feedback,
+                observations=observations,
+                feedback_items=self._normalize_feedback_items(feedback_items),
             )
 
             result = ClassifierResult(
@@ -123,7 +171,9 @@ class ClassifierService:
                 aims=aims_coaching,
                 safety_flags=data.get("safety_flags") or [],
                 person_topic=data.get("person_topic"),
-                reasoning=data.get("reasoning")
+                reasoning=data.get("reasoning"),
+                person_events=person_events,
+                resolution=resolution,
             )
             
             # Clip tips to at most one as policy (parity with previous LLM path)
@@ -140,9 +190,59 @@ class ClassifierService:
                 raise e
                 
             self.logger.error("Unified classification failed, falling back: %s", e)
+            if not self.heuristic_fallback_enabled:
+                return self._get_classification_unavailable_result()
             return self._get_deterministic_fallback(
                 clinician_message, mapping
             )
+
+    @staticmethod
+    def _normalize_feedback_items(items: list[FeedbackItem]) -> list[FeedbackItem]:
+        for item in items:
+            item.text = normalize_aims_feedback_terms(item.text)
+        return items
+
+    def _parse_optional_model(
+        self,
+        model_cls: type[ParsedModel],
+        raw: Any,
+        field_name: str,
+    ) -> ParsedModel | None:
+        if not isinstance(raw, dict):
+            return None
+        try:
+            return model_cls(**raw)
+        except Exception as exc:
+            self.logger.debug("Ignoring malformed optional classifier field %s: %s", field_name, exc)
+            return None
+
+    def _parse_model_list(
+        self,
+        model_cls: type[ParsedModel],
+        raw: Any,
+        field_name: str,
+        *,
+        required_fields: tuple[str, ...] = (),
+    ) -> list[ParsedModel]:
+        if not isinstance(raw, list):
+            return []
+
+        parsed: list[ParsedModel] = []
+        for index, item in enumerate(raw):
+            if not isinstance(item, dict):
+                continue
+            if any(not item.get(required) for required in required_fields):
+                continue
+            try:
+                parsed.append(model_cls(**item))
+            except Exception as exc:
+                self.logger.debug(
+                    "Ignoring malformed optional classifier field %s[%s]: %s",
+                    field_name,
+                    index,
+                    exc,
+                )
+        return parsed
 
     @staticmethod
     def _strip_json_fences(text: str) -> str:
@@ -223,6 +323,28 @@ class ClassifierService:
         )
 
     @staticmethod
+    def _get_classification_unavailable_result() -> ClassifierResult:
+        """Return neutral coaching when semantic classification is unavailable."""
+        return ClassifierResult(
+            is_small_talk=False,
+            is_vaccine_relevant=True,
+            aims=Coaching(
+                step=None,
+                score=0,
+                reasons=["AIMS coaching is temporarily unavailable for this turn."],
+                tips=[],
+                feedback_items=[
+                    FeedbackItem(
+                        code="classification_unavailable",
+                        text="AIMS coaching is temporarily unavailable for this turn.",
+                    )
+                ],
+            ),
+            safety_flags=[],
+            reasoning="classification unavailable",
+        )
+
+    @staticmethod
     def _get_deterministic_fallback(
             clinician_message: str,
         mapping: Dict[str, Any],
@@ -239,8 +361,16 @@ class ClassifierService:
         aims_coaching = Coaching(
             step=fb.get("step"),
             score=fb.get("score", 2),
-            reasons=reasons,
-            tips=fb.get("tips", [])
+            reasons=[
+                normalize_aims_feedback_terms(reason)
+                for reason in reasons
+                if str(reason or "").strip()
+            ],
+            tips=[
+                normalize_aims_feedback_terms(tip)
+                for tip in (fb.get("tips", []) or [])
+                if str(tip or "").strip()
+            ],
         )
         
         return ClassifierResult(

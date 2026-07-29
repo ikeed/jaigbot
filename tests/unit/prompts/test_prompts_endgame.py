@@ -106,6 +106,22 @@ def test_endgame_detector_prompt_warns_that_concern_lists_are_incomplete():
     assert "do not rely on empty lists" in lower
 
 
+def test_endgame_detector_prompt_requests_structured_resolution_fields():
+    prompt = build_endgame_detector_prompt(
+        history_text="Doctor: We can keep talking.\nAssistant: That plan works.",
+        announced=True,
+        inquired_concerns=["trust"],
+        mirrored_concerns=["trust"],
+        secured_concerns=["trust"],
+    )
+    lower = prompt.lower()
+    assert "accepted_vaccine" in lower
+    assert "accepted_materials" in lower
+    assert "accepted_followup" in lower
+    assert "remaining_active_concern" in lower
+    assert "evidence_spans" in lower
+
+
 def test_summary_analysis_builder_uses_live_template_not_endgame_summary():
     with patch("app.prompts.aims.load_and_render") as load_and_render:
         load_and_render.return_value = "ok"

@@ -119,6 +119,54 @@ def test_ui_handler_format_coach_message_filters_phase_and_empty_values():
     assert ui.format_coach_message("   ") == ""
 
 
+def test_ui_handler_format_coaching_message_uses_structured_payload():
+    ui = UIHandler()
+
+    formatted = ui.format_coaching_message(
+        {
+            "step": "Secure",
+            "reasons": ["You supported the decision."],
+            "tips": ["Offer a concrete next step."],
+            "step_feedback": [
+                {
+                    "step": "Secure",
+                    "tone": "praise",
+                    "feedback": "You affirmed autonomy clearly.",
+                }
+            ],
+        }
+    )
+
+    assert "**Coaching**" in formatted
+    assert "- Detected step: Secure" in formatted
+    assert "- Secure: Great job: You affirmed autonomy clearly." in formatted
+    assert "- Tip: Offer a concrete next step." in formatted
+
+
+def test_ui_handler_format_coaching_message_prefers_feedback_items():
+    ui = UIHandler()
+
+    formatted = ui.format_coaching_message(
+        {
+            "step": "Inquire",
+            "reasons": ["Legacy reason should not be shown."],
+            "tips": ["Legacy tip should not show when an improvement item exists."],
+            "feedback_items": [
+                {
+                    "step": "Inquire",
+                    "tone": "improvement",
+                    "code": "ask_one_question",
+                    "text": "Ask one open concern question, then pause.",
+                }
+            ],
+        }
+    )
+
+    assert "- Inquire: Tip: Ask one open concern question, then pause." in formatted
+    assert "Legacy reason should not be shown" not in formatted
+    assert "Legacy tip should not show" not in formatted
+
+
 def test_ui_handler_render_scenario_card_html_labels_and_notes():
     ui = UIHandler()
 
@@ -146,13 +194,18 @@ async def test_ui_handler_send_helpers_use_expected_chainlit_calls():
         await ui.show_error("Problem")
         await ui.send_assistant_reply("Hello")
         await ui.send_coach_message("Detected step: Announce")
+        await ui.send_coaching_message(
+            {"step": "Announce", "reasons": ["Clear recommendation."]}
+        )
         await ui.send_window_message({"type": "x"})
 
-    assert mock_msg_cls.call_count == 4
+    assert mock_msg_cls.call_count == 5
     assert "aims-scenario-briefing" in mock_msg_cls.call_args_list[0].kwargs["content"]
     assert mock_msg_cls.call_args_list[1].args == ("Problem",)
     assert mock_msg_cls.call_args_list[2].args == ("Hello",)
     assert "**Coaching**" in mock_msg_cls.call_args_list[3].kwargs["content"]
+    assert "**Coaching**" in mock_msg_cls.call_args_list[4].kwargs["content"]
+    assert "Detected step: Announce" in mock_msg_cls.call_args_list[4].kwargs["content"]
     send_window.assert_awaited_once_with({"type": "x"})
 
 

@@ -7,6 +7,7 @@ import re
 from typing import Any
 
 from app.chat_roles import ROLE_ASSISTANT, get_ui_attributes
+from app.json_schemas import SUMMARY_ANALYSIS_SCHEMA, validate_json
 from app.telemetry.events import log_event as telemetry_log_event
 
 module_logger = logging.getLogger(__name__)
@@ -166,6 +167,10 @@ async def _analysis_bullets(
         logger=logger,
         client_cls=vertex_client_cls,
     )
+    structured_bullets = _structured_analysis_bullets(narrative, per_counts)
+    if structured_bullets is not None:
+        return structured_bullets
+
     bullets_raw = [line for line in (narrative or "").strip().splitlines() if line.strip()]
     try:
         from app.services.coach_post import sanitize_endgame_bullets
@@ -175,6 +180,66 @@ async def _analysis_bullets(
         bullets = [line.strip(" -\t") for line in bullets_raw]
 
     return _enforce_metrics_consistency(bullets, per_counts)
+
+
+def _structured_analysis_bullets(
+    narrative: str | None,
+    step_counts: dict[str, int],
+) -> list[str] | None:
+    raw = (narrative or "").strip()
+    if not raw:
+        return None
+
+    if raw.startswith("```"):
+        first_newline = raw.find("\n")
+        raw = raw[first_newline + 1:] if first_newline != -1 else raw[3:]
+        if raw.rstrip().endswith("```"):
+            raw = raw.rstrip()[:-3].rstrip()
+
+    if not raw.startswith("{"):
+        return None
+
+    try:
+        parsed = json.loads(raw)
+        validate_json(parsed, SUMMARY_ANALYSIS_SCHEMA)
+    except Exception:
+        return None
+
+    bullets: list[str] = []
+    overall = str(parsed.get("overall_commentary") or "").strip()
+    if overall:
+        bullets.append(overall)
+
+    for key in ("strengths", "growth_areas"):
+        for item in parsed.get(key) or []:
+            text = str(item or "").strip()
+            if text:
+                bullets.append(text)
+
+    present = {
+        key
+        for key, value in (step_counts or {}).items()
+        if isinstance(value, int) and value > 0
+    }
+    for item in parsed.get("metric_notes") or []:
+        step = item.get("step")
+        status = item.get("status")
+        if step in present and status == "not_used":
+            continue
+        text = str(item.get("text") or "").strip()
+        if text:
+            bullets.append(text)
+
+    out: list[str] = []
+    seen = set()
+    for item in bullets:
+        if item in seen:
+            continue
+        out.append(item)
+        seen.add(item)
+        if len(out) >= 8:
+            break
+    return out
 
 
 def _build_transcript(mem: dict) -> str:
@@ -220,7 +285,7 @@ def _enforce_metrics_consistency(bullets_in: list[str], step_counts: dict[str, i
             rewrites = {
                 "Announce": "Announce occurred - keep it concise and invite input (e.g., 'It's MMR today - how does that sound?').",
                 "Inquire": "Inquire was present - prioritize open-ended questions and pause for the full answer.",
-                "Mirror": "Mirror was used - keep reflecting the exact worry before educating.",
+                "Mirror": "Mirror was used - keep mirroring the exact worry before educating.",
                 "Secure": "Secure was present - share one tailored fact, link to the concern, and check understanding.",
             }
             cleaned.append(rewrites.get(step, bullet))

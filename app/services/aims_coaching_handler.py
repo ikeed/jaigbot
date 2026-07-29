@@ -154,6 +154,10 @@ class AimsCoachingHandler:
         self.endgame_temperature = float(os.getenv("AIMS_ENDGAME_TEMPERATURE", "0.1"))
         self.endgame_max_tokens = int(os.getenv("AIMS_ENDGAME_MAX_TOKENS", "192"))
         self.classify_budget_s = float(os.getenv("AIMS_CLASSIFY_BUDGET_S", "30.0"))
+        self.heuristic_fallback_enabled = (
+            os.getenv("AIMS_HEURISTIC_FALLBACK_ENABLED", "true").strip().lower()
+            not in {"0", "false", "no", "off"}
+        )
 
         # Allow tests to monkeypatch the client via app.main.VertexClient
         self.client_cls = self.vertex_config.client_cls or VertexClient
@@ -170,6 +174,7 @@ class AimsCoachingHandler:
             temperature=self.classify_temperature,
             max_tokens=self.classify_max_tokens,
             client_cls=self.client_cls,
+            heuristic_fallback_enabled=self.heuristic_fallback_enabled,
         )
         self.patient_reply_service = patient_reply_service or PatientReplyService(
             model_json_caller=self._call_vertex_json,
@@ -213,6 +218,7 @@ class AimsCoachingHandler:
             patient_reply_service=self.patient_reply_service,
             classify_budget_s=self.classify_budget_s,
             logger=self.logger,
+            heuristic_fallback_enabled=self.heuristic_fallback_enabled,
         )
     
     async def handle(
@@ -306,7 +312,12 @@ class AimsCoachingHandler:
             clinician_text=body.message,
             person_last=ctx.person_last,
             parent_recent_concerns=recent_concerns_texts,
-            prior_announced=prior_announced
+            prior_announced=prior_announced,
+            semantic_is_vaccine_relevant=(
+                classification_result.is_vaccine_relevant
+                if classification_result
+                else None
+            ),
         )
         
         # Only apply small-talk override when no AIMS step was detected.
@@ -337,6 +348,12 @@ class AimsCoachingHandler:
             model_used=model_used_cls,
             step=cls_payload.get("step"),
             score=cls_payload.get("score"),
+            semantic_contract={
+                "observations": bool(cls_payload.get("observations")),
+                "feedback_items": bool(cls_payload.get("feedback_items")),
+                "person_events": bool(classification_result and classification_result.person_events),
+                "resolution": bool(classification_result and classification_result.resolution),
+            },
         )
 
         # Step 3: Update AIMS state and provide coaching guidance (after classification completes)
@@ -347,6 +364,7 @@ class AimsCoachingHandler:
             body.message,
             ctx.person_last,
             llm_topic,
+            person_events=classification_result.person_events if classification_result else None,
         )
 
         if turn.was_fallback:
@@ -446,25 +464,39 @@ class AimsCoachingHandler:
             self.logger.warning("Failed to determine model used for response: %s", e)
             model_used = self.model_id
 
+        coaching_payload = {
+            "step": cls_payload.get("step"),
+            "score": cls_payload.get("score"),
+            # Strip internal guard/debug reasons before sending to client
+            "reasons": self.coach_feedback_history_service.filter_user_facing_reasons(
+                cls_payload.get("reasons", []),
+                step=cls_payload.get("step"),
+            ),
+            "tips": cls_payload.get("tips", []),
+            "step_feedback": [
+                sf if isinstance(sf, dict) else sf.model_dump()
+                for sf in (cls_payload.get("step_feedback") or [])
+            ],
+            "phase": cls_payload.get("phase"),
+        }
+
+        observations = cls_payload.get("observations")
+        if isinstance(observations, dict):
+            coaching_payload["observations"] = observations
+
+        feedback_items = [
+            item if isinstance(item, dict) else item.model_dump()
+            for item in (cls_payload.get("feedback_items") or [])
+            if isinstance(item, dict) or hasattr(item, "model_dump")
+        ]
+        if feedback_items:
+            coaching_payload["feedback_items"] = feedback_items
+
         result = {
             "reply": reply_payload.get("patient_reply", ""),
             "model": model_used,
             "latency_ms": latency_ms,
-            "coaching": {
-                "step": cls_payload.get("step"),
-                "score": cls_payload.get("score"),
-                # Strip internal guard/debug reasons before sending to client
-                "reasons": self.coach_feedback_history_service.filter_user_facing_reasons(
-                    cls_payload.get("reasons", []),
-                    step=cls_payload.get("step"),
-                ),
-                "tips": cls_payload.get("tips", []),
-                "step_feedback": [
-                    sf if isinstance(sf, dict) else sf.model_dump()
-                    for sf in (cls_payload.get("step_feedback") or [])
-                ],
-                "phase": cls_payload.get("phase"),
-            },
+            "coaching": coaching_payload,
             "session": session_obj,
         }
         
@@ -493,12 +525,19 @@ class AimsCoachingHandler:
         reply_payload: Dict[str, Any],
         person_last: str,
     ) -> None:
-        """Remove scenario headers from the first assistant reply.
+        """Preserve validated reply text and strip legacy first-turn headers.
 
-        The UI already shows the scenario card for the initial turn, so we
-        keep the assistant text focused on the actual reply content.
+        PatientReplyService validates fresh model output and treats leaked
+        metadata labels as invalid. The strip path below is retained only for
+        injected or legacy reply payloads that predate that validation metadata.
         """
         try:
+            validation = reply_payload.get("reply_validation")
+            if isinstance(validation, dict):
+                reply_payload["patient_reply"] = (
+                    reply_payload.get("patient_reply", "") or ""
+                ).strip()
+                return
             if (person_last or "").strip():
                 return
             reply = reply_payload.get("patient_reply", "")

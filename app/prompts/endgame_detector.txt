@@ -4,7 +4,7 @@ You are an expert evaluator of clinical communication. Your task is to determine
 ### AIMS FRAMEWORK CONTEXT
 - **Announce**: A clear or presumptive recommendation for vaccines was made.
 - **Inquire**: The clinician asked open-ended questions to discover the person's concerns.
-- **Mirror**: The clinician reflected and validated the person's concerns ("making them feel felt").
+- **Mirror**: The clinician mirrored and validated the person's concerns ("making them feel felt").
 - **Secure**: The clinician provided trust-preserving education and supported the person's autonomy.
 
 ### ENDGAME CRITERIA
@@ -37,7 +37,7 @@ The Inquired/Mirrored/Secured Concerns lists are derived from automatic keyword 
 and are **often incomplete or empty even when concerns were clearly raised and addressed**.
 Do NOT rely on empty lists as evidence that criterion 2 was not met.
 Instead, use the **full transcript** as the authoritative source:
-- If the transcript shows the person raised a concern AND the clinician acknowledged/reflected it, treat that concern as mirrored.
+- If the transcript shows the person raised a concern AND the clinician acknowledged/mirrored it, treat that concern as mirrored.
 - If the conversation clearly reached a follow-up agreement or resolution, do NOT return `not_resolved` just because the tracked lists are sparse.
 
 ### CONVERSATION STATE
@@ -55,3 +55,8 @@ Return ONLY valid JSON with these keys:
 - "reason": (string, brief explanation of why the session is or is not finished)
 - "resolution_type": ("accepted_vaccine" | "accepted_literature" | "deferred" | "not_resolved")
 - "summary": (string, a concise 1-sentence summary of the resolution)
+- "accepted_vaccine": (boolean, true only if the person clearly agrees to vaccinate today)
+- "accepted_materials": (boolean, true only if the person clearly accepts take-home/read-at-home information)
+- "accepted_followup": (boolean, true only if the person clearly accepts continuing the vaccine conversation later)
+- "remaining_active_concern": (boolean, true if the latest person reply still raises an unresolved vaccine concern)
+- "evidence_spans": (array of short source phrases supporting the resolution fields)

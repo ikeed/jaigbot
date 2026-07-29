@@ -452,15 +452,17 @@ async def test_process_backend_response_dispatches_coaching_reply_and_coach_post
     mock_services["session"].history = []
     mock_services["session"].persona_name = "Sarah"
     mock_services["ui"].send_coach_message = AsyncMock()
+    mock_services["ui"].send_coaching_message = AsyncMock()
     mock_services["ui"].send_assistant_reply = AsyncMock()
 
+    coaching = {
+        "step": "Announce",
+        "reasons": ["Clear recommendation."],
+        "tips": ["Ask how that sounds."],
+    }
     await orchestrator._process_backend_response(
         {
-            "coaching": {
-                "step": "Announce",
-                "reasons": ["Clear recommendation."],
-                "tips": ["Ask how that sounds."],
-            },
+            "coaching": coaching,
             "reply": "I need to understand more.",
             "coachPost": {
                 "title": "Scenario complete",
@@ -473,13 +475,12 @@ async def test_process_backend_response_dispatches_coaching_reply_and_coach_post
         {
             "role": "coach",
             "content": "Detected step: Announce | Feedback: Clear recommendation. | Tip: Ask how that sounds.",
+            "coaching_data": coaching,
         },
         {"role": "assistant", "content": "I need to understand more."},
     ]
-    mock_services["ui"].send_coach_message.assert_any_await(
-        "Detected step: Announce | Feedback: Clear recommendation. | Tip: Ask how that sounds."
-    )
-    mock_services["ui"].send_coach_message.assert_any_await(
+    mock_services["ui"].send_coaching_message.assert_awaited_once_with(coaching)
+    mock_services["ui"].send_coach_message.assert_awaited_once_with(
         "Scenario complete\nOutcome: accepted literature"
     )
     mock_services["ui"].send_assistant_reply.assert_awaited_once_with(
@@ -493,7 +494,7 @@ async def test_process_backend_response_prefers_step_feedback_over_raw_tip(
 ):
     mock_services["session"].history = []
     mock_services["session"].persona_name = "Sarah"
-    mock_services["ui"].send_coach_message = AsyncMock()
+    mock_services["ui"].send_coaching_message = AsyncMock()
     mock_services["ui"].send_assistant_reply = AsyncMock()
 
     await orchestrator._process_backend_response(
@@ -531,7 +532,7 @@ async def test_process_backend_response_shows_tip_with_praise_only_step_feedback
 ):
     mock_services["session"].history = []
     mock_services["session"].persona_name = "Zia"
-    mock_services["ui"].send_coach_message = AsyncMock()
+    mock_services["ui"].send_coaching_message = AsyncMock()
     mock_services["ui"].send_assistant_reply = AsyncMock()
 
     await orchestrator._process_backend_response(
@@ -566,7 +567,7 @@ async def test_process_backend_response_rotates_praise_step_feedback_labels(
     orchestrator, mock_services
 ):
     mock_services["session"].history = []
-    mock_services["ui"].send_coach_message = AsyncMock()
+    mock_services["ui"].send_coaching_message = AsyncMock()
     mock_services["ui"].send_assistant_reply = AsyncMock()
 
     await orchestrator._process_backend_response(
@@ -601,7 +602,7 @@ async def test_process_backend_response_rotates_praise_step_feedback_labels(
     )
 
     coach_text = mock_services["session"].history[0]["content"]
-    assert "Mirror: Great job: You reflected the parent's core worry." in coach_text
+    assert "Mirror: Great job: You mirrored the parent's core worry." in coach_text
     assert "Secure: Well done: You supported the parent's choice." in coach_text
     assert "Inquire: Nice work: You asked a collaborative open question." in coach_text
     assert "Announce: Strong move: You made a clear recommendation." in coach_text
@@ -613,6 +614,7 @@ async def test_process_backend_response_handles_empty_coaching_and_default_coach
 ):
     mock_services["session"].history = []
     mock_services["ui"].send_coach_message = AsyncMock()
+    mock_services["ui"].send_coaching_message = AsyncMock()
     mock_services["ui"].send_assistant_reply = AsyncMock()
 
     await orchestrator._process_backend_response(
@@ -624,6 +626,7 @@ async def test_process_backend_response_handles_empty_coaching_and_default_coach
 
     assert mock_services["session"].history == []
     mock_services["ui"].send_assistant_reply.assert_not_awaited()
+    mock_services["ui"].send_coaching_message.assert_not_awaited()
     mock_services["ui"].send_coach_message.assert_awaited_once_with(
         "✅ Scenario complete\nLine"
     )

@@ -252,7 +252,7 @@ def test_secure_before_mirror_first_time_gives_standard_feedback():
     ])
     cls = {"step": "Secure", "score": 2, "reasons": [], "tips": []}
     h.apply_coaching_guidance(cls, "Secure", state, "The data shows...", "I don't trust pharma")
-    assert "reflecting" in cls["reasons"][0].lower() or "mirroring" in cls["reasons"][0].lower()
+    assert "mirroring" in cls["reasons"][0].lower()
     assert state.get("recent_coaching") == ["secure_before_mirror:trust"]
 
 
@@ -267,8 +267,8 @@ def test_secure_before_mirror_second_time_escalates_with_topic():
     h.apply_coaching_guidance(cls, "Secure", state, "Studies show...", "I don't trust pharma")
     assert "trust" in cls["reasons"][0].lower()
     assert "still" in cls["reasons"][0].lower() or "hasn't" in cls["reasons"][0].lower()
-    assert cls["tips"][0].startswith("Reflect the specific concern")
-    assert "try reflecting" not in cls["tips"][0].lower()
+    assert cls["tips"][0].startswith("Mirror the specific concern")
+    assert "try mirroring" not in cls["tips"][0].lower()
 
 
 def test_secure_before_mirror_repeated_tip_does_not_leak_internal_topic_keys():
@@ -293,7 +293,7 @@ def test_secure_before_mirror_repeated_tip_does_not_leak_internal_topic_keys():
     assert "'disease" not in feedback
     assert "whether the disease still feels like a real risk" in feedback
     assert cls["tips"][0] == (
-        "Reflect the specific concern about whether the disease still feels like a real risk "
+        "Mirror the specific concern about whether the disease still feels like a real risk "
         "before more education."
     )
 
@@ -346,7 +346,7 @@ def test_secure_before_mirror_is_not_suppressed_by_earlier_other_mirror():
     ])
     cls = {"step": "Secure", "score": 3, "reasons": [], "tips": []}
     h.apply_coaching_guidance(cls, "Secure", state, "Studies show...", "I don't trust pharma")
-    assert any("reflecting" in reason.lower() or "mirroring" in reason.lower() for reason in cls["reasons"])
+    assert any("mirroring" in reason.lower() for reason in cls["reasons"])
     assert state.get("recent_coaching") == ["secure_before_mirror:trust"]
 
 
@@ -537,4 +537,4 @@ def test_default_persona_gets_emotional_tip():
         character="Sarah is a caring mother.",
     )
     assert "feel heard" in cls["reasons"][0].lower()
-    assert "reflect the concern" in cls["tips"][0].lower()
+    assert "mirror the concern" in cls["tips"][0].lower()

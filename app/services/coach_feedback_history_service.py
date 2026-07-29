@@ -11,6 +11,7 @@ from app.constants import (
     SESSION_HISTORY,
     STEP_ANNOUNCE,
 )
+from app.services.coaching_display import coaching_summary_text
 
 
 class CoachFeedbackHistoryService:
@@ -43,32 +44,11 @@ class CoachFeedbackHistoryService:
             if not memory_enabled or not session_id or mem is None:
                 return
 
-            parts: list[str] = []
             step = cls_payload.get("step")
             phase = cls_payload.get("phase")
             reasons = cls_payload.get("reasons") or []
             tips = cls_payload.get("tips") or []
             step_feedback = cls_payload.get("step_feedback") or []
-
-            if step and step not in ("null", "None"):
-                parts.append(f"Detected step: {step}")
-
-            displayed_step_feedback = 0
-            has_improvement_step_feedback = False
-            if step_feedback:
-                for sf in step_feedback:
-                    tone_icon = "\u2713" if sf.get("tone") == "praise" else "\u2192"
-                    sf_step = sf.get("step", "")
-                    sf_text = sf.get("feedback", "")
-                    if sf_text:
-                        parts.append(f"{sf_step}: {tone_icon} {sf_text}")
-                        displayed_step_feedback += 1
-                        if sf.get("tone") != "praise":
-                            has_improvement_step_feedback = True
-            else:
-                feedback = self.first_user_facing_reason(reasons, step=step)
-                if feedback:
-                    parts.append(f"Feedback: {feedback}")
 
             aims_state_now = mem.get(KEY_AIMS_STATE) or {}
             already_announced = aims_state_now.get("announced", False)
@@ -76,21 +56,6 @@ class CoachFeedbackHistoryService:
                 t for t in tips
                 if not (already_announced and STEP_ANNOUNCE.lower() in (t or "").lower())
             ]
-            if tips_to_show and (
-                not displayed_step_feedback or not has_improvement_step_feedback
-            ):
-                parts.append(f"Tip: {tips_to_show[0]}")
-
-            if reply_payload.get("resolution_type") == "deferred":
-                parts.append("Nudge: The patient is deferring. Try offering specific literature or a follow-up visit to reach a clear AIMS resolution.")
-
-            coach_text = " | ".join(parts)
-            if not coach_text:
-                return
-
-            now = time.time()
-            coach_entry = {"role": ROLE_COACH, "content": coach_text}
-            mem.setdefault(SESSION_HISTORY, []).append(coach_entry)
 
             structured_coaching = {
                 "step": step,
@@ -103,10 +68,36 @@ class CoachFeedbackHistoryService:
                 ],
                 "phase": phase,
             }
+
+            observations = cls_payload.get("observations")
+            if isinstance(observations, dict):
+                structured_coaching["observations"] = observations
+
+            feedback_items = [
+                item if isinstance(item, dict) else item.model_dump()
+                for item in (cls_payload.get("feedback_items") or [])
+                if isinstance(item, dict) or hasattr(item, "model_dump")
+            ]
+            if feedback_items:
+                structured_coaching["feedback_items"] = feedback_items
+
+            coach_text = coaching_summary_text(
+                structured_coaching,
+                include_deferred_nudge=reply_payload.get("resolution_type") == "deferred",
+            )
+            if not coach_text:
+                return
+
+            now = time.time()
+            coach_entry = {
+                "role": ROLE_COACH,
+                "content": coach_text,
+                "coaching_data": structured_coaching,
+            }
+            mem.setdefault(SESSION_HISTORY, []).append(coach_entry)
             mem.setdefault(KEY_FULL_HISTORY, []).append({
                 **coach_entry,
                 "time": now,
-                "coaching_data": structured_coaching,
             })
             mem[KEY_UPDATED] = now
         except Exception as e:
