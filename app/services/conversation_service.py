@@ -343,8 +343,11 @@ def _apply_concern_presence_event(
     concerns: list[Concern] = state.setdefault("parent_concerns", [])  # type: ignore[assignment]
     evidence_items = _event_evidence(event, person_text)
     if (
-        _is_acceptance_message(person_text or "")
-        or _is_confirmation_restatement_without_new_question(person_text or "")
+        concerns
+        and (
+            _is_acceptance_message(person_text or "")
+            or _is_confirmation_restatement_without_new_question(person_text or "")
+        )
     ):
         restated = _find_restated_existing_concern(concerns, evidence_items, person_text)
         if restated:
