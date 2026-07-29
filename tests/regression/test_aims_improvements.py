@@ -76,10 +76,13 @@ def _make_state(phase="Secure", concerns=None):
     }
 
 
-def _state_service():
+def _state_service(*, heuristic_fallback_enabled=False):
     """Minimal state service for AIMS state transition tests."""
     import logging
-    return AimsStateService(logger=logging.getLogger("test"))
+    return AimsStateService(
+        logger=logging.getLogger("test"),
+        heuristic_fallback_enabled=heuristic_fallback_enabled,
+    )
 
 
 def test_mirror_returns_phase_to_inquire_mirror_from_secure():
@@ -152,6 +155,10 @@ def test_mirror_secure_inquire_scalar_marks_all_components():
         "You're worried about side effects. Serious side effects are rare. What else is on your mind?",
         "I'm worried about side effects.",
         llm_topic="side_effects",
+        person_events=[
+            {"event_type": "concern_mirrored", "topic": "side_effects"},
+            {"event_type": "concern_secured", "topic": "side_effects"},
+        ],
     )
 
     concern = mem["aims_state"]["parent_concerns"][0]
@@ -197,6 +204,12 @@ def test_mirror_secure_inquire_can_resolve_multiple_explicit_concerns():
         ),
         "I'm worried about side effects and aluminum.",
         llm_topic="side_effects",
+        person_events=[
+            {"event_type": "concern_mirrored", "topic": "side_effects"},
+            {"event_type": "concern_mirrored", "topic": "ingredients"},
+            {"event_type": "concern_secured", "topic": "side_effects"},
+            {"event_type": "concern_secured", "topic": "ingredients"},
+        ],
     )
 
     concerns = mem["aims_state"]["parent_concerns"]
@@ -230,6 +243,9 @@ def test_secure_inquire_scalar_marks_secure_without_premature_secure_warning():
         "Side effects are usually mild and brief. What else would help you decide?",
         "I'm worried about side effects.",
         llm_topic="side_effects",
+        person_events=[
+            {"event_type": "concern_secured", "topic": "side_effects"},
+        ],
     )
 
     concern = mem["aims_state"]["parent_concerns"][0]
@@ -399,7 +415,7 @@ def test_secure_before_mirror_ignores_same_evidence_sibling_concern():
 
 
 def test_secure_followup_closure_missing_literature_gets_tip():
-    h = _state_service()
+    h = _state_service(heuristic_fallback_enabled=True)
     state = _make_state(
         phase="Secure",
         concerns=[
@@ -459,7 +475,7 @@ def test_secure_closure_with_written_safety_information_gets_no_literature_tip()
 
 
 def test_secure_literature_closure_missing_followup_gets_tip():
-    h = _state_service()
+    h = _state_service(heuristic_fallback_enabled=True)
     state = _make_state(
         phase="Secure",
         concerns=[

@@ -255,7 +255,7 @@ async def test_handle_passes_optional_semantic_coaching_fields(monkeypatch):
                     step="Mirror",
                     tone="praise",
                     code="mirror_reflection",
-                    text="You reflected the concern clearly.",
+                    text="You mirrored the concern clearly.",
                     evidence_spans=["worried about side effects"],
                 )
             ],
@@ -360,7 +360,7 @@ async def test_handle_refines_fallback_coaching_when_available(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_handle_sanitizes_stale_step_feedback_after_state_guidance(monkeypatch):
+async def test_handle_prefers_state_feedback_item_without_rewriting_step_feedback(monkeypatch):
     feedback = _feedback()
     endgame = _endgame()
     turn_coordinator = Mock()
@@ -370,6 +370,7 @@ async def test_handle_sanitizes_stale_step_feedback_after_state_guidance(monkeyp
             score=3,
             reasons=["LLM classified as Secure."],
             tips=[],
+            observations=AimsObservations(open_concern_question_present=True),
             step_feedback=[
                 {
                     "step": "Secure",
@@ -413,18 +414,23 @@ async def test_handle_sanitizes_stale_step_feedback_after_state_guidance(monkeyp
         ctx=ctx,
     )
 
-    assert result["coaching"]["tips"] == [
-        "After asking what's on their mind, pause before offering reassurance."
+    assert result["coaching"]["feedback_items"] == [
+        {
+            "step": "Secure",
+            "tone": "improvement",
+            "code": "secure_before_inquire_after_question",
+            "text": "You asked an open question, then moved into reassurance before giving them space to answer.",
+        }
     ]
     assert result["coaching"]["step_feedback"] == [
         {
             "step": "Secure",
             "tone": "improvement",
-            "feedback": "After asking what's on their mind, pause before offering reassurance.",
+            "feedback": "Try leading with an open question before reassurance.",
         }
     ]
     feedback_payload = feedback.append.call_args.kwargs["cls_payload"]
-    assert "Try leading with an open question" not in str(feedback_payload)
+    assert "Try leading with an open question" in str(feedback_payload)
 
 
 @pytest.mark.asyncio

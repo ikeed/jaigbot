@@ -60,6 +60,7 @@ def test_aims_post_processor_normalizes_score_and_softens_autonomy_feedback():
     processed = AimsPostProcessor.post_process(
         payload,
         "No pressure. It is your decision, and I am happy to answer any questions.",
+        allow_text_softening=True,
     )
 
     assert processed["score"] == 1
@@ -74,7 +75,11 @@ def test_aims_post_processor_keeps_non_aims_score_and_filters_mixed_reasons():
         "reasons": ["Useful feedback.", "This is leading."],
     }
 
-    processed = AimsPostProcessor.post_process(payload, "It's up to you.")
+    processed = AimsPostProcessor.post_process(
+        payload,
+        "It's up to you.",
+        allow_text_softening=True,
+    )
 
     assert processed["score"] == 0
     assert processed["reasons"] == ["Useful feedback."]
@@ -102,7 +107,7 @@ def test_aims_post_processor_preserves_reasons_when_structured_feedback_exists()
 
 
 def test_vaccine_relevance_gate_prefers_semantic_relevance_true():
-    payload = {"step": "Mirror", "score": 3, "reasons": ["Reflected."], "tips": []}
+    payload = {"step": "Mirror", "score": 3, "reasons": ["Mirrored."], "tips": []}
 
     result = VaccineRelevanceGate.gate(
         cls_payload=payload,
@@ -194,7 +199,7 @@ def test_build_endgame_bullets_fallback_handles_absent_low_mid_high_and_invalid_
     assert bullets[0] == "Overall AIMS score: 64%"
     assert any("Announce 93%" in bullet and "well done" in bullet for bullet in bullets)
     assert any("Inquire 67%" in bullet and "remaining concerns" in bullet for bullet in bullets)
-    assert any("Mirror 33%" in bullet and "reflect" in bullet for bullet in bullets)
+    assert any("Mirror 33%" in bullet and "mirror" in bullet for bullet in bullets)
     assert any(bullet.startswith("Secure:") and "absent" not in bullet for bullet in bullets)
 
 

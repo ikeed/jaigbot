@@ -28,6 +28,7 @@ def test_sanitize_drops_open_question_tip_when_turn_already_asked_one():
     sanitize_coaching_tips(
         payload,
         clinician_message="What concerns do you have about MMR? It is very safe.",
+        allow_text_rewrite=True,
     )
 
     assert payload["tips"] == []
@@ -114,7 +115,7 @@ def test_sanitize_feedback_items_drops_absent_behavior_codes_and_keeps_praise():
                 "step": "Mirror",
                 "tone": "praise",
                 "code": "add_reflection",
-                "text": "You reflected the concern clearly.",
+                "text": "You mirrored the concern clearly.",
             },
             {
                 "step": "Secure",
@@ -157,7 +158,7 @@ def test_sanitize_feedback_items_drops_target_observation_when_already_present()
                 "step": "Mirror",
                 "tone": "improvement",
                 "target_observation": "reflection_present",
-                "text": "Reflect the concern.",
+                "text": "Mirror the concern.",
             }
         ],
         "tips": [],
@@ -171,18 +172,18 @@ def test_sanitize_feedback_items_drops_target_observation_when_already_present()
     assert payload["feedback_items"] == []
 
 
-def test_sanitize_normalizes_mirror_terms_in_public_coaching_fields():
+def test_sanitize_does_not_rewrite_model_authored_mirror_terms_in_public_coaching_fields():
     payload = {
         "step": "Mirror",
         "score": 3,
         "observations": {"reflection_present": True},
-        "reasons": ["Reflected concern well"],
-        "tips": ["Reflect the exact timing concern before educating."],
+        "reasons": ["Mirrored concern well"],
+        "tips": ["Mirror the exact timing concern before educating."],
         "step_feedback": [
             {
                 "step": "Mirror",
                 "tone": "praise",
-                "feedback": "You reflected the concern clearly.",
+                "feedback": "You mirrored the concern clearly.",
             }
         ],
         "feedback_items": [
@@ -190,7 +191,7 @@ def test_sanitize_normalizes_mirror_terms_in_public_coaching_fields():
                 "step": "Mirror",
                 "tone": "praise",
                 "code": "mirror_reflection",
-                "text": "You reflected the timing concern clearly.",
+                "text": "You mirrored the timing concern clearly.",
                 "target_observation": "reflection_present",
             }
         ],
@@ -234,6 +235,7 @@ def test_sanitize_replaces_open_question_tip_for_leading_question():
     sanitize_coaching_tips(
         payload,
         clinician_message="Don't you think the MMR concerns are manageable?",
+        allow_text_rewrite=True,
     )
 
     assert payload["tips"] == [
@@ -251,6 +253,7 @@ def test_sanitize_replaces_open_question_tip_for_why_question():
     sanitize_coaching_tips(
         payload,
         clinician_message="Why are you worried about the MMR vaccine?",
+        allow_text_rewrite=True,
     )
 
     assert payload["tips"] == [
@@ -275,6 +278,7 @@ def test_sanitize_replaces_stale_step_feedback_with_corrected_tip():
     sanitize_coaching_tips(
         payload,
         clinician_message="What concerns do you have about MMR? It is very safe.",
+        allow_text_rewrite=True,
     )
 
     assert payload["step_feedback"] == [
@@ -303,6 +307,7 @@ def test_sanitize_drops_stale_step_feedback_without_replacement():
     sanitize_coaching_tips(
         payload,
         clinician_message="What concerns do you have about MMR? It is very safe.",
+        allow_text_rewrite=True,
     )
 
     assert payload["step_feedback"] == []
@@ -388,6 +393,7 @@ def test_sanitize_replaces_stacked_open_question_tip_with_specific_gap():
             "What concerns do you have about MMR? "
             "How are you feeling about the schedule?"
         ),
+        allow_text_rewrite=True,
     )
 
     assert payload["tips"] == [

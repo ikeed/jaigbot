@@ -10,6 +10,7 @@ from app.chat_roles import (
     ROLE_USER,
     get_ui_attributes,
 )
+from app.message_catalog import message
 from app.services.coaching_display import (
     coaching_message_parts,
     coaching_summary_text as build_coaching_summary_text,
@@ -32,16 +33,22 @@ class UIHandler:
         if not txt:
             return ""
         if " | " in txt:
+            phase_prefix = message("coaching.phase_prefix").lower()
             parts = [
                 p.strip()
                 for p in txt.split(" | ")
-                if p.strip() and not p.strip().lower().startswith("conversation phase:")
+                if p.strip() and not p.strip().lower().startswith(phase_prefix)
             ]
         else:
             parts = [ln.strip() for ln in txt.splitlines() if ln.strip()]
         if not parts:
             return txt
-        title = "Scenario complete" if any("Scenario complete" in p for p in parts) else "Coaching"
+        scenario_complete = message("coaching.scenario_complete")
+        title = (
+            scenario_complete
+            if any(scenario_complete in p for p in parts)
+            else message("coaching.section_title")
+        )
         return UIHandler._format_parts(title, parts)
 
     @staticmethod
@@ -49,7 +56,7 @@ class UIHandler:
         parts = coaching_message_parts(coaching)
         if not parts:
             return ""
-        return UIHandler._format_parts("Coaching", parts)
+        return UIHandler._format_parts(message("coaching.section_title"), parts)
 
     @staticmethod
     def coaching_summary_text(coaching: dict[str, Any]) -> str:
@@ -60,7 +67,7 @@ class UIHandler:
         """Render a scenario briefing with consistent HTML styling."""
         lines: list[str] = [
             '<div class="aims-scenario-briefing">',
-            '<div class="aims-scenario-title">Scenario Briefing</div>',
+            f'<div class="aims-scenario-title">{message("chainlit.scenario_briefing")}</div>',
         ]
         for line in (card_text or "").splitlines():
             stripped = line.strip()

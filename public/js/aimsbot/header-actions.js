@@ -24,7 +24,7 @@
     if (!document.getElementById("aims-info-button")) {
       rightContainer.insertBefore(makeHeaderButton(
         "aims-info-button",
-        "AIMS infographic",
+        app.t("header.infographic"),
         '<span aria-hidden="true" style="font-size:18px">?</span>',
         function () {
           app.infographic.show(false);
@@ -35,7 +35,7 @@
     if (!document.getElementById("sidebar-report-button")) {
       rightContainer.insertBefore(makeHeaderButton(
         "sidebar-report-button",
-        "Report Issue",
+        app.t("header.reportIssue"),
         '<span aria-hidden="true" style="font-size:18px">🪲</span>',
         app.showReportIssueModal
       ), rightContainer.firstChild);

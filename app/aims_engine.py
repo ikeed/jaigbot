@@ -1,9 +1,10 @@
 """
-Deterministic AIMS engine: loader, classifier, and scorer.
+Legacy deterministic AIMS engine: classifier and scorer.
 
-Pure-Python utilities that do not call any LLM. These are used for
-classification and per-turn scoring using the docs/aims/aims_mapping.json
-as the source of truth.
+Pure-Python utilities that do not call any LLM. The runtime AIMS coaching
+path uses LLM-supplied structured semantic fields by default; this module is
+kept for explicit legacy fallback, diagnostics, and historical regression
+tests only.
 
 Functions are intentionally simple and conservative; they implement the
 markers and tie-breakers described in the mapping meta section.
@@ -498,7 +499,7 @@ def evaluate_turn(clinician_last: str, mapping: Dict[str, Any]) -> Dict[str, Any
                 tips.append("Excellent use of Mirror+Inquire to build trust before exploring.")
         elif cls.step == "Mirror":
             if introduces_new_info(lt):
-                tips.append("Reflect without adding new information or rebuttal; keep it brief and nonjudgmental.")
+                tips.append("Mirror without adding new information or rebuttal; keep it brief and nonjudgmental.")
             elif not re.search(r"did i get that right|is that right|did i capture", lt):
                 tips.append("End with a quick check for accuracy: 'Did I get that right?'")
         elif cls.step == "Announce":

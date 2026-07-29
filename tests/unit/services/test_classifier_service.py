@@ -31,7 +31,7 @@ async def test_classify_turn_success(classifier_service, mock_vertex_client):
         "aims": {
             "step": "Mirror",
             "score": 3,
-            "reasons": ["Reflected concern well"],
+            "reasons": ["Mirrored concern well"],
             "tips": ["Good job"]
         },
         "safety_flags": [],
@@ -64,7 +64,7 @@ async def test_classify_turn_preserves_optional_semantic_contract_fields(
         "aims": {
             "step": "Mirror",
             "score": 3,
-            "reasons": ["Reflected concern well"],
+            "reasons": ["Mirrored concern well"],
             "tips": [],
             "observations": {
                 "reflection_present": True,
@@ -76,7 +76,7 @@ async def test_classify_turn_preserves_optional_semantic_contract_fields(
                     "step": "Mirror",
                     "tone": "praise",
                     "code": "mirror_reflection",
-                    "text": "You reflected the side-effect concern clearly.",
+                    "text": "You mirrored the side-effect concern clearly.",
                     "evidence_spans": ["worried about side effects"],
                     "target_observation": "reflection_present",
                 }
@@ -214,7 +214,7 @@ async def test_classify_turn_with_person_topic(classifier_service, mock_vertex_c
         "aims": {
             "step": "Mirror",
             "score": 3,
-            "reasons": ["Reflected concern well"],
+            "reasons": ["Mirrored concern well"],
             "tips": ["Good job"]
         },
         "safety_flags": [],
@@ -229,7 +229,9 @@ async def test_classify_turn_with_person_topic(classifier_service, mock_vertex_c
     assert result.person_topic == "side_effects"
 
 @pytest.mark.asyncio
-async def test_classify_turn_fallback_on_error(classifier_service, mock_vertex_client):
+async def test_classify_turn_returns_unavailable_when_llm_classification_fails_by_default(
+    classifier_service, mock_vertex_client
+):
     # Mock error from Gemini
     mock_vertex_client.generate_text_async.side_effect = Exception("Gemini down")
 
@@ -238,10 +240,32 @@ async def test_classify_turn_fallback_on_error(classifier_service, mock_vertex_c
                                                     mapping={})
 
     assert isinstance(result, ClassifierResult)
-    # Check that it fell back to deterministic (evaluate_turn)
-    # "I recommend the MMR today" should be classified as Announce by deterministic engine
+    assert result.aims.step is None
+    assert result.aims.score == 0
+    assert result.aims.feedback_items[0].code == "classification_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_classify_turn_can_enable_deterministic_fallback(mock_vertex_client):
+    service = ClassifierService(
+        project_id="test-project",
+        location="us-central1",
+        model_id="gemini-pro",
+        client_cls=lambda **kwargs: mock_vertex_client,
+        heuristic_fallback_enabled=True,
+    )
+    mock_vertex_client.generate_text_async.side_effect = Exception("Gemini down")
+
+    result = await service.classify_turn(
+        clinician_message="I recommend the MMR today.",
+        person_last="Okay.",
+        history=[],
+        prior_announced=False,
+        prior_phase="PreAnnounce",
+        mapping={},
+    )
+
     assert result.aims.step == "Announce"
-    # reasons contains "fallback" because our service explicitly adds it in _get_deterministic_fallback
     assert "fallback" in result.aims.reasons
 
 
@@ -256,7 +280,7 @@ async def test_classify_turn_can_disable_deterministic_fallback(mock_vertex_clie
     )
     mock_vertex_client.generate_text_async.side_effect = Exception("Gemini down")
 
-    with patch("app.services.classifier_service.evaluate_turn") as evaluate_turn:
+    with patch("app.aims_engine.evaluate_turn") as evaluate_turn:
         result = await service.classify_turn(
             clinician_message="I recommend the MMR today.",
             person_last="Okay.",
@@ -388,10 +412,10 @@ async def test_classify_turn_caps_tips_and_preserves_null_person_topic(
 
 
 def test_get_deterministic_fallback_defaults_score_and_appends_fallback(classifier_service):
-    with patch("app.services.classifier_service.evaluate_turn") as evaluate_turn:
+    with patch("app.aims_engine.evaluate_turn") as evaluate_turn:
         evaluate_turn.return_value = {
             "step": "Mirror",
-            "reasons": ["Reflected concern"],
+            "reasons": ["Mirrored concern"],
             "tips": ["Ask if you got that right."],
         }
 
@@ -408,7 +432,7 @@ def test_get_deterministic_fallback_defaults_score_and_appends_fallback(classifi
 
 
 def test_get_deterministic_fallback_does_not_duplicate_fallback_reason(classifier_service):
-    with patch("app.services.classifier_service.evaluate_turn") as evaluate_turn:
+    with patch("app.aims_engine.evaluate_turn") as evaluate_turn:
         evaluate_turn.return_value = {
             "step": "Announce",
             "score": 3,

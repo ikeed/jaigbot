@@ -18,16 +18,16 @@
       '<div class="aims-infographic-panel" role="dialog" aria-modal="true" aria-labelledby="aims-infographic-title">' +
       '  <div class="aims-infographic-header">' +
       '    <div class="aims-infographic-copy">' +
-      '      <h2 id="aims-infographic-title">Review the AIMS approach</h2>' +
-      '      <p>This bot is going to help you to practice the AIMS communication protocol for helping address vaccine hesitancy. Before you start, please review this infographic so you are best equipped to have a conversation with our vaccine hesitant patients.</p>' +
+      '      <h2 id="aims-infographic-title">' + app.t("infographic.title") + '</h2>' +
+      '      <p>' + app.t("infographic.intro") + '</p>' +
       '    </div>' +
       '    <div class="aims-infographic-actions">' +
-      '      <button type="button" class="aims-infographic-close" aria-label="Close">Close</button>' +
-      '      <button type="button" class="aims-infographic-continue">Start practicing</button>' +
+      '      <button type="button" class="aims-infographic-close" aria-label="' + app.t("infographic.close") + '">' + app.t("infographic.close") + '</button>' +
+      '      <button type="button" class="aims-infographic-continue">' + app.t("infographic.start") + '</button>' +
       '    </div>' +
       '  </div>' +
       '  <div class="aims-infographic-scroll">' +
-      '    <img src="/public/aims_infographic.svg" alt="Addressing Vaccine Hesitancy with the AIMS Communication Approach infographic" />' +
+      '    <img src="/public/aims_infographic.svg" alt="' + app.t("infographic.alt") + '" />' +
       '  </div>' +
       "</div>";
 

@@ -38,7 +38,10 @@ def aims_mapping_mock():
     }
     
     # Use session-scoped patch
-    with patch("app.aims_engine.load_mapping", return_value=mock_mapping):
+    with (
+        patch("app.aims_engine.load_mapping", return_value=mock_mapping),
+        patch("app.aims_mapping_loader.load_mapping", return_value=mock_mapping),
+    ):
         yield mock_mapping
 
 

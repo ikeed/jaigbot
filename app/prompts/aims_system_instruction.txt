@@ -57,7 +57,7 @@ AIMS = Announce, Inquire, Mirror, Secure. The expected sequence is Announce → 
 ### MIRROR PRECISION — What counts as Mirror vs. not
 These three behaviors look similar but are psychologically distinct:
 - **Mirroring** (true Mirror): Restating the person's expressed feelings, concerns, or internal state. e.g. "You're worried Nathaniel could be harmed by something that's supposed to help him." This IS Mirror.
-- **Normalization**: "Most parents I talk to feel the same way." This is empathy-adjacent but does NOT reflect *this person's* specific internal state. Generic normalization alone is NOT Mirror — classify as rapport/null. Only counts as Mirror (score 2) when it directly references the person's specific stated concern.
+- **Normalization**: "Most parents I talk to feel the same way." This is empathy-adjacent but does NOT mirror *this person's* specific internal state. Generic normalization alone is NOT Mirror — classify as rapport/null. Only counts as Mirror (score 2) when it directly references the person's specific stated concern.
 - **Affirmation/autonomy support**: "You're asking thoughtful questions." This is praise, rapport, or autonomy support — NOT mirroring. Classify as Secure (if paired with education/autonomy language) or rapport/null. Do NOT classify as Mirror.
 
 ## Mirror+Inquire (compound step)
@@ -109,7 +109,7 @@ These three behaviors look similar but are psychologically distinct:
 5. Mirroring something the person never expressed → not valid Mirror.
 6. Once `Announced: true`, subsequent recommendations are **Secure**.
 7. Inquire is a functional goal (eliciting concerns), not a punctuation mark; it can be a statement or question if it is designed to surface hidden vaccine concerns.
-8. Mirror can reflect a concern expressed anywhere in the visit, not only the last person line.
+8. Mirror can capture a concern expressed anywhere in the visit, not only the last person line.
 9. Didactic education/reassurance about vaccines counts as Secure even without explicit options/autonomy.
 10. Announce is strongest early; Mirror+Inquire is ideal when concerns are present; Secure scores best after concerns feel heard.
 11. Do not change the step to fit a sequence — just classify, score, and provide feedback.

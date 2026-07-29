@@ -24,11 +24,29 @@ const context = {
       this.type = type;
       this.bubbles = init && init.bubbles;
     },
-    AIMSBotUI: {
-      chainlitIconButtonClass: "icon-button",
-      prevent() {},
-      state: {}
-    }
+	    AIMSBotUI: {
+	      chainlitIconButtonClass: "icon-button",
+	      t(key) {
+	        const messages = {
+	          "dictation.errors.blocked": "Microphone access was blocked.",
+	          "dictation.errors.unavailable": "No microphone was found.",
+	          "dictation.errors.noSpeech": "No speech was detected.",
+	          "dictation.errors.network": "Speech recognition lost network access.",
+	          "dictation.errors.cancelled": "Voice dictation stopped.",
+	          "dictation.errors.unexpected": "Voice dictation hit an unexpected error.",
+	          "dictation.errors.unsupported": "Voice dictation is not supported in this browser.",
+	          "dictation.errors.unavailableShort": "Dictation unavailable",
+	          "dictation.errors.startFailed": "Voice dictation could not start.",
+	          "dictation.start": "Start dictation",
+	          "dictation.stop": "Stop dictation",
+	          "dictation.listening": "Listening...",
+	          "dictation.lang": "en-US"
+	        };
+	        return messages[key] || key;
+	      },
+	      prevent() {},
+	      state: {}
+	    }
   },
   document: {
     body: {

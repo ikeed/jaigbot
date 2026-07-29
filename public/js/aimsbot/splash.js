@@ -66,7 +66,7 @@
               window.sessionStorage.setItem(app.state.startupStorageKey, "1");
           } catch (_) {}
 
-          showRecoveryMessage("Loading is taking longer than usual, refreshing...");
+          showRecoveryMessage(app.t("splash.recovery"));
           window.setTimeout(function () {
               window.location.reload();
           }, 1000);

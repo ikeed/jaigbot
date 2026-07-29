@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Mapping
 from typing import Any
 
-from app.services.coaching_tip_sanitizer import normalize_aims_feedback_terms
+from app.message_catalog import message, message_list
 
 
-PRAISE_FEEDBACK_LABELS = ("Great job", "Well done", "Nice work", "Strong move")
-DEFERRED_NUDGE = (
-    "Nudge: The patient is deferring. Try offering specific literature or a "
-    "follow-up visit to reach a clear AIMS resolution."
-)
+DEFAULT_PRAISE_LABELS = [
+    "Good job!",
+    "Nice work!",
+    "Well done!",
+    "Great work!",
+    "Strong move!",
+]
 
 
 def _as_dict(value: Any) -> dict[str, Any]:
@@ -25,17 +28,38 @@ def _as_dict(value: Any) -> dict[str, Any]:
 def _strings(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
-    return [
-        normalize_aims_feedback_terms(item)
-        for item in value
-        if str(item or "").strip()
-    ]
+    return [str(item).strip() for item in value if str(item or "").strip()]
 
 
-def step_feedback_label(tone: Any, feedback_index: int) -> str:
+def _stable_label_index(labels: list[str], feedback_index: int, item: Mapping[str, Any]) -> int:
+    seed = "|".join(
+        str(item.get(key) or "").strip()
+        for key in ("step", "code", "text", "feedback")
+        if str(item.get(key) or "").strip()
+    )
+    if not seed:
+        return feedback_index % len(labels)
+    digest = hashlib.sha256(seed.encode("utf-8")).hexdigest()
+    return int(digest[:8], 16) % len(labels)
+
+
+def step_feedback_label(
+    tone: Any,
+    feedback_index: int,
+    item: Mapping[str, Any] | None = None,
+) -> str:
     if tone == "praise":
-        return PRAISE_FEEDBACK_LABELS[feedback_index % len(PRAISE_FEEDBACK_LABELS)]
-    return "Tip"
+        praise_labels = message_list("coaching.labels.praise")
+        if not praise_labels:
+            praise_labels = DEFAULT_PRAISE_LABELS
+        return praise_labels[_stable_label_index(praise_labels, feedback_index, item or {})]
+    return message("coaching.labels.tip")
+
+
+def _feedback_line(prefix: str, tone: Any, label: str, feedback: str) -> str:
+    if tone == "praise":
+        return f"{prefix}{label} {feedback}"
+    return f"{prefix}{label}: {feedback}"
 
 
 def coaching_message_parts(
@@ -50,7 +74,7 @@ def coaching_message_parts(
     parts: list[str] = []
     step = str(coaching.get("step") or "").strip()
     if step and step not in {"null", "None"}:
-        parts.append(f"Detected step: {step}")
+        parts.append(message("coaching.detected_step", step=step))
 
     feedback_items = coaching.get("feedback_items") or []
     displayed_feedback_items = 0
@@ -61,14 +85,14 @@ def coaching_message_parts(
             item = _as_dict(raw_item)
             if not item:
                 continue
-            feedback = normalize_aims_feedback_terms(item.get("text"))
+            feedback = str(item.get("text") or "").strip()
             if not feedback:
                 continue
             tone = item.get("tone")
-            label = step_feedback_label(tone, feedback_index)
+            label = step_feedback_label(tone, feedback_index, item)
             item_step = str(item.get("step") or "").strip()
             prefix = f"{item_step}: " if item_step else ""
-            parts.append(f"{prefix}{label}: {feedback}")
+            parts.append(_feedback_line(prefix, tone, label, feedback))
             displayed_feedback_items += 1
             if tone != "praise":
                 has_improvement_feedback_item = True
@@ -83,14 +107,14 @@ def coaching_message_parts(
             item = _as_dict(raw_item)
             if not item:
                 continue
-            feedback = normalize_aims_feedback_terms(item.get("feedback"))
+            feedback = str(item.get("feedback") or "").strip()
             if not feedback:
                 continue
             tone = item.get("tone")
-            label = step_feedback_label(tone, feedback_index)
+            label = step_feedback_label(tone, feedback_index, item)
             sf_step = str(item.get("step") or "").strip()
             prefix = f"{sf_step}: " if sf_step else ""
-            parts.append(f"{prefix}{label}: {feedback}")
+            parts.append(_feedback_line(prefix, tone, label, feedback))
             displayed_step_feedback += 1
             if tone != "praise":
                 has_improvement_step_feedback = True
@@ -98,16 +122,16 @@ def coaching_message_parts(
     elif not displayed_feedback_items:
         reasons = _strings(coaching.get("reasons"))
         if reasons:
-            parts.append(f"Feedback: {reasons[0]}")
+            parts.append(message("coaching.feedback", feedback=reasons[0]))
 
     tips = _strings(coaching.get("tips"))
     has_improvement = has_improvement_feedback_item or has_improvement_step_feedback
     has_structured_feedback = bool(displayed_feedback_items or displayed_step_feedback)
     if tips and (not has_structured_feedback or not has_improvement):
-        parts.append(f"Tip: {tips[0]}")
+        parts.append(message("coaching.tip", tip=tips[0]))
 
     if include_deferred_nudge:
-        parts.append(DEFERRED_NUDGE)
+        parts.append(message("coaching.deferred_nudge"))
 
     return parts
 

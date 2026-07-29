@@ -47,17 +47,17 @@
     switch (String(errorCode || "")) {
       case "not-allowed":
       case "service-not-allowed":
-        return "Microphone access was blocked.";
+        return app.t("dictation.errors.blocked");
       case "audio-capture":
-        return "No microphone was available.";
+        return app.t("dictation.errors.unavailable");
       case "no-speech":
-        return "No speech was detected.";
+        return app.t("dictation.errors.noSpeech");
       case "network":
-        return "Voice recognition could not reach the speech service.";
+        return app.t("dictation.errors.network");
       case "aborted":
-        return "Voice dictation was cancelled.";
+        return app.t("dictation.errors.cancelled");
       default:
-        return "Voice dictation hit an unexpected error.";
+        return app.t("dictation.errors.unexpected");
     }
   }
 
@@ -90,10 +90,10 @@
       button.disabled = status === "unsupported";
       const title = message || (
         status === "unsupported"
-          ? "Voice dictation is not supported in this browser."
+          ? app.t("dictation.errors.unsupported")
           : status === "listening"
-            ? "Stop voice dictation"
-            : "Start voice dictation"
+            ? app.t("dictation.stop")
+            : app.t("dictation.start")
       );
       button.title = title;
       button.setAttribute("aria-label", title);
@@ -133,7 +133,7 @@
   function startRecognition(textarea) {
     const RecognitionCtor = getRecognitionCtor(window);
     if (!RecognitionCtor) {
-      setStatus("unsupported", "Voice input unavailable");
+      setStatus("unsupported", app.t("dictation.errors.unavailableShort"));
       return;
     }
 
@@ -145,7 +145,7 @@
     const recognition = new RecognitionCtor();
     recognition.continuous = true;
     recognition.interimResults = true;
-    recognition.lang = "en-US";
+    recognition.lang = app.t("dictation.lang");
 
     state.activeTextarea = textarea;
     state.recognition = recognition;
@@ -157,7 +157,7 @@
     state.stopRequested = false;
 
     recognition.onstart = function () {
-      setStatus("listening", "Listening...");
+      setStatus("listening", app.t("dictation.listening"));
     };
 
     recognition.onresult = function (event) {
@@ -193,7 +193,7 @@
       recognition.start();
     } catch (_) {
       handleRecognitionEnd();
-      setStatus("idle", "Voice dictation could not start.");
+      setStatus("idle", app.t("dictation.errors.startFailed"));
     }
   }
 
@@ -201,10 +201,10 @@
     const button = document.createElement("button");
     button.type = "button";
     button.className = app.chainlitIconButtonClass + " aims-dictation-button";
-    button.setAttribute("aria-label", "Start voice dictation");
+    button.setAttribute("aria-label", app.t("dictation.start"));
     button.setAttribute("aria-pressed", "false");
     button.setAttribute("data-dictation-state", "idle");
-    button.title = "Start voice dictation";
+    button.title = app.t("dictation.start");
     button.innerHTML = [
       '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">',
       '<path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"></path>',
@@ -234,13 +234,13 @@
       micButton.disabled = !RecognitionCtor;
       if (!RecognitionCtor) {
         micButton.setAttribute("data-dictation-state", "unsupported");
-        micButton.title = "Voice dictation is not supported in this browser.";
+        micButton.title = app.t("dictation.errors.unsupported");
       }
 
       micButton.addEventListener("click", function (event) {
         app.prevent(event);
         if (!getRecognitionCtor(window)) {
-          setStatus("unsupported", "Voice input unavailable");
+          setStatus("unsupported", app.t("dictation.errors.unavailableShort"));
           return;
         }
         if (state.recognition && state.activeTextarea === textarea) {
@@ -267,7 +267,7 @@
     });
 
     if (!RecognitionCtor) {
-      setStatus("unsupported", "Voice input unavailable");
+      setStatus("unsupported", app.t("dictation.errors.unavailableShort"));
     } else if (!state.recognition && state.status !== "idle") {
       setStatus("idle", "");
     }

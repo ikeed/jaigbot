@@ -149,7 +149,7 @@ async def test_generate_invalid_json_twice_returns_safe_fallback():
         session_id="sid",
     )
 
-    assert result["patient_reply"] == "I'm not sure — I have some questions, but I'd like to hear more."
+    assert result["patient_reply"] == "I'm not sure - I have some questions, but I'd like to hear more."
     assert result["reply_validation"]["fallback_reply_code"] == "need_more"
     assert len(caller.calls) == 2
 
@@ -247,7 +247,7 @@ async def test_generate_returns_coded_fallback_after_repeated_metadata_leak():
         session_id="sid",
     )
 
-    assert result["patient_reply"] == "I'm not sure — I have some questions, but I'd like to hear more."
+    assert result["patient_reply"] == "I'm not sure - I have some questions, but I'd like to hear more."
     assert result["reply_validation"] == {
         "reply_valid": False,
         "metadata_leak_detected": True,

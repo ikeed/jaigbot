@@ -75,10 +75,16 @@ function runSplash({ hasContent = false, introVisible = false, storage = {} } = 
         timers.push(callback);
         return timers.length;
       },
-      AIMSBotUI: {
-        state: {},
-        removeManagedModals() {},
-        decorateShell() {},
+	      AIMSBotUI: {
+	        state: {},
+	        t(key) {
+	          const messages = {
+	            "splash.recovery": "Still loading; refreshing once..."
+	          };
+	          return messages[key] || key;
+	        },
+	        removeManagedModals() {},
+	        decorateShell() {},
         decorateNativeDialogs() {},
         observeNativeDialogs() {}
       }

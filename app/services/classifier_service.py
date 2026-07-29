@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional, TypeVar
 
 from pydantic import BaseModel
 
-from app.aims_engine import evaluate_turn
+from app.message_catalog import message
 from app.models import (
     AimsObservations,
     ClassifierResult,
@@ -17,7 +17,6 @@ from app.models import (
     StepFeedback,
 )
 from app.services.chat_helpers import recent_context as build_recent_context
-from app.services.coaching_tip_sanitizer import normalize_aims_feedback_terms
 from app.services.prompt_builders import AimsPromptBuilder
 from app.vertex import VertexClient
 
@@ -42,7 +41,7 @@ class ClassifierService:
         temperature: float = 0.0,
         max_tokens: int = 500,
         client_cls: Any = VertexClient,
-        heuristic_fallback_enabled: bool = True,
+        heuristic_fallback_enabled: bool = False,
     ):
         self.project_id = project_id
         self.location = location
@@ -119,7 +118,7 @@ class ClassifierService:
                 if isinstance(sf, dict) and sf.get("step") and sf.get("feedback"):
                     step_feedback.append(StepFeedback(
                         step=sf["step"],
-                        feedback=normalize_aims_feedback_terms(sf["feedback"]),
+                        feedback=str(sf["feedback"]).strip(),
                         tone=sf.get("tone", "praise"),
                     ))
 
@@ -150,16 +149,8 @@ class ClassifierService:
                 step=step,
                 steps=steps,
                 score=aims_data.get("score"),
-                reasons=[
-                    normalize_aims_feedback_terms(reason)
-                    for reason in (aims_data.get("reasons") or [])
-                    if str(reason or "").strip()
-                ],
-                tips=[
-                    normalize_aims_feedback_terms(tip)
-                    for tip in (aims_data.get("tips") or [])
-                    if str(tip or "").strip()
-                ],
+                reasons=[str(reason).strip() for reason in (aims_data.get("reasons") or []) if str(reason or "").strip()],
+                tips=[str(tip).strip() for tip in (aims_data.get("tips") or []) if str(tip or "").strip()],
                 step_feedback=step_feedback,
                 observations=observations,
                 feedback_items=self._normalize_feedback_items(feedback_items),
@@ -189,9 +180,10 @@ class ClassifierService:
             if status_code and status_code in {403, 404, 429}:
                 raise e
                 
-            self.logger.error("Unified classification failed, falling back: %s", e)
+            self.logger.error("Unified classification failed: %s", e)
             if not self.heuristic_fallback_enabled:
                 return self._get_classification_unavailable_result()
+            self.logger.warning("Using deterministic classification fallback")
             return self._get_deterministic_fallback(
                 clinician_message, mapping
             )
@@ -199,7 +191,7 @@ class ClassifierService:
     @staticmethod
     def _normalize_feedback_items(items: list[FeedbackItem]) -> list[FeedbackItem]:
         for item in items:
-            item.text = normalize_aims_feedback_terms(item.text)
+            item.text = str(item.text or "").strip()
         return items
 
     def _parse_optional_model(
@@ -278,8 +270,8 @@ class ClassifierService:
         """Call Gemini to detect whether the session reached a natural conclusion.
 
         AimsEndgameService.check() calls this after its hard guards pass. The
-        service then applies deterministic confirmation/fallback gates around
-        this LLM result.
+        service then validates the structured result; legacy heuristic fallback
+        is used only when explicitly enabled.
         """
         prompt = AimsPromptBuilder.build_endgame_detector_prompt(
             history_text=history_text,
@@ -325,23 +317,24 @@ class ClassifierService:
     @staticmethod
     def _get_classification_unavailable_result() -> ClassifierResult:
         """Return neutral coaching when semantic classification is unavailable."""
+        unavailable_text = message("aims.classification_unavailable")
         return ClassifierResult(
             is_small_talk=False,
             is_vaccine_relevant=True,
             aims=Coaching(
                 step=None,
                 score=0,
-                reasons=["AIMS coaching is temporarily unavailable for this turn."],
+                reasons=[unavailable_text],
                 tips=[],
                 feedback_items=[
                     FeedbackItem(
                         code="classification_unavailable",
-                        text="AIMS coaching is temporarily unavailable for this turn.",
+                        text=unavailable_text,
                     )
                 ],
             ),
             safety_flags=[],
-            reasoning="classification unavailable",
+            reasoning=message("aims.classification_unavailable_reason"),
         )
 
     @staticmethod
@@ -350,27 +343,21 @@ class ClassifierService:
         mapping: Dict[str, Any],
     ) -> ClassifierResult:
         """Invoke the original deterministic engine as a fallback."""
+        from app.aims_engine import evaluate_turn
         
         fb = evaluate_turn(clinician_message, mapping)
         
         # Map deterministic 'evaluate_turn' result to ClassifierResult
         reasons = fb.get("reasons", [])
-        if "fallback" not in reasons:
-            reasons.append("fallback")
+        fallback_marker = message("aims.fallback_marker")
+        if fallback_marker not in reasons:
+            reasons.append(fallback_marker)
             
         aims_coaching = Coaching(
             step=fb.get("step"),
             score=fb.get("score", 2),
-            reasons=[
-                normalize_aims_feedback_terms(reason)
-                for reason in reasons
-                if str(reason or "").strip()
-            ],
-            tips=[
-                normalize_aims_feedback_terms(tip)
-                for tip in (fb.get("tips", []) or [])
-                if str(tip or "").strip()
-            ],
+            reasons=[str(reason).strip() for reason in reasons if str(reason or "").strip()],
+            tips=[str(tip).strip() for tip in (fb.get("tips", []) or []) if str(tip or "").strip()],
         )
         
         return ClassifierResult(
@@ -378,5 +365,5 @@ class ClassifierService:
             is_vaccine_relevant=True,
             aims=aims_coaching,
             safety_flags=[],
-            reasoning="deterministic fallback"
+            reasoning=message("aims.deterministic_fallback_reason")
         )

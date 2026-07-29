@@ -6,7 +6,19 @@ import pytest
 
 from app import chainlit_thread_state
 from app.constants import MSG_DUPLICATE_TAB, MSG_INTRO_REQUIRED, MSG_THREAD_BOUND
+from app.message_catalog import message_list
 from app.services.chainlit.orchestrator import ChainlitOrchestrator
+
+
+def _has_praise_line(text: str, step: str, feedback: str) -> bool:
+    return any(
+        f"{step}: {label} {feedback}" in text
+        for label in message_list("coaching.labels.praise")
+    )
+
+
+def _praise_labels_in_text(text: str) -> set[str]:
+    return {label for label in message_list("coaching.labels.praise") if label in text}
 
 
 @pytest.fixture
@@ -521,7 +533,8 @@ async def test_process_backend_response_prefers_step_feedback_over_raw_tip(
     )
 
     coach_text = mock_services["session"].history[0]["content"]
-    assert "Inquire: Great job: You opened with a broad concern question." in coach_text
+    assert _has_praise_line(coach_text, "Inquire", "You opened with a broad concern question.")
+    assert "praise:" not in coach_text.lower()
     assert "Secure: Tip: Pause before moving into reassurance." in coach_text
     assert "Tip: Try leading with an open question." not in coach_text
 
@@ -555,7 +568,8 @@ async def test_process_backend_response_shows_tip_with_praise_only_step_feedback
     )
 
     coach_text = mock_services["session"].history[0]["content"]
-    assert "Secure: Great job: You led with a strong autonomy statement." in coach_text
+    assert _has_praise_line(coach_text, "Secure", "You led with a strong autonomy statement.")
+    assert "praise:" not in coach_text.lower()
     assert (
         "Tip: Ask a single, open-ended question to check for understanding."
         in coach_text
@@ -578,7 +592,7 @@ async def test_process_backend_response_rotates_praise_step_feedback_labels(
                     {
                         "step": "Mirror",
                         "tone": "praise",
-                        "feedback": "You reflected the parent's core worry.",
+                        "feedback": "You mirrored the parent's core worry.",
                     },
                     {
                         "step": "Secure",
@@ -602,10 +616,12 @@ async def test_process_backend_response_rotates_praise_step_feedback_labels(
     )
 
     coach_text = mock_services["session"].history[0]["content"]
-    assert "Mirror: Great job: You mirrored the parent's core worry." in coach_text
-    assert "Secure: Well done: You supported the parent's choice." in coach_text
-    assert "Inquire: Nice work: You asked a collaborative open question." in coach_text
-    assert "Announce: Strong move: You made a clear recommendation." in coach_text
+    assert _has_praise_line(coach_text, "Mirror", "You mirrored the parent's core worry.")
+    assert _has_praise_line(coach_text, "Secure", "You supported the parent's choice.")
+    assert _has_praise_line(coach_text, "Inquire", "You asked a collaborative open question.")
+    assert _has_praise_line(coach_text, "Announce", "You made a clear recommendation.")
+    assert len(_praise_labels_in_text(coach_text)) >= 2
+    assert "praise:" not in coach_text.lower()
 
 
 @pytest.mark.asyncio

@@ -262,7 +262,7 @@ def _load_mapping(app_state: Any) -> dict:
     if mapping is not None:
         return mapping
     try:
-        from app.aims_engine import load_mapping
+        from app.aims_mapping_loader import load_mapping
         mapping = load_mapping()
         app_state.aims_mapping = mapping
         return mapping
