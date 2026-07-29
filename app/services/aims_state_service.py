@@ -132,6 +132,19 @@ class AimsStateService:
         ],
     }
 
+    USER_FACING_TOPIC_HINTS = {
+        "autism": "autism concerns",
+        "immune_load": "immune load or spacing concerns",
+        "side_effects": "side-effect concerns",
+        "ingredients": "ingredient concerns",
+        "schedule_timing": "timing or schedule concerns",
+        "disease_risk": "whether the disease still feels like a real risk",
+        "effectiveness": "effectiveness or benefit concerns",
+        "trust": "trust or evidence concerns",
+        "autonomy": "choice or pressure concerns",
+        "requirements": "school or system requirements",
+    }
+
     ANALYTICAL_KEYWORDS = (
         "analytical",
         "data",
@@ -439,12 +452,12 @@ class AimsStateService:
                 reason = "You moved into education before reflecting the concern — try mirroring first so they feel heard"
                 tip = "Before educating, briefly reflect the concern (e.g., 'It feels like a lot at once — did I get that right?')."
         elif repeat_count == 1:
-            topic_hint = f" ('{first_unmirrored}')" if first_unmirrored else ""
+            topic_hint = self._user_facing_topic_hint(first_unmirrored)
             reason = f"You're still educating without reflecting — the concern{topic_hint} hasn't been mirrored yet"
-            tip = f"Try reflecting the specific concern{topic_hint} before more education."
+            tip = f"Reflect the specific concern{topic_hint} before more education."
         else:
             count = repeat_count + 1
-            topic_hint = f" about '{first_unmirrored}'" if first_unmirrored else ""
+            topic_hint = self._user_facing_topic_hint(first_unmirrored)
             reason = f"You've had {count} Secure turns without mirroring{topic_hint} — try pausing to reflect before more education"
             tip = f"Pause and mirror: acknowledge the concern{topic_hint} before sharing more facts."
 
@@ -501,6 +514,14 @@ class AimsStateService:
     def _secure_before_mirror_key(topic: str | None) -> str:
         normalized = str(topic).strip() if topic else ""
         return f"secure_before_mirror:{normalized}" if normalized else "secure_before_mirror"
+
+    @classmethod
+    def _user_facing_topic_hint(cls, topic: str | None) -> str:
+        normalized = str(topic or "").strip()
+        if not normalized:
+            return ""
+        label = cls.USER_FACING_TOPIC_HINTS.get(normalized, normalized.replace("_", " "))
+        return f" about {label}"
 
     @classmethod
     def _secure_before_mirror_repeat_count(cls, recent: list[Any], topic: str | None) -> int:

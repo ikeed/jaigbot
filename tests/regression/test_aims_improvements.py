@@ -257,7 +257,7 @@ def test_secure_before_mirror_first_time_gives_standard_feedback():
 
 
 def test_secure_before_mirror_second_time_escalates_with_topic():
-    """Second repetition should name the unmirrored concern topic."""
+    """Second repetition should name the unmirrored concern in user-facing language."""
     h = _state_service()
     state = _make_state(phase="InquireMirror", concerns=[
         {"desc": "x", "topic": "trust", "is_mirrored": False, "is_secured": False},
@@ -267,6 +267,35 @@ def test_secure_before_mirror_second_time_escalates_with_topic():
     h.apply_coaching_guidance(cls, "Secure", state, "Studies show...", "I don't trust pharma")
     assert "trust" in cls["reasons"][0].lower()
     assert "still" in cls["reasons"][0].lower() or "hasn't" in cls["reasons"][0].lower()
+    assert cls["tips"][0].startswith("Reflect the specific concern")
+    assert "try reflecting" not in cls["tips"][0].lower()
+
+
+def test_secure_before_mirror_repeated_tip_does_not_leak_internal_topic_keys():
+    """Repeated feedback should not expose taxonomy labels like disease_risk."""
+    h = _state_service()
+    state = _make_state(phase="InquireMirror", concerns=[
+        {"desc": "x", "topic": "disease_risk", "is_mirrored": False, "is_secured": False},
+    ])
+    state["recent_coaching"] = ["secure_before_mirror:disease_risk"]
+    cls = {"step": "Secure", "score": 2, "reasons": [], "tips": []}
+
+    h.apply_coaching_guidance(
+        cls,
+        "Secure",
+        state,
+        "Measles can spread quickly when vaccination rates drop.",
+        "I don't see measles around here.",
+    )
+
+    feedback = " ".join(cls["reasons"] + cls["tips"])
+    assert "disease_risk" not in feedback
+    assert "'disease" not in feedback
+    assert "whether the disease still feels like a real risk" in feedback
+    assert cls["tips"][0] == (
+        "Reflect the specific concern about whether the disease still feels like a real risk "
+        "before more education."
+    )
 
 
 def test_secure_before_mirror_third_time_escalates_to_pattern():
