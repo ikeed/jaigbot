@@ -526,6 +526,42 @@ async def test_process_backend_response_prefers_step_feedback_over_raw_tip(
 
 
 @pytest.mark.asyncio
+async def test_process_backend_response_shows_tip_with_praise_only_step_feedback(
+    orchestrator, mock_services
+):
+    mock_services["session"].history = []
+    mock_services["session"].persona_name = "Zia"
+    mock_services["ui"].send_coach_message = AsyncMock()
+    mock_services["ui"].send_assistant_reply = AsyncMock()
+
+    await orchestrator._process_backend_response(
+        {
+            "coaching": {
+                "step": "Secure",
+                "tips": [
+                    "Ask a single, open-ended question to check for understanding."
+                ],
+                "step_feedback": [
+                    {
+                        "step": "Secure",
+                        "tone": "praise",
+                        "feedback": "You led with a strong autonomy statement.",
+                    },
+                ],
+            },
+            "reply": "I would like to go slowly.",
+        }
+    )
+
+    coach_text = mock_services["session"].history[0]["content"]
+    assert "Secure: Great job: You led with a strong autonomy statement." in coach_text
+    assert (
+        "Tip: Ask a single, open-ended question to check for understanding."
+        in coach_text
+    )
+
+
+@pytest.mark.asyncio
 async def test_process_backend_response_rotates_praise_step_feedback_labels(
     orchestrator, mock_services
 ):

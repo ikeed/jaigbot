@@ -101,6 +101,35 @@ def test_append_uses_step_feedback_and_deferred_nudge():
     assert "This should not show" not in text
 
 
+def test_append_shows_tip_when_step_feedback_is_praise_only():
+    service = _service()
+    mem = {}
+
+    service.append(
+        mem=mem,
+        memory_enabled=True,
+        session_id="sid",
+        cls_payload={
+            "step": "Secure",
+            "score": 2,
+            "phase": "Secure",
+            "step_feedback": [
+                {
+                    "step": "Secure",
+                    "tone": "praise",
+                    "feedback": "You affirmed autonomy clearly.",
+                },
+            ],
+            "tips": ["Ask one open-ended check-in question."],
+        },
+        reply_payload={},
+    )
+
+    text = mem[SESSION_HISTORY][0]["content"]
+    assert "Secure: \u2713 You affirmed autonomy clearly." in text
+    assert "Tip: Ask one open-ended check-in question." in text
+
+
 def test_filter_user_facing_reasons_and_first_reason():
     reasons = [
         "LLM flagged internal condition",
