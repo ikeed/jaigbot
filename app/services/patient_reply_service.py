@@ -131,7 +131,7 @@ class PatientReplyService:
                 fallback_code = (
                     "acknowledge_resolved"
                     if no_open_concerns
-                    else "need_more"
+                    else "acknowledge_open"
                 )
                 telemetry_log_event(
                     self._logger,
@@ -160,13 +160,13 @@ class PatientReplyService:
                 )
 
                 if attempt == 1:
-                    prompt_for_attempt = reply_prompt
+                    prompt_for_attempt = self._json_retry_prompt(reply_prompt)
                     continue
 
                 fallback_code = (
                     "acknowledge_resolved"
                     if no_open_concerns
-                    else "need_more"
+                    else "acknowledge_open"
                 )
                 telemetry_log_event(
                     self._logger,
@@ -217,3 +217,7 @@ class PatientReplyService:
     @staticmethod
     def _retry_prompt(base_prompt: str) -> str:
         return message("patient_reply.retry_prompt", base_prompt=base_prompt)
+
+    @staticmethod
+    def _json_retry_prompt(base_prompt: str) -> str:
+        return message("patient_reply.json_retry_prompt", base_prompt=base_prompt)

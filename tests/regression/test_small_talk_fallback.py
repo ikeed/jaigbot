@@ -75,7 +75,7 @@ def enable_coaching(monkeypatch):
     yield
 
 
-def test_small_talk_fallback_produces_friendly_reply(caplog, monkeypatch):
+def test_small_talk_fallback_produces_neutral_reply(caplog, monkeypatch):
     monkeypatch.setenv("AIMS_HEURISTIC_FALLBACK_ENABLED", "true")
     caplog.set_level(logging.INFO)
     # Small talk / pleasantries that should classify as non-step
@@ -86,9 +86,9 @@ def test_small_talk_fallback_produces_friendly_reply(caplog, monkeypatch):
     data = r.json()
     assert "reply" in data
     reply = data["reply"]
-    # Should not be a bland "Okay." and should be the expected fallback response
+    # Technical reply-generation failure should not invent a new concern.
     assert reply.strip() != "Okay."
-    assert reply == "I'm not sure - I have some questions, but I'd like to hear more."
+    assert reply == "Okay, thank you."
 
     # Coaching should indicate rapport allowed anytime
     coaching = data.get("coaching") or {}

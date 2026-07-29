@@ -136,6 +136,7 @@
       "generic_ack": "Okay."
     },
     "retry_prompt": "{base_prompt}\n\nYour previous JSON was valid, but patient_reply included scenario metadata or speaker labels. Try again with only the person's conversational reply.",
+    "json_retry_prompt": "{base_prompt}\n\nYour previous response was not valid JSON, or it was cut off before the JSON object was complete. Reply with exactly one complete JSON object matching this schema and no extra text: {\"patient_reply\": \"one or two complete conversational sentences\"}",
     "concern_state": {
       "none_tracked": "No tracked vaccine concerns yet.",
       "unspecified": "unspecified concern",
@@ -878,6 +879,33 @@
         "wondering",
         "what about",
         "what if"
+      ],
+      "confirmation_reopening_cues": [
+        " but ",
+        " however ",
+        " though ",
+        " although ",
+        "still worry",
+        "still concern",
+        "still not sure",
+        "not sure",
+        "not certain",
+        "not convinced",
+        "wonder if",
+        "wonder about",
+        "wondering",
+        "what about",
+        "what if",
+        "can you tell me",
+        "could you tell me",
+        "help me understand",
+        "is it required",
+        "is it mandatory",
+        "required for school",
+        "mandatory for school",
+        "what vaccines",
+        "what shots",
+        "what happens"
       ],
       "concern_after_acceptance_cues": [
         "i want to understand",

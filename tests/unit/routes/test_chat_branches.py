@@ -239,4 +239,5 @@ def test_invalid_json_twice_falls_back_based_on_step(monkeypatch):
         or ("i’m not sure" in low or "i'm not sure" in low)
         or ("thanks for letting me know" in low)
         or ("i appreciate" in low)
+        or ("okay, thank you" in low)
     )

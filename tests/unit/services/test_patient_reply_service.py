@@ -135,11 +135,12 @@ async def test_generate_retries_invalid_json_then_returns_success():
         "fallback_reply_code": None,
     }
     assert len(caller.calls) == 2
+    assert "not valid JSON" in caller.calls[1]["prompt"]
     assert any("aims_patient_reply_invalid_json" in message for message in logger.info_messages)
 
 
 @pytest.mark.asyncio
-async def test_generate_invalid_json_twice_returns_safe_fallback():
+async def test_generate_invalid_json_twice_returns_neutral_open_acknowledgment():
     caller = JsonCaller("{", "not json")
     service = _service(caller)
 
@@ -149,9 +150,10 @@ async def test_generate_invalid_json_twice_returns_safe_fallback():
         session_id="sid",
     )
 
-    assert result["patient_reply"] == "I'm not sure - I have some questions, but I'd like to hear more."
-    assert result["reply_validation"]["fallback_reply_code"] == "need_more"
+    assert result["patient_reply"] == "Okay, thank you."
+    assert result["reply_validation"]["fallback_reply_code"] == "acknowledge_open"
     assert len(caller.calls) == 2
+    assert "not valid JSON" in caller.calls[1]["prompt"]
 
 
 @pytest.mark.asyncio
@@ -234,7 +236,7 @@ async def test_generate_retries_metadata_label_leak_then_returns_success():
 
 
 @pytest.mark.asyncio
-async def test_generate_returns_coded_fallback_after_repeated_metadata_leak():
+async def test_generate_returns_neutral_fallback_after_repeated_metadata_leak():
     caller = JsonCaller(
         json.dumps({"patient_reply": "Person: Taylor Lopez\nPurpose: Flu vaccination"}),
         json.dumps({"patient_reply": "Parent: Sarah Jenkins\nNotes: Still leaking."}),
@@ -247,9 +249,9 @@ async def test_generate_returns_coded_fallback_after_repeated_metadata_leak():
         session_id="sid",
     )
 
-    assert result["patient_reply"] == "I'm not sure - I have some questions, but I'd like to hear more."
+    assert result["patient_reply"] == "Okay, thank you."
     assert result["reply_validation"] == {
         "reply_valid": False,
         "metadata_leak_detected": True,
-        "fallback_reply_code": "need_more",
+        "fallback_reply_code": "acknowledge_open",
     }

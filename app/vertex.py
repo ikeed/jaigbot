@@ -14,6 +14,7 @@ MAX_CONTINUATIONS = int(os.getenv("MAX_CONTINUATIONS", "2"))
 CONTINUE_TAIL_CHARS = int(os.getenv("CONTINUE_TAIL_CHARS", "500"))
 CONTINUE_INSTRUCTION_ENABLED = os.getenv("CONTINUE_INSTRUCTION_ENABLED", "true").lower() == "true"
 MIN_CONTINUE_GROWTH = int(os.getenv("MIN_CONTINUE_GROWTH", "10"))
+MAX_TOKEN_FINISH_REASONS = frozenset({"MAX_TOKENS", "MAX_TOKEN", "MAX_OUTPUT_TOKENS"})
 
 
 class VertexAIError(Exception):
@@ -293,6 +294,8 @@ class VertexClient:
                 "finishReason": meta.get("finishReason"),
                 "textLen": meta.get("textLen"),
                 "thoughtLen": meta.get("thoughtLen", 0),
+                "candidatesTokens": meta.get("candidatesTokens"),
+                "thoughtsTokens": meta.get("thoughtsTokens"),
                 "cachedContentTokens": meta.get("cachedContentTokens"),
                 "hasText": bool(text),
             }))
@@ -300,6 +303,20 @@ class VertexClient:
             if not text:
                 raise VertexAIError(
                     "No text candidates returned from model (possibly safety blocked)"
+                )
+            if (
+                response_mime_type == "application/json"
+                and meta.get("finishReason") in MAX_TOKEN_FINISH_REASONS
+            ):
+                self.logger.warning(json.dumps({
+                    "event": "genai_async_json_max_tokens",
+                    "modelId": self.model_id,
+                    "textLen": meta.get("textLen"),
+                    "candidatesTokens": meta.get("candidatesTokens"),
+                    "thoughtsTokens": meta.get("thoughtsTokens"),
+                }))
+                raise VertexAIError(
+                    "Model stopped at max tokens before completing JSON response"
                 )
             return text
 
@@ -368,12 +385,11 @@ class VertexClient:
             }))
 
             # Auto-continue loop if hitting output cap
-            _MAX_TOKEN_REASONS = frozenset({"MAX_TOKENS", "MAX_TOKEN", "MAX_OUTPUT_TOKENS"})
             continuation_count = 0
             no_progress_break = False
             while (
                 AUTO_CONTINUE_ON_MAX_TOKENS
-                and meta_local.get("finishReason") in _MAX_TOKEN_REASONS
+                and meta_local.get("finishReason") in MAX_TOKEN_FINISH_REASONS
                 and continuation_count < MAX_CONTINUATIONS
             ):
                 continuation_count += 1
@@ -409,7 +425,7 @@ class VertexClient:
                 if len(text) - prev_len < MIN_CONTINUE_GROWTH:
                     no_progress_break = True
                     break
-                if next_meta.get("finishReason") not in _MAX_TOKEN_REASONS:
+                if next_meta.get("finishReason") not in MAX_TOKEN_FINISH_REASONS:
                     break
 
             # Guard: raise if no text after all attempts

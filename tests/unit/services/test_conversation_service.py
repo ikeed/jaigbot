@@ -207,6 +207,90 @@ def test_apply_concern_events_merges_confirmation_restatement_into_existing_mirr
     assert "too many vaccines at the same time" in concern["evidence"][-1]
 
 
+def test_apply_concern_events_does_not_open_new_concern_for_agreement_restatement():
+    st = {
+        "parent_concerns": [
+            {
+                "id": "requirements",
+                "topic": "requirements",
+                "summary": "wants to understand the local vaccine process",
+                "desc": "wants to understand the local vaccine process",
+                "evidence": [
+                    "I want to understand how it works here so I can explain it to my husband."
+                ],
+                "is_mirrored": True,
+                "is_secured": False,
+                "mirror_count": 1,
+                "secure_count": 0,
+                "status": "mirrored",
+            }
+        ]
+    }
+
+    handled = apply_concern_events(
+        st,
+        [
+            {
+                "event_type": "concern_raised",
+                "topic": "trust",
+                "evidence_spans": [
+                    "Yes, Doctor, that is right. I just want to understand everything clearly for my son and for my husband."
+                ],
+                "confidence": "high",
+            }
+        ],
+        person_text=(
+            "Yes, Doctor, that is right. I just want to understand everything "
+            "clearly for my son and for my husband."
+        ),
+    )
+
+    assert handled == {"concern_presence"}
+    assert len(st["parent_concerns"]) == 1
+    assert st["parent_concerns"][0]["topic"] == "requirements"
+    assert st["parent_concerns"][0]["is_mirrored"] is True
+
+
+def test_apply_concern_events_keeps_new_question_after_agreement():
+    st = {
+        "parent_concerns": [
+            {
+                "id": "requirements",
+                "topic": "requirements",
+                "summary": "wants to understand the local vaccine process",
+                "desc": "wants to understand the local vaccine process",
+                "evidence": [
+                    "I want to understand how it works here so I can explain it to my husband."
+                ],
+                "is_mirrored": True,
+                "is_secured": False,
+                "mirror_count": 1,
+                "secure_count": 0,
+                "status": "mirrored",
+            }
+        ]
+    }
+
+    handled = apply_concern_events(
+        st,
+        [
+            {
+                "event_type": "concern_raised",
+                "topic": "requirements",
+                "evidence_spans": [
+                    "Yes, that helps. But can you tell me what vaccines he needs today?"
+                ],
+                "confidence": "high",
+            }
+        ],
+        person_text="Yes, that helps. But can you tell me what vaccines he needs today?",
+    )
+
+    assert handled == {"concern_presence"}
+    assert len(st["parent_concerns"]) == 1
+    assert "what vaccines he needs today" in st["parent_concerns"][0]["evidence"][-1]
+
+
 def test_state_update_prefers_no_active_concern_event_over_keyword_fallback():
     mem = {}
 
