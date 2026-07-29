@@ -203,6 +203,14 @@ body.aimsbot-shell .aims-message-enter {
   animation: aims-message-rise 420ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+body.aimsbot-shell .aimsbot-message-scroll {
+  scroll-padding-bottom: var(--aims-composer-clearance, 13rem);
+}
+
+body.aimsbot-shell .aimsbot-message-list {
+  padding-bottom: var(--aims-composer-clearance, 13rem) !important;
+}
+
 .aims-message-row {
   width: min(100%, 88rem) !important;
   margin: 0 auto 14px !important;
