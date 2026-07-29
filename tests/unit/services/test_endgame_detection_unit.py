@@ -120,6 +120,28 @@ def test_endgame_detector_accepts_resources_and_talk_again_plan():
     assert EndGameDetector.detect(reply) == {"reason": "followup_literature"}
 
 
+def test_endgame_detector_treats_generic_plan_agreement_as_followup_literature_not_vaccine():
+    reply = (
+        "Okay, that sounds like a plan. I'll take that home and go over it "
+        "with my husband Noah. We can talk again after that."
+    )
+
+    assert EndGameDetector.detect(reply) == {"reason": "followup_literature"}
+
+
+def test_endgame_detector_rejects_generic_plan_agreement_without_vaccine_or_materials():
+    assert EndGameDetector.detect("Okay, that sounds like a plan.") is None
+
+
+def test_endgame_detector_accepts_papers_and_next_appointment_closure():
+    reply = (
+        "Thank you, doctor. I think it is better if I review the papers with "
+        "my husband Gabriel first, and then we can decide at the next appointment."
+    )
+
+    assert EndGameDetector.detect(reply) == {"reason": "followup_literature"}
+
+
 def test_endgame_detector_rejects_negative_literature_followup():
     reply = "I'm not going to read that information and I don't want a follow-up appointment."
     assert EndGameDetector.detect(reply) is None

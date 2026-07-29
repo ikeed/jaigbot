@@ -35,7 +35,7 @@ class AimsEndgameService:
         if not text:
             return False
         has_followup = any(cue in text for cue in EndGameDetector.FOLLOWUP_CUES)
-        has_literature = any(cue in text for cue in EndGameDetector.LITERATURE_CUES)
+        has_literature = EndGameDetector.has_literature_cue(text)
         has_negative = any(cue in text for cue in EndGameDetector.PLAN_NEGATIVE_CUES)
         has_active_concern = any(cue in text for cue in EndGameDetector.PLAN_ACTIVE_CONCERN_CUES)
         return has_followup and has_literature and not has_negative and not has_active_concern
