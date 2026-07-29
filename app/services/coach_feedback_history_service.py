@@ -53,6 +53,8 @@ class CoachFeedbackHistoryService:
             if step and step not in ("null", "None"):
                 parts.append(f"Detected step: {step}")
 
+            displayed_step_feedback = 0
+            has_improvement_step_feedback = False
             if step_feedback:
                 for sf in step_feedback:
                     tone_icon = "\u2713" if sf.get("tone") == "praise" else "\u2192"
@@ -60,6 +62,9 @@ class CoachFeedbackHistoryService:
                     sf_text = sf.get("feedback", "")
                     if sf_text:
                         parts.append(f"{sf_step}: {tone_icon} {sf_text}")
+                        displayed_step_feedback += 1
+                        if sf.get("tone") != "praise":
+                            has_improvement_step_feedback = True
             else:
                 feedback = self.first_user_facing_reason(reasons, step=step)
                 if feedback:
@@ -71,7 +76,9 @@ class CoachFeedbackHistoryService:
                 t for t in tips
                 if not (already_announced and STEP_ANNOUNCE.lower() in (t or "").lower())
             ]
-            if tips_to_show and not step_feedback:
+            if tips_to_show and (
+                not displayed_step_feedback or not has_improvement_step_feedback
+            ):
                 parts.append(f"Tip: {tips_to_show[0]}")
 
             if reply_payload.get("resolution_type") == "deferred":
