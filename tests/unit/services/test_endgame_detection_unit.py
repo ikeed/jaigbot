@@ -1090,6 +1090,58 @@ def test_llm_accepted_literature_with_literature_and_followup_evidence_is_endgam
     assert result["title"] == "\U0001f389 Great job!"
 
 
+def test_accepted_literature_closure_uses_latest_exchange_not_old_safety_risk_mirror():
+    """Earlier mirrored safety-risk wording should not block a later closure plan."""
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_literature",
+            "summary": "Person agreed to review materials and return for follow-up.",
+            "reason": "",
+        }
+    )
+    store = {
+        "s15a-risk": {
+            "history": [
+                {
+                    "role": "user",
+                    "content": (
+                        "You want absolute risk reduction, and you also want any "
+                        "safety risks described transparently. Did I capture that?"
+                    ),
+                },
+                {
+                    "role": "assistant",
+                    "content": (
+                        "Yes, I want the full risk-benefit profile, including "
+                        "downsides and individual benefit."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        "I will give you the written information now and book the "
+                        "follow-up appointment so we can review the numbers before "
+                        "you decide."
+                    ),
+                },
+                {
+                    "role": "assistant",
+                    "content": (
+                        "Excellent. I appreciate the materials and scheduling a "
+                        "follow-up."
+                    ),
+                },
+            ],
+            "aims_state": _literature_ready_state(),
+        }
+    }
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s15a-risk"], {}, None, "s15a-risk"))
+    assert result is not None
+    assert result["title"] == "\U0001f389 Great job!"
+
+
 def test_followup_after_spouse_discussion_without_literature_does_not_end():
     """Prod regression: follow-up alone should show a nudge, not game over."""
     mock_svc = _MockClassifierService(

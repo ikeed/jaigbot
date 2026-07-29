@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from app.constants import (
@@ -191,6 +192,10 @@ class AimsStateService:
         "printout",
         "printed information",
         "info sheet",
+        "data sources",
+        "effectiveness data",
+        "product monographs",
+        "safety data",
         "read over",
         "look over",
     )
@@ -420,7 +425,7 @@ class AimsStateService:
             return
 
         text = (clinician_message or "").lower()
-        has_literature = any(cue in text for cue in cls.CLOSURE_LITERATURE_CUES)
+        has_literature = cls._has_closure_literature(text)
         has_followup = any(cue in text for cue in cls.CLOSURE_FOLLOWUP_CUES)
         if has_followup and not has_literature:
             cls_payload["tips"] = [
@@ -430,6 +435,18 @@ class AimsStateService:
             cls_payload["tips"] = [
                 "You offered take-home information; also book a follow-up so they know when they can bring questions back."
             ]
+
+    @classmethod
+    def _has_closure_literature(cls, text: str) -> bool:
+        if any(cue in text for cue in cls.CLOSURE_LITERATURE_CUES):
+            return True
+        return bool(
+            re.search(
+                r"\b(?:written|printed|print|material|take-home|take home)\b"
+                r"[\w\s'-]{0,60}\binformation\b",
+                text,
+            )
+        )
 
     def _add_secure_before_mirror_feedback(
         self,

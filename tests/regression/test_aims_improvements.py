@@ -429,6 +429,35 @@ def test_secure_followup_closure_missing_literature_gets_tip():
     ]
 
 
+def test_secure_closure_with_written_safety_information_gets_no_literature_tip():
+    h = _state_service()
+    state = _make_state(
+        phase="Secure",
+        concerns=[
+            {
+                "desc": "wants safety evidence explained",
+                "topic": "side_effects",
+                "is_mirrored": True,
+                "is_secured": True,
+            }
+        ],
+    )
+    cls = {"step": "Secure", "score": 3, "reasons": [], "tips": []}
+
+    h.apply_coaching_guidance(
+        cls,
+        "Secure",
+        state,
+        (
+            "I will give you the written safety information now and book a "
+            "follow-up appointment so you can bring back specific questions."
+        ),
+        "That works for me.",
+    )
+
+    assert cls["tips"] == []
+
+
 def test_secure_literature_closure_missing_followup_gets_tip():
     h = _state_service()
     state = _make_state(
