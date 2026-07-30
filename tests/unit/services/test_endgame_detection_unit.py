@@ -72,7 +72,7 @@ def _history_with_coach(include_coach: bool = True) -> list:
     if include_coach:
         hist.insert(
             1,
-            {"role": "coach", "content": "Detected step: Announce"},
+            {"role": "coach", "content": "Announce:\n- Clear recommendation."},
         )
     return hist
 
@@ -206,7 +206,7 @@ def test_coach_entries_excluded_from_history_text():
     ht = mock_svc.last_history_text
     assert "coach" not in ht.lower(), "Coach role should not appear in history_text"
     assert "Conversation phase" not in ht, "Coach content should not appear in history_text"
-    assert "Detected step" not in ht, "Coach content should not appear in history_text"
+    assert "Clear recommendation" not in ht, "Coach content should not appear in history_text"
 
 
 def test_assistant_role_labelled_assistant_not_parent():

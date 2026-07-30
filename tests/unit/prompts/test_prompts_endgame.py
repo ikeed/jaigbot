@@ -63,6 +63,16 @@ def test_patient_reply_prompt_includes_concern_state_hints():
     assert 'do not give a vague placeholder reply like "ok"' in prompt.lower()
 
 
+def test_patient_reply_prompt_forbids_unrelated_visit_drift():
+    prompt = build_patient_reply_prompt(
+        history_text="Clinician: Vaccines today?",
+        clinician_last="I recommend Nathaniel receive any vaccines he is due for today.",
+    )
+
+    assert "do not invent a different complaint" in prompt.lower()
+    assert "unrelated symptom" in prompt.lower()
+
+
 def test_endgame_detector_prompt_requires_both_literature_and_followup():
     prompt = build_endgame_detector_prompt(
         history_text="Doctor: We can keep talking.\nAssistant: I'd like something to read.",

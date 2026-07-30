@@ -291,6 +291,106 @@ async def test_generate_retries_instruction_echo_then_returns_success():
 
 
 @pytest.mark.asyncio
+async def test_generate_retries_off_scenario_medical_drift_then_returns_success():
+    logger = DummyLogger()
+    caller = JsonCaller(
+        json.dumps({
+            "patient_reply": (
+                "I'm feeling a bit better today, thank you for asking. "
+                "The pain isn't as sharp as it was yesterday."
+            )
+        }),
+        json.dumps({
+            "patient_reply": (
+                "Yes, that helps me understand how it works here. "
+                "I would like the written summary for Gabriel."
+            )
+        }),
+    )
+    service = _service(caller, logger=logger)
+
+    result = await service.generate(
+        clinician_message=(
+            "These vaccines are recommended for Nathaniel's health, and "
+            "nothing happens without your consent."
+        ),
+        history_text=(
+            "Clinician: What questions or worries do you have?\n"
+            "Person: Is this required? I need to tell my husband Gabriel."
+        ),
+        session_id="sid",
+        character=(
+            "Specific Persona: Zia\n"
+            "Zia wants to understand the Canadian vaccine protocol for Nathaniel."
+        ),
+        scene="Zia is asking how children's vaccine protocols work in Canada.",
+    )
+
+    assert result["patient_reply"] == (
+        "Yes, that helps me understand how it works here. "
+        "I would like the written summary for Gabriel."
+    )
+    assert result["reply_validation"] == {
+        "reply_valid": True,
+        "metadata_leak_detected": False,
+        "fallback_reply_code": None,
+    }
+    assert len(caller.calls) == 2
+    assert "drifted into a different clinical visit" in caller.calls[1]["prompt"]
+    assert any(
+        "patient_reply_invalid_off_scenario_drift" in message
+        for message in logger.info_messages
+    )
+
+
+@pytest.mark.asyncio
+async def test_generate_falls_back_when_json_retry_drifts_to_unrelated_symptom():
+    logger = DummyLogger()
+    caller = JsonCaller(
+        "{",
+        json.dumps({
+            "patient_reply": (
+                "I'm feeling a bit better today, thank you for asking. "
+                "The pain isn't as sharp as it was yesterday."
+            )
+        }),
+    )
+    service = _service(caller, logger=logger)
+
+    result = await service.generate(
+        clinician_message=(
+            "These vaccines are recommended for Nathaniel's health, and "
+            "nothing happens without your consent."
+        ),
+        history_text=(
+            "Clinician: What questions or worries do you have?\n"
+            "Person: Is this required? I need to tell my husband Gabriel."
+        ),
+        session_id="sid",
+        character=(
+            "Specific Persona: Zia\n"
+            "Zia wants to understand the Canadian vaccine protocol for Nathaniel."
+        ),
+        scene="Zia is asking how children's vaccine protocols work in Canada.",
+    )
+
+    assert result["patient_reply"] == "Okay, thank you."
+    assert result["reply_validation"] == {
+        "reply_valid": False,
+        "metadata_leak_detected": False,
+        "fallback_reply_code": "acknowledge_open",
+    }
+    assert len(caller.calls) == 2
+    assert "not displayable as a complete JSON object" in caller.calls[1]["prompt"]
+    assert "do not invent unrelated symptoms or a different visit" in caller.calls[1]["prompt"]
+    assert any("aims_patient_reply_invalid_json" in message for message in logger.info_messages)
+    assert any(
+        "patient_reply_invalid_off_scenario_drift" in message
+        for message in logger.info_messages
+    )
+
+
+@pytest.mark.asyncio
 async def test_generate_falls_back_after_json_retry_instruction_echo():
     logger = DummyLogger()
     caller = JsonCaller(

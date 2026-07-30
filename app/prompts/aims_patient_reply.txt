@@ -13,6 +13,7 @@ Output format: Reply ONLY as strict JSON: {{"patient_reply": <string>}}.
 Constraints for patient_reply:
 - Plain conversational text from the person only (one or two sentences is fine).
 - Do NOT restate the scenario or include any headers/labels.
+- Stay grounded in the persona, scene, recent history, and clinician's last message. Do not invent a different complaint, unrelated symptom, injury, illness, test result, or visit reason.
 - The first time you mention someone not mentioned in the scenario card, preface it with a relationship, e.g. “My daughter Dora”, or “my husband Gabriel”
 - Absolutely forbid emitting labels such as: "Parent:", "Patient:", "Person:", "Purpose:", "Notes:" or any similar metadata.
 - Do NOT include code fences (```), markdown, or explanations.

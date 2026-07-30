@@ -7,7 +7,6 @@ from typing import Any
 
 from app.message_catalog import message, message_list
 
-
 DEFAULT_PRAISE_LABELS = [
     "Good job!",
     "Nice work!",
@@ -19,6 +18,7 @@ DEFAULT_PRAISE_LABELS = [
 IMPORTANT_FEEDBACK_CODES = {
     "secure_before_mirror",
 }
+CLASSIFICATION_UNAVAILABLE_CODE = "classification_unavailable"
 
 
 def _as_dict(value: Any) -> dict[str, Any]:
@@ -54,6 +54,21 @@ def _feedback_code(item: Mapping[str, Any] | None) -> str:
 
 def _is_important_feedback(item: Mapping[str, Any] | None) -> bool:
     return _feedback_code(item) in IMPORTANT_FEEDBACK_CODES
+
+
+def _classification_unavailable_text(coaching: Mapping[str, Any], has_step: bool) -> str | None:
+    if has_step:
+        return None
+
+    feedback_items = coaching.get("feedback_items")
+    if isinstance(feedback_items, list):
+        for raw_item in feedback_items:
+            item = _as_dict(raw_item)
+            if _feedback_code(item) == CLASSIFICATION_UNAVAILABLE_CODE:
+                return str(item.get("text") or "").strip() or message(
+                    "aims.classification_unavailable"
+                )
+    return None
 
 
 def step_feedback_label(
@@ -107,12 +122,18 @@ def _append_group_line(
 
 def _feedback_group_parts(groups: Mapping[str, list[str]]) -> list[str]:
     parts: list[str] = []
+    feedback_group = message("coaching.feedback_group")
     for label, lines in groups.items():
         if not lines:
             continue
-        nested = "\n".join(f"  - {line}" for line in lines if line)
+        nested = "\n".join(f"- {line}" for line in lines if line)
         if nested:
-            parts.append(f"{label}\n{nested}")
+            header = (
+                message("coaching.feedback_group_header", label=label)
+                if label == feedback_group
+                else message("coaching.step_group_header", step=label)
+            )
+            parts.append(f"{header}\n{nested}")
     return parts
 
 
@@ -182,8 +203,14 @@ def coaching_message_parts(
 
     parts: list[str] = []
     step = str(coaching.get("step") or "").strip()
-    if step and step not in {"null", "None"}:
-        parts.append(message("coaching.detected_step", step=step))
+    has_step = bool(step and step not in {"null", "None"})
+
+    unavailable_text = _classification_unavailable_text(coaching, has_step)
+    if unavailable_text:
+        parts.append(unavailable_text)
+        if include_deferred_nudge:
+            parts.append(message("coaching.deferred_nudge"))
+        return parts
 
     feedback_groups: OrderedDict[str, list[str]] = OrderedDict()
     feedback_items = coaching.get("feedback_items") or []
@@ -208,7 +235,11 @@ def coaching_message_parts(
     if not displayed_feedback_items and not displayed_step_feedback:
         reasons = _strings(coaching.get("reasons"))
         if reasons:
-            parts.append(message("coaching.feedback", feedback=reasons[0]))
+            feedback = message("coaching.feedback", feedback=reasons[0])
+            if has_step:
+                _append_group_line(feedback_groups, step, feedback)
+            else:
+                parts.append(feedback)
 
     tips = _strings(coaching.get("tips"))
     has_improvement = has_improvement_feedback_item or has_improvement_step_feedback
@@ -217,10 +248,15 @@ def coaching_message_parts(
         tip = message("coaching.tip", tip=tips[0])
         if feedback_groups:
             _append_group_line(feedback_groups, _tip_group_label(feedback_groups, step), tip)
+        elif has_step:
+            _append_group_line(feedback_groups, step, tip)
         else:
             parts.append(tip)
 
     parts.extend(_feedback_group_parts(feedback_groups))
+
+    if has_step and not feedback_groups:
+        parts.insert(0, message("coaching.step_group_header", step=step))
 
     if include_deferred_nudge:
         parts.append(message("coaching.deferred_nudge"))
@@ -233,7 +269,7 @@ def coaching_summary_text(
     *,
     include_deferred_nudge: bool = False,
 ) -> str:
-    return " | ".join(
+    return "\n\n".join(
         coaching_message_parts(
             coaching,
             include_deferred_nudge=include_deferred_nudge,

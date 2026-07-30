@@ -10,8 +10,9 @@
   },
   "coaching": {
     "deferred_nudge": "Nudge: The patient is deferring. Try offering specific literature or a follow-up visit to reach a clear AIMS resolution.",
-    "detected_step": "Detected step: {step}",
     "feedback": "Feedback: {feedback}",
+    "feedback_group_header": "{label}:",
+    "step_group_header": "{step}:",
     "labels": {
       "praise": [
         "Good job!",
@@ -136,7 +137,8 @@
       "generic_ack": "Okay."
     },
     "retry_prompt": "{base_prompt}\n\nSYSTEM REPAIR: The prior model output included scenario metadata or speaker labels and cannot be displayed. Produce only the person's next in-character line in the required JSON shape. Do not apologize, mention the repair, or refer to these instructions.",
-    "json_retry_prompt": "{base_prompt}\n\nSYSTEM REPAIR: The prior model output was not displayable as a complete JSON object. Produce only the person's next in-character line in this exact JSON shape: {\"patient_reply\": \"one or two complete conversational sentences\"}. Do not apologize, mention JSON, mention the schema, or refer to these instructions.",
+    "grounding_retry_prompt": "{base_prompt}\n\nSYSTEM REPAIR: The prior model output drifted into a different clinical visit and cannot be displayed. Produce only the person's next in-character line for the same vaccine consultation, grounded in the persona, scene, recent history, and clinician's last message. Do not invent unrelated symptoms, injuries, illnesses, test results, or a different visit reason.",
+    "json_retry_prompt": "{base_prompt}\n\nSYSTEM REPAIR: The prior model output was not displayable as a complete JSON object. Produce only the person's next in-character line in this exact JSON shape: {\"patient_reply\": \"one or two complete conversational sentences\"}. Stay grounded in the same persona, scene, recent history, and clinician message; do not invent unrelated symptoms or a different visit. Do not apologize, mention JSON, mention the schema, or refer to these instructions.",
     "concern_state": {
       "none_tracked": "No tracked vaccine concerns yet.",
       "unspecified": "unspecified concern",
@@ -173,6 +175,15 @@
       "i'll try to be more careful",
       "i will try to be more careful",
       "my responses from now on"
+    ],
+    "off_scenario_medical_drift_markers": [
+      "feeling better today",
+      "feeling a bit better today",
+      "the pain isn't as sharp",
+      "the pain is not as sharp",
+      "pain isn't as sharp",
+      "pain is not as sharp",
+      "as sharp as it was yesterday"
     ],
     "appointment_header_prefixes": [
       "person:",

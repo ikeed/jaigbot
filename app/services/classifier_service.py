@@ -311,6 +311,7 @@ class ClassifierService:
             temperature=self.temperature,
             max_tokens=self.max_tokens,
             system_instruction=system_instruction,
+            response_mime_type="application/json",
             thinking_budget=128,
         )
 

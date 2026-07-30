@@ -304,7 +304,7 @@ The API already returns a structured `coaching` object. But
 `app/services/chainlit/orchestrator.py` immediately turns it into pipe-delimited
 English text:
 
-- `Detected step: ...`
+- step group headers such as `Secure:`
 - `Feedback: ...`
 - `Tip: ...`
 - `Nudge: ...`
@@ -329,7 +329,7 @@ Cleanup direction:
 - Store `coach_entry.content` as a compatibility summary only.
 - Render labels from a small UI message catalog:
   - `coach.title`
-  - `coach.detected_step`
+  - `coach.step_group_header`
   - `coach.feedback`
   - `coach.tip`
   - `coach.nudge.deferred`
@@ -457,7 +457,7 @@ Create a small renderer-facing shape:
   "title_key": "coach.title",
   "items": [
     {
-      "label_key": "coach.detected_step",
+      "label_key": "coach.step_group_header",
       "value": "Mirror+Secure"
     },
     {
@@ -572,7 +572,7 @@ Tasks:
   replay source of truth.
 - Keep `content` as a backward-compatible English summary during migration.
 - Add a tiny English message catalog for labels, not full multilingual support:
-  - detected step
+  - step group header
   - feedback
   - tip
   - nudge
@@ -581,7 +581,7 @@ Tasks:
 Exit criteria:
 
 - No live rendering code has to split on `" | "`.
-- No live rendering code has to parse "Feedback:", "Tip:", or "Detected step:".
+- No live rendering code has to parse display prefixes such as "Feedback:" or "Tip:".
 - Replay still works for legacy history entries.
 
 ### Phase 5 - Replace endgame cue lists with semantic resolution fields
