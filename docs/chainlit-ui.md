@@ -55,7 +55,10 @@ Caveats for multi‑user deployments:
   ```
 
 ## Model and transport options
-- Switch models using `MODEL_ID` (e.g., `gemini-2.5-pro`, `gemini-2.5-pro-001`).
+- Switch the main reply model using `MODEL_ID` (e.g., `gemini-3.6-flash`).
+- Switch the AIMS classifier separately using `AIMS_CLASSIFIER_MODEL_ID`
+  (e.g., `gemini-3.5-flash-lite`) and tune classifier thinking with
+  `AIMS_CLASSIFIER_THINKING_LEVEL` (`minimal`, `low`, `medium`, or `high`).
 - Transport defaults: REST path is the default (recommended). To switch back to SDK path:
   ```bash
   export USE_VERTEX_REST=false   # default true

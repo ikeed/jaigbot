@@ -70,7 +70,8 @@ Set the following in your GitHub repo (Settings → Secrets and variables):
   - GCP_REGION     = var.region
   - GAR_REPO       = var.gar_repo
   - SERVICE_NAME   = var.service_name
-  - MODEL_ID       = gemini-2.5-pro (or your choice)
+  - MODEL_ID       = gemini-3.6-flash (or your choice)
+  - AIMS_CLASSIFIER_MODEL_ID = gemini-3.5-flash-lite (or your choice)
   - TEMPERATURE    = 0.2
   - MAX_TOKENS     = 256
 
@@ -209,7 +210,7 @@ Once roles are fixed and resources are imported if needed:
 
 ## Notes
 - Ensure Artifact Registry region matches Cloud Run region for efficiency.
-- The deploy workflow maps Terraform var.region to the GitHub variable GCP_REGION and sets Cloud Run env REGION accordingly. The backend can use a separate Vertex location via VERTEX_LOCATION (recommended: global for Gemini 2.x). Ensure your chosen MODEL_ID is available in that location (e.g., set VERTEX_LOCATION=global for gemini-2.5-pro).
+- The deploy workflow maps Terraform var.region to the GitHub variable GCP_REGION and sets Cloud Run env REGION accordingly. The backend can use a separate Vertex location via VERTEX_LOCATION. Ensure your chosen MODEL_ID and AIMS_CLASSIFIER_MODEL_ID are available in that location (e.g., set VERTEX_LOCATION=global for Gemini 3 Flash models).
 - WIF attribute_condition restricts deployments to configured branch refs. By default `github_branch_refs` permits `refs/heads/main` and `refs/heads/staging`.
 - The deploy workflow expects the runtime service account to exist and will set env vars during `gcloud run deploy`.
 

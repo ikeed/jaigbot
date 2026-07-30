@@ -46,7 +46,7 @@ def enable_coaching(monkeypatch):
     from app.config import settings
     monkeypatch.setattr(settings, "PROJECT_ID", "proj")
     monkeypatch.setattr(settings, "REGION", "us-central1")
-    monkeypatch.setattr(settings, "MODEL_ID", "gemini-2.5-pro")
+    monkeypatch.setattr(settings, "MODEL_ID", "gemini-3.6-flash")
     monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", True)
     
     # AIMS mapping mock is now handled globally by conftest.py

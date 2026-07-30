@@ -55,7 +55,7 @@ def test_chat_success_with_mock(monkeypatch):
     # Ensure env values are present for route checks
     monkeypatch.setattr(settings, "PROJECT_ID", "test-project")
     monkeypatch.setattr(settings, "REGION", "us-central1")
-    monkeypatch.setattr(settings, "MODEL_ID", "gemini-2.5-pro")
+    monkeypatch.setattr(settings, "MODEL_ID", "gemini-3.6-flash")
     
     # Force legacy path to ensure our mock is used
     monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", False)

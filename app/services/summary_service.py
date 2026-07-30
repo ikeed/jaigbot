@@ -157,7 +157,7 @@ async def _analysis_bullets(
         vertex_helpers.vertex_call_with_fallback_text,
         project=settings.PROJECT_ID,
         region=settings.VERTEX_LOCATION,
-        primary_model="gemini-2.5-flash",
+        primary_model=settings.AIMS_CLASSIFIER_MODEL_ID,
         fallbacks=[settings.MODEL_ID] + list(settings.MODEL_FALLBACKS or []),
         temperature=min(settings.TEMPERATURE, 0.2),
         max_tokens=min(settings.MAX_TOKENS, 384),

@@ -51,11 +51,11 @@ Response without coaching:
 ```json
 {
   "reply": "...",
-  "model": "gemini-2.5-pro",
+  "model": "gemini-3.6-flash",
   "latencyMs": 123,
   "sessionId": "abc-123",
   "text": "...",
-  "modelId": "gemini-2.5-pro",
+  "modelId": "gemini-3.6-flash",
   "latency_ms": 123
 }
 ```
@@ -65,7 +65,7 @@ Response with coaching:
 ```json
 {
   "reply": "...",
-  "model": "gemini-2.5-pro",
+  "model": "gemini-3.6-flash",
   "latencyMs": 234,
   "sessionId": "abc-123",
   "coaching": {
