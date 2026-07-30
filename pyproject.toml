@@ -19,6 +19,7 @@ dependencies = {file = ["requirements.txt"]}
 # app modules that read settings at import time.
 "chainlit_app.py" = ["E402"]
 "run_app.py" = ["E402"]
+"scripts/benchmark_classifier_models.py" = ["E402"]
 
 [tool.mypy]
 implicit_optional = true
