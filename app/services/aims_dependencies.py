@@ -116,6 +116,8 @@ class AimsEndgameDependency(Protocol):
         reply_payload: dict[str, Any],
         session_obj: dict[str, Any] | None,
         session_id: str,
+        *,
+        classifier_resolution: Any = None,
     ) -> dict[str, Any] | None:
         ...
 

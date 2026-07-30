@@ -133,6 +133,21 @@ def test_build_config_includes_json_schema_and_thinking_budget():
     assert cfg.thinking_config.thinking_budget == 64
 
 
+def test_build_config_prefers_thinking_level_over_budget():
+    cfg = VertexClient(project="proj", region="us-central1", model_id="model")._build_config(
+        temperature=0.1,
+        max_tokens=256,
+        system_instruction=None,
+        response_mime_type="application/json",
+        response_schema=None,
+        thinking_budget=64,
+        thinking_level="minimal",
+    )
+
+    assert cfg.thinking_config.thinking_level.value == "MINIMAL"
+    assert cfg.thinking_config.thinking_budget is None
+
+
 def test_merge_with_overlap_covers_no_space_before_and_no_progress():
     assert VertexClient.merge_with_overlap("Hello(", "world)") == "Hello(world)"
     assert VertexClient.merge_with_overlap("Already complete", "") == "Already complete"

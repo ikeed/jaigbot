@@ -1118,7 +1118,7 @@
       "Parent/Patient: "
     ],
     "model_unavailable": "Model '{model_id}' not available in '{region}'.",
-    "model_flash_recommendation": "Tip: set MODEL_ID=gemini-2.5-flash for this environment if Gemini 2.5 Pro is not enabled."
+    "model_flash_recommendation": "Tip: set MODEL_ID=gemini-3.6-flash or AIMS_CLASSIFIER_MODEL_ID=gemini-3.5-flash-lite for this environment if the configured model is not enabled."
   },
   "roles": {
     "authors": {
@@ -1147,7 +1147,7 @@
     "message_too_large": "Message too large (max 2 KiB)",
     "report_internal_server_error": "Internal server error during report",
     "report_success": "Issue reported and session ended.",
-    "vertex_model_not_found": "Publisher model not found or access denied. Verify MODEL_ID spelling and REGION; ensure Vertex AI API is enabled, billing is active, and your ADC principal has roles/aiplatform.user. Use GET /models or /modelcheck to confirm availability in this region. Consider switching MODEL_ID to one listed there (e.g., 'gemini-1.5-pro') or changing REGION.",
+    "vertex_model_not_found": "Publisher model not found or access denied. Verify MODEL_ID spelling and VERTEX_LOCATION; ensure Vertex AI API is enabled, billing is active, and your ADC principal has roles/aiplatform.user. Use GET /models or /modelcheck to confirm availability in this location. Consider switching MODEL_ID to a GA model available there, such as 'gemini-3.6-flash' or 'gemini-3.5-flash-lite'.",
     "vertex_upstream": "Upstream error calling Vertex AI"
   },
   "templates": {

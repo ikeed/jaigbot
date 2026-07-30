@@ -47,10 +47,13 @@ fi
 # Prefer PROJECT_ID, then GCP_PROJECT_ID, then hardcoded default
 export PROJECT_ID="${PROJECT_ID:-${GCP_PROJECT_ID:-your-project-id}}"
 export REGION="${REGION:-${GCP_REGION:-us-west4}}"
-export MODEL_ID="${MODEL_ID:-gemini-2.5-pro}"
+export VERTEX_LOCATION="${VERTEX_LOCATION:-global}"
+export MODEL_ID="${MODEL_ID:-gemini-3.6-flash}"
+export AIMS_CLASSIFIER_MODEL_ID="${AIMS_CLASSIFIER_MODEL_ID:-gemini-3.5-flash-lite}"
+export AIMS_CLASSIFIER_THINKING_LEVEL="${AIMS_CLASSIFIER_THINKING_LEVEL:-minimal}"
 export TEMPERATURE="${TEMPERATURE:-0.2}"
 export MAX_TOKENS="${MAX_TOKENS:-512}"
-export MODEL_FALLBACKS="${MODEL_FALLBACKS:-gemini-2.5-pro-001,gemini-2.5-pro}"
+export MODEL_FALLBACKS="${MODEL_FALLBACKS:-gemini-3.5-flash,gemini-3.5-flash-lite}"
 export LOG_LEVEL="${LOG_LEVEL:-info}"
 export MEMORY_PERSIST_PATH="${MEMORY_PERSIST_PATH:-.chainlit/session_memory.json}"
 # Force Chainlit UI language to English by default (can be overridden)
@@ -59,8 +62,8 @@ PORT="${PORT:-8080}"
 
 # 4) Light sanity info
 echo "[dev_run] Using configuration:"
-printf '  PROJECT_ID=%s\n  REGION=%s\n  MODEL_ID=%s\n  MODEL_FALLBACKS=%s\n  TEMPERATURE=%s\n  MAX_TOKENS=%s\n  PORT=%s\n' \
-  "$PROJECT_ID" "$REGION" "$MODEL_ID" "$MODEL_FALLBACKS" "$TEMPERATURE" "$MAX_TOKENS" "$PORT"
+printf '  PROJECT_ID=%s\n  REGION=%s\n  VERTEX_LOCATION=%s\n  MODEL_ID=%s\n  AIMS_CLASSIFIER_MODEL_ID=%s\n  AIMS_CLASSIFIER_THINKING_LEVEL=%s\n  MODEL_FALLBACKS=%s\n  TEMPERATURE=%s\n  MAX_TOKENS=%s\n  PORT=%s\n' \
+  "$PROJECT_ID" "$REGION" "$VERTEX_LOCATION" "$MODEL_ID" "$AIMS_CLASSIFIER_MODEL_ID" "$AIMS_CLASSIFIER_THINKING_LEVEL" "$MODEL_FALLBACKS" "$TEMPERATURE" "$MAX_TOKENS" "$PORT"
 
 # 5) ADC hint (non-fatal): if no token can be printed, advise the user once
 if ! command -v gcloud >/dev/null 2>&1; then

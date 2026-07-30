@@ -48,7 +48,7 @@ def ensure_env(monkeypatch):
     # Ensure base env values
     monkeypatch.setattr(settings, "PROJECT_ID", "proj")
     monkeypatch.setattr(settings, "REGION", "us-central1")
-    monkeypatch.setattr(settings, "MODEL_ID", "gemini-2.5-pro")
+    monkeypatch.setattr(settings, "MODEL_ID", "gemini-3.6-flash")
     # Enable coaching by default for these tests
     monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", True)
     # Default VertexClient stub (individual tests override via VertexGateway + VertexClient)

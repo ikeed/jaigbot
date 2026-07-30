@@ -125,8 +125,16 @@ class AimsEndgameService:
         _reply_payload: dict[str, Any],
         session_obj: dict[str, Any] | None,
         session_id: str,
+        *,
+        classifier_resolution: Any = None,
     ) -> dict[str, Any] | None:
-        """Check for end-game scenarios using structured semantic detection."""
+        """Check for end-game scenarios using structured semantic detection.
+
+        ``classifier_resolution`` is from the clinician turn before the patient
+        reply is generated. A negative value must not veto endgame detection
+        because the patient reply may contain the first acceptance signal.
+        """
+        del classifier_resolution
         started = time.time()
         try:
             if mem is None:

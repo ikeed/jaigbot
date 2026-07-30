@@ -94,6 +94,15 @@ class VertexClient:
         return cleaned if isinstance(cleaned, dict) and len(cleaned) > 0 else None
 
     @staticmethod
+    def _normalize_thinking_level(value: Optional[str]) -> Optional[types.ThinkingLevel]:
+        if not value:
+            return None
+        normalized = str(value).strip().upper()
+        if not normalized:
+            return None
+        return types.ThinkingLevel(normalized)
+
+    @staticmethod
     def merge_with_overlap(base: str, addition: str, max_overlap: int = 200) -> str:
         """
         Merge addition onto base by trimming any overlapping prefix of `addition`
@@ -167,6 +176,7 @@ class VertexClient:
         response_mime_type: Optional[str],
         response_schema: Optional[Dict[str, Any]],
         thinking_budget: Optional[int] = None,
+        thinking_level: Optional[str] = None,
     ) -> types.GenerateContentConfig:
         """Build a GenerateContentConfig for the Gen AI SDK."""
         _resp_mime = response_mime_type or "text/plain"
@@ -185,7 +195,11 @@ class VertexClient:
             config_kwargs["system_instruction"] = system_instruction
         if _san_schema:
             config_kwargs["response_schema"] = _san_schema
-        if thinking_budget is not None:
+        if thinking_level:
+            config_kwargs["thinking_config"] = types.ThinkingConfig(
+                thinking_level=self._normalize_thinking_level(thinking_level)
+            )
+        elif thinking_budget is not None:
             config_kwargs["thinking_config"] = types.ThinkingConfig(
                 thinking_budget=thinking_budget
             )
@@ -267,6 +281,7 @@ class VertexClient:
         response_mime_type: Optional[str] = None,
         response_schema: Optional[Dict[str, Any]] = None,
         thinking_budget: Optional[int] = None,
+        thinking_level: Optional[str] = None,
     ) -> str:
         """Native async generation using the Gen AI SDK.
 
@@ -277,7 +292,7 @@ class VertexClient:
             client = self._get_client()
             config = self._build_config(
                 temperature, max_tokens, system_instruction,
-                response_mime_type, response_schema, thinking_budget,
+                response_mime_type, response_schema, thinking_budget, thinking_level,
             )
 
             response = await client.aio.models.generate_content(
@@ -341,6 +356,7 @@ class VertexClient:
         response_mime_type: Optional[str] = None,
         response_schema: Optional[Dict[str, Any]] = None,
         thinking_budget: Optional[int] = None,
+        thinking_level: Optional[str] = None,
     ) -> tuple[str, dict]:
         """Generate text and return both the text and useful metadata for logging.
 
@@ -354,7 +370,7 @@ class VertexClient:
             client = self._get_client()
             config = self._build_config(
                 temperature, max_tokens, system_instruction,
-                response_mime_type, response_schema, thinking_budget,
+                response_mime_type, response_schema, thinking_budget, thinking_level,
             )
 
             self.logger.debug(

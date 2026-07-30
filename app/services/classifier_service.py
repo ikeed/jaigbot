@@ -42,6 +42,8 @@ class ClassifierService:
         max_tokens: int = 500,
         client_cls: Any = VertexClient,
         heuristic_fallback_enabled: bool = False,
+        thinking_level: str | None = "minimal",
+        thinking_budget: int | None = None,
     ):
         self.project_id = project_id
         self.location = location
@@ -51,6 +53,8 @@ class ClassifierService:
         self.max_tokens = max_tokens
         self.client_cls = client_cls
         self.heuristic_fallback_enabled = heuristic_fallback_enabled
+        self.thinking_level = thinking_level
+        self.thinking_budget = thinking_budget
 
     async def classify_turn(self, *, clinician_message: str, person_last: str, history: List[Dict[str, str]],
                             prior_announced: bool, prior_phase: str, mapping: Dict[str, Any], context_turns: int = 3,
@@ -292,9 +296,9 @@ class ClassifierService:
     ) -> str:
         """Call Gemini with JSON response expectation.
 
-        Uses thinking_budget=128 to minimize thinking for classification tasks,
-        reducing latency and cost. 128 is the minimum supported by gemini-2.5-pro;
-        gemini-2.5-flash supports 0 but we use 128 for cross-model compatibility.
+        Uses a low thinking setting by default because classification is a
+        structured judgment task on a compact transcript, not open-ended
+        deliberation.
 
         When system_instruction is provided, the static AIMS rubric and reference
         data are passed separately from the per-turn prompt. This enables implicit
@@ -312,7 +316,8 @@ class ClassifierService:
             max_tokens=self.max_tokens,
             system_instruction=system_instruction,
             response_mime_type="application/json",
-            thinking_budget=128,
+            thinking_budget=self.thinking_budget,
+            thinking_level=self.thinking_level,
         )
 
     @staticmethod

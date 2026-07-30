@@ -208,7 +208,8 @@ async def test_classify_turn_prompt_includes_recent_context_and_concern_lists(
         mock_vertex_client.generate_text_async.await_args.kwargs["response_mime_type"]
         == "application/json"
     )
-    assert mock_vertex_client.generate_text_async.await_args.kwargs["thinking_budget"] == 128
+    assert mock_vertex_client.generate_text_async.await_args.kwargs["thinking_budget"] is None
+    assert mock_vertex_client.generate_text_async.await_args.kwargs["thinking_level"] == "minimal"
 
 @pytest.mark.asyncio
 async def test_classify_turn_with_person_topic(classifier_service, mock_vertex_client):

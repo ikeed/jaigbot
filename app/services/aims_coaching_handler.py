@@ -145,6 +145,9 @@ class AimsCoachingHandler:
         self.vertex_location = self.vertex_config.vertex_location
         self.model_id = self.vertex_config.model_id
         self.model_fallbacks = self.vertex_config.model_fallbacks
+        self.classifier_model_id = self.vertex_config.classifier_model_id
+        self.classifier_thinking_level = self.vertex_config.classifier_thinking_level
+        self.classifier_thinking_budget = self.vertex_config.classifier_thinking_budget
         self.temperature = self.vertex_config.temperature
         self.max_tokens = self.vertex_config.max_tokens
         
@@ -172,12 +175,14 @@ class AimsCoachingHandler:
         self.classifier_service = classifier_service or ClassifierService(
             project_id=self.project_id,
             location=self.vertex_location,
-            model_id=self.model_id,
+            model_id=self.classifier_model_id,
             logger=self.logger,
             temperature=self.classify_temperature,
             max_tokens=self.classify_max_tokens,
             client_cls=self.client_cls,
             heuristic_fallback_enabled=self.heuristic_fallback_enabled,
+            thinking_level=self.classifier_thinking_level,
+            thinking_budget=self.classifier_thinking_budget,
         )
         self.patient_reply_service = patient_reply_service or PatientReplyService(
             model_json_caller=self._call_vertex_json,
@@ -450,7 +455,12 @@ class AimsCoachingHandler:
             session_obj = {}
         
         # Step 8: Check for end-game scenarios
-        coach_post = await self.endgame_service.check(mem, reply_payload, session_obj, ctx.session_id)
+        coach_post = await self.endgame_service.check(
+            mem,
+            reply_payload,
+            session_obj,
+            ctx.session_id,
+        )
         
         # Save coach_post to memory if it exists, so it can be archived
         if coach_post and mem is not None:
@@ -612,12 +622,12 @@ class AimsCoachingHandler:
     
     def _primary_for_json(self, log_path: str) -> tuple[str, list[str]]:
         """Select primary and fallback models for JSON tasks based on call path.
-        - coach_classify: Pro primary (better semantics), Flash as fallback(s)
-        - otherwise (e.g., endgame_detect): Flash primary, Pro as fallback
+        - coach_classify: configured main model primary, Flash fallback(s)
+        - otherwise (e.g., endgame_detect): Flash primary, configured main model fallback
         """
         lp = (log_path or "").lower()
         # Start with configured fallbacks, ensuring uniqueness and preserving order
-        pro_primary = self.model_id
+        configured_primary = self.model_id
         try:
             cfg_fallbacks = [m for m in (self.model_fallbacks or []) if m]
         except Exception as e:
@@ -625,11 +635,9 @@ class AimsCoachingHandler:
             cfg_fallbacks = []
         flash = DEFAULT_MODEL_FLASH
         if lp == "coach_classify":
-            # Pro primary, ensure Flash is in fallbacks
             fb = [x for x in ([flash] + cfg_fallbacks) if x]
-            return pro_primary, fb
-        # Default: Flash primary, Pro then others as fallbacks
-        fb = [x for x in ([pro_primary] + cfg_fallbacks) if x]
+            return configured_primary, fb
+        fb = [x for x in ([configured_primary] + cfg_fallbacks) if x]
         return flash, fb
 
     async def _call_vertex_json(self, prompt: str, schema: dict, log_path: str, *, temperature: float | None = None, max_tokens: int | None = None) -> str:

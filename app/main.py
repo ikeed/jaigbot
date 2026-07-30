@@ -92,6 +92,9 @@ def _vertex_config() -> dict:
         "vertex_location": settings.VERTEX_LOCATION,
         "model_id": settings.MODEL_ID,
         "model_fallbacks": settings.MODEL_FALLBACKS,
+        "classifier_model_id": settings.AIMS_CLASSIFIER_MODEL_ID,
+        "classifier_thinking_level": settings.AIMS_CLASSIFIER_THINKING_LEVEL,
+        "classifier_thinking_budget": settings.AIMS_CLASSIFIER_THINKING_BUDGET,
         "temperature": settings.TEMPERATURE,
         "max_tokens": settings.MAX_TOKENS,
         # Pass client class from app.main so tests can monkeypatch m.VertexClient.

@@ -83,8 +83,10 @@ class _MockClassifierService:
     def __init__(self, result: dict):
         self._result = result
         self.last_history_text: str = ""
+        self.calls = 0
 
     async def detect_endgame(self, *, history_text: str, **kwargs) -> dict:
+        self.calls += 1
         self.last_history_text = history_text
         return self._result
 
@@ -352,6 +354,55 @@ def test_heuristic_fallback_silent_on_no_endgame_match():
     service = _make_endgame_service(mock_svc)
     result = _run(service.check(store["s7"], {}, None, "s7"))
     assert result is None
+
+
+def test_classifier_not_resolved_resolution_does_not_skip_post_reply_acceptance():
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_vaccine",
+            "summary": "Sarah agreed to vaccinate today.",
+            "accepted_vaccine": True,
+            "remaining_active_concern": False,
+            "reason": "patient_reply_acceptance",
+        }
+    )
+    store = {
+        "s7-post-reply-acceptance": {
+            "history": [
+                {
+                    "role": "user",
+                    "content": (
+                        "Would you like to do the booster today, or would you "
+                        "rather take the literature home and schedule a follow-up?"
+                    ),
+                },
+                {
+                    "role": "assistant",
+                    "content": (
+                        "Let's go ahead and do the booster today so Emily is "
+                        "protected, and I'll take that information sheet home too."
+                    ),
+                },
+            ],
+            "aims_state": _announced_state(),
+        }
+    }
+    service = _make_endgame_service(mock_svc, heuristic_fallback_enabled=False)
+
+    result = _run(
+        service.check(
+            store["s7-post-reply-acceptance"],
+            {},
+            None,
+            "s7-post-reply-acceptance",
+            classifier_resolution={"is_endgame": False, "resolution_type": "not_resolved"},
+        )
+    )
+
+    assert result is not None
+    assert result["lines"][0] == "Outcome: Sarah agreed to vaccinate today."
+    assert mock_svc.calls == 1
 
 
 def test_heuristic_fallback_requires_patient_acceptance_not_clinician_offer():

@@ -22,6 +22,12 @@ When the signal is clear, include `person_events`, `aims.observations`, `aims.fe
 Use these fields for decisions the app should not infer by searching English text.
 If unsure, omit the optional field rather than guessing.
 
+### COMPACT OUTPUT RULES
+- Avoid duplicate prose across `reasons`, `step_feedback`, and `feedback_items`.
+- Keep `reasons` to at most 2 short support phrases.
+- Keep `feedback_items` to at most 3 items, with at most 1 short `evidence_spans` entry per item.
+- Keep `reasoning` to 12 words or fewer.
+
 ### OUTPUT — JSON only
 {{
   "is_small_talk": (boolean),
