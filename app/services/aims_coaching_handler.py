@@ -38,11 +38,6 @@ from app.constants import (
 )
 from app.message_catalog import message
 from app.models import ChatRequest
-from app.services.chat_context import ChatContext
-from app.services.chat_helpers import strip_appointment_headers
-from app.services.classifier_service import ClassifierService
-from app.services.clinician_identity import clinician_display_name_from_user_info
-from app.services.coaching_tip_sanitizer import sanitize_coaching_tips
 from app.services.aims_dependencies import (
     AimsEndgameDependency,
     AimsFeedbackDependency,
@@ -59,15 +54,20 @@ from app.services.aims_feedback_service import AimsFeedbackService
 from app.services.aims_handler_config import AimsMemoryConfig, AimsVertexConfig
 from app.services.aims_metrics_service import AimsMetricsService
 from app.services.aims_state_service import AimsStateService
-from app.services.aims_turn_telemetry import AimsTurnTelemetry
 from app.services.aims_turn_coordinator import AimsTurnCoordinator
-from app.services.summary_service import build_summary_analysis_bullets
+from app.services.aims_turn_telemetry import AimsTurnTelemetry
+from app.services.chat_context import ChatContext
+from app.services.chat_helpers import strip_appointment_headers
+from app.services.classifier_service import ClassifierService
+from app.services.clinician_identity import clinician_display_name_from_user_info
 from app.services.coach_feedback_history_service import CoachFeedbackHistoryService
 from app.services.coach_post import (
     VaccineRelevanceGate,
     AimsPostProcessor,
 )
+from app.services.coaching_tip_sanitizer import sanitize_coaching_tips
 from app.services.patient_reply_service import PatientReplyService
+from app.services.summary_service import build_summary_analysis_bullets
 from app.services.vertex_helpers import (
     avertex_call_with_fallback_json,
     get_last_model_used
@@ -153,7 +153,10 @@ class AimsCoachingHandler:
         self.classify_max_tokens = int(os.getenv("AIMS_CLASSIFY_MAX_TOKENS", "4096"))
         self.endgame_temperature = float(os.getenv("AIMS_ENDGAME_TEMPERATURE", "0.1"))
         self.endgame_max_tokens = int(os.getenv("AIMS_ENDGAME_MAX_TOKENS", "192"))
-        self.classify_budget_s = float(os.getenv("AIMS_CLASSIFY_BUDGET_S", "30.0"))
+        self.reply_max_tokens = int(
+            os.getenv("AIMS_REPLY_MAX_TOKENS", str(max(self.max_tokens, 1536)))
+        )
+        self.classify_budget_s = float(os.getenv("AIMS_CLASSIFY_BUDGET_S", "60.0"))
         self.heuristic_fallback_enabled = (
             os.getenv("AIMS_HEURISTIC_FALLBACK_ENABLED", "false").strip().lower()
             not in {"0", "false", "no", "off"}
@@ -180,7 +183,7 @@ class AimsCoachingHandler:
             model_json_caller=self._call_vertex_json,
             logger=self.logger,
             temperature=self.temperature,
-            max_tokens=self.max_tokens,
+            max_tokens=self.reply_max_tokens,
         )
         self.metrics_service = metrics_service or AimsMetricsService(logger=self.logger)
         self.state_service = state_service or AimsStateService(

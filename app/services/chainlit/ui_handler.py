@@ -10,6 +10,17 @@ from app.chat_roles import (
     ROLE_USER,
     get_ui_attributes,
 )
+from app.constants import (
+    STEP_ANNOUNCE,
+    STEP_ANNOUNCE_INQUIRE,
+    STEP_INQUIRE,
+    STEP_MIRROR,
+    STEP_MIRROR_INQUIRE,
+    STEP_MIRROR_SECURE,
+    STEP_MIRROR_SECURE_INQUIRE,
+    STEP_SECURE,
+    STEP_SECURE_INQUIRE,
+)
 from app.message_catalog import message
 from app.services.coaching_display import (
     coaching_message_parts,
@@ -18,14 +29,50 @@ from app.services.coaching_display import (
 
 logger = logging.getLogger(__name__)
 
+STEP_LABELS = {
+    STEP_ANNOUNCE,
+    STEP_INQUIRE,
+    STEP_MIRROR,
+    STEP_SECURE,
+    STEP_ANNOUNCE_INQUIRE,
+    STEP_MIRROR_INQUIRE,
+    STEP_MIRROR_SECURE,
+    STEP_SECURE_INQUIRE,
+    STEP_MIRROR_SECURE_INQUIRE,
+}
+
+
 class UIHandler:
     """Handles all formatting and sending of messages to the Chainlit frontend."""
 
     @staticmethod
     def _format_parts(title: str, parts: list[str]) -> str:
-        clean_parts = [p for p in parts if p and p != title]
-        bullets = "\n".join(f"- {p}" for p in clean_parts)
-        return f"**{title}**\n\n{bullets}" if bullets else f"**{title}**"
+        clean_parts = [UIHandler._normalize_part(p) for p in parts if p and p != title]
+        lines: list[str] = []
+        for part in clean_parts:
+            if not part:
+                continue
+            if "\n" in part:
+                if lines:
+                    lines.append("")
+                lines.extend(part.splitlines())
+            elif part.endswith(":"):
+                lines.append(part)
+            else:
+                lines.append(f"- {part}")
+        body = "\n".join(lines)
+        return f"**{title}**\n\n{body}" if body else f"**{title}**"
+
+    @staticmethod
+    def _normalize_part(part: str) -> str:
+        text = (part or "").strip()
+        if ":" in text:
+            step = text.split(":", 1)[1].strip()
+        else:
+            step = ""
+        if step in STEP_LABELS:
+            return message("coaching.step_group_header", step=step) if step else ""
+        return text
 
     @staticmethod
     def format_coach_message(text: str) -> str:

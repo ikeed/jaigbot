@@ -92,12 +92,15 @@ class PatientReplyService:
                 validate_json(cand, REPLY_SCHEMA)
 
                 text = cand.get("patient_reply", "").strip()
-                validation = self._validate_reply_text(text)
+                validation = self._validate_reply_text(
+                    text,
+                    grounding_text=reply_prompt,
+                )
                 if not validation["reply_valid"]:
-                    reason = (
-                        "patient_reply_invalid_metadata"
-                        if validation["metadata_leak_detected"]
-                        else "patient_reply_invalid_instruction_echo"
+                    reason = self._validation_failure_reason(
+                        text,
+                        validation=validation,
+                        grounding_text=reply_prompt,
                     )
                     raise ReplyValidationError(reason, validation)
 
@@ -131,7 +134,10 @@ class PatientReplyService:
                 )
 
                 if attempt == 1:
-                    prompt_for_attempt = self._retry_prompt(reply_prompt)
+                    prompt_for_attempt = self._retry_prompt(
+                        reply_prompt,
+                        reason=str(ve),
+                    )
                     continue
 
                 fallback_code = (
@@ -187,8 +193,13 @@ class PatientReplyService:
         fallback_code = "acknowledge_resolved" if no_open_concerns else "generic_ack"
         return self._fallback_payload(fallback_code)
 
-    @staticmethod
-    def _validate_reply_text(text: str) -> dict[str, Any]:
+    @classmethod
+    def _validate_reply_text(
+        cls,
+        text: str,
+        *,
+        grounding_text: str = "",
+    ) -> dict[str, Any]:
         """Validate display text without rewriting it."""
         metadata_leak_detected = False
         for line in (text or "").splitlines():
@@ -198,18 +209,67 @@ class PatientReplyService:
             if lowered.startswith(tuple(message_list("validation.metadata_label_prefixes"))):
                 metadata_leak_detected = True
                 break
-        normalized_text = " ".join((text or "").lower().split())
+        normalized_text = cls._normalize_validation_text(text)
         instruction_echo_detected = any(
-            marker in normalized_text
+            cls._normalize_validation_text(marker) in normalized_text
             for marker in message_list("validation.instruction_echo_markers")
+        )
+        off_scenario_medical_drift_detected = cls._detect_off_scenario_medical_drift(
+            text,
+            grounding_text=grounding_text,
         )
         return {
             "reply_valid": bool(text)
             and not metadata_leak_detected
-            and not instruction_echo_detected,
+            and not instruction_echo_detected
+            and not off_scenario_medical_drift_detected,
             "metadata_leak_detected": metadata_leak_detected,
             "fallback_reply_code": None,
         }
+
+    @staticmethod
+    def _normalize_validation_text(text: str) -> str:
+        return " ".join((text or "").lower().replace("’", "'").split())
+
+    @classmethod
+    def _detect_off_scenario_medical_drift(
+        cls,
+        text: str,
+        *,
+        grounding_text: str = "",
+    ) -> bool:
+        normalized_text = cls._normalize_validation_text(text)
+        if not normalized_text:
+            return False
+
+        normalized_grounding = cls._normalize_validation_text(grounding_text)
+        for marker in message_list("validation.off_scenario_medical_drift_markers"):
+            normalized_marker = cls._normalize_validation_text(marker)
+            if not normalized_marker:
+                continue
+            if (
+                normalized_marker in normalized_text
+                and normalized_marker not in normalized_grounding
+            ):
+                return True
+        return False
+
+    @classmethod
+    def _validation_failure_reason(
+        cls,
+        text: str,
+        *,
+        validation: dict[str, Any],
+        grounding_text: str = "",
+    ) -> str:
+        if validation["metadata_leak_detected"]:
+            return "patient_reply_invalid_metadata"
+        if cls._detect_off_scenario_medical_drift(
+            text,
+            grounding_text=grounding_text,
+        ):
+            return "patient_reply_invalid_off_scenario_drift"
+        return "patient_reply_invalid_instruction_echo"
 
     @staticmethod
     def _fallback_payload(
@@ -228,7 +288,9 @@ class PatientReplyService:
         }
 
     @staticmethod
-    def _retry_prompt(base_prompt: str) -> str:
+    def _retry_prompt(base_prompt: str, *, reason: str) -> str:
+        if reason == "patient_reply_invalid_off_scenario_drift":
+            return message("patient_reply.grounding_retry_prompt", base_prompt=base_prompt)
         return message("patient_reply.retry_prompt", base_prompt=base_prompt)
 
     @staticmethod

@@ -3,8 +3,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.classifier_service import ClassifierService
 from app.models import ClassifierResult
+from app.services.classifier_service import ClassifierService
+
 
 @pytest.fixture
 def mock_vertex_client():
@@ -203,6 +204,11 @@ async def test_classify_turn_prompt_includes_recent_context_and_concern_lists(
     assert "Mirrored Concerns: trust" in prompt
     assert "Phase: InquireMirror" in prompt
     assert "Triple-Move" in system_instruction
+    assert (
+        mock_vertex_client.generate_text_async.await_args.kwargs["response_mime_type"]
+        == "application/json"
+    )
+    assert mock_vertex_client.generate_text_async.await_args.kwargs["thinking_budget"] == 128
 
 @pytest.mark.asyncio
 async def test_classify_turn_with_person_topic(classifier_service, mock_vertex_client):
