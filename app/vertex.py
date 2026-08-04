@@ -14,6 +14,7 @@ MAX_CONTINUATIONS = int(os.getenv("MAX_CONTINUATIONS", "2"))
 CONTINUE_TAIL_CHARS = int(os.getenv("CONTINUE_TAIL_CHARS", "500"))
 CONTINUE_INSTRUCTION_ENABLED = os.getenv("CONTINUE_INSTRUCTION_ENABLED", "true").lower() == "true"
 MIN_CONTINUE_GROWTH = int(os.getenv("MIN_CONTINUE_GROWTH", "10"))
+MAX_TOKEN_FINISH_REASONS = frozenset({"MAX_TOKENS", "MAX_TOKEN", "MAX_OUTPUT_TOKENS"})
 
 
 class VertexAIError(Exception):
@@ -93,6 +94,15 @@ class VertexClient:
         return cleaned if isinstance(cleaned, dict) and len(cleaned) > 0 else None
 
     @staticmethod
+    def _normalize_thinking_level(value: Optional[str]) -> Optional[types.ThinkingLevel]:
+        if not value:
+            return None
+        normalized = str(value).strip().upper()
+        if not normalized:
+            return None
+        return types.ThinkingLevel(normalized)
+
+    @staticmethod
     def merge_with_overlap(base: str, addition: str, max_overlap: int = 200) -> str:
         """
         Merge addition onto base by trimming any overlapping prefix of `addition`
@@ -166,6 +176,7 @@ class VertexClient:
         response_mime_type: Optional[str],
         response_schema: Optional[Dict[str, Any]],
         thinking_budget: Optional[int] = None,
+        thinking_level: Optional[str] = None,
     ) -> types.GenerateContentConfig:
         """Build a GenerateContentConfig for the Gen AI SDK."""
         _resp_mime = response_mime_type or "text/plain"
@@ -184,7 +195,11 @@ class VertexClient:
             config_kwargs["system_instruction"] = system_instruction
         if _san_schema:
             config_kwargs["response_schema"] = _san_schema
-        if thinking_budget is not None:
+        if thinking_level:
+            config_kwargs["thinking_config"] = types.ThinkingConfig(
+                thinking_level=self._normalize_thinking_level(thinking_level)
+            )
+        elif thinking_budget is not None:
             config_kwargs["thinking_config"] = types.ThinkingConfig(
                 thinking_budget=thinking_budget
             )
@@ -266,6 +281,7 @@ class VertexClient:
         response_mime_type: Optional[str] = None,
         response_schema: Optional[Dict[str, Any]] = None,
         thinking_budget: Optional[int] = None,
+        thinking_level: Optional[str] = None,
     ) -> str:
         """Native async generation using the Gen AI SDK.
 
@@ -276,7 +292,7 @@ class VertexClient:
             client = self._get_client()
             config = self._build_config(
                 temperature, max_tokens, system_instruction,
-                response_mime_type, response_schema, thinking_budget,
+                response_mime_type, response_schema, thinking_budget, thinking_level,
             )
 
             response = await client.aio.models.generate_content(
@@ -293,6 +309,8 @@ class VertexClient:
                 "finishReason": meta.get("finishReason"),
                 "textLen": meta.get("textLen"),
                 "thoughtLen": meta.get("thoughtLen", 0),
+                "candidatesTokens": meta.get("candidatesTokens"),
+                "thoughtsTokens": meta.get("thoughtsTokens"),
                 "cachedContentTokens": meta.get("cachedContentTokens"),
                 "hasText": bool(text),
             }))
@@ -300,6 +318,20 @@ class VertexClient:
             if not text:
                 raise VertexAIError(
                     "No text candidates returned from model (possibly safety blocked)"
+                )
+            if (
+                response_mime_type == "application/json"
+                and meta.get("finishReason") in MAX_TOKEN_FINISH_REASONS
+            ):
+                self.logger.warning(json.dumps({
+                    "event": "genai_async_json_max_tokens",
+                    "modelId": self.model_id,
+                    "textLen": meta.get("textLen"),
+                    "candidatesTokens": meta.get("candidatesTokens"),
+                    "thoughtsTokens": meta.get("thoughtsTokens"),
+                }))
+                raise VertexAIError(
+                    "Model stopped at max tokens before completing JSON response"
                 )
             return text
 
@@ -324,6 +356,7 @@ class VertexClient:
         response_mime_type: Optional[str] = None,
         response_schema: Optional[Dict[str, Any]] = None,
         thinking_budget: Optional[int] = None,
+        thinking_level: Optional[str] = None,
     ) -> tuple[str, dict]:
         """Generate text and return both the text and useful metadata for logging.
 
@@ -337,7 +370,7 @@ class VertexClient:
             client = self._get_client()
             config = self._build_config(
                 temperature, max_tokens, system_instruction,
-                response_mime_type, response_schema, thinking_budget,
+                response_mime_type, response_schema, thinking_budget, thinking_level,
             )
 
             self.logger.debug(
@@ -368,12 +401,11 @@ class VertexClient:
             }))
 
             # Auto-continue loop if hitting output cap
-            _MAX_TOKEN_REASONS = frozenset({"MAX_TOKENS", "MAX_TOKEN", "MAX_OUTPUT_TOKENS"})
             continuation_count = 0
             no_progress_break = False
             while (
                 AUTO_CONTINUE_ON_MAX_TOKENS
-                and meta_local.get("finishReason") in _MAX_TOKEN_REASONS
+                and meta_local.get("finishReason") in MAX_TOKEN_FINISH_REASONS
                 and continuation_count < MAX_CONTINUATIONS
             ):
                 continuation_count += 1
@@ -409,7 +441,7 @@ class VertexClient:
                 if len(text) - prev_len < MIN_CONTINUE_GROWTH:
                     no_progress_break = True
                     break
-                if next_meta.get("finishReason") not in _MAX_TOKEN_REASONS:
+                if next_meta.get("finishReason") not in MAX_TOKEN_FINISH_REASONS:
                     break
 
             # Guard: raise if no text after all attempts

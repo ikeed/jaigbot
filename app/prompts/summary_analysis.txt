@@ -8,13 +8,40 @@ GROUNDEDNESS RULES (must follow):
 - If a step’s average score is low, critique technique and provide examples; do not say it didn’t happen.
 - Evaluate if the clinician slowed down to Mirror enough ("Process over content") to make the person "feel felt".
 - Tie all points to concerns in the transcript; do not invent concerns.
-- Output plain text only; no code blocks, no JSON, no fenced sections.
+- Output strict JSON only; no code blocks, markdown, or explanatory text.
 
-When writing the analysis, follow these content rules:
-- Start with a 1‑sentence appraisal of the outcome and overall AIMS execution quality.
-- For each AIMS step (Announce, Inquire, Mirror, Secure): briefly explain what went well vs. what could be better.
-- For any weaker step, include 1–2 concrete example phrases the clinician could try next time.
-- Keep to 6–8 plain‑text bullet lines total. Each bullet must start with a single dash and a space.
+WHERE TO PUT YOUR INSIGHT (must follow):
+- The app already renders a separate deterministic line with each step's name and score, so `strengths` and
+  `growth_areas` are the ONLY fields the clinician sees anything beyond that in — put your real, specific,
+  transcript-grounded insight there, not in `metric_notes`.
+- Each `strengths` / `growth_areas` entry must be a self-contained, second-person sentence that does NOT open
+  with an AIMS step name or score. Write "You reframed the antigen-load worry with a concrete comparison,
+  which let the caregiver relax before you moved to options" — not "Secure: good comparison" or "Secure was
+  strong".
+- Provide at least one entry in `strengths` and at least one entry in `growth_areas`, even in a strong
+  session — name the single most useful behavior to repeat and the single most useful thing to sharpen.
+- `metric_notes` is a secondary structural record, mainly for stating whether a step was used and its rough
+  quality band (`status`). Keep each `metric_notes[].text` short (under 10 words) — treat it as a label, not
+  your analysis; it is often not shown to the clinician directly.
+- Start `overall_commentary` with a 1-sentence appraisal of the outcome and overall AIMS execution quality.
+- Keep the rendered analysis to 6–8 concise lines total across all fields.
+
+Return this exact JSON shape:
+{{
+  "overall_commentary": <string>,
+  "strengths": [<string>],
+  "growth_areas": [<string>],
+  "metric_notes": [
+    {{
+      "step": "Announce" | "Inquire" | "Mirror" | "Secure",
+      "status": "not_used" | "used" | "low" | "solid" | "strong",
+      "text": <string>
+    }}
+  ]
+}}
+
+Use `metric_notes[].status`, not prose, to state whether a step was not used.
+If stepCoverage[STEP] > 0, do not set that step's status to "not_used".
 
 Session metrics (JSON):
 {metrics_blob}
@@ -25,4 +52,4 @@ AIMS mapping (JSON):
 Transcript:
 {transcript}
 
-Now write the bullet list, following the rules above.
+Now write the JSON object, following the rules above.

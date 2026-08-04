@@ -84,6 +84,7 @@ class AimsStateDependency(Protocol):
         clinician_message: str,
         person_last: str,
         llm_topic: str | None = None,
+        person_events: list[Any] | None = None,
     ) -> None:
         ...
 
@@ -115,6 +116,8 @@ class AimsEndgameDependency(Protocol):
         reply_payload: dict[str, Any],
         session_obj: dict[str, Any] | None,
         session_id: str,
+        *,
+        classifier_resolution: Any = None,
     ) -> dict[str, Any] | None:
         ...
 
@@ -139,6 +142,7 @@ class AimsTelemetryDependency(Protocol):
         model_used: str,
         step: str | None,
         score: int | None,
+        semantic_contract: dict[str, bool] | None = None,
     ) -> None:
         ...
 

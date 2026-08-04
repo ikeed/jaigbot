@@ -5,6 +5,14 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 
+def _is_none(value: object) -> bool:
+    return value is None
+
+
+def _is_empty(value: object) -> bool:
+    return not value
+
+
 class StepFeedback(BaseModel):
     """Per-step coaching feedback for compound AIMS classifications.
 
@@ -18,6 +26,58 @@ class StepFeedback(BaseModel):
         default="praise",
         description="'praise' for reinforcement or 'improvement' for a suggested change",
     )
+
+
+class AimsObservations(BaseModel):
+    """Language-neutral observations about the clinician turn.
+
+    These fields describe behaviors the classifier observed. They are optional
+    so older prompts and deterministic fallback payloads keep their current
+    response shape.
+    """
+
+    open_concern_question_present: Optional[bool] = Field(default=None, exclude_if=_is_none)
+    question_count: Optional[int] = Field(default=None, exclude_if=_is_none)
+    leading_question_present: Optional[bool] = Field(default=None, exclude_if=_is_none)
+    why_framing_present: Optional[bool] = Field(default=None, exclude_if=_is_none)
+    reflection_present: Optional[bool] = Field(default=None, exclude_if=_is_none)
+    accuracy_check_present: Optional[bool] = Field(default=None, exclude_if=_is_none)
+    autonomy_support_present: Optional[bool] = Field(default=None, exclude_if=_is_none)
+    safety_net_present: Optional[bool] = Field(default=None, exclude_if=_is_none)
+    followup_or_materials_present: Optional[bool] = Field(default=None, exclude_if=_is_none)
+
+
+class FeedbackItem(BaseModel):
+    """Structured coaching feedback with optional evidence and stable codes."""
+
+    text: str = Field(description="User-facing coaching text")
+    step: Optional[str] = Field(default=None, exclude_if=_is_none)
+    tone: str = Field(default="improvement")
+    code: Optional[str] = Field(default=None, exclude_if=_is_none)
+    evidence_spans: list[str] = Field(default_factory=list, exclude_if=_is_empty)
+    target_observation: Optional[str] = Field(default=None, exclude_if=_is_none)
+
+
+class ConcernEvent(BaseModel):
+    """Structured signal about a person's concern or resolution-related turn."""
+
+    event_type: str = Field(description="Stable event kind, such as concern_raised")
+    topic: Optional[str] = Field(default=None, exclude_if=_is_none)
+    target_concern_id: Optional[str] = Field(default=None, exclude_if=_is_none)
+    evidence_spans: list[str] = Field(default_factory=list, exclude_if=_is_empty)
+    confidence: Optional[str] = Field(default=None, exclude_if=_is_none)
+
+
+class ResolutionSignals(BaseModel):
+    """Optional semantic resolution signals from a classifier response."""
+
+    is_endgame: Optional[bool] = Field(default=None, exclude_if=_is_none)
+    resolution_type: Optional[str] = Field(default=None, exclude_if=_is_none)
+    accepted_materials: Optional[bool] = Field(default=None, exclude_if=_is_none)
+    accepted_followup: Optional[bool] = Field(default=None, exclude_if=_is_none)
+    accepted_vaccine: Optional[bool] = Field(default=None, exclude_if=_is_none)
+    remaining_active_concern: Optional[bool] = Field(default=None, exclude_if=_is_none)
+    evidence_spans: list[str] = Field(default_factory=list, exclude_if=_is_empty)
 
 
 class Coaching(BaseModel):
@@ -41,6 +101,8 @@ class Coaching(BaseModel):
     phase: Optional[str] = Field(
         default=None, description="Current conversation phase: PreAnnounce|InquireMirror|Secure"
     )
+    observations: Optional[AimsObservations] = Field(default=None, exclude_if=_is_none)
+    feedback_items: list[FeedbackItem] = Field(default_factory=list, exclude_if=_is_empty)
 
 
 class ClassifierResult(BaseModel):
@@ -68,6 +130,8 @@ class ClassifierResult(BaseModel):
     reasoning: Optional[str] = Field(
         default=None, description="Brief internal chain-of-thought for the classification"
     )
+    person_events: list[ConcernEvent] = Field(default_factory=list, exclude_if=_is_empty)
+    resolution: Optional[ResolutionSignals] = Field(default=None, exclude_if=_is_none)
 
 
 class SessionMetrics(BaseModel):
@@ -126,4 +190,15 @@ class ReportRequest(BaseModel):
     )
 
 
-__all__ = ["StepFeedback", "Coaching", "ClassifierResult", "SessionMetrics", "ChatRequest", "ReportRequest"]
+__all__ = [
+    "AimsObservations",
+    "FeedbackItem",
+    "ConcernEvent",
+    "ResolutionSignals",
+    "StepFeedback",
+    "Coaching",
+    "ClassifierResult",
+    "SessionMetrics",
+    "ChatRequest",
+    "ReportRequest",
+]

@@ -4,8 +4,9 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
-from app.models import ChatRequest, ReportRequest
 from app.constants import ENDPOINT_CHAT, ENDPOINT_REPORT
+from app.message_catalog import message
+from app.models import ChatRequest, ReportRequest
 
 
 def create_chat_router(
@@ -26,7 +27,7 @@ def create_chat_router(
         if not settings.PROJECT_ID:
             raise HTTPException(status_code=500, detail={
                 "error": {
-                    "message": "settings.PROJECT_ID not set - configure the settings.PROJECT_ID environment variable.",
+                    "message": message("api_errors.project_id_missing"),
                     "code": 500,
                 }
             })

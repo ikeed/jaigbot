@@ -10,7 +10,7 @@
   if (window.__aimsbotCustomJsInitialized) return;
   window.__aimsbotCustomJsInitialized = true;
 
-  const assetVersion = "20260609-dialogs-2";
+  const assetVersion = "20260729-endgame-scroll";
   window.AIMSBotUI = window.AIMSBotUI || {};
   window.AIMSBotUI.pendingWindowMessages = window.AIMSBotUI.pendingWindowMessages || [];
   window.AIMSBotUI.handleWindowMessagePayload =
@@ -27,6 +27,7 @@
   });
 
     const modules = [
+        "/public/js/aimsbot/i18n.js?v=" + assetVersion,
         "/public/js/aimsbot/core.js?v=" + assetVersion,
         "/public/js/aimsbot/modal.js?v=" + assetVersion,
         "/public/js/aimsbot/report-issue.js?v=" + assetVersion,

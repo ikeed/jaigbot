@@ -30,7 +30,7 @@ def test_legacy_handler_jailbreak_early_return(monkeypatch):
         vertex_config={
             "project_id": "proj",
             "vertex_location": "global",
-            "model_id": "gemini-2.5-pro",
+            "model_id": "gemini-3.6-flash",
             "model_fallbacks": [],
             "temperature": 0.2,
             "max_tokens": 64,
@@ -60,6 +60,6 @@ def test_legacy_handler_jailbreak_early_return(monkeypatch):
         out = asyncio.run(handler.handle(None, req, ctx))
 
     assert out["jailbreak_detected"] is True
-    assert out["model"] == "gemini-2.5-pro"
+    assert out["model"] == "gemini-3.6-flash"
     assert isinstance(out["latency_ms"], int)
     assert "focus on clinical conversations" in out["reply"].lower()

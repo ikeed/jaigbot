@@ -51,7 +51,9 @@ Manual setup is also fine:
    export PROJECT_ID=your-gcp-project-id
    export REGION=us-west4
    export VERTEX_LOCATION=global
-   export MODEL_ID=gemini-2.5-pro
+   export MODEL_ID=gemini-3.6-flash
+   export AIMS_CLASSIFIER_MODEL_ID=gemini-3.5-flash-lite
+   export AIMS_CLASSIFIER_THINKING_LEVEL=minimal
    ```
 
 ### PyCharm Run Configurations

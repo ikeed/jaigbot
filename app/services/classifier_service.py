@@ -2,13 +2,25 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TypeVar
 
-from app.aims_engine import evaluate_turn
-from app.models import ClassifierResult, Coaching, StepFeedback
+from pydantic import BaseModel
+
+from app.message_catalog import message
+from app.models import (
+    AimsObservations,
+    ClassifierResult,
+    Coaching,
+    ConcernEvent,
+    FeedbackItem,
+    ResolutionSignals,
+    StepFeedback,
+)
 from app.services.chat_helpers import recent_context as build_recent_context
 from app.services.prompt_builders import AimsPromptBuilder
 from app.vertex import VertexClient
+
+ParsedModel = TypeVar("ParsedModel", bound=BaseModel)
 
 
 class ClassifierService:
@@ -29,6 +41,9 @@ class ClassifierService:
         temperature: float = 0.0,
         max_tokens: int = 500,
         client_cls: Any = VertexClient,
+        heuristic_fallback_enabled: bool = False,
+        thinking_level: str | None = "minimal",
+        thinking_budget: int | None = None,
     ):
         self.project_id = project_id
         self.location = location
@@ -37,6 +52,9 @@ class ClassifierService:
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.client_cls = client_cls
+        self.heuristic_fallback_enabled = heuristic_fallback_enabled
+        self.thinking_level = thinking_level
+        self.thinking_budget = thinking_budget
 
     async def classify_turn(self, *, clinician_message: str, person_last: str, history: List[Dict[str, str]],
                             prior_announced: bool, prior_phase: str, mapping: Dict[str, Any], context_turns: int = 3,
@@ -104,17 +122,42 @@ class ClassifierService:
                 if isinstance(sf, dict) and sf.get("step") and sf.get("feedback"):
                     step_feedback.append(StepFeedback(
                         step=sf["step"],
-                        feedback=sf["feedback"],
+                        feedback=str(sf["feedback"]).strip(),
                         tone=sf.get("tone", "praise"),
                     ))
+
+            observations = self._parse_optional_model(
+                AimsObservations,
+                aims_data.get("observations"),
+                "aims.observations",
+            )
+            feedback_items = self._parse_model_list(
+                FeedbackItem,
+                aims_data.get("feedback_items"),
+                "aims.feedback_items",
+                required_fields=("text",),
+            )
+            person_events = self._parse_model_list(
+                ConcernEvent,
+                data.get("person_events"),
+                "person_events",
+                required_fields=("event_type",),
+            )
+            resolution = self._parse_optional_model(
+                ResolutionSignals,
+                data.get("resolution"),
+                "resolution",
+            )
 
             aims_coaching = Coaching(
                 step=step,
                 steps=steps,
                 score=aims_data.get("score"),
-                reasons=aims_data.get("reasons") or [],
-                tips=aims_data.get("tips") or [],
+                reasons=[str(reason).strip() for reason in (aims_data.get("reasons") or []) if str(reason or "").strip()],
+                tips=[str(tip).strip() for tip in (aims_data.get("tips") or []) if str(tip or "").strip()],
                 step_feedback=step_feedback,
+                observations=observations,
+                feedback_items=self._normalize_feedback_items(feedback_items),
             )
 
             result = ClassifierResult(
@@ -123,7 +166,9 @@ class ClassifierService:
                 aims=aims_coaching,
                 safety_flags=data.get("safety_flags") or [],
                 person_topic=data.get("person_topic"),
-                reasoning=data.get("reasoning")
+                reasoning=data.get("reasoning"),
+                person_events=person_events,
+                resolution=resolution,
             )
             
             # Clip tips to at most one as policy (parity with previous LLM path)
@@ -139,10 +184,61 @@ class ClassifierService:
             if status_code and status_code in {403, 404, 429}:
                 raise e
                 
-            self.logger.error("Unified classification failed, falling back: %s", e)
+            self.logger.error("Unified classification failed: %s", e)
+            if not self.heuristic_fallback_enabled:
+                return self._get_classification_unavailable_result()
+            self.logger.warning("Using deterministic classification fallback")
             return self._get_deterministic_fallback(
                 clinician_message, mapping
             )
+
+    @staticmethod
+    def _normalize_feedback_items(items: list[FeedbackItem]) -> list[FeedbackItem]:
+        for item in items:
+            item.text = str(item.text or "").strip()
+        return items
+
+    def _parse_optional_model(
+        self,
+        model_cls: type[ParsedModel],
+        raw: Any,
+        field_name: str,
+    ) -> ParsedModel | None:
+        if not isinstance(raw, dict):
+            return None
+        try:
+            return model_cls(**raw)
+        except Exception as exc:
+            self.logger.debug("Ignoring malformed optional classifier field %s: %s", field_name, exc)
+            return None
+
+    def _parse_model_list(
+        self,
+        model_cls: type[ParsedModel],
+        raw: Any,
+        field_name: str,
+        *,
+        required_fields: tuple[str, ...] = (),
+    ) -> list[ParsedModel]:
+        if not isinstance(raw, list):
+            return []
+
+        parsed: list[ParsedModel] = []
+        for index, item in enumerate(raw):
+            if not isinstance(item, dict):
+                continue
+            if any(not item.get(required) for required in required_fields):
+                continue
+            try:
+                parsed.append(model_cls(**item))
+            except Exception as exc:
+                self.logger.debug(
+                    "Ignoring malformed optional classifier field %s[%s]: %s",
+                    field_name,
+                    index,
+                    exc,
+                )
+        return parsed
 
     @staticmethod
     def _strip_json_fences(text: str) -> str:
@@ -178,8 +274,8 @@ class ClassifierService:
         """Call Gemini to detect whether the session reached a natural conclusion.
 
         AimsEndgameService.check() calls this after its hard guards pass. The
-        service then applies deterministic confirmation/fallback gates around
-        this LLM result.
+        service then validates the structured result; legacy heuristic fallback
+        is used only when explicitly enabled.
         """
         prompt = AimsPromptBuilder.build_endgame_detector_prompt(
             history_text=history_text,
@@ -200,9 +296,9 @@ class ClassifierService:
     ) -> str:
         """Call Gemini with JSON response expectation.
 
-        Uses thinking_budget=128 to minimize thinking for classification tasks,
-        reducing latency and cost. 128 is the minimum supported by gemini-2.5-pro;
-        gemini-2.5-flash supports 0 but we use 128 for cross-model compatibility.
+        Uses a low thinking setting by default because classification is a
+        structured judgment task on a compact transcript, not open-ended
+        deliberation.
 
         When system_instruction is provided, the static AIMS rubric and reference
         data are passed separately from the per-turn prompt. This enables implicit
@@ -219,7 +315,32 @@ class ClassifierService:
             temperature=self.temperature,
             max_tokens=self.max_tokens,
             system_instruction=system_instruction,
-            thinking_budget=128,
+            response_mime_type="application/json",
+            thinking_budget=self.thinking_budget,
+            thinking_level=self.thinking_level,
+        )
+
+    @staticmethod
+    def _get_classification_unavailable_result() -> ClassifierResult:
+        """Return neutral coaching when semantic classification is unavailable."""
+        unavailable_text = message("aims.classification_unavailable")
+        return ClassifierResult(
+            is_small_talk=False,
+            is_vaccine_relevant=True,
+            aims=Coaching(
+                step=None,
+                score=0,
+                reasons=[unavailable_text],
+                tips=[],
+                feedback_items=[
+                    FeedbackItem(
+                        code="classification_unavailable",
+                        text=unavailable_text,
+                    )
+                ],
+            ),
+            safety_flags=[],
+            reasoning=message("aims.classification_unavailable_reason"),
         )
 
     @staticmethod
@@ -228,19 +349,21 @@ class ClassifierService:
         mapping: Dict[str, Any],
     ) -> ClassifierResult:
         """Invoke the original deterministic engine as a fallback."""
+        from app.aims_engine import evaluate_turn
         
         fb = evaluate_turn(clinician_message, mapping)
         
         # Map deterministic 'evaluate_turn' result to ClassifierResult
         reasons = fb.get("reasons", [])
-        if "fallback" not in reasons:
-            reasons.append("fallback")
+        fallback_marker = message("aims.fallback_marker")
+        if fallback_marker not in reasons:
+            reasons.append(fallback_marker)
             
         aims_coaching = Coaching(
             step=fb.get("step"),
             score=fb.get("score", 2),
-            reasons=reasons,
-            tips=fb.get("tips", [])
+            reasons=[str(reason).strip() for reason in reasons if str(reason or "").strip()],
+            tips=[str(tip).strip() for tip in (fb.get("tips", []) or []) if str(tip or "").strip()],
         )
         
         return ClassifierResult(
@@ -248,5 +371,5 @@ class ClassifierService:
             is_vaccine_relevant=True,
             aims=aims_coaching,
             safety_flags=[],
-            reasoning="deterministic fallback"
+            reasoning=message("aims.deterministic_fallback_reason")
         )

@@ -212,7 +212,7 @@ class TestScoreStepBranches:
             {}
         )
         assert result.score <= 1
-        assert "Weak/absent reflective stem" in result.reasons
+        assert "Weak/absent mirror stem" in result.reasons
         
     def test_score_step_inquire_not_open_ended(self):
         """Test score_step Inquire that's not clearly open-ended"""

@@ -6,6 +6,7 @@ Usage:
   source .venv/bin/activate  # optional but recommended
   export PROJECT_ID=warm-actor-253703
   export REGION=us-west4
+  export VERTEX_LOCATION=global
   python scripts/sanity_vertex.py
 
 Expected: prints a short greeting from the model. If it fails, the exception
@@ -20,7 +21,7 @@ from vertexai.generative_models import GenerativeModel
 
 def main():
     project = os.getenv("PROJECT_ID") or os.getenv("GCP_PROJECT_ID")
-    region = os.getenv("REGION") or os.getenv("GCP_REGION") or "us-west4"
+    region = os.getenv("VERTEX_LOCATION") or os.getenv("REGION") or os.getenv("GCP_REGION") or "global"
     if not project:
         print("PROJECT_ID (or GCP_PROJECT_ID) is not set. Please export PROJECT_ID before running.", file=sys.stderr)
         sys.exit(2)
@@ -28,7 +29,7 @@ def main():
     print(f"[sanity] Initializing Vertex AI: project={project}, region={region}")
     aiplatform.init(project=project, location=region)
 
-    model_id = os.getenv("MODEL_ID", "gemini-2.5-pro")
+    model_id = os.getenv("MODEL_ID", "gemini-3.6-flash")
     print(f"[sanity] Creating GenerativeModel: {model_id}")
     model = GenerativeModel(model_id)
 

@@ -194,7 +194,7 @@ class TestMainBranches:
             }
         }
         
-        mock_vertex_call.return_value = "- Practice more open questions\n- Use better reflections"
+        mock_vertex_call.return_value = "- Practice more open questions\n- Use better mirroring"
         
         monkeypatch.setattr("app.config.settings.MEMORY_ENABLED", True)
         monkeypatch.setattr("app.main.MEMORY_STORE", mock_memory)

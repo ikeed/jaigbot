@@ -1,6 +1,7 @@
 from app.services.coach_post import (
     AimsPostProcessor,
     EndGameDetector,
+    VaccineRelevanceGate,
     build_endgame_bullets_fallback,
     endgame_title,
     sanitize_endgame_bullets,
@@ -59,6 +60,7 @@ def test_aims_post_processor_normalizes_score_and_softens_autonomy_feedback():
     processed = AimsPostProcessor.post_process(
         payload,
         "No pressure. It is your decision, and I am happy to answer any questions.",
+        allow_text_softening=True,
     )
 
     assert processed["score"] == 1
@@ -73,10 +75,67 @@ def test_aims_post_processor_keeps_non_aims_score_and_filters_mixed_reasons():
         "reasons": ["Useful feedback.", "This is leading."],
     }
 
-    processed = AimsPostProcessor.post_process(payload, "It's up to you.")
+    processed = AimsPostProcessor.post_process(
+        payload,
+        "It's up to you.",
+        allow_text_softening=True,
+    )
 
     assert processed["score"] == 0
     assert processed["reasons"] == ["Useful feedback."]
+
+
+def test_aims_post_processor_preserves_reasons_when_structured_feedback_exists():
+    payload = {
+        "step": "Secure",
+        "score": 0,
+        "reasons": ["This sounds leading."],
+        "feedback_items": [
+            {
+                "step": "Secure",
+                "tone": "improvement",
+                "code": "add_autonomy_support",
+                "text": "Name that it is their decision.",
+            }
+        ],
+    }
+
+    processed = AimsPostProcessor.post_process(payload, "It's up to you.")
+
+    assert processed["score"] == 1
+    assert processed["reasons"] == ["This sounds leading."]
+
+
+def test_vaccine_relevance_gate_prefers_semantic_relevance_true():
+    payload = {"step": "Mirror", "score": 3, "reasons": ["Mirrored."], "tips": []}
+
+    result = VaccineRelevanceGate.gate(
+        cls_payload=payload,
+        clinician_text="I hear that this feels like a lot.",
+        person_last="Yes.",
+        parent_recent_concerns=[],
+        prior_announced=False,
+        semantic_is_vaccine_relevant=True,
+    )
+
+    assert result is payload
+    assert result["step"] == "Mirror"
+
+
+def test_vaccine_relevance_gate_prefers_semantic_relevance_false():
+    payload = {"step": "Announce", "score": 3, "reasons": ["Clear."], "tips": []}
+
+    result = VaccineRelevanceGate.gate(
+        cls_payload=payload,
+        clinician_text="I recommend the MMR today.",
+        person_last="Okay.",
+        parent_recent_concerns=[],
+        prior_announced=False,
+        semantic_is_vaccine_relevant=False,
+    )
+
+    assert result["step"] is None
+    assert result["score"] == 0
 
 
 def test_endgame_detector_guards_conditional_and_question_acceptance():
@@ -140,7 +199,7 @@ def test_build_endgame_bullets_fallback_handles_absent_low_mid_high_and_invalid_
     assert bullets[0] == "Overall AIMS score: 64%"
     assert any("Announce 93%" in bullet and "well done" in bullet for bullet in bullets)
     assert any("Inquire 67%" in bullet and "remaining concerns" in bullet for bullet in bullets)
-    assert any("Mirror 33%" in bullet and "reflect" in bullet for bullet in bullets)
+    assert any("Mirror 33%" in bullet and "mirror" in bullet for bullet in bullets)
     assert any(bullet.startswith("Secure:") and "absent" not in bullet for bullet in bullets)
 
 
@@ -163,7 +222,7 @@ def test_build_endgame_bullets_fallback_personalizes_with_persona_and_patient_na
     inquire = next(b for b in bullets if b.startswith("Inquire "))
     mirror = next(b for b in bullets if b.startswith("Mirror "))
 
-    assert "Nathaniel's due for MMR today" in announce
+    assert "Nathaniel's due for the recommended vaccine today" in announce
     assert "Carter" not in announce
     assert "Zia's real concerns" in inquire
     assert "Zia's concern" in mirror

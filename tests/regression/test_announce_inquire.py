@@ -186,6 +186,38 @@ class TestSecuringBeforeInquiringCoaching:
         assert cls_payload["score"] <= 2
         assert any("open question" in t.lower() or "thoughts" in t.lower() for t in cls_payload["tips"])
 
+    def test_secure_open_question_then_reassurance_gets_pause_feedback(self):
+        """If the turn already opened with inquiry, feedback should not say to ask first."""
+        state = {
+            "announced": True,
+            "phase": "PreAnnounce",
+            "first_inquire_done": False,
+            "parent_concerns": [],
+            "recent_coaching": [],
+        }
+        cls_payload = {
+            "step": "Secure",
+            "score": 3,
+            "reasons": ["LLM classified as Secure"],
+            "tips": [],
+            "observations": {"open_concern_question_present": True},
+        }
+
+        AimsStateService(logger=MagicMock()).apply_coaching_guidance(
+            cls_payload,
+            "Secure",
+            state,
+            "What concerns do you have about the MMR vaccine? It is safe and effective.",
+            "",
+            character=None,
+        )
+
+        feedback = " ".join(cls_payload["reasons"] + cls_payload["tips"]).lower()
+        assert "you asked an open question" in feedback
+        assert "before asking" not in feedback
+        assert "open question first" not in feedback
+        assert "pause before offering reassurance" in feedback
+
     def test_secure_after_inquire_no_coaching_about_inquiring(self):
         """When first_inquire_done is True and concerns are mirrored,
         should NOT get 'Securing before inquiring' warning."""

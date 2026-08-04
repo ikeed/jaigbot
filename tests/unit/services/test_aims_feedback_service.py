@@ -307,12 +307,12 @@ def test_normalize_step_feedback_falls_back_to_reason_or_tip():
     assert AimsFeedbackService._normalize_step_feedback(
         raw=None,
         step="Mirror",
-        reasons=["Use a more specific reflection."],
+        reasons=["Use more specific mirroring."],
         tips=[],
     ) == [
         {
             "step": "Mirror",
-            "feedback": "Use a more specific reflection.",
+            "feedback": "Use more specific mirroring.",
             "tone": "improvement",
         }
     ]

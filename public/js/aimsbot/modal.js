@@ -35,7 +35,7 @@
       '  <p class="aims-modal-description">' + escapeHtml(options.description) + '</p>' +
       textareaHtml +
       '  <div class="aims-modal-actions">' +
-      '    <button type="button" class="aims-modal-button aims-modal-cancel modal-cancel-btn">Cancel</button>' +
+      '    <button type="button" class="aims-modal-button aims-modal-cancel modal-cancel-btn">' + escapeHtml(app.t("modal.cancel")) + '</button>' +
       '    <button type="button" class="aims-modal-button aims-modal-confirm modal-confirm-btn">' + escapeHtml(options.confirmText) + '</button>' +
       "  </div>" +
       "</div>";
@@ -56,7 +56,7 @@
         const textarea = modal.querySelector("textarea");
         const value = textarea ? textarea.value.trim() : "";
         if (options.showTextarea && !value) {
-        alert(options.emptyMessage || "Please provide a reason.");
+        alert(options.emptyMessage || app.t("modal.emptyReason"));
         return;
       }
 

@@ -20,6 +20,7 @@ from typing import Any, Optional
 from fastapi import HTTPException, Request, BackgroundTasks
 from fastapi.responses import JSONResponse
 
+from app.message_catalog import message
 from app.models import ChatRequest, ReportRequest
 from app.services.chat_context import ChatContextBuilder, ChatContext
 from app.services.session_service import SessionService, CookieSettings
@@ -112,7 +113,12 @@ class ChatOrchestrator:
             raise
         except Exception as e:
             # Handle unexpected errors
-            return self._build_error_response(req, e, 500, "Internal server error")
+            return self._build_error_response(
+                req,
+                e,
+                500,
+                message("api_errors.internal_server_error"),
+            )
     
     def _validate_request(self, body: ChatRequest) -> None:
         """Validate the incoming request."""
@@ -123,13 +129,13 @@ class ChatOrchestrator:
             self.logger.warning(f"UTF-8 encoding failed for message: {e}")
             raise HTTPException(
                 status_code=400,
-                detail={"error": {"message": "Invalid UTF-8 in message", "code": 400}}
+                detail={"error": {"message": message("api_errors.invalid_utf8"), "code": 400}}
             )
         
         if len(encoded) > 2048:
             raise HTTPException(
                 status_code=400,
-                detail={"error": {"message": "Message too large (max 2 KiB)", "code": 400}}
+                detail={"error": {"message": message("api_errors.message_too_large"), "code": 400}}
             )
     
     async def _handle_coaching_path(
@@ -302,13 +308,7 @@ class ChatOrchestrator:
         
         if getattr(e, "status_code", None) == 404:
             # Model not found
-            guidance = (
-                "Publisher model not found or access denied. Verify MODEL_ID spelling and REGION; "
-                "ensure Vertex AI API is enabled, billing is active, and your ADC principal has "
-                "roles/aiplatform.user. Use GET /models or /modelcheck to confirm availability in "
-                "this region. Consider switching MODEL_ID to one listed there (e.g., 'gemini-1.5-pro') "
-                "or changing REGION."
-            )
+            guidance = message("api_errors.vertex_model_not_found")
             
             payload = {
                 "error": {
@@ -328,7 +328,7 @@ class ChatOrchestrator:
             # Other upstream errors -> 502
             payload = {
                 "error": {
-                    "message": "Upstream error calling Vertex AI",
+                    "message": message("api_errors.vertex_upstream"),
                     "code": 502,
                     "requestId": req_id
                 }
@@ -429,11 +429,21 @@ class ChatOrchestrator:
             # Clear session from memory store
             self.memory_store.pop(session_id, None)
 
-            return JSONResponse(content={"status": "ok", "message": "Issue reported and session ended."})
+            return JSONResponse(
+                content={
+                    "status": "ok",
+                    "message": message("api_errors.report_success"),
+                }
+            )
 
         except Exception as e:
             self.logger.error(f"Error handling report for session {session_id}: {e}", exc_info=True)
-            return self._build_error_response(req, e, 500, "Internal server error during report")
+            return self._build_error_response(
+                req,
+                e,
+                500,
+                message("api_errors.report_internal_server_error"),
+            )
 
     def _get_request_id(self, request: Request) -> Optional[str]:
         """Extract request ID from headers or generate one."""

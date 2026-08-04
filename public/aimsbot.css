@@ -203,6 +203,14 @@ body.aimsbot-shell .aims-message-enter {
   animation: aims-message-rise 420ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+body.aimsbot-shell .aimsbot-message-scroll {
+  scroll-padding-bottom: var(--aims-composer-clearance, 13rem);
+}
+
+body.aimsbot-shell .aimsbot-message-list {
+  padding-bottom: var(--aims-composer-clearance, 13rem) !important;
+}
+
 .aims-message-row {
   width: min(100%, 88rem) !important;
   margin: 0 auto 14px !important;
@@ -738,7 +746,7 @@ body.dark .aims-scenario-note {
   color: #ffffff;
 }
 
-/* --- Built-in Chainlit Alert Dialogs --- */
+/* --- Built-in Chainlit Dialogs --- */
 
 body.aimsbot-shell .aims-native-dialog,
 body.aimsbot-shell [role="alertdialog"] {
@@ -765,6 +773,46 @@ body.aimsbot-shell [role="alertdialog"] p {
   color: #43556f !important;
 }
 
+body.aimsbot-shell .aims-native-dialog label,
+body.aimsbot-shell [role="alertdialog"] label {
+  color: #26384f !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+}
+
+body.aimsbot-shell .aims-native-dialog input,
+body.aimsbot-shell .aims-native-dialog textarea,
+body.aimsbot-shell .aims-native-dialog select,
+body.aimsbot-shell [role="alertdialog"] input,
+body.aimsbot-shell [role="alertdialog"] textarea,
+body.aimsbot-shell [role="alertdialog"] select {
+  border: 1px solid rgba(128, 153, 195, 0.34) !important;
+  border-radius: 6px !important;
+  background: rgba(255, 255, 255, 0.96) !important;
+  color: #132238 !important;
+  caret-color: #2563eb;
+  box-shadow: none !important;
+}
+
+body.aimsbot-shell .aims-native-dialog input::placeholder,
+body.aimsbot-shell .aims-native-dialog textarea::placeholder,
+body.aimsbot-shell [role="alertdialog"] input::placeholder,
+body.aimsbot-shell [role="alertdialog"] textarea::placeholder {
+  color: #7082a3 !important;
+  opacity: 1 !important;
+}
+
+body.aimsbot-shell .aims-native-dialog input:focus,
+body.aimsbot-shell .aims-native-dialog textarea:focus,
+body.aimsbot-shell .aims-native-dialog select:focus,
+body.aimsbot-shell [role="alertdialog"] input:focus,
+body.aimsbot-shell [role="alertdialog"] textarea:focus,
+body.aimsbot-shell [role="alertdialog"] select:focus {
+  border-color: rgba(77, 127, 247, 0.62) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(77, 127, 247, 0.16) !important;
+}
+
 body.aimsbot-shell .aims-native-dialog button,
 body.aimsbot-shell [role="alertdialog"] button {
   border-radius: 4px !important;
@@ -779,6 +827,19 @@ body.aimsbot-shell .aims-native-dialog button:hover,
 body.aimsbot-shell [role="alertdialog"] button:hover {
   transform: translateY(-1px);
   box-shadow: 0 14px 26px rgba(22, 38, 68, 0.16);
+}
+
+body.aimsbot-shell .aims-native-dialog-close {
+  border: none !important;
+  background: transparent !important;
+  color: #43556f !important;
+  box-shadow: none !important;
+}
+
+body.aimsbot-shell .aims-native-dialog-close:hover {
+  transform: none !important;
+  background: rgba(67, 85, 111, 0.08) !important;
+  box-shadow: none !important;
 }
 
 body.aimsbot-shell .aims-native-dialog-cancel,
@@ -833,6 +894,68 @@ body.dark.aimsbot-shell [role="alertdialog"] h3 {
 body.dark.aimsbot-shell .aims-native-dialog p,
 body.dark.aimsbot-shell [role="alertdialog"] p {
   color: #b6c6de !important;
+}
+
+.dark body.aimsbot-shell .aims-native-dialog label,
+.dark body.aimsbot-shell [role="alertdialog"] label,
+body.dark.aimsbot-shell .aims-native-dialog label,
+body.dark.aimsbot-shell [role="alertdialog"] label {
+  color: #dbe9ff !important;
+}
+
+.dark body.aimsbot-shell .aims-native-dialog input,
+.dark body.aimsbot-shell .aims-native-dialog textarea,
+.dark body.aimsbot-shell .aims-native-dialog select,
+.dark body.aimsbot-shell [role="alertdialog"] input,
+.dark body.aimsbot-shell [role="alertdialog"] textarea,
+.dark body.aimsbot-shell [role="alertdialog"] select,
+body.dark.aimsbot-shell .aims-native-dialog input,
+body.dark.aimsbot-shell .aims-native-dialog textarea,
+body.dark.aimsbot-shell .aims-native-dialog select,
+body.dark.aimsbot-shell [role="alertdialog"] input,
+body.dark.aimsbot-shell [role="alertdialog"] textarea,
+body.dark.aimsbot-shell [role="alertdialog"] select {
+  border-color: rgba(104, 128, 166, 0.42) !important;
+  background: rgba(21, 30, 45, 0.96) !important;
+  color: #f5f8ff !important;
+  caret-color: #7db5ff;
+}
+
+.dark body.aimsbot-shell .aims-native-dialog input::placeholder,
+.dark body.aimsbot-shell .aims-native-dialog textarea::placeholder,
+.dark body.aimsbot-shell [role="alertdialog"] input::placeholder,
+.dark body.aimsbot-shell [role="alertdialog"] textarea::placeholder,
+body.dark.aimsbot-shell .aims-native-dialog input::placeholder,
+body.dark.aimsbot-shell .aims-native-dialog textarea::placeholder,
+body.dark.aimsbot-shell [role="alertdialog"] input::placeholder,
+body.dark.aimsbot-shell [role="alertdialog"] textarea::placeholder {
+  color: #89a0c2 !important;
+}
+
+.dark body.aimsbot-shell .aims-native-dialog input:focus,
+.dark body.aimsbot-shell .aims-native-dialog textarea:focus,
+.dark body.aimsbot-shell .aims-native-dialog select:focus,
+.dark body.aimsbot-shell [role="alertdialog"] input:focus,
+.dark body.aimsbot-shell [role="alertdialog"] textarea:focus,
+.dark body.aimsbot-shell [role="alertdialog"] select:focus,
+body.dark.aimsbot-shell .aims-native-dialog input:focus,
+body.dark.aimsbot-shell .aims-native-dialog textarea:focus,
+body.dark.aimsbot-shell .aims-native-dialog select:focus,
+body.dark.aimsbot-shell [role="alertdialog"] input:focus,
+body.dark.aimsbot-shell [role="alertdialog"] textarea:focus,
+body.dark.aimsbot-shell [role="alertdialog"] select:focus {
+  border-color: rgba(125, 181, 255, 0.68) !important;
+  box-shadow: 0 0 0 3px rgba(125, 181, 255, 0.16) !important;
+}
+
+.dark body.aimsbot-shell .aims-native-dialog-close,
+body.dark.aimsbot-shell .aims-native-dialog-close {
+  color: #b6c6de !important;
+}
+
+.dark body.aimsbot-shell .aims-native-dialog-close:hover,
+body.dark.aimsbot-shell .aims-native-dialog-close:hover {
+  background: rgba(182, 198, 222, 0.12) !important;
 }
 
 .dark body.aimsbot-shell .aims-native-dialog-cancel,

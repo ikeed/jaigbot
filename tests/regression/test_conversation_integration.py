@@ -17,7 +17,7 @@ def test_whole_conversation_multi_turns(monkeypatch):
     # Ensure env values are present for route checks
     monkeypatch.setattr(settings, "PROJECT_ID", "test-project")
     monkeypatch.setattr(settings, "REGION", "us-central1")
-    monkeypatch.setattr(settings, "MODEL_ID", "gemini-2.5-pro")
+    monkeypatch.setattr(settings, "MODEL_ID", "gemini-3.6-flash")
     monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", False)
 
     # Allow cookies over http in TestClient
@@ -79,7 +79,7 @@ def test_whole_conversation_multi_turns(monkeypatch):
     assert "set-cookie" in {k.lower() for k in r1.headers.keys()}
     data1 = r1.json()
     assert data1["reply"] == "reply1"
-    assert data1["model"] == "gemini-2.5-pro"
+    assert data1["model"] == "gemini-3.6-flash"
     assert isinstance(data1["latencyMs"], int)
 
     # Subsequent turns – prompts must include growing prior history
@@ -88,7 +88,7 @@ def test_whole_conversation_multi_turns(monkeypatch):
         assert r.status_code == 200
         data = r.json()
         assert data["reply"] == f"reply{i+1}"
-        assert data["model"] == "gemini-2.5-pro"
+        assert data["model"] == "gemini-3.6-flash"
         assert isinstance(data["latencyMs"], int)
 
         # Inspect the last prompt sent to the model. It must include a history

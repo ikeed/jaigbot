@@ -2,8 +2,8 @@
 AIMS coaching path handler.
 
 This service handles the full coaching flow:
-1. Load AIMS mapping and evaluate deterministic classification
-2. Perform LLM-based classification with fallbacks
+1. Load supporting AIMS mapping data
+2. Perform LLM-based structured classification with model fallbacks
 3. Apply vaccine relevance gating 
 4. Update AIMS state and metrics
 5. Generate patient reply with safety checks
@@ -21,7 +21,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import Request
 
-from app.aims_engine import load_mapping
+from app.aims_mapping_loader import load_mapping
 from app.chat_roles import ROLE_USER, ROLE_ASSISTANT
 from app.config import settings
 from app.constants import (
@@ -36,11 +36,8 @@ from app.constants import (
     SESSION_SCENE,
     DEFAULT_MODEL_FLASH
 )
+from app.message_catalog import message
 from app.models import ChatRequest
-from app.services.chat_context import ChatContext
-from app.services.chat_helpers import strip_appointment_headers
-from app.services.classifier_service import ClassifierService
-from app.services.clinician_identity import clinician_display_name_from_user_info
 from app.services.aims_dependencies import (
     AimsEndgameDependency,
     AimsFeedbackDependency,
@@ -57,15 +54,20 @@ from app.services.aims_feedback_service import AimsFeedbackService
 from app.services.aims_handler_config import AimsMemoryConfig, AimsVertexConfig
 from app.services.aims_metrics_service import AimsMetricsService
 from app.services.aims_state_service import AimsStateService
-from app.services.aims_turn_telemetry import AimsTurnTelemetry
 from app.services.aims_turn_coordinator import AimsTurnCoordinator
-from app.services.summary_service import build_summary_analysis_bullets
+from app.services.aims_turn_telemetry import AimsTurnTelemetry
+from app.services.chat_context import ChatContext
+from app.services.chat_helpers import strip_appointment_headers
+from app.services.classifier_service import ClassifierService
+from app.services.clinician_identity import clinician_display_name_from_user_info
 from app.services.coach_feedback_history_service import CoachFeedbackHistoryService
 from app.services.coach_post import (
     VaccineRelevanceGate,
     AimsPostProcessor,
 )
+from app.services.coaching_tip_sanitizer import sanitize_coaching_tips
 from app.services.patient_reply_service import PatientReplyService
+from app.services.summary_service import build_summary_analysis_bullets
 from app.services.vertex_helpers import (
     avertex_call_with_fallback_json,
     get_last_model_used
@@ -82,7 +84,7 @@ class AimsCoachingHandler:
     def _build_reply_concern_state_section(state: dict[str, Any] | None) -> str:
         concerns = (state or {}).get("parent_concerns") or []
         if not concerns:
-            return "No tracked vaccine concerns yet."
+            return message("patient_reply.concern_state.none_tracked")
 
         open_topics: list[str] = []
         resolved_topics: list[str] = []
@@ -91,7 +93,7 @@ class AimsCoachingHandler:
                 concern.get("canonical_label")
                 or concern.get("summary")
                 or concern.get("topic")
-                or "unspecified concern"
+                or message("patient_reply.concern_state.unspecified")
             ).strip()
             if not topic:
                 continue
@@ -103,18 +105,17 @@ class AimsCoachingHandler:
                     open_topics.append(topic)
 
         if not open_topics and resolved_topics:
-            return (
-                "Open concerns: none. "
-                f"Resolved concerns: {', '.join(resolved_topics)}. "
-                "Do not reopen resolved concerns as if unanswered."
+            return message(
+                "patient_reply.concern_state.open_none_resolved",
+                resolved=", ".join(resolved_topics),
             )
         if open_topics and resolved_topics:
-            return (
-                f"Open concerns: {', '.join(open_topics)}. "
-                f"Resolved concerns: {', '.join(resolved_topics)}. "
-                "Focus on open concerns; do not reopen resolved concerns as if unanswered."
+            return message(
+                "patient_reply.concern_state.open_and_resolved",
+                open=", ".join(open_topics),
+                resolved=", ".join(resolved_topics),
             )
-        return f"Open concerns: {', '.join(open_topics)}."
+        return message("patient_reply.concern_state.open_only", open=", ".join(open_topics))
     
     def __init__(
         self,
@@ -144,6 +145,9 @@ class AimsCoachingHandler:
         self.vertex_location = self.vertex_config.vertex_location
         self.model_id = self.vertex_config.model_id
         self.model_fallbacks = self.vertex_config.model_fallbacks
+        self.classifier_model_id = self.vertex_config.classifier_model_id
+        self.classifier_thinking_level = self.vertex_config.classifier_thinking_level
+        self.classifier_thinking_budget = self.vertex_config.classifier_thinking_budget
         self.temperature = self.vertex_config.temperature
         self.max_tokens = self.vertex_config.max_tokens
         
@@ -152,7 +156,14 @@ class AimsCoachingHandler:
         self.classify_max_tokens = int(os.getenv("AIMS_CLASSIFY_MAX_TOKENS", "4096"))
         self.endgame_temperature = float(os.getenv("AIMS_ENDGAME_TEMPERATURE", "0.1"))
         self.endgame_max_tokens = int(os.getenv("AIMS_ENDGAME_MAX_TOKENS", "192"))
-        self.classify_budget_s = float(os.getenv("AIMS_CLASSIFY_BUDGET_S", "30.0"))
+        self.reply_max_tokens = int(
+            os.getenv("AIMS_REPLY_MAX_TOKENS", str(max(self.max_tokens, 1536)))
+        )
+        self.classify_budget_s = float(os.getenv("AIMS_CLASSIFY_BUDGET_S", "60.0"))
+        self.heuristic_fallback_enabled = (
+            os.getenv("AIMS_HEURISTIC_FALLBACK_ENABLED", "false").strip().lower()
+            not in {"0", "false", "no", "off"}
+        )
 
         # Allow tests to monkeypatch the client via app.main.VertexClient
         self.client_cls = self.vertex_config.client_cls or VertexClient
@@ -164,20 +175,26 @@ class AimsCoachingHandler:
         self.classifier_service = classifier_service or ClassifierService(
             project_id=self.project_id,
             location=self.vertex_location,
-            model_id=self.model_id,
+            model_id=self.classifier_model_id,
             logger=self.logger,
             temperature=self.classify_temperature,
             max_tokens=self.classify_max_tokens,
             client_cls=self.client_cls,
+            heuristic_fallback_enabled=self.heuristic_fallback_enabled,
+            thinking_level=self.classifier_thinking_level,
+            thinking_budget=self.classifier_thinking_budget,
         )
         self.patient_reply_service = patient_reply_service or PatientReplyService(
             model_json_caller=self._call_vertex_json,
             logger=self.logger,
             temperature=self.temperature,
-            max_tokens=self.max_tokens,
+            max_tokens=self.reply_max_tokens,
         )
         self.metrics_service = metrics_service or AimsMetricsService(logger=self.logger)
-        self.state_service = state_service or AimsStateService(logger=self.logger)
+        self.state_service = state_service or AimsStateService(
+            logger=self.logger,
+            heuristic_fallback_enabled=self.heuristic_fallback_enabled,
+        )
         self.feedback_service = feedback_service or AimsFeedbackService(
             project_id=self.project_id,
             region=self.vertex_location,
@@ -195,6 +212,7 @@ class AimsCoachingHandler:
         self.endgame_service = endgame_service or AimsEndgameService(
             logger=self.logger,
             classifier_service_getter=lambda: self.classifier_service,
+            heuristic_fallback_enabled=self.heuristic_fallback_enabled,
             summary_bullets_builder=lambda mem: build_summary_analysis_bullets(
                 mem=mem,
                 settings=settings,
@@ -212,6 +230,7 @@ class AimsCoachingHandler:
             patient_reply_service=self.patient_reply_service,
             classify_budget_s=self.classify_budget_s,
             logger=self.logger,
+            heuristic_fallback_enabled=self.heuristic_fallback_enabled,
         )
     
     async def handle(
@@ -237,7 +256,8 @@ class AimsCoachingHandler:
         # Load AIMS mapping (cached at app level)
         mapping = await self._load_aims_mapping()
         
-        # Step 1 & 2: Unified Classification (LLM with deterministic fallback)
+        # Step 1 & 2: Unified Classification (LLM structured output; legacy
+        # heuristic fallback only when explicitly enabled)
         cls_start = time.time()
         reply_start = time.time()
         self._emit_telemetry(
@@ -305,7 +325,13 @@ class AimsCoachingHandler:
             clinician_text=body.message,
             person_last=ctx.person_last,
             parent_recent_concerns=recent_concerns_texts,
-            prior_announced=prior_announced
+            prior_announced=prior_announced,
+            semantic_is_vaccine_relevant=(
+                classification_result.is_vaccine_relevant
+                if classification_result
+                else None
+            ),
+            allow_keyword_fallback=self.heuristic_fallback_enabled,
         )
         
         # Only apply small-talk override when no AIMS step was detected.
@@ -314,10 +340,16 @@ class AimsCoachingHandler:
         if is_small_talk and not cls_payload.get("step"):
             cls_payload["step"] = None
             cls_payload["score"] = 0
-            cls_payload["reasons"] = (cls_payload.get("reasons") or []) + ["LLM flagged as small talk"]
+            cls_payload["reasons"] = (cls_payload.get("reasons") or []) + [
+                message("aims.small_talk_reason")
+            ]
             
         # Legacy AimsPostProcessor (score normalization, score capping)
-        cls_payload = AimsPostProcessor.post_process(cls_payload, body.message)
+        cls_payload = AimsPostProcessor.post_process(
+            cls_payload,
+            body.message,
+            allow_text_softening=self.heuristic_fallback_enabled,
+        )
 
         # Populate current phase for UI transparency
         cls_payload["phase"] = aims_state.get("phase", PHASE_PRE_ANNOUNCE)
@@ -336,6 +368,12 @@ class AimsCoachingHandler:
             model_used=model_used_cls,
             step=cls_payload.get("step"),
             score=cls_payload.get("score"),
+            semantic_contract={
+                "observations": bool(cls_payload.get("observations")),
+                "feedback_items": bool(cls_payload.get("feedback_items")),
+                "person_events": bool(classification_result and classification_result.person_events),
+                "resolution": bool(classification_result and classification_result.resolution),
+            },
         )
 
         # Step 3: Update AIMS state and provide coaching guidance (after classification completes)
@@ -346,6 +384,7 @@ class AimsCoachingHandler:
             body.message,
             ctx.person_last,
             llm_topic,
+            person_events=classification_result.person_events if classification_result else None,
         )
 
         if turn.was_fallback:
@@ -361,6 +400,12 @@ class AimsCoachingHandler:
                 )
             except Exception as e:
                 self.logger.debug("AIMS feedback refinement failed: %s", e)
+
+        sanitize_coaching_tips(
+            cls_payload,
+            clinician_message=body.message,
+            allow_text_rewrite=self.heuristic_fallback_enabled,
+        )
 
         # Step 4: Persist AIMS metrics (after state update)
         try:
@@ -410,7 +455,12 @@ class AimsCoachingHandler:
             session_obj = {}
         
         # Step 8: Check for end-game scenarios
-        coach_post = await self.endgame_service.check(mem, reply_payload, session_obj, ctx.session_id)
+        coach_post = await self.endgame_service.check(
+            mem,
+            reply_payload,
+            session_obj,
+            ctx.session_id,
+        )
         
         # Save coach_post to memory if it exists, so it can be archived
         if coach_post and mem is not None:
@@ -443,25 +493,39 @@ class AimsCoachingHandler:
             self.logger.warning("Failed to determine model used for response: %s", e)
             model_used = self.model_id
 
+        coaching_payload = {
+            "step": cls_payload.get("step"),
+            "score": cls_payload.get("score"),
+            # Strip internal guard/debug reasons before sending to client
+            "reasons": self.coach_feedback_history_service.filter_user_facing_reasons(
+                cls_payload.get("reasons", []),
+                step=cls_payload.get("step"),
+            ),
+            "tips": cls_payload.get("tips", []),
+            "step_feedback": [
+                sf if isinstance(sf, dict) else sf.model_dump()
+                for sf in (cls_payload.get("step_feedback") or [])
+            ],
+            "phase": cls_payload.get("phase"),
+        }
+
+        observations = cls_payload.get("observations")
+        if isinstance(observations, dict):
+            coaching_payload["observations"] = observations
+
+        feedback_items = [
+            item if isinstance(item, dict) else item.model_dump()
+            for item in (cls_payload.get("feedback_items") or [])
+            if isinstance(item, dict) or hasattr(item, "model_dump")
+        ]
+        if feedback_items:
+            coaching_payload["feedback_items"] = feedback_items
+
         result = {
             "reply": reply_payload.get("patient_reply", ""),
             "model": model_used,
             "latency_ms": latency_ms,
-            "coaching": {
-                "step": cls_payload.get("step"),
-                "score": cls_payload.get("score"),
-                # Strip internal guard/debug reasons before sending to client
-                "reasons": self.coach_feedback_history_service.filter_user_facing_reasons(
-                    cls_payload.get("reasons", []),
-                    step=cls_payload.get("step"),
-                ),
-                "tips": cls_payload.get("tips", []),
-                "step_feedback": [
-                    sf if isinstance(sf, dict) else sf.model_dump()
-                    for sf in (cls_payload.get("step_feedback") or [])
-                ],
-                "phase": cls_payload.get("phase"),
-            },
+            "coaching": coaching_payload,
             "session": session_obj,
         }
         
@@ -490,12 +554,19 @@ class AimsCoachingHandler:
         reply_payload: Dict[str, Any],
         person_last: str,
     ) -> None:
-        """Remove scenario headers from the first assistant reply.
+        """Preserve validated reply text and strip legacy first-turn headers.
 
-        The UI already shows the scenario card for the initial turn, so we
-        keep the assistant text focused on the actual reply content.
+        PatientReplyService validates fresh model output and treats leaked
+        metadata labels as invalid. The strip path below is retained only for
+        injected or legacy reply payloads that predate that validation metadata.
         """
         try:
+            validation = reply_payload.get("reply_validation")
+            if isinstance(validation, dict):
+                reply_payload["patient_reply"] = (
+                    reply_payload.get("patient_reply", "") or ""
+                ).strip()
+                return
             if (person_last or "").strip():
                 return
             reply = reply_payload.get("patient_reply", "")
@@ -551,12 +622,12 @@ class AimsCoachingHandler:
     
     def _primary_for_json(self, log_path: str) -> tuple[str, list[str]]:
         """Select primary and fallback models for JSON tasks based on call path.
-        - coach_classify: Pro primary (better semantics), Flash as fallback(s)
-        - otherwise (e.g., endgame_detect): Flash primary, Pro as fallback
+        - coach_classify: configured main model primary, Flash fallback(s)
+        - otherwise (e.g., endgame_detect): Flash primary, configured main model fallback
         """
         lp = (log_path or "").lower()
         # Start with configured fallbacks, ensuring uniqueness and preserving order
-        pro_primary = self.model_id
+        configured_primary = self.model_id
         try:
             cfg_fallbacks = [m for m in (self.model_fallbacks or []) if m]
         except Exception as e:
@@ -564,11 +635,9 @@ class AimsCoachingHandler:
             cfg_fallbacks = []
         flash = DEFAULT_MODEL_FLASH
         if lp == "coach_classify":
-            # Pro primary, ensure Flash is in fallbacks
             fb = [x for x in ([flash] + cfg_fallbacks) if x]
-            return pro_primary, fb
-        # Default: Flash primary, Pro then others as fallbacks
-        fb = [x for x in ([pro_primary] + cfg_fallbacks) if x]
+            return configured_primary, fb
+        fb = [x for x in ([configured_primary] + cfg_fallbacks) if x]
         return flash, fb
 
     async def _call_vertex_json(self, prompt: str, schema: dict, log_path: str, *, temperature: float | None = None, max_tokens: int | None = None) -> str:

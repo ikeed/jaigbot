@@ -20,10 +20,12 @@ from app.constants import (
     MSG_PERSONA_NAME,
     MSG_THREAD_BOUND,
 )
+from app.message_catalog import message as catalog_message, message_list
 from app.persona import DEFAULT_CHARACTER, DEFAULT_SCENE
 from app.services.chainlit.backend_client import BackendClient
 from app.services.chainlit.session_manager import SessionManager
 from app.services.chainlit.ui_handler import UIHandler
+from app.services.coaching_display import coaching_summary_text
 
 logger = logging.getLogger(__name__)
 
@@ -62,14 +64,12 @@ class ChainlitOrchestrator:
             await self._start_scenario_flow()
         except Exception as e:
             await self._report_error_silently(e, "handle_chat_start")
-            await self.ui.show_error(
-                "An error occurred while starting the chat. Please try refreshing."
-            )
+            await self.ui.show_error(catalog_message("chainlit.chat_start_error"))
 
     async def handle_user_message(self, message: Message):
         """Processes an incoming user message."""
         if self.session.session_ended:
-            await self.ui.show_error("This session has ended. Please start a new chat.")
+            await self.ui.show_error(catalog_message("chainlit.session_ended"))
             return
         if self.session.intro_pending:
             await self.ui.send_window_message({"type": MSG_INTRO_REQUIRED})
@@ -82,7 +82,7 @@ class ChainlitOrchestrator:
             else str(raw_content or "").strip()
         )
         if not content:
-            await self.ui.show_error("Please enter a message.")
+            await self.ui.show_error(catalog_message("chainlit.blank_message"))
             return
 
         # Update UI for user message
@@ -118,7 +118,7 @@ class ChainlitOrchestrator:
 
         except Exception as e:
             await self._report_error_silently(e, "handle_user_message")
-            await self.ui.show_error(f"Error: {str(e)}")
+            await self.ui.show_error(catalog_message("chainlit.generic_error", error=str(e)))
 
     async def handle_session_resume(self, thread: Dict[str, Any]):
         """Rehydrates session state from a resumed Chainlit thread."""
@@ -218,7 +218,7 @@ class ChainlitOrchestrator:
 
         except Exception as e:
             await self._report_error_silently(e, "handle_session_resume")
-            await self.ui.show_error("An error occurred while resuming the chat.")
+            await self.ui.show_error(catalog_message("chainlit.resume_error"))
 
     async def handle_report_issue(self, reason: str):
         """Handles user-initiated issue reporting."""
@@ -232,12 +232,9 @@ class ChainlitOrchestrator:
             )
             self.session.session_ended = True
             self.session.history = []
-            await self.ui.show_error(
-                "Thank you for your report. The scenario has been ended and logged for review. "
-                "Please start a new chat to continue."
-            )
+            await self.ui.show_error(catalog_message("chainlit.report_success"))
         except Exception as e:
-            await self.ui.show_error(f"An error occurred while reporting: {str(e)}")
+            await self.ui.show_error(catalog_message("chainlit.report_error", error=str(e)))
 
     # --- Private Helpers ---
     async def _start_scenario_flow(self):
@@ -399,12 +396,7 @@ class ChainlitOrchestrator:
                 ROLE_ASSISTANT,
             } and is_scenario_card(content):
                 for line in content.splitlines():
-                    for prefix in [
-                        "Persona: ",
-                        "Person: ",
-                        "Parent: ",
-                        "Parent/Patient: ",
-                    ]:
+                    for prefix in message_list("chainlit.scenario_name_prefixes"):
                         if line.startswith(prefix):
                             return line.replace(prefix, "").strip()
         return None
@@ -424,11 +416,11 @@ class ChainlitOrchestrator:
         self, history: List[Dict[str, Any]], default_card: str
     ):
         scene = self.session.scene or ""
-        if "Scenario details" in scene:
+        if catalog_message("chainlit.scenario_details_marker") in scene:
             return
 
         card = self._recover_scenario_card(history) or default_card
-        suffix = f"\n\nScenario details (use these exact names; do not change them):\n{card}\n\nIf asked for names, respond naturally but keep the same names."
+        suffix = "\n\n" + catalog_message("chainlit.scenario_details_suffix", card=card)
         self.session.scene = scene + suffix
 
     async def _process_backend_response(self, data: Dict[str, Any]):
@@ -437,18 +429,14 @@ class ChainlitOrchestrator:
         # 1. Coaching
         coaching = data.get("coaching")
         if isinstance(coaching, dict):
-            parts = []
-            if coaching.get("step"):
-                parts.append(f"Detected step: {coaching['step']}")
-            if coaching.get("reasons"):
-                parts.append(f"Feedback: {coaching['reasons'][0]}")
-            if coaching.get("tips"):
-                parts.append(f"Tip: {coaching['tips'][0]}")
-
-            if parts:
-                coach_text = " | ".join(parts)
-                history.append({"role": ROLE_COACH, "content": coach_text})
-                await self.ui.send_coach_message(coach_text)
+            coach_text = coaching_summary_text(coaching)
+            if coach_text:
+                history.append({
+                    "role": ROLE_COACH,
+                    "content": coach_text,
+                    "coaching_data": coaching,
+                })
+                await self.ui.send_coaching_message(coaching)
 
         # 2. Assistant Reply
         reply = data.get("reply")
@@ -461,7 +449,7 @@ class ChainlitOrchestrator:
         # 3. Coach Post (Game Over)
         coach_post = data.get("coachPost")
         if isinstance(coach_post, dict):
-            title = coach_post.get("title") or "✅ Scenario complete"
+            title = coach_post.get("title") or catalog_message("coaching.scenario_complete_marked")
             combined = "\n".join([title, *(coach_post.get("lines") or [])])
             await self.ui.send_coach_message(combined)
 
@@ -469,7 +457,7 @@ class ChainlitOrchestrator:
 
     async def _run_preflight_checks(self):
         if not await self.backend.check_health():
-            await self.ui.show_error("Backend is not reachable. Ensure it is running.")
+            await self.ui.show_error(catalog_message("chainlit.backend_unreachable"))
             return
 
         try:
@@ -480,7 +468,7 @@ class ChainlitOrchestrator:
                 or config.get("project")
             )
             if proj in (None, "", "<unset>"):
-                await self.ui.show_error("Warning: Backend PROJECT_ID appears unset.")
+                await self.ui.show_error(catalog_message("chainlit.project_unset"))
         except Exception as e:
             logger.debug(f"Failed to check backend config during preflight: {e}")
             pass
@@ -489,7 +477,11 @@ class ChainlitOrchestrator:
             mc = await self.backend.check_model()
             if mc.get("available") is False:
                 await self.ui.show_error(
-                    f"Model '{mc.get('modelId')}' not available in '{mc.get('region')}'."
+                    catalog_message(
+                        "chainlit.model_unavailable",
+                        model_id=mc.get("modelId"),
+                        region=mc.get("region"),
+                    )
                 )
         except Exception as e:
             logger.debug(f"Failed to check model availability during preflight: {e}")

@@ -72,7 +72,7 @@
     {
       "turn": 3,
       "role": "coach",
-      "content": "Detected step: Announce+Inquire | Announce: \u2192 You introduced the topic of vaccinations after addressing the primary concern, but the introduction was indirect ('he may not be up to date'). | Inquire: \u2192 You followed up with a closed question ('Do you have any questions?') which often gets a 'no' even when concerns are present.",
+      "content": "Announce:\n- You introduced the topic of vaccinations after addressing the primary concern, but the introduction was indirect ('he may not be up to date').\n\nInquire:\n- You followed up with a closed question ('Do you have any questions?') which often gets a 'no' even when concerns are present.",
       "timestamp": "2026-06-03T16:43:20.595547Z",
       "coaching": {
         "step": "Announce+Inquire",
@@ -116,7 +116,7 @@
     {
       "turn": 4,
       "role": "coach",
-      "content": "Detected step: Secure | Secure: \u2713 You provided a clear, brief explanation of the schedule and checked in with the parent, which supports the conversation.",
+      "content": "Secure:\n- You provided a clear, brief explanation of the schedule and checked in with the parent, which supports the conversation.",
       "timestamp": "2026-06-03T16:45:18.174635Z",
       "coaching": {
         "step": "Secure",
@@ -159,7 +159,7 @@
     {
       "turn": 5,
       "role": "coach",
-      "content": "Detected step: Mirror+Secure | Mirror: \u2192 Your opening, 'I understand your concerns,' was a good starting point for validation, but it was too general. It did not reflect the specific concern the parent raised about their child being 'so small.' | Secure: \u2192 You provided reassurance ('The vaccines are very safe'), but it came before the parent's specific concern was fully heard and validated, which can feel like a dismissal.",
+      "content": "Mirror:\n- Your opening, 'I understand your concerns,' was a good starting point for validation, but it was too general. It did not mirror the specific concern the parent raised about their child being 'so small.'\n\nSecure:\n- You provided reassurance ('The vaccines are very safe'), but it came before the parent's specific concern was fully heard and validated, which can feel like a dismissal.",
       "timestamp": "2026-06-03T16:46:22.031897Z",
       "coaching": {
         "step": "Mirror+Secure",
@@ -203,7 +203,7 @@
     {
       "turn": 6,
       "role": "coach",
-      "content": "Detected step: Mirror | Mirror: \u2713 You accurately reflected the person's concern about the requirement and checked your understanding with 'Did I get that right?'.",
+      "content": "Mirror:\n- You accurately mirrored the person's concern about the requirement and checked your understanding with 'Did I get that right?'.",
       "timestamp": "2026-06-03T16:47:13.379777Z",
       "coaching": {
         "step": "Mirror",
@@ -243,7 +243,7 @@
     {
       "turn": 7,
       "role": "coach",
-      "content": "Detected step: Secure | Secure: \u2713 You affirmed the parent's concerns as valid and directly answered their question about requirements, which supports their autonomy.",
+      "content": "Secure:\n- You affirmed the parent's concerns as valid and directly answered their question about requirements, which supports their autonomy.",
       "timestamp": "2026-06-03T16:48:54.415664Z",
       "coaching": {
         "step": "Secure",
@@ -283,7 +283,7 @@
     {
       "turn": 8,
       "role": "coach",
-      "content": "Detected step: Secure | Secure: \u2713 You affirmed the parent's concerns as valid and provided reassurance by sharing your personal and professional perspective. The check-in question 'Does that make sense?' helps ensure the parent is following along.",
+      "content": "Secure:\n- You affirmed the parent's concerns as valid and provided reassurance by sharing your personal and professional perspective. The check-in question 'Does that make sense?' helps ensure the parent is following along.",
       "timestamp": "2026-06-03T16:51:25.548469Z",
       "coaching": {
         "step": "Secure",
@@ -323,7 +323,7 @@
     {
       "turn": 9,
       "role": "coach",
-      "content": "Detected step: Secure | Secure: \u2713 You did an excellent job of supporting the parent's decision-making process by validating their need to talk with their husband and then offering a concrete follow-up plan.",
+      "content": "Secure:\n- You did an excellent job of supporting the parent's decision-making process by validating their need to talk with their husband and then offering a concrete follow-up plan.",
       "timestamp": "2026-06-03T16:54:04.658436Z",
       "coaching": {
         "step": "Secure",
@@ -361,7 +361,7 @@
     {
       "turn": 10,
       "role": "coach",
-      "content": "Detected step: Mirror+Secure | Mirror: \u2713 You started by directly validating the parent's feeling of confusion with 'This is confusing!' | Secure: \u2713 You provided a resource and explicitly supported her autonomy by letting her decide when to call back, which is a great way to build trust.",
+      "content": "Mirror:\n- You started by directly validating the parent's feeling of confusion with 'This is confusing!'\n\nSecure:\n- You provided a resource and explicitly supported her autonomy by letting her decide when to call back, which is a great way to build trust.",
       "timestamp": "2026-06-03T16:55:57.095750Z",
       "coaching": {
         "step": "Mirror+Secure",

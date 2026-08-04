@@ -19,7 +19,10 @@ def local_aims_mapping_mock():
             }
         }
     }
-    with patch("app.aims_engine.load_mapping", return_value=mock_mapping):
+    with (
+        patch("app.aims_engine.load_mapping", return_value=mock_mapping),
+        patch("app.aims_mapping_loader.load_mapping", return_value=mock_mapping),
+    ):
         yield mock_mapping
 
 
@@ -27,6 +30,7 @@ class GWStub:
     classify_payload = None
     reply_json_payload = None
     person_topic = None
+    person_events = None
 
     def __init__(self, *args, **kwargs):
         pass
@@ -42,7 +46,8 @@ class GWStub:
                 "aims": aims_payload,
                 "safety_flags": [],
                 "reasoning": "mock",
-                "person_topic": GWStub.person_topic
+                "person_topic": GWStub.person_topic,
+                "person_events": GWStub.person_events or [],
             }
             return json.dumps(payload)
         
@@ -67,6 +72,10 @@ class GWStub:
 
 
 def setup_env(monkeypatch):
+    GWStub.classify_payload = None
+    GWStub.reply_json_payload = None
+    GWStub.person_topic = None
+    GWStub.person_events = None
     monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", GWStub)
     monkeypatch.setattr(m, "VertexClient", GWStub)
     monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", True, raising=False)
@@ -104,7 +113,7 @@ def test_secure_before_mirror_adds_reason_tip_and_caps_score(monkeypatch):
     # Score capped and reason/tip injected
     assert data["coaching"]["score"] <= 2
     reasons = " ".join(data["coaching"]["reasons"]).lower()
-    assert "reflecting" in reasons or "mirroring" in reasons
+    assert "mirroring" in reasons
     assert any("before educating" in t.lower() for t in data["coaching"]["tips"])
 
 
@@ -123,6 +132,13 @@ def test_topic_mirroring_and_securing_state_updates(monkeypatch):
     # We now need another turn to actually seed the concern from the previous turn's reply
     GWStub.classify_payload = {"step": "Inquire", "score": 3, "reasons": ["llm"], "tips": []}
     GWStub.person_topic = "side_effects"
+    GWStub.person_events = [
+        {
+            "event_type": "concern_raised",
+            "topic": "side_effects",
+            "evidence_spans": ["I'm worried about vaccine side effects."],
+        }
+    ]
     GWStub.reply_json_payload = {"patient_reply": "ok"}
     r1b = c.post("/chat", json={"message": "What have you heard about side effects?", "coach": True, "sessionId": sess})
     assert r1b.status_code == 200
@@ -134,12 +150,18 @@ def test_topic_mirroring_and_securing_state_updates(monkeypatch):
     # Turn 3: Mirror via clinician topic mention
     GWStub.classify_payload = {"step": "Mirror", "score": 3, "reasons": ["llm"], "tips": []}
     GWStub.person_topic = "side_effects"
+    GWStub.person_events = [
+        {"event_type": "concern_mirrored", "topic": "side_effects"}
+    ]
     GWStub.reply_json_payload = {"patient_reply": "ok"}
     r2 = c.post("/chat", json={"message": "It sounds like the side effects worry you.", "coach": True, "sessionId": sess})
     assert r2.status_code == 200
     # Turn 4: Secure via clinician topic mention
     GWStub.classify_payload = {"step": "Secure", "score": 3, "reasons": ["llm"], "tips": []}
     GWStub.person_topic = None
+    GWStub.person_events = [
+        {"event_type": "concern_secured", "topic": "side_effects"}
+    ]
     GWStub.reply_json_payload = {"patient_reply": "ok"}
     r3 = c.post("/chat", json={"message": "For side effects, here is what to expect.", "coach": True, "sessionId": sess})
     assert r3.status_code == 200
@@ -169,6 +191,18 @@ def test_zia_style_required_and_safe_reply_seeds_distinct_concerns_and_flags_sec
 
     GWStub.classify_payload = {"step": "Secure", "score": 3, "reasons": ["llm"], "tips": []}
     GWStub.person_topic = None
+    GWStub.person_events = [
+        {
+            "event_type": "concern_raised",
+            "topic": "requirements",
+            "evidence_spans": ["Is it required? Is it okay here in Canada?"],
+        },
+        {
+            "event_type": "concern_raised",
+            "topic": "side_effects",
+            "evidence_spans": ["Is it safe for my son?"],
+        },
+    ]
     GWStub.reply_json_payload = {"patient_reply": "ok"}
     r2 = c.post(
         "/chat",
@@ -185,7 +219,7 @@ def test_zia_style_required_and_safe_reply_seeds_distinct_concerns_and_flags_sec
     data = r2.json()
 
     reasons = " ".join(data["coaching"]["reasons"]).lower()
-    assert "reflecting" in reasons or "mirroring" in reasons
+    assert "mirroring" in reasons
 
     concerns = m.MEMORY_STORE[sess]["aims_state"]["parent_concerns"]
     assert {c["topic"] for c in concerns} == {"requirements", "side_effects"}

@@ -4,7 +4,7 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any
 
-from app.aims_engine import evaluate_turn
+from app.message_catalog import message
 from app.models import ClassifierResult
 
 
@@ -19,7 +19,7 @@ class AimsTurnResult:
 
 
 class AimsTurnCoordinator:
-    """Runs independent LLM work for a clinician turn and applies classification fallback."""
+    """Runs independent LLM work and optional legacy classification fallback."""
 
     def __init__(
         self,
@@ -28,11 +28,13 @@ class AimsTurnCoordinator:
         patient_reply_service: Any,
         classify_budget_s: float,
         logger: Any,
+        heuristic_fallback_enabled: bool = False,
     ) -> None:
         self._classifier_service = classifier_service
         self._patient_reply_service = patient_reply_service
         self._classify_budget_s = classify_budget_s
         self._logger = logger
+        self._heuristic_fallback_enabled = heuristic_fallback_enabled
 
     async def run(
         self,
@@ -112,12 +114,41 @@ class AimsTurnCoordinator:
                 was_fallback=False,
             )
 
+        if not self._heuristic_fallback_enabled:
+            unavailable_text = message("aims.classification_unavailable")
+            return AimsTurnResult(
+                cls_payload={
+                    "step": None,
+                    "score": 0,
+                    "reasons": [unavailable_text],
+                    "tips": [],
+                    "feedback_items": [
+                        {
+                            "code": "classification_unavailable",
+                            "text": unavailable_text,
+                            "tone": "improvement",
+                        }
+                    ],
+                },
+                is_vaccine_relevant=True,
+                is_small_talk=False,
+                classification_result=None,
+                reply_payload=reply_payload,
+                was_fallback=False,
+            )
+
+        from app.aims_engine import evaluate_turn
+
         fallback = evaluate_turn(clinician_message, mapping)
+        fallback_marker = message("aims.fallback_marker")
+        fallback_reasons = list(fallback.get("reasons", []) or [])
+        if fallback_marker not in fallback_reasons:
+            fallback_reasons.append(fallback_marker)
         return AimsTurnResult(
             cls_payload={
                 "step": fallback.get("step"),
                 "score": fallback.get("score", 2),
-                "reasons": fallback.get("reasons", []) + ["fallback"],
+                "reasons": fallback_reasons,
                 "tips": fallback.get("tips", []),
             },
             is_vaccine_relevant=True,

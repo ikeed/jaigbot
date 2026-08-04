@@ -52,13 +52,17 @@ def create_system_router(
             if full:
                 return {"history": mem.get("full_history") or []}
             hist = mem.get("history") or []
-            out = []
+            out: list[dict[str, Any]] = []
             for it in hist:
                 try:
                     role = it.get("role")
                     content = it.get("content")
                     if isinstance(role, str) and isinstance(content, str):
-                        out.append({"role": role, "content": content})
+                        item: dict[str, Any] = {"role": role, "content": content}
+                        coaching = it.get("coaching_data") or it.get("coaching")
+                        if isinstance(coaching, dict):
+                            item["coaching"] = coaching
+                        out.append(item)
                 except Exception as e:
                     logger.debug("Failed to parse history item: %s. Error: %s", it, e)
                     continue
@@ -77,6 +81,9 @@ def create_system_router(
             "region": settings.REGION,
             "vertexLocation": settings.VERTEX_LOCATION,
             "modelId": settings.MODEL_ID,
+            "aimsClassifierModelId": settings.AIMS_CLASSIFIER_MODEL_ID,
+            "aimsClassifierThinkingLevel": settings.AIMS_CLASSIFIER_THINKING_LEVEL,
+            "aimsClassifierThinkingBudget": settings.AIMS_CLASSIFIER_THINKING_BUDGET,
             "temperature": settings.TEMPERATURE,
             "maxTokens": settings.MAX_TOKENS,
             "logLevel": settings.LOG_LEVEL,

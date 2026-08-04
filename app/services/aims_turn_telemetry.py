@@ -42,7 +42,9 @@ class AimsTurnTelemetry:
         model_used: str,
         step: str | None,
         score: int | None,
+        semantic_contract: dict[str, bool] | None = None,
     ) -> None:
+        semantic_contract = semantic_contract or {}
         telemetry_log_event(
             self._logger,
             "aims_classify_end",
@@ -52,6 +54,10 @@ class AimsTurnTelemetry:
             modelUsed=model_used,
             step=step,
             score=score,
+            hasObservations=bool(semantic_contract.get("observations")),
+            hasFeedbackItems=bool(semantic_contract.get("feedback_items")),
+            hasPersonEvents=bool(semantic_contract.get("person_events")),
+            hasResolution=bool(semantic_contract.get("resolution")),
         )
 
     def reply_end(

@@ -6,7 +6,18 @@ import pytest
 
 from app import chainlit_thread_state
 from app.constants import MSG_DUPLICATE_TAB, MSG_INTRO_REQUIRED, MSG_THREAD_BOUND
+from app.message_catalog import message_list
 from app.services.chainlit.orchestrator import ChainlitOrchestrator
+
+
+def _has_praise_line(text: str, step: str, feedback: str) -> bool:
+    return f"{step}:\n" in text and any(
+        f"{label} {feedback}" in text for label in message_list("coaching.labels.praise")
+    )
+
+
+def _praise_labels_in_text(text: str) -> set[str]:
+    return {label for label in message_list("coaching.labels.praise") if label in text}
 
 
 @pytest.fixture
@@ -452,15 +463,17 @@ async def test_process_backend_response_dispatches_coaching_reply_and_coach_post
     mock_services["session"].history = []
     mock_services["session"].persona_name = "Sarah"
     mock_services["ui"].send_coach_message = AsyncMock()
+    mock_services["ui"].send_coaching_message = AsyncMock()
     mock_services["ui"].send_assistant_reply = AsyncMock()
 
+    coaching = {
+        "step": "Announce",
+        "reasons": ["Clear recommendation."],
+        "tips": ["Ask how that sounds."],
+    }
     await orchestrator._process_backend_response(
         {
-            "coaching": {
-                "step": "Announce",
-                "reasons": ["Clear recommendation."],
-                "tips": ["Ask how that sounds."],
-            },
+            "coaching": coaching,
             "reply": "I need to understand more.",
             "coachPost": {
                 "title": "Scenario complete",
@@ -472,14 +485,13 @@ async def test_process_backend_response_dispatches_coaching_reply_and_coach_post
     assert mock_services["session"].history == [
         {
             "role": "coach",
-            "content": "Detected step: Announce | Feedback: Clear recommendation. | Tip: Ask how that sounds.",
+            "content": "Announce:\n- Feedback: Clear recommendation.\n- Tip: Ask how that sounds.",
+            "coaching_data": coaching,
         },
         {"role": "assistant", "content": "I need to understand more."},
     ]
-    mock_services["ui"].send_coach_message.assert_any_await(
-        "Detected step: Announce | Feedback: Clear recommendation. | Tip: Ask how that sounds."
-    )
-    mock_services["ui"].send_coach_message.assert_any_await(
+    mock_services["ui"].send_coaching_message.assert_awaited_once_with(coaching)
+    mock_services["ui"].send_coach_message.assert_awaited_once_with(
         "Scenario complete\nOutcome: accepted literature"
     )
     mock_services["ui"].send_assistant_reply.assert_awaited_once_with(
@@ -488,11 +500,136 @@ async def test_process_backend_response_dispatches_coaching_reply_and_coach_post
 
 
 @pytest.mark.asyncio
+async def test_process_backend_response_prefers_step_feedback_over_raw_tip(
+    orchestrator, mock_services
+):
+    mock_services["session"].history = []
+    mock_services["session"].persona_name = "Sarah"
+    mock_services["ui"].send_coaching_message = AsyncMock()
+    mock_services["ui"].send_assistant_reply = AsyncMock()
+
+    await orchestrator._process_backend_response(
+        {
+            "coaching": {
+                "step": "Secure",
+                "reasons": ["You asked and then reassured."],
+                "tips": ["Try leading with an open question."],
+                "step_feedback": [
+                    {
+                        "step": "Inquire",
+                        "tone": "praise",
+                        "feedback": "You opened with a broad concern question.",
+                    },
+                    {
+                        "step": "Secure",
+                        "tone": "improvement",
+                        "feedback": "Pause before moving into reassurance.",
+                    },
+                ],
+            },
+            "reply": "I need to understand more.",
+        }
+    )
+
+    coach_text = mock_services["session"].history[0]["content"]
+    assert _has_praise_line(coach_text, "Inquire", "You opened with a broad concern question.")
+    assert "praise:" not in coach_text.lower()
+    assert "Secure:\n- Tip: Pause before moving into reassurance." in coach_text
+    assert "Tip: Try leading with an open question." not in coach_text
+
+
+@pytest.mark.asyncio
+async def test_process_backend_response_shows_tip_with_praise_only_step_feedback(
+    orchestrator, mock_services
+):
+    mock_services["session"].history = []
+    mock_services["session"].persona_name = "Zia"
+    mock_services["ui"].send_coaching_message = AsyncMock()
+    mock_services["ui"].send_assistant_reply = AsyncMock()
+
+    await orchestrator._process_backend_response(
+        {
+            "coaching": {
+                "step": "Secure",
+                "tips": [
+                    "Ask a single, open-ended question to check for understanding."
+                ],
+                "step_feedback": [
+                    {
+                        "step": "Secure",
+                        "tone": "praise",
+                        "feedback": "You led with a strong autonomy statement.",
+                    },
+                ],
+            },
+            "reply": "I would like to go slowly.",
+        }
+    )
+
+    coach_text = mock_services["session"].history[0]["content"]
+    assert _has_praise_line(coach_text, "Secure", "You led with a strong autonomy statement.")
+    assert "praise:" not in coach_text.lower()
+    assert (
+        "Tip: Ask a single, open-ended question to check for understanding."
+        in coach_text
+    )
+
+
+@pytest.mark.asyncio
+async def test_process_backend_response_rotates_praise_step_feedback_labels(
+    orchestrator, mock_services
+):
+    mock_services["session"].history = []
+    mock_services["ui"].send_coaching_message = AsyncMock()
+    mock_services["ui"].send_assistant_reply = AsyncMock()
+
+    await orchestrator._process_backend_response(
+        {
+            "coaching": {
+                "step": "Mirror+Secure+Inquire+Announce",
+                "step_feedback": [
+                    {
+                        "step": "Mirror",
+                        "tone": "praise",
+                        "feedback": "You mirrored the parent's core worry.",
+                    },
+                    {
+                        "step": "Secure",
+                        "tone": "praise",
+                        "feedback": "You supported the parent's choice.",
+                    },
+                    {
+                        "step": "Inquire",
+                        "tone": "praise",
+                        "feedback": "You asked a collaborative open question.",
+                    },
+                    {
+                        "step": "Announce",
+                        "tone": "praise",
+                        "feedback": "You made a clear recommendation.",
+                    },
+                ],
+            },
+            "reply": "I appreciate that.",
+        }
+    )
+
+    coach_text = mock_services["session"].history[0]["content"]
+    assert _has_praise_line(coach_text, "Mirror", "You mirrored the parent's core worry.")
+    assert _has_praise_line(coach_text, "Secure", "You supported the parent's choice.")
+    assert _has_praise_line(coach_text, "Inquire", "You asked a collaborative open question.")
+    assert _has_praise_line(coach_text, "Announce", "You made a clear recommendation.")
+    assert len(_praise_labels_in_text(coach_text)) >= 2
+    assert "praise:" not in coach_text.lower()
+
+
+@pytest.mark.asyncio
 async def test_process_backend_response_handles_empty_coaching_and_default_coach_post_title(
     orchestrator, mock_services
 ):
     mock_services["session"].history = []
     mock_services["ui"].send_coach_message = AsyncMock()
+    mock_services["ui"].send_coaching_message = AsyncMock()
     mock_services["ui"].send_assistant_reply = AsyncMock()
 
     await orchestrator._process_backend_response(
@@ -504,6 +641,7 @@ async def test_process_backend_response_handles_empty_coaching_and_default_coach
 
     assert mock_services["session"].history == []
     mock_services["ui"].send_assistant_reply.assert_not_awaited()
+    mock_services["ui"].send_coaching_message.assert_not_awaited()
     mock_services["ui"].send_coach_message.assert_awaited_once_with(
         "✅ Scenario complete\nLine"
     )

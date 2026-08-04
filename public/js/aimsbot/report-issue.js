@@ -7,11 +7,11 @@
   app.reportIssueReady = true;
   app.modals.reportIssue = app.createModal({
     id: "report-issue-modal",
-    title: "Report Issue",
-    description: "Describe the issue you encountered. This will end the session and log a report.",
-    placeholder: "What went wrong?",
+    title: app.t("reportIssue.title"),
+    description: app.t("reportIssue.description"),
+    placeholder: app.t("reportIssue.placeholder"),
     showTextarea: true,
-    confirmText: "Submit Report",
+    confirmText: app.t("reportIssue.confirm"),
     onConfirm: function (reason) {
       app.postToChainlit({ type: "report_issue", reason: reason });
     }
