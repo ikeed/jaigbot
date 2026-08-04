@@ -73,7 +73,7 @@ async def test_refine_fallback_feedback_uses_llm_and_keeps_shape():
         state={
             "announced": True,
             "phase": "Secure",
-            "first_inquire_done": True,
+            "is_undiscovered_concerns": False,
             "pending_concerns": True,
             "recent_coaching": ["secure_before_mirror"],
             "parent_concerns": [
@@ -272,7 +272,7 @@ def test_build_context_normalizes_parent_concerns_and_feedback_objects():
         state={
             "announced": True,
             "phase": "Secure",
-            "first_inquire_done": True,
+            "is_undiscovered_concerns": False,
             "pending_concerns": True,
             "recent_coaching": ["one"],
             "parent_concerns": [

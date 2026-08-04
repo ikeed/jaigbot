@@ -69,7 +69,7 @@ For each clinician turn, determine the correct AIMS classification by reading `r
 From the transcript's `aims_state`, reconstruct the state that existed BEFORE the first visible clinician turn:
 - `announced`: Was Announce already done?
 - `phase`: Current AIMS phase
-- `first_inquire_done`: Has any Inquire happened?
+- `is_undiscovered_concerns`: Are there concerns that haven't surfaced yet (via clinician Inquire or the person volunteering them)?
 - `parent_concerns`: Which concerns exist and their mirrored/secured status
 - `mirrors_done`: How many Mirror turns have occurred
 

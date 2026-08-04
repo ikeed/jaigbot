@@ -168,7 +168,6 @@ class AimsEndgameService:
             )
 
             concerns = aims_state.get("parent_concerns") or []
-            first_inquire_done = bool(aims_state.get("first_inquire_done", False))
             literature_followup_closure = (
                 heuristic is not None
                 and heuristic.get("reason") == "followup_literature"
@@ -229,7 +228,7 @@ class AimsEndgameService:
 
             if is_endgame and outcome == "accepted_literature":
                 structured_literature = self._structured_literature_resolution(result)
-                if not first_inquire_done or not concerns:
+                if not concerns:
                     is_endgame = False
                 elif structured_literature is True:
                     pass

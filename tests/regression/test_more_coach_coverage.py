@@ -97,7 +97,7 @@ def test_secure_before_mirror_adds_reason_tip_and_caps_score(monkeypatch):
         "aims_state": {
             "announced": True,
             "phase": "InquireMirror",
-            "first_inquire_done": True,
+            "is_undiscovered_concerns": False,
             "pending_concerns": True,
             "parent_concerns": [
                 {"desc": "side effects", "topic": "side_effects", "is_mirrored": False, "is_secured": False}
@@ -183,7 +183,7 @@ def test_zia_style_required_and_safe_reply_seeds_distinct_concerns_and_flags_sec
         "aims_state": {
             "announced": True,
             "phase": "InquireMirror",
-            "first_inquire_done": True,
+            "is_undiscovered_concerns": False,
             "pending_concerns": True,
             "parent_concerns": [],
         },

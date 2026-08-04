@@ -366,9 +366,11 @@ appending a fresh unresolved concern.
 - **Mirror+Secure**: if all concerns are now mirrored after the turn, phase advances to `Secure`;
   otherwise stays in `InquireMirror`.
 - **Inquire**, **Announce+Inquire**, **Mirror+Inquire**, **Secure+Inquire**, and
-  **Mirror+Secure+Inquire** set `first_inquire_done = True` and phase to `InquireMirror`,
+  **Mirror+Secure+Inquire** set `is_undiscovered_concerns = False` and phase to `InquireMirror`,
   even from `Secure`, unless global reconciliation advances fully resolved concern state to
-  `Secure`.
+  `Secure`. `is_undiscovered_concerns` also flips to `False` the moment any concern is tracked
+  in `parent_concerns`, regardless of source — including the person volunteering a concern
+  unprompted, without the clinician ever being classified with an Inquire step (see §8.3).
 
 ---
 
@@ -429,7 +431,11 @@ three weeks should give me enough time to look things over"* = `accepted_literat
   state still blocks closure.
 - **`accepted_literature`**: requires both LLM intent and deterministic transcript evidence that
   literature/materials plus a follow-up or return plan were offered/accepted. Natural language
-  still reaches the LLM, but follow-up alone or literature alone cannot end the session.
+  still reaches the LLM, but follow-up alone or literature alone cannot end the session. Also
+  requires `parent_concerns` to be non-empty — some concern must have surfaced, from any source.
+  It does **not** require the clinician to have been classified with an Inquire step
+  (`is_undiscovered_concerns` does not gate endgame): a person who volunteers and resolves their
+  own concerns without ever being explicitly asked can still reach `accepted_literature` closure.
 - **`deferred`**: never ends the scenario. If the LLM returns `deferred`, the runtime forces
   `is_endgame` to false so coaching can continue with a nudge or next-step suggestion.
 

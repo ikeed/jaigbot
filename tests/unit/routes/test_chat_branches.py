@@ -154,7 +154,7 @@ def test_classifier_post_processing_inquire_to_secure_and_tip_trim_and_score_nor
     # Tips trimmed to at most one (the app logic trims in the coach note,
     # and the post-processor used to trim them too. Since we want to ensure
     # we don't overwhelm the user, we keep this check.)
-    # Update: the handler adds a "secure before inquire" tip if first_inquire_done is False.
+    # Update: the handler adds a "secure before inquire" tip if is_undiscovered_concerns is True.
     assert isinstance(data["coaching"]["tips"], list)
     # Just check that it's a list. The exact count might vary now that we have
     # both LLM tips and heuristic tips.

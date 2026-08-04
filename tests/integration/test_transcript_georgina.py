@@ -313,7 +313,7 @@ def _seed_session():
         "aims_state": {
             "announced": True,
             "phase": "InquireMirror",
-            "first_inquire_done": True,
+            "is_undiscovered_concerns": False,
             "pending_concerns": True,
             "parent_concerns": [
                 # Two earlier concerns already resolved
