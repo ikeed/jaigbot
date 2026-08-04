@@ -307,7 +307,7 @@ class AimsEndgameService:
             seen.add(text)
             filtered.append(text)
 
-        if len(filtered) < 2:
+        if not filtered:
             return []
         return filtered[:2]
 
