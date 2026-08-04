@@ -159,7 +159,7 @@ class TranscriptReplayTest:
     INITIAL_AIMS_STATE: dict = {
         "announced": False,
         "phase": "PreAnnounce",
-        "first_inquire_done": False,
+        "is_undiscovered_concerns": True,
         "pending_concerns": False,
         "parent_concerns": [],
         "recent_coaching": [],

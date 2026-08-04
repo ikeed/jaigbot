@@ -84,7 +84,7 @@ def test_tip_suppression_when_all_concerns_mirrored(monkeypatch):
         "aims_state": {
             "announced": True,
             "phase": "InquireMirror",
-            "first_inquire_done": True,
+            "is_undiscovered_concerns": False,
             "pending_concerns": False,
             "parent_concerns": [
                 {"desc": "side effects", "topic": "side_effects", "is_mirrored": True, "is_secured": True}
@@ -109,7 +109,7 @@ def test_announce_after_inquiry_gets_reason_and_score_capped(monkeypatch):
         "aims_state": {
             "announced": False,
             "phase": "InquireMirror",
-            "first_inquire_done": True,
+            "is_undiscovered_concerns": False,
             "pending_concerns": True,
             "parent_concerns": [
                 {"desc": "side effects", "topic": "side_effects", "is_mirrored": True, "is_secured": False}

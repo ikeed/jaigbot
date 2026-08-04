@@ -74,7 +74,7 @@ def _secure_state_with_resolved_trust() -> dict:
     return {
         "announced": True,
         "phase": "Secure",
-        "first_inquire_done": True,
+        "is_undiscovered_concerns": False,
         "pending_concerns": False,
         "parent_concerns": [
             {
@@ -171,7 +171,7 @@ def test_live_route_compound_turn_resolves_final_concern_then_acceptance_can_end
         aims_state={
             "announced": True,
             "phase": "InquireMirror",
-            "first_inquire_done": True,
+            "is_undiscovered_concerns": False,
             "pending_concerns": True,
             "parent_concerns": [
                 {
@@ -215,7 +215,7 @@ def test_live_route_negative_literature_reply_blocks_endgame_with_active_trust_c
         aims_state={
             "announced": True,
             "phase": "Secure",
-            "first_inquire_done": True,
+            "is_undiscovered_concerns": False,
             "pending_concerns": True,
             "parent_concerns": [],
         },

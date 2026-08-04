@@ -70,7 +70,7 @@ def _make_state(phase="Secure", concerns=None):
     return {
         "announced": True,
         "phase": phase,
-        "first_inquire_done": True,
+        "is_undiscovered_concerns": False,
         "pending_concerns": True,
         "parent_concerns": concerns or [],
     }
@@ -164,7 +164,7 @@ def test_mirror_secure_inquire_scalar_marks_all_components():
     concern = mem["aims_state"]["parent_concerns"][0]
     assert concern["is_mirrored"] is True
     assert concern["is_secured"] is True
-    assert mem["aims_state"]["first_inquire_done"] is True
+    assert mem["aims_state"]["is_undiscovered_concerns"] is False
     assert mem["aims_state"]["phase"] == "Secure"
     assert cls["phase"] == "Secure"
 

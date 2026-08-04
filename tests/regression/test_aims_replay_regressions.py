@@ -152,7 +152,7 @@ def _resolved_trust_state() -> dict:
     return {
         "announced": True,
         "phase": "Secure",
-        "first_inquire_done": True,
+        "is_undiscovered_concerns": False,
         "pending_concerns": False,
         "parent_concerns": [
             {
@@ -234,7 +234,7 @@ async def test_replay_split_acceptance_requires_second_turn():
 
 
 @pytest.mark.asyncio
-async def test_replay_literature_followup_cannot_end_without_inquiry_or_surfaced_concern():
+async def test_replay_literature_followup_cannot_end_without_surfaced_concern():
     handler, memory_store = _handler(
         turn_results=[
             _turn(
@@ -264,7 +264,7 @@ async def test_replay_literature_followup_cannot_end_without_inquiry_or_surfaced
         KEY_AIMS_STATE: {
             "announced": True,
             "phase": "Secure",
-            "first_inquire_done": False,
+            "is_undiscovered_concerns": True,
             "pending_concerns": False,
             "parent_concerns": [],
             "recent_coaching": [],

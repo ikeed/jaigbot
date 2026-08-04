@@ -50,7 +50,7 @@ def _literature_ready_state() -> dict:
     return {
         "phase": "Secure",
         "announced": True,
-        "first_inquire_done": True,
+        "is_undiscovered_concerns": False,
         "parent_concerns": [
             {
                 "id": "trust",
@@ -572,7 +572,7 @@ def test_accepted_vaccine_blocks_when_any_concern_is_not_secured():
             "aims_state": {
                 "phase": "Secure",
                 "announced": True,
-                "first_inquire_done": True,
+                "is_undiscovered_concerns": False,
                 "parent_concerns": [
                     {
                         "id": "ingredients",
@@ -609,7 +609,7 @@ def test_accepted_vaccine_allows_when_all_concerns_are_secured():
             "aims_state": {
                 "phase": "Secure",
                 "announced": True,
-                "first_inquire_done": True,
+                "is_undiscovered_concerns": False,
                 "parent_concerns": [
                     {
                         "id": "ingredients",
@@ -653,8 +653,13 @@ def test_accepted_literature_requires_literature_and_followup_evidence():
     assert result is None
 
 
-def test_accepted_literature_requires_inquiry_and_surfaced_concern():
-    """A pamphlet/follow-up cop-out cannot end the scenario before inquiry and concern surfacing."""
+def test_accepted_literature_requires_surfaced_concern():
+    """A pamphlet/follow-up cop-out cannot end the scenario before any concern has surfaced.
+
+    is_undiscovered_concerns no longer gates endgame directly (see
+    test_accepted_literature_succeeds_despite_undiscovered_concerns_flag below) — only an
+    empty parent_concerns list blocks accepted_literature.
+    """
     mock_svc = _MockClassifierService(
         {
             "is_endgame": True,
@@ -678,7 +683,7 @@ def test_accepted_literature_requires_inquiry_and_surfaced_concern():
             "aims_state": {
                 "phase": "Secure",
                 "announced": True,
-                "first_inquire_done": False,
+                "is_undiscovered_concerns": True,
                 "parent_concerns": [],
             },
         }
@@ -686,6 +691,53 @@ def test_accepted_literature_requires_inquiry_and_surfaced_concern():
     service = _make_endgame_service(mock_svc)
     result = _run(service.check(store["s10a"], {}, None, "s10a"))
     assert result is None
+
+
+def test_accepted_literature_succeeds_despite_undiscovered_concerns_flag():
+    """A concern surfaced without a clinician-initiated Inquire must not block closure.
+
+    Regression test: previously accepted_literature was hard-blocked whenever
+    is_undiscovered_concerns (formerly first_inquire_done) was True, even when the person had
+    volunteered a concern unprompted and it had been fully addressed. That made closure
+    structurally impossible for any conversation where the person raised their own concerns
+    without the clinician ever being classified with an Inquire step.
+    """
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_literature",
+            "summary": "Person accepted information and follow-up.",
+            "reason": "",
+            "accepted_materials": True,
+            "accepted_followup": True,
+            "remaining_active_concern": False,
+        }
+    )
+    store = {
+        "s10a2": {
+            "history": [
+                {"role": "user", "content": "I'll print that information and we can follow up in a few weeks."},
+                {"role": "assistant", "content": "That sounds good, I'll read it over and talk to my husband."},
+            ],
+            "aims_state": {
+                "phase": "Secure",
+                "announced": True,
+                "is_undiscovered_concerns": True,
+                "parent_concerns": [
+                    {
+                        "id": "requirements",
+                        "topic": "requirements",
+                        "desc": "wanted to know if the vaccine was required",
+                        "is_mirrored": True,
+                        "is_secured": True,
+                    }
+                ],
+            },
+        }
+    }
+    service = _make_endgame_service(mock_svc)
+    result = _run(service.check(store["s10a2"], {}, None, "s10a2"))
+    assert result is not None
 
 
 def test_negative_literature_language_blocks_llm_accepted_literature():
@@ -807,7 +859,7 @@ def test_unmirrored_concern_does_not_block_literature_followup_closure():
                 "aims_state": {
                     "phase": "Secure",
                     "announced": True,
-                    "first_inquire_done": True,
+                    "is_undiscovered_concerns": False,
                     "parent_concerns": [
                         {
                             "id": "trust",
@@ -852,7 +904,7 @@ def test_unmirrored_concern_allows_natural_language_review_and_followup_closure(
                 "aims_state": {
                     "phase": "Secure",
                     "announced": True,
-                    "first_inquire_done": True,
+                    "is_undiscovered_concerns": False,
                     "parent_concerns": [
                         {
                             "id": "trust",
@@ -902,7 +954,7 @@ def test_unmirrored_concern_allows_resources_and_talk_again_closure():
             "aims_state": {
                 "phase": "Secure",
                 "announced": True,
-                "first_inquire_done": True,
+                "is_undiscovered_concerns": False,
                 "parent_concerns": [
                     {
                         "id": "trust",
@@ -950,7 +1002,7 @@ def test_unmirrored_concern_with_natural_review_plan_and_active_concern_still_bl
                 "aims_state": {
                     "phase": "Secure",
                     "announced": True,
-                    "first_inquire_done": True,
+                    "is_undiscovered_concerns": False,
                     "parent_concerns": [
                         {
                             "id": "trust",
@@ -989,7 +1041,7 @@ def test_unmirrored_concern_with_literature_only_blocks_after_semantic_check():
             "aims_state": {
                 "phase": "Secure",
                 "announced": True,
-                "first_inquire_done": True,
+                "is_undiscovered_concerns": False,
                 "parent_concerns": [
                     {
                         "id": "trust",
@@ -1105,7 +1157,7 @@ def test_compound_turn_resolving_final_concern_allows_endgame():
             "aims_state": {
                 "phase": "InquireMirror",
                 "announced": True,
-                "first_inquire_done": True,
+                "is_undiscovered_concerns": False,
                 "parent_concerns": [
                     {
                         "desc": "I'm worried about side effects.",
@@ -1453,7 +1505,7 @@ def test_structured_vaccine_closure_overrides_stale_unsecured_state():
             "aims_state": {
                 "phase": "Secure",
                 "announced": True,
-                "first_inquire_done": True,
+                "is_undiscovered_concerns": False,
                 "parent_concerns": [
                     {
                         "id": "relevance",
@@ -1563,7 +1615,7 @@ def test_followup_after_spouse_discussion_without_literature_does_not_end():
             "aims_state": {
                 "phase": "Secure",
                 "announced": True,
-                "first_inquire_done": True,
+                "is_undiscovered_concerns": False,
                 "parent_concerns": [
                     {
                         "id": "trust",
@@ -1643,7 +1695,7 @@ def test_analytical_persona_literature_followup_closure_with_residual_uncertaint
             "aims_state": {
                 "phase": "Secure",
                 "announced": True,
-                "first_inquire_done": True,
+                "is_undiscovered_concerns": False,
                 "parent_concerns": [
                     {
                         "id": "trust",
@@ -1745,7 +1797,7 @@ def test_spouse_discussion_followup_and_ear_plan_without_literature_does_not_end
             "aims_state": {
                 "phase": "InquireMirror",
                 "announced": True,
-                "first_inquire_done": True,
+                "is_undiscovered_concerns": False,
                 "parent_concerns": [
                     {
                         "id": "requirements",

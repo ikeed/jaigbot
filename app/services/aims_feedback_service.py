@@ -181,7 +181,7 @@ class AimsFeedbackService:
             "state": {
                 "announced": bool(state.get("announced", False)),
                 "phase": state.get("phase", PHASE_PRE_ANNOUNCE),
-                "first_inquire_done": bool(state.get("first_inquire_done", False)),
+                "is_undiscovered_concerns": bool(state.get("is_undiscovered_concerns", True)),
                 "pending_concerns": bool(state.get("pending_concerns", False)),
                 "recent_coaching": list(state.get("recent_coaching") or []),
                 "parent_concerns": concerns,
