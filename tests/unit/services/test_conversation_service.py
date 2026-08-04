@@ -126,6 +126,53 @@ def test_apply_concern_events_ignores_untargeted_action_events():
     assert st["parent_concerns"] == []
 
 
+def test_apply_concern_events_mirrored_event_creates_untracked_concern():
+    """A concern_mirrored event for a topic with no prior concern_raised must not be dropped.
+
+    Regression test: the classifier can emit concern_mirrored for a topic before ever
+    emitting concern_raised for it (e.g. it judged an earlier turn as friction rather than
+    a trackable concern). Previously this mirror credit was silently lost -- the concern,
+    when it was created later from a fresh concern_raised/concern_renewed event, always
+    started as unmirrored, and no further turn ever re-mirrored the same tracked instance.
+    """
+    st = {"parent_concerns": []}
+
+    handled = apply_concern_events(
+        st,
+        [
+            {
+                "event_type": "concern_mirrored",
+                "topic": "schedule_timing",
+                "evidence_spans": ["why are we rushing to do this now"],
+                "confidence": "high",
+            }
+        ],
+        person_text="why are we rushing to do this now",
+    )
+
+    assert handled == {"mirrored"}
+    assert len(st["parent_concerns"]) == 1
+    concern = st["parent_concerns"][0]
+    assert concern["topic"] == "schedule_timing"
+    assert concern["is_mirrored"] is True
+    assert concern["mirror_count"] == 1
+    assert concern["evidence"] == ["why are we rushing to do this now"]
+
+
+def test_apply_concern_events_mirrored_event_with_general_topic_still_no_ops():
+    """The create-on-mirror fallback must not track a 'general' or empty topic."""
+    st = {"parent_concerns": []}
+
+    handled = apply_concern_events(
+        st,
+        [{"event_type": "concern_mirrored", "topic": "general", "confidence": "high"}],
+        person_text="okay, thank you",
+    )
+
+    assert handled == {"mirrored"}
+    assert st["parent_concerns"] == []
+
+
 def test_apply_concern_events_mirror_and_secure_targeted_concern():
     st = {
         "parent_concerns": [
