@@ -313,6 +313,29 @@ def _looks_like_confirmation_restatement(text: str) -> bool:
     return bool(lt and any(lt.startswith(start) for start in _ACCEPTANCE_STARTS))
 
 
+def _new_concern(topic: object, evidence_items: list[str]) -> Optional[Concern]:
+    """Build a fresh concern dict for `topic`, or None if the topic isn't trackable."""
+    canonical = _canonical_topic(_as_text(topic))
+    if not canonical or canonical == "general":
+        return None
+
+    first_evidence = evidence_items[0] if evidence_items else ""
+    label = _concern_label(canonical, first_evidence)
+    return {
+        "id": _canonical_id(canonical),
+        "topic": canonical,
+        "canonical_label": label,
+        "summary": label,
+        "desc": label,
+        "evidence": evidence_items[:5],
+        "is_mirrored": False,
+        "is_secured": False,
+        "status": "open",
+        "mirror_count": 0,
+        "secure_count": 0,
+    }
+
+
 def _find_restated_existing_concern(
     concerns: list[Concern],
     evidence_items: list[str],
@@ -367,34 +390,35 @@ def _apply_concern_presence_event(
         _sync_concern_status(restated)
         return
 
-    topic = _canonical_topic(_as_text(event.get("topic")))
-    if not topic or topic == "general":
+    new_concern = _new_concern(event.get("topic"), evidence_items)
+    if new_concern is None:
         return
-
-    first_evidence = evidence_items[0] if evidence_items else _clean_evidence_snippet(person_text or "")
-    label = _concern_label(topic, first_evidence)
-    concerns.append({
-        "id": _canonical_id(topic),
-        "topic": topic,
-        "canonical_label": label,
-        "summary": label,
-        "desc": label,
-        "evidence": evidence_items[:5],
-        "is_mirrored": False,
-        "is_secured": False,
-        "status": "open",
-        "mirror_count": 0,
-        "secure_count": 0,
-    })
+    concerns.append(new_concern)
 
 
-def _apply_mirrored_event(state: dict, event: dict[str, object]) -> None:
+def _apply_mirrored_event(
+    state: dict,
+    event: dict[str, object],
+    person_text: str | None = None,
+) -> None:
     if not _event_confidence_allows_apply(event):
         return
 
-    concern = _find_event_target(state.get("parent_concerns") or [], event)
-    if not concern or concern.get("is_mirrored"):
+    concerns: list[Concern] = state.setdefault("parent_concerns", [])  # type: ignore[assignment]
+    concern = _find_event_target(concerns, event)
+    if concern is not None and concern.get("is_mirrored"):
         return
+
+    if concern is None:
+        # The classifier can mirror a concern before ever emitting a concern_raised
+        # event for it (e.g. it judged an earlier turn as friction/rapport rather than
+        # a trackable concern). Without this, the mirror credit is silently dropped and
+        # the concern -- created later from scratch when it resurfaces -- stays
+        # permanently unmirrored no matter how well subsequent turns address it.
+        concern = _new_concern(event.get("topic"), _event_evidence(event, person_text))
+        if concern is None:
+            return
+        concerns.append(concern)
 
     concern["is_mirrored"] = True
     concern["mirror_count"] = _count(concern.get("mirror_count")) + 1
@@ -441,7 +465,7 @@ def apply_concern_events(
             if not _event_has_concern_target(event):
                 continue
             handled.add("mirrored")
-            _apply_mirrored_event(state, event)
+            _apply_mirrored_event(state, event, person_text=person_text)
         elif event_kind in {"secured", "concern_secured"}:
             if not _event_has_concern_target(event):
                 continue
