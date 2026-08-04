@@ -96,7 +96,7 @@ def test_live_closing_offer_classifies_as_secure_not_inquire():
         aims_state={
             "announced": True,
             "phase": "Secure",
-            "first_inquire_done": True,
+            "is_undiscovered_concerns": False,
             "pending_concerns": False,
             "parent_concerns": [
                 {
@@ -135,7 +135,7 @@ def test_live_polite_appreciation_near_miss_does_not_end():
         aims_state={
             "announced": True,
             "phase": "Secure",
-            "first_inquire_done": True,
+            "is_undiscovered_concerns": False,
             "pending_concerns": False,
             "parent_concerns": [
                 {
@@ -172,7 +172,7 @@ def test_live_analytical_residual_uncertainty_plus_followup_can_end():
         aims_state={
             "announced": True,
             "phase": "Secure",
-            "first_inquire_done": True,
+            "is_undiscovered_concerns": False,
             "pending_concerns": False,
             "parent_concerns": [
                 {
@@ -213,7 +213,7 @@ def test_live_mixed_resolution_one_vaccine_today_and_literature_for_others_ends(
         aims_state={
             "announced": True,
             "phase": "Secure",
-            "first_inquire_done": True,
+            "is_undiscovered_concerns": False,
             "pending_concerns": False,
             "parent_concerns": [
                 {

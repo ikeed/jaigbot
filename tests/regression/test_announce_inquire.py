@@ -4,9 +4,9 @@ Tests for the Announce+Inquire compound step and related coaching fixes.
 Covers:
 1. Step normalization: [Announce, Inquire] → Announce+Inquire when not yet announced
 2. Phase guard: Announce+Inquire → Inquire when already announced
-3. AimsStateService.update_observational_state: Announce+Inquire sets announced=True + first_inquire_done=True
+3. AimsStateService.update_observational_state: Announce+Inquire sets announced=True + is_undiscovered_concerns=False
 4. AimsMetricsService.persist: Announce+Inquire expands into both Announce and Inquire counts
-5. "Securing before inquiring" coaching when first_inquire_done is False
+5. "Securing before inquiring" coaching when is_undiscovered_concerns is True
 6. Question Guard scoping: Secure turns ending with ? are not exempt from Inquire flip
 """
 import json
@@ -108,18 +108,18 @@ class TestAnnounceInquireNormalization:
 class TestObservationalStateAnnounceInquire:
 
     def test_announce_inquire_sets_announced_and_inquire(self):
-        """Announce+Inquire should set announced=True and first_inquire_done=True."""
+        """Announce+Inquire should set announced=True and is_undiscovered_concerns=False."""
         state = {
             "announced": False,
             "phase": "PreAnnounce",
-            "first_inquire_done": False,
+            "is_undiscovered_concerns": True,
             "parent_concerns": [],
         }
         AimsStateService(logger=MagicMock()).update_observational_state(
             state, "Announce+Inquire", ["Announce", "Inquire"]
         )
         assert state["announced"] is True
-        assert state["first_inquire_done"] is True
+        assert state["is_undiscovered_concerns"] is False
         assert state["phase"] == "InquireMirror"
 
 
@@ -159,12 +159,12 @@ class TestMetricsExpansionAnnounceInquire:
 class TestSecuringBeforeInquiringCoaching:
 
     def test_secure_before_inquire_coaching(self):
-        """When step is Secure and first_inquire_done is False,
+        """When step is Secure and is_undiscovered_concerns is True,
         coaching should say 'Securing before inquiring'."""
         state = {
             "announced": True,
             "phase": "PreAnnounce",
-            "first_inquire_done": False,
+            "is_undiscovered_concerns": True,
             "parent_concerns": [],
             "recent_coaching": [],
         }
@@ -191,7 +191,7 @@ class TestSecuringBeforeInquiringCoaching:
         state = {
             "announced": True,
             "phase": "PreAnnounce",
-            "first_inquire_done": False,
+            "is_undiscovered_concerns": True,
             "parent_concerns": [],
             "recent_coaching": [],
         }
@@ -219,12 +219,12 @@ class TestSecuringBeforeInquiringCoaching:
         assert "pause before offering reassurance" in feedback
 
     def test_secure_after_inquire_no_coaching_about_inquiring(self):
-        """When first_inquire_done is True and concerns are mirrored,
+        """When is_undiscovered_concerns is False and concerns are mirrored,
         should NOT get 'Securing before inquiring' warning."""
         state = {
             "announced": True,
             "phase": "InquireMirror",
-            "first_inquire_done": True,
+            "is_undiscovered_concerns": False,
             "parent_concerns": [
                 {"desc": "worried about side effects", "topic": "side_effects", "is_mirrored": True, "is_secured": False}
             ],

@@ -68,7 +68,7 @@ class AimsStateService:
                 {
                     "announced": False,
                     "phase": PHASE_PRE_ANNOUNCE,
-                    "first_inquire_done": False,
+                    "is_undiscovered_concerns": True,
                     "pending_concerns": True,
                     "parent_concerns": [],
                 },
@@ -87,6 +87,12 @@ class AimsStateService:
                 and "concern_presence" not in handled_events
             ):
                 maybe_add_person_concern(state, person_last, self.TOPICAL_CUES, llm_topic)
+
+            if state.get("parent_concerns"):
+                # A concern surfacing at all — whether the clinician drew it out with an
+                # Inquire, or the person volunteered it unprompted — means it's no longer
+                # undiscovered. See update_observational_state for the Inquire-turn trigger.
+                state["is_undiscovered_concerns"] = False
 
             if (
                 self._heuristic_fallback_enabled
@@ -236,8 +242,8 @@ class AimsStateService:
         *,
         prefer_structured_feedback: bool = False,
     ) -> None:
-        first_inquire_done = state.get("first_inquire_done", False)
-        if not first_inquire_done:
+        is_undiscovered_concerns = state.get("is_undiscovered_concerns", True)
+        if is_undiscovered_concerns:
             opened_with_concern_question = self._observed_open_concern_question(cls_payload)
             if (
                 opened_with_concern_question is None
@@ -281,7 +287,7 @@ class AimsStateService:
 
         needs_mirror = self._has_material_unmirrored_concern(state)
 
-        if needs_mirror and first_inquire_done:
+        if needs_mirror and not is_undiscovered_concerns:
             if prefer_structured_feedback:
                 self._add_secure_before_mirror_feedback_item(cls_payload, state)
             else:
@@ -534,7 +540,7 @@ class AimsStateService:
             in (STEP_INQUIRE, STEP_ANNOUNCE_INQUIRE, STEP_MIRROR_INQUIRE, STEP_SECURE_INQUIRE)
             or STEP_INQUIRE in all_steps
         ):
-            state["first_inquire_done"] = True
+            state["is_undiscovered_concerns"] = False
             state["phase"] = PHASE_INQUIRE_MIRROR
         elif step_current == STEP_MIRROR_SECURE:
             concerns = state.get("parent_concerns") or []
@@ -564,5 +570,10 @@ class AimsStateService:
         )
         state["pending_concerns"] = not all_resolved
 
-        if all_resolved and concerns and state.get("announced") and state.get("first_inquire_done"):
+        if (
+            all_resolved
+            and concerns
+            and state.get("announced")
+            and not state.get("is_undiscovered_concerns", True)
+        ):
             state["phase"] = PHASE_SECURE

@@ -40,7 +40,7 @@ def test_structured_feedback_secure_before_inquire_uses_coded_state_feedback():
     state = {
         "phase": PHASE_INQUIRE_MIRROR,
         "announced": True,
-        "first_inquire_done": False,
+        "is_undiscovered_concerns": True,
         "parent_concerns": [],
     }
     payload = _structured_payload()
@@ -63,7 +63,7 @@ def test_structured_feedback_secure_before_mirror_uses_coded_state_feedback():
     state = {
         "phase": PHASE_INQUIRE_MIRROR,
         "announced": True,
-        "first_inquire_done": True,
+        "is_undiscovered_concerns": False,
         "parent_concerns": [
             {
                 "topic": "trust",
@@ -98,7 +98,7 @@ def test_structured_feedback_announce_after_inquiry_uses_coded_state_feedback():
     state = {
         "phase": PHASE_INQUIRE_MIRROR,
         "announced": True,
-        "first_inquire_done": True,
+        "is_undiscovered_concerns": False,
         "parent_concerns": [],
     }
     payload = _structured_payload(STEP_ANNOUNCE)
@@ -121,7 +121,7 @@ def test_structured_feedback_suppresses_closure_plan_tip_heuristics():
     state = {
         "phase": PHASE_INQUIRE_MIRROR,
         "announced": True,
-        "first_inquire_done": True,
+        "is_undiscovered_concerns": False,
         "parent_concerns": [
             {
                 "topic": "trust",
