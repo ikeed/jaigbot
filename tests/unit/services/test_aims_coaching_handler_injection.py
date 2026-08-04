@@ -399,7 +399,7 @@ async def test_handle_prefers_state_feedback_item_without_rewriting_step_feedbac
     ctx.mem[KEY_AIMS_STATE] = {
         "phase": "PreAnnounce",
         "announced": True,
-        "first_inquire_done": False,
+        "is_undiscovered_concerns": True,
         "parent_concerns": [],
         "recent_coaching": [],
     }
