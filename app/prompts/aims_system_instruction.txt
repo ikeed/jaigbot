@@ -59,6 +59,7 @@ These three behaviors look similar but are psychologically distinct:
 - **Mirroring** (true Mirror): Restating the person's expressed feelings, concerns, or internal state. e.g. "You're worried Nathaniel could be harmed by something that's supposed to help him." This IS Mirror.
 - **Normalization**: "Most parents I talk to feel the same way." This is empathy-adjacent but does NOT mirror *this person's* specific internal state. Generic normalization alone is NOT Mirror — classify as rapport/null. Only counts as Mirror (score 2) when it directly references the person's specific stated concern.
 - **Affirmation/autonomy support**: "You're asking thoughtful questions." This is praise, rapport, or autonomy support — NOT mirroring. Classify as Secure (if paired with education/autonomy language) or rapport/null. Do NOT classify as Mirror.
+- **Exception — autonomy-topic concerns**: When the open concern's topic is `autonomy` (the person felt pressured, pushed, cornered, or not free to decide), an explicit autonomy affirmation in Secure ("It's your decision", "I respect that", "I'm not going to push you into a corner") IS the resolving act for that concern — the affirmation directly answers what was raised, so a separate reflective restatement is not required. In this case only: emit a `concern_mirrored` person_event for `topic: "autonomy"` in the same turn as the affirmation, and do not apply the "securing an unmirrored concern" score penalty (CLASSIFICATION RULES #4, Secure scoring) to that topic. This exception applies to `autonomy` only — affirmation still does not mirror any other topic (side_effects, schedule_timing, trust, etc.).
 
 ## Mirror+Inquire (compound step)
 - Brief mirroring immediately followed by an open question surfacing NEW/ADDITIONAL concerns.
@@ -96,7 +97,7 @@ These three behaviors look similar but are psychologically distinct:
 - Score 2: Autonomy + options, but missing safety-net or concern-tailoring.
 - Score 1: Educational lecture or data-dump without explicit autonomy support. A message over 50 words with no autonomy language (e.g., "Ultimately it's your call") is penalized, though a strong check-in question (Bridge Question) can partially mitigate this.
 - **Bridge Questions**: Good check-in/landing questions (e.g., "How does that land?") are critical for preventing a lecture feel in long Secure turns. If a turn is long (>50 words), it MUST have either explicit autonomy language OR a Bridge Question to score above 1. If it has BOTH, it is a strong score 3 candidate.
-- Securing for a concern not yet Mirrored reduces the score by 1 (does not apply to Mirror+Secure).
+- Securing for a concern not yet Mirrored reduces the score by 1 (does not apply to Mirror+Secure, and does not apply to `autonomy`-topic concerns — see MIRROR PRECISION exception above).
 - Recognition cues: "It's your decision", "I'm here to support", "We can", "Options include", "If you'd prefer"
 - Positive example: "It's your call, and I appreciate how thoughtful you're being. We can do the shot today, or if you'd prefer, I can share a short handout and we can check in next week — what would work best?"
 
@@ -105,7 +106,7 @@ These three behaviors look similar but are psychologically distinct:
 1. Apply AIMS only if the turn is vaccine-related.
 2. First mention of vaccines = Announce, even if phrased as a question.
 3. Use compound step arrays: ["Announce","Inquire"], ["Mirror","Inquire"], ["Mirror","Secure"], ["Secure","Inquire"], ["Mirror","Secure","Inquire"].
-4. Securing an unmirrored concern → reduce score by 1 (not for Mirror+Secure).
+4. Securing an unmirrored concern → reduce score by 1 (not for Mirror+Secure; not for `autonomy`-topic concerns — see MIRROR PRECISION exception).
 5. Mirroring something the person never expressed → not valid Mirror.
 6. Once `Announced: true`, subsequent recommendations are **Secure**.
 7. Inquire is a functional goal (eliciting concerns), not a punctuation mark; it can be a statement or question if it is designed to surface hidden vaccine concerns.
