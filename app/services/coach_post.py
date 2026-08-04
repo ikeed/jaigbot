@@ -1,20 +1,26 @@
 from __future__ import annotations
 
+import logging
+import re
 from typing import Dict, List
 
-import logging
+from app.message_catalog import message, message_list, message_map
 
 logger = logging.getLogger(__name__)
 
 
 def _persona_label(session_obj: Dict | None) -> str:
     name = str((session_obj or {}).get("personaName") or "").strip()
-    return f"{name}'s" if name else "the parent's"
+    if name:
+        return message("endgame.labels.persona_possessive", name=name)
+    return message("endgame.labels.persona_possessive_default")
 
 
 def _patient_label(session_obj: Dict | None) -> str:
     patient_name = str((session_obj or {}).get("patientName") or "").strip()
-    return f"{patient_name}'s" if patient_name else "the patient's"
+    if patient_name:
+        return message("endgame.labels.patient_possessive", name=patient_name)
+    return message("endgame.labels.patient_possessive_default")
 
 
 class VaccineRelevanceGate:
@@ -23,37 +29,7 @@ class VaccineRelevanceGate:
     Mirrors the logic in main.py exactly to avoid behavior changes.
     """
 
-    VAX_CUES = [
-        "vaccine",
-        "vaccin",
-        "shot",
-        "jab",
-        "jabs",
-        "mmr",
-        "measles",
-        "booster",
-        "immuniz",
-        "side effect",
-        "adverse event",
-        "vaers",
-        "thimerosal",
-        "immunity",
-        "immune",
-        "schedule",
-        "dose",
-        "hib",
-        "pcv",
-        "hepb",
-        "mmrv",
-        "rotavirus",
-        "pertussis",
-        "varicella",
-        "dtap",
-        "polio",
-        "option",
-        "options",
-        "decision",
-    ]
+    VAX_CUES = message_list("lexicon.coach_post.vaccine_cues")
 
     VALID_STEPS = {"Announce", "Inquire", "Mirror", "Secure", "Announce+Inquire", "Mirror+Inquire", "Mirror+Secure", "Secure+Inquire", "Mirror+Secure+Inquire"}
 
@@ -65,28 +41,31 @@ class VaccineRelevanceGate:
         person_last: str,
         parent_recent_concerns: List[str],
         prior_announced: bool,
+        semantic_is_vaccine_relevant: bool | None = None,
+        allow_keyword_fallback: bool = False,
     ) -> Dict:
         lt_msg = (clinician_text or "").strip().lower()
         pt_msg = (person_last or "").strip().lower()
         ctx_blob = ("\n".join(parent_recent_concerns) if parent_recent_concerns else "").lower()
 
-        is_vax_related = (
-            any(cue in lt_msg for cue in VaccineRelevanceGate.VAX_CUES)
-            or any(cue in pt_msg for cue in VaccineRelevanceGate.VAX_CUES)
-            or any(cue in ctx_blob for cue in VaccineRelevanceGate.VAX_CUES)
-            or bool(prior_announced)
-        )
+        if semantic_is_vaccine_relevant is None and allow_keyword_fallback:
+            is_vax_related = (
+                any(cue in lt_msg for cue in VaccineRelevanceGate.VAX_CUES)
+                or any(cue in pt_msg for cue in VaccineRelevanceGate.VAX_CUES)
+                or any(cue in ctx_blob for cue in VaccineRelevanceGate.VAX_CUES)
+                or bool(prior_announced)
+            )
+        elif semantic_is_vaccine_relevant is None:
+            is_vax_related = bool(prior_announced)
+        else:
+            is_vax_related = bool(semantic_is_vaccine_relevant) or bool(prior_announced)
 
         if not is_vax_related and (cls_payload.get("step") in VaccineRelevanceGate.VALID_STEPS):
             return {
                 "step": None,
                 "score": 0,
-                "reasons": [
-                    "Rapport/symptom gathering in progress. Waiting for vaccine Announce."
-                ],
-                "tips": [
-                    "Vaccine coaching will begin after vaccination is introduced."
-                ],
+                "reasons": [message("aims.vaccine_gate_reason")],
+                "tips": [message("aims.vaccine_gate_tip")],
             }
 
         return cls_payload
@@ -109,28 +88,31 @@ class AimsPostProcessor:
         return cls_payload
 
     @staticmethod
-    def post_process(cls_payload: Dict, clinician_text: str) -> Dict:
+    def post_process(
+        cls_payload: Dict,
+        clinician_text: str,
+        *,
+        allow_text_softening: bool = False,
+    ) -> Dict:
         cls_payload = AimsPostProcessor.normalize_score(cls_payload)
+        if cls_payload.get("feedback_items") or not allow_text_softening:
+            return cls_payload
         # Soften overly harsh feedback when autonomy-respecting language is present
         try:
             lt = (clinician_text or "").lower()
-            autonomy_cues = (
-                "no pressure",
-                "it’s your choice",
-                "it's your choice",
-                "up to you",
-                "your decision",
-                "happy to answer",
-                "any questions",
-                "open to talking",
-            )
+            autonomy_cues = message_list("lexicon.coach_post.autonomy_softening_cues")
             if any(c in lt for c in autonomy_cues):
                 reasons = list(cls_payload.get("reasons") or [])
                 # Remove judgmental phrasing markers if present
-                filtered = [r for r in reasons if ("judgment" not in r.lower() and "leading" not in r.lower())]
+                markers = message_list("lexicon.coach_post.judgmental_reason_markers")
+                filtered = [
+                    r
+                    for r in reasons
+                    if not any(marker in r.lower() for marker in markers)
+                ]
                 if not filtered and reasons:
                     # Replace with a neutral nudge if we removed everything
-                    filtered = ["Keep framing neutral and open; invite questions."]
+                    filtered = [message("state_feedback.neutral_framing_tip")]
                 cls_payload = dict(cls_payload)
                 cls_payload["reasons"] = filtered
         except Exception as e:
@@ -147,66 +129,23 @@ class EndGameDetector:
       - Person prefers a follow-up appointment and to take literature/home materials
     """
 
-    ACCEPT_NOW_CUES = [
-        "let's do it", "let’s do it", "lets do it", "do it today", "do the shots today",
-        "go ahead and do", "go ahead today", "go ahead with it today", "we can go ahead", "we can go ahead with it today",
-        "okay to vaccinate", "ok to vaccinate", "yes, vaccinate", "yes vaccinate",
-        "get the vaccine now", "take the vaccine now", "we can do it today",
-        "we'll do it today", "we will do it today", "let's get the shot", "let’s get the shot",
-        "ready for the shot", "ready for the vaccine", "let's get it today", "let’s get it today",
-        "we're ready", "we are ready", "we're ready today", "we are ready today", "ready to proceed", "let's proceed", "proceed today",
-        "let's go ahead", "let’s go ahead",
-        # Consent-based confirmations
-        "i consent", "yes, i consent", "we consent", "i give consent",
-        "consent to vaccinate", "consent to the vaccine", "consent to the shot",
-        "consent for him to get the vaccine", "consent for her to get the vaccine", "consent for my child to get the vaccine",
-        "i consent for him to get the vaccine today", "i consent for her to get the vaccine today", "i consent for my child to get the vaccine today",
-        "i agree to vaccinate today", "we agree to vaccinate today", "i agree to the vaccine today",
-        # Naturalistic acceptance phrasing
-        "comfortable proceeding", "i'm comfortable proceeding", "i am comfortable proceeding",
-        "comfortable with proceeding", "comfortable going ahead", "comfortable with the",
-        "i feel good about proceeding", "feel confident in proceeding",
-        "sounds good to me", "plan sounds good", "that sounds like a plan",
-        "i'm on board", "i am on board", "on board with",
-        "comfortable moving forward", "comfortable with moving forward", "happy to move forward",
-        "move forward with it", "move forward today", "happy to proceed",
-        "ready to go ahead", "i'm ready to go ahead", "i am ready to go ahead",
-        "ready to go ahead with it", "i'm ready to go ahead with it", "i am ready to go ahead with it",
+    ACCEPT_NOW_CUES = message_list("lexicon.coach_post.endgame.accept_now_cues")
+    FOLLOWUP_CUES = message_list("lexicon.coach_post.endgame.followup_cues")
+    LITERATURE_CUES = message_list("lexicon.coach_post.endgame.literature_cues")
+    MATERIAL_REVIEW_RES = [
+        re.compile(pattern)
+        for pattern in message_list("lexicon.coach_post.endgame.material_review_patterns")
     ]
+    PLAN_ACCEPTANCE_CUES = message_list("lexicon.coach_post.endgame.plan_acceptance_cues")
+    PLAN_NEGATIVE_CUES = message_list("lexicon.coach_post.endgame.plan_negative_cues")
+    PLAN_ACTIVE_CONCERN_CUES = message_list("lexicon.coach_post.endgame.plan_active_concern_cues")
 
-    FOLLOWUP_CUES = [
-        "follow up", "follow-up", "another appointment", "next visit", "come back",
-        "schedule", "set up an appointment", "later appointment", "book an appointment",
-        "make an appointment", "schedule something", "make another", "appointment",
-    ]
-
-    LITERATURE_CUES = [
-        "handout", "handouts", "brochure", "pamphlet", "literature", "written info",
-        "information to take home", "take home", "materials", "resource", "printout", "printed info",
-        "read this", "give you some literature", "leaflet", "info sheet",
-        "look over", "at home", "read over", "information",
-    ]
-
-    PLAN_ACCEPTANCE_CUES = [
-        "sounds good", "sounds like a plan", "that would help", "would be helpful",
-        "would be very helpful", "that would be helpful", "excellent approach",
-        "reasonable plan", "helpful for me", "i'd like that", "i would like that",
-        "yes,", "yes ", "helpful", "sounds reasonable", "works for me",
-        "i'll take", "i will take", "talk about it at the next appointment",
-        "talk about it at the next visit", "we can talk about it",
-    ]
-
-    PLAN_NEGATIVE_CUES = [
-        "don't want", "do not want", "not going to read", "would not help",
-        "wouldn't help", "not helpful", "no point", "don't think", "do not think",
-        "not interested", "rather not", "won't read", "will not read",
-    ]
-
-    PLAN_ACTIVE_CONCERN_CUES = [
-        "still worried", "still worry", "still concerned", "still nervous",
-        "still scared", "not convinced", "not sure", "do not trust",
-        "don't trust", "safety risk", "unsafe", "still a risk",
-    ]
+    @classmethod
+    def has_literature_cue(cls, text: str) -> bool:
+        lt = (text or "").lower()
+        if any(cue in lt for cue in cls.LITERATURE_CUES):
+            return True
+        return any(pattern.search(lt) for pattern in cls.MATERIAL_REVIEW_RES)
 
     @staticmethod
     def detect(patient_reply: str) -> dict | None:
@@ -215,7 +154,6 @@ class EndGameDetector:
             return None
 
         # Helper: split into simple sentences by ., !, ? while keeping end char
-        import re
         # Normalize whitespace
         lt_norm = re.sub(r"\s+", " ", lt)
         # Split into sentences; keep punctuation to check questions
@@ -224,14 +162,8 @@ class EndGameDetector:
             parts = [lt_norm]
 
         # Conditional/open-question guard phrases that should suppress acceptance
-        conditional_starts = (
-            "if we ", "if i ", "if we do ", "if i do ", "if we were to ", "if i were to ",
-            "if we decide ", "if i decide ", "if we choose ", "if i choose ", "if we go ahead ", "if i go ahead ",
-        )
-        strong_confirms = (
-            "i consent", "we consent", "yes, i consent", "i agree", "we agree",
-            "we're ready", "we are ready", "ready to proceed", "let's proceed", "we can do it today",
-        )
+        conditional_starts = message_list("lexicon.coach_post.endgame.conditional_starts")
+        strong_confirms = message_list("lexicon.coach_post.endgame.strong_confirms")
 
         def sentence_accepts(sent: str) -> bool:
             s = (sent or "").strip()
@@ -264,7 +196,7 @@ class EndGameDetector:
 
         # Follow-up AND literature require explicit positive acceptance and no negation.
         has_followup = any(c in lt for c in EndGameDetector.FOLLOWUP_CUES)
-        has_literature = any(c in lt for c in EndGameDetector.LITERATURE_CUES)
+        has_literature = EndGameDetector.has_literature_cue(lt)
         has_positive_acceptance = any(c in lt for c in EndGameDetector.PLAN_ACCEPTANCE_CUES)
         has_negative_acceptance = any(c in lt for c in EndGameDetector.PLAN_NEGATIVE_CUES)
         has_active_concern = any(c in lt for c in EndGameDetector.PLAN_ACTIVE_CONCERN_CUES)
@@ -350,7 +282,7 @@ def endgame_title(session_obj: Dict | None, outcome: str = "") -> str:
     Falls back to 'Great job!' when no score data is available.
     """
     if outcome == "deferred":
-        return "Session Complete"
+        return message("endgame.titles.deferred")
     try:
         ra = (session_obj or {}).get("runningAverage") or {}
         core_avgs = [
@@ -358,18 +290,18 @@ def endgame_title(session_obj: Dict | None, outcome: str = "") -> str:
             if isinstance(ra.get(s), (int, float))
         ]
         if not core_avgs:
-            return "🎉 Great job!"
+            return message("endgame.titles.great")
         overall = sum(core_avgs) / (len(core_avgs) * 3.0) * 100
         if overall >= 85:
-            return "🏆 Excellent job!"
+            return message("endgame.titles.excellent")
         if overall >= 70:
-            return "🎉 Great job!"
+            return message("endgame.titles.great")
         if overall >= 55:
-            return "👏 Good job!"
-        return "💪 Nice job!"
+            return message("endgame.titles.good")
+        return message("endgame.titles.nice")
     except Exception as e:
         logger.debug(f"Error determining endgame title: {e}")
-        return "🎉 Great job!"
+        return message("endgame.titles.great")
 
 
 def build_endgame_bullets_fallback(session_obj: Dict | None) -> List[str]:
@@ -384,40 +316,17 @@ def build_endgame_bullets_fallback(session_obj: Dict | None) -> List[str]:
     persona_label = _persona_label(session_obj)
     patient_label = _patient_label(session_obj)
 
-    # Per-step messages keyed by performance tier
-    _MSGS: Dict[str, Dict[str, str]] = {
-        "Announce": {
-            "high": "clear, non-pressuring recommendation — well done.",
-            "mid":  "the recommendation was present; try making it more concise and following immediately with an open question.",
-            "low":  f"lead with a brief presumptive recommendation, then invite input (e.g., \"{patient_label} due for MMR today — what are your thoughts?\").",
-            "absent": "introduce vaccines with a clear, non-pushy recommendation before asking for concerns.",
-        },
-        "Inquire": {
-            "high": f"strong open questions that surfaced {persona_label} real concerns.",
-            "mid":  "good inquiry; when closing the loop, explicitly invite any remaining concerns or what is still on their mind.",
-            "low":  "use open-ended questions to surface concerns (e.g., \"What's still on your mind about vaccines today?\") before educating.",
-            "absent": f"ask at least one open-ended question to discover {persona_label} specific concerns before educating.",
-        },
-        "Mirror": {
-            "high": "excellent reflections — you consistently captured the concern before moving forward.",
-            "mid":  "good reflections; make sure to capture the underlying value (not just the stated concern) and check for accuracy.",
-            "low":  f"reflect {persona_label} concern before educating (e.g., \"It sounds like you want to be sure this is safe — did I get that right?\").",
-            "absent": f"mirror {persona_label} concern back to them before offering any education — it makes them feel heard.",
-        },
-        "Secure": {
-            "high": "education was well-tailored to the stated concerns without overwhelming.",
-            "mid":  "solid education; try adding an explicit check-in after key facts (e.g., \"How does that land for you?\") to avoid a lecture feel.",
-            "low":  "keep Secure focused: one tailored fact, linked directly to the concern, then check in (e.g., \"Does that help with the ingredient question?\"). Avoid long explanations without pauses.",
-            "absent": "provide targeted education addressing the stated concern, then check understanding.",
-        },
+    catalog_messages = message_map("endgame.fallback_bullets")
+    step_messages: Dict[str, Dict[str, str]] = {
+        step: dict(value)
+        for step, value in catalog_messages.items()
+        if isinstance(value, dict)
     }
 
     if not isinstance(session_obj, dict):
         return [
-            "Announce: lead with a short, non-pushy recommendation and invite input.",
-            "Inquire: ask open-ended questions to surface the parent's specific concerns.",
-            "Mirror: reflect their words and emotions before educating.",
-            "Secure: share one tailored fact linked to the concern, then check understanding.",
+            item.format(persona_label=persona_label, patient_label=patient_label)
+            for item in message_list("endgame.fallback_bullets.default")
         ]
 
     counts = (session_obj.get("perStepCounts") or {})
@@ -442,21 +351,28 @@ def build_endgame_bullets_fallback(session_obj: Dict | None) -> List[str]:
     core_avgs = [a for a in core_avgs if a == a]  # drop NaN
     if core_avgs:
         overall_pct = int(round((sum(core_avgs) / (len(core_avgs) * 3.0)) * 100))
-        bullets.append(f"Overall AIMS score: {overall_pct}%")
+        bullets.append(message("endgame.overall_score", pct=overall_pct))
 
     # 2. Per-step contextual feedback
     for step_name in ("Announce", "Inquire", "Mirror", "Secure"):
         c = int(counts.get(step_name, 0) or 0)
         a = _avg(step_name)
-        msgs = _MSGS[step_name]
+        msgs = step_messages.get(step_name, {})
+
+        def _step_message(tier: str) -> str:
+            template = str(msgs.get(tier) or "")
+            return template.format(
+                persona_label=persona_label,
+                patient_label=patient_label,
+            )
 
         if c == 0 or a != a:  # step not used or no score data
-            bullets.append(f"{step_name}: {msgs['absent']}")
+            bullets.append(f"{step_name}: {_step_message('absent')}")
         elif a >= _HIGH:
-            bullets.append(f"{step_name} {_pct(a)}% \u2014 {msgs['high']}")
+            bullets.append(f"{step_name} {_pct(a)}% - {_step_message('high')}")
         elif a >= _MID:
-            bullets.append(f"{step_name} {_pct(a)}% \u2014 {msgs['mid']}")
+            bullets.append(f"{step_name} {_pct(a)}% - {_step_message('mid')}")
         else:
-            bullets.append(f"{step_name} {_pct(a)}% \u2014 {msgs['low']}")
+            bullets.append(f"{step_name} {_pct(a)}% - {_step_message('low')}")
 
     return bullets[:6]

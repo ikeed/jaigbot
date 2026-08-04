@@ -59,15 +59,38 @@ class TestPromptContent:
         """Active classifier prompts must use the step_feedback JSON structure."""
         prompt = self._active_classifier_prompt()
         assert "step_feedback" in prompt
+        assert "observations" in prompt
+        assert "feedback_items" in prompt
+        assert "person_events" in prompt
+        assert "resolution" in prompt
         assert "tone" in prompt
         assert "praise|improvement" in prompt or "praise" in prompt
 
     def test_system_instruction_has_feedback_tone_rules(self):
         """aims_system_instruction.txt must define praise/improvement tone rules."""
         instruction = get_classify_system_instruction()
-        assert "tone" in instruction.lower()
-        assert "praise" in instruction.lower()
-        assert "improvement" in instruction.lower()
+        lower = instruction.lower()
+        assert "tone" in lower
+        assert "praise" in lower
+        assert "improvement" in lower
+        assert "past-tense second-person" in lower
+        assert "ui labels it with `tip:`" in lower
+
+    def test_system_instruction_contains_optional_semantic_contract(self):
+        """Structured optional fields should be available for non-regex decisions."""
+        instruction = get_classify_system_instruction().lower()
+        assert "optional semantic fields" in instruction
+        assert "open_concern_question_present" in instruction
+        assert "feedback_items" in instruction
+        assert "person_events" in instruction
+        assert "remaining_active_concern" in instruction
+
+    def test_system_instruction_prevents_tips_for_behavior_already_done(self):
+        """Tips should target actual gaps, not already-successful behavior."""
+        instruction = get_classify_system_instruction().lower()
+        assert "do not suggest a behavior the clinician already performed" in instruction
+        assert "if they asked an open concern question" in instruction
+        assert "pausing" in instruction
 
     def test_person_topic_excludes_literature_followup_acceptance(self):
         """Prompts must not turn literature/follow-up agreement into autonomy concerns."""
@@ -143,6 +166,8 @@ class TestPromptContent:
         assert "avoid stock phrases" in lower
         assert "preserve the detected step and the score" in lower
         assert "step_feedback" in lower
+        assert "do not suggest a behavior the clinician already performed" in lower
+        assert 'ui labels it with "tip:"' in lower
 
     def test_classify_turn_prompt_renders_context_and_concern_lists(self):
         prompt = build_classify_turn_prompt(
@@ -187,4 +212,7 @@ class TestPromptContent:
         assert "never claim a step was" in lower
         assert "stepcoverage[step] > 0" in lower
         assert "do not invent concerns" in lower
-        assert "6–8 plain" in prompt or "6-8 plain" in lower
+        assert "strict json only" in lower
+        assert "overall_commentary" in prompt
+        assert "metric_notes" in prompt
+        assert "status" in prompt

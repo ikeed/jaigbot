@@ -1,6 +1,7 @@
 from typing import List, Optional
 
 from app.chat_roles import ROLE_ASSISTANT, get_ui_attributes
+from app.message_catalog import message, message_list
 
 
 def build_system_instruction(effective_character: Optional[str], effective_scene: Optional[str]) -> Optional[str]:
@@ -10,11 +11,11 @@ def build_system_instruction(effective_character: Optional[str], effective_scene
     """
     sys_parts: List[str] = []
     if effective_character:
-        sys_parts.append(f"You are roleplaying as: {effective_character}")
+        sys_parts.append(message("system_instruction.character", character=effective_character))
     if effective_scene:
-        sys_parts.append(f"Scene objectives/context: {effective_scene}")
+        sys_parts.append(message("system_instruction.scene", scene=effective_scene))
     if sys_parts:
-        sys_parts.append("Stay consistent with the persona and scenario details (including names) throughout the conversation.")
+        sys_parts.append(message("system_instruction.consistency"))
         return "\n".join(sys_parts)
     return None
 
@@ -55,45 +56,8 @@ def extract_recent_concerns(turns: list[dict], max_items: int = 3) -> list[str]:
 
     Uses the exact cues and ordering from the inline implementation.
     """
-    vax_cues = [
-        "vaccine",
-        "vaccin",
-        "shot",
-        "mmr",
-        "measles",
-        "booster",
-        "immuniz",
-        "side effect",
-        "adverse event",
-        "vaers",
-        "thimerosal",
-        "immunity",
-        "immune",
-        "schedule",
-        "dose",
-        "hib",
-        "pcv",
-        "hepb",
-        "mmrv",
-        "rotavirus",
-        "pertussis",
-        "varicella",
-        "dtap",
-        "polio",
-    ]
-    concern_cues = [
-        "worried",
-        "concern",
-        "scared",
-        "afraid",
-        "nervous",
-        "hesitant",
-        "risk",
-        "autism",
-        "too many",
-        "too soon",
-        "safety",
-    ]
+    vax_cues = message_list("lexicon.recent_concern.vaccine_cues")
+    concern_cues = message_list("lexicon.recent_concern.concern_cues")
     items: list[str] = []
     for t in reversed(turns or []):
         if t.get("role") == ROLE_ASSISTANT:  # parent persona in this app
@@ -123,13 +87,7 @@ def strip_appointment_headers(text: str) -> str:
             kept.append("")
             continue
         ltl = lt.lower()
-        if (
-            ltl.startswith("person:")
-            or ltl.startswith("parent:")
-            or ltl.startswith("patient:")
-            or ltl.startswith("purpose:")
-            or ltl.startswith("notes:")
-        ):
+        if ltl.startswith(tuple(message_list("validation.appointment_header_prefixes"))):
             # Skip header line
             continue
         kept.append(lt)

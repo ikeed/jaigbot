@@ -1,4 +1,6 @@
+from app.services.aims_state_service import AimsStateService
 from app.services.conversation_service import (
+    apply_concern_events,
     topics_in,
     concern_topic,
     is_duplicate_concern,
@@ -6,8 +8,6 @@ from app.services.conversation_service import (
     mark_mirrored_multi,
     mark_secured_by_topic,
 )
-from app.services.aims_state_service import AimsStateService
-
 
 TOPICAL_CUES = {
     "sleep": ["sleep", "bedtime"],
@@ -64,6 +64,270 @@ def test_maybe_add_person_concern_uses_llm_topic():
     assert st["parent_concerns"][0]["topic"] == "diet"
     assert st["parent_concerns"][0]["desc"] == "I'm worried about what he eats."
     assert st["parent_concerns"][0]["evidence"] == ["I'm worried about what he eats."]
+
+
+def test_apply_concern_events_adds_concern_without_keyword_text():
+    st = {"parent_concerns": []}
+
+    handled = apply_concern_events(
+        st,
+        [
+            {
+                "event_type": "concern_raised",
+                "topic": "trust",
+                "evidence_spans": ["Tengo dudas sobre lo que dicen."],
+                "confidence": "high",
+            }
+        ],
+        person_text="Tengo dudas sobre lo que dicen.",
+    )
+
+    assert handled == {"concern_presence"}
+    assert len(st["parent_concerns"]) == 1
+    concern = st["parent_concerns"][0]
+    assert concern["topic"] == "trust"
+    assert concern["evidence"] == ["Tengo dudas sobre lo que dicen."]
+
+
+def test_apply_concern_events_low_confidence_suppresses_keyword_fallback_group():
+    st = {"parent_concerns": []}
+
+    handled = apply_concern_events(
+        st,
+        [
+            {
+                "event_type": "concern_raised",
+                "topic": "trust",
+                "evidence_spans": ["Maybe."],
+                "confidence": "low",
+            }
+        ],
+        person_text="Maybe.",
+    )
+
+    assert handled == {"concern_presence"}
+    assert st["parent_concerns"] == []
+
+
+def test_apply_concern_events_ignores_untargeted_action_events():
+    st = {"parent_concerns": []}
+
+    handled = apply_concern_events(
+        st,
+        [
+            {"event_type": "concern_raised", "confidence": "high"},
+            {"event_type": "concern_mirrored", "confidence": "high"},
+            {"event_type": "concern_secured", "confidence": "high"},
+        ],
+        person_text="I'm worried about safety.",
+    )
+
+    assert handled == set()
+    assert st["parent_concerns"] == []
+
+
+def test_apply_concern_events_mirror_and_secure_targeted_concern():
+    st = {
+        "parent_concerns": [
+            {
+                "id": "trust",
+                "topic": "trust",
+                "summary": "wants evidence, uncertainty, and trust addressed",
+                "desc": "wants evidence, uncertainty, and trust addressed",
+                "evidence": ["I do not know who to believe."],
+                "is_mirrored": False,
+                "is_secured": False,
+                "mirror_count": 0,
+                "secure_count": 0,
+            }
+        ]
+    }
+
+    handled = apply_concern_events(
+        st,
+        [
+            {"event_type": "concern_mirrored", "target_concern_id": "trust"},
+            {"event_type": "concern_secured", "target_concern_id": "trust"},
+        ],
+    )
+
+    concern = st["parent_concerns"][0]
+    assert handled == {"mirrored", "secured"}
+    assert concern["is_mirrored"] is True
+    assert concern["is_secured"] is True
+    assert concern["mirror_count"] == 1
+    assert concern["secure_count"] == 1
+    assert concern["status"] == "resolved"
+
+
+def test_apply_concern_events_merges_confirmation_restatement_into_existing_mirrored_concern():
+    st = {
+        "parent_concerns": [
+            {
+                "id": "immune-load",
+                "topic": "immune_load",
+                "summary": "wants immune load or spacing addressed",
+                "desc": "wants immune load or spacing addressed",
+                "evidence": [
+                    "I'm worried too many shots at once will overload her immune system."
+                ],
+                "is_mirrored": True,
+                "is_secured": False,
+                "mirror_count": 1,
+                "secure_count": 0,
+                "status": "mirrored",
+            }
+        ]
+    }
+
+    handled = apply_concern_events(
+        st,
+        [
+            {
+                "event_type": "concern_renewed",
+                "topic": "schedule_timing",
+                "evidence_spans": [
+                    "Exactly, it still feels like too many vaccines at the same time for her immune system."
+                ],
+                "confidence": "high",
+            }
+        ],
+        person_text=(
+            "Exactly, it still feels like too many vaccines at the same time "
+            "for her immune system."
+        ),
+    )
+
+    assert handled == {"concern_presence"}
+    assert len(st["parent_concerns"]) == 1
+    concern = st["parent_concerns"][0]
+    assert concern["topic"] == "immune_load"
+    assert concern["is_mirrored"] is True
+    assert concern["status"] == "mirrored"
+    assert "too many vaccines at the same time" in concern["evidence"][-1]
+
+
+def test_apply_concern_events_does_not_open_new_concern_for_agreement_restatement():
+    st = {
+        "parent_concerns": [
+            {
+                "id": "requirements",
+                "topic": "requirements",
+                "summary": "wants to understand the local vaccine process",
+                "desc": "wants to understand the local vaccine process",
+                "evidence": [
+                    "I want to understand how it works here so I can explain it to my husband."
+                ],
+                "is_mirrored": True,
+                "is_secured": False,
+                "mirror_count": 1,
+                "secure_count": 0,
+                "status": "mirrored",
+            }
+        ]
+    }
+
+    handled = apply_concern_events(
+        st,
+        [
+            {
+                "event_type": "concern_raised",
+                "topic": "trust",
+                "evidence_spans": [
+                    "Yes, Doctor, that is right. I just want to understand everything clearly for my son and for my husband."
+                ],
+                "confidence": "high",
+            }
+        ],
+        person_text=(
+            "Yes, Doctor, that is right. I just want to understand everything "
+            "clearly for my son and for my husband."
+        ),
+    )
+
+    assert handled == {"concern_presence"}
+    assert len(st["parent_concerns"]) == 1
+    assert st["parent_concerns"][0]["topic"] == "requirements"
+    assert st["parent_concerns"][0]["is_mirrored"] is True
+
+
+def test_apply_concern_events_keeps_new_question_after_agreement():
+    st = {
+        "parent_concerns": [
+            {
+                "id": "requirements",
+                "topic": "requirements",
+                "summary": "wants to understand the local vaccine process",
+                "desc": "wants to understand the local vaccine process",
+                "evidence": [
+                    "I want to understand how it works here so I can explain it to my husband."
+                ],
+                "is_mirrored": True,
+                "is_secured": False,
+                "mirror_count": 1,
+                "secure_count": 0,
+                "status": "mirrored",
+            }
+        ]
+    }
+
+    handled = apply_concern_events(
+        st,
+        [
+            {
+                "event_type": "concern_raised",
+                "topic": "requirements",
+                "evidence_spans": [
+                    "Yes, that helps. But can you tell me what vaccines he needs today?"
+                ],
+                "confidence": "high",
+            }
+        ],
+        person_text="Yes, that helps. But can you tell me what vaccines he needs today?",
+    )
+
+    assert handled == {"concern_presence"}
+    assert len(st["parent_concerns"]) == 1
+    assert "what vaccines he needs today" in st["parent_concerns"][0]["evidence"][-1]
+
+
+def test_state_update_prefers_no_active_concern_event_over_keyword_fallback():
+    mem = {}
+
+    AimsStateService(logger=None).update(
+        mem,
+        cls_payload={"step": "Inquire", "steps": ["Inquire"], "score": 2, "reasons": [], "tips": []},
+        clinician_message="What questions do you have?",
+        person_last="That sounds helpful, and safety makes sense.",
+        llm_topic="side_effects",
+        person_events=[{"event_type": "no_active_concern", "confidence": "high"}],
+    )
+
+    assert mem["aims_state"]["parent_concerns"] == []
+
+
+def test_state_update_applies_person_event_when_text_has_no_topic_keywords():
+    mem = {}
+
+    AimsStateService(logger=None).update(
+        mem,
+        cls_payload={"step": "Inquire", "steps": ["Inquire"], "score": 2, "reasons": [], "tips": []},
+        clinician_message="Tell me what is on your mind.",
+        person_last="Tengo dudas sobre lo que dicen.",
+        llm_topic=None,
+        person_events=[
+            {
+                "event_type": "concern_raised",
+                "topic": "trust",
+                "evidence_spans": ["Tengo dudas sobre lo que dicen."],
+                "confidence": "high",
+            }
+        ],
+    )
+
+    concern = mem["aims_state"]["parent_concerns"][0]
+    assert concern["topic"] == "trust"
+    assert concern["evidence"] == ["Tengo dudas sobre lo que dicen."]
 
 
 def test_maybe_add_person_concern_can_seed_multiple_topics_from_one_reply():
@@ -129,6 +393,59 @@ def test_maybe_add_person_concern_skips_empty_acceptance_and_duplicates():
     maybe_add_person_concern(st, "I'm worried about sleep.", TOPICAL_CUES)
     maybe_add_person_concern(st, "I'm worried about sleep.", TOPICAL_CUES)
     assert len(st["parent_concerns"]) == 1
+
+
+def test_maybe_add_person_concern_keeps_question_after_polite_acceptance():
+    st = {"parent_concerns": []}
+
+    maybe_add_person_concern(
+        st,
+        (
+            "Thank you, Doctor. I want to understand what vaccines my son needs here. "
+            "Is it required for school?"
+        ),
+        AimsStateService.TOPICAL_CUES,
+    )
+
+    assert len(st["parent_concerns"]) == 1
+    concern = st["parent_concerns"][0]
+    assert concern["topic"] == "requirements"
+    assert concern["evidence"][0].startswith("I want to understand")
+
+
+def test_maybe_add_person_concern_keeps_need_to_understand_after_yes_preamble():
+    st = {"parent_concerns": []}
+
+    maybe_add_person_concern(
+        st,
+        (
+            "Yes, Doctor. That is right. I just want to understand clearly "
+            "so I can tell my husband Gabriel what we need to do for Nathaniel."
+        ),
+        AimsStateService.TOPICAL_CUES,
+    )
+
+    assert len(st["parent_concerns"]) == 1
+    concern = st["parent_concerns"][0]
+    assert concern["topic"] == "requirements"
+    assert concern["evidence"][0].startswith("I just want to understand")
+
+
+def test_maybe_add_person_concern_does_not_turn_need_to_worry_into_requirements():
+    st = {"parent_concerns": []}
+
+    maybe_add_person_concern(
+        st,
+        (
+            "Yes, exactly. I just want to understand if it's something we actually "
+            "need to worry about here in Moncton, for my daughter Emily, or if "
+            "it's just a general warning for other places."
+        ),
+        AimsStateService.TOPICAL_CUES,
+    )
+
+    assert len(st["parent_concerns"]) == 1
+    assert st["parent_concerns"][0]["topic"] == "disease_risk"
 
 
 def test_maybe_add_person_concern_merges_same_topic_paraphrases_and_cleans_evidence():

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from app.constants import (
@@ -17,8 +18,11 @@ from app.constants import (
     STEP_SECURE,
     STEP_SECURE_INQUIRE,
 )
+from app.message_catalog import message, message_list, message_map
 from app.services.aims_metrics_service import AimsMetricsService
+from app.services.coaching_tip_sanitizer import opens_with_open_concern_question
 from app.services.conversation_service import (
+    apply_concern_events,
     mark_mirrored_multi,
     mark_secured_by_topic,
     maybe_add_person_concern,
@@ -28,158 +32,22 @@ from app.services.conversation_service import (
 class AimsStateService:
     """Owns AIMS phase transitions, concern state, and stateful coaching guidance."""
 
-    TOPICAL_CUES = {
-        "autism": ["autism", "asd"],
-        "immune_load": [
-            "too many",
-            "too soon",
-            "immune overload",
-            "immune system load",
-            "viral load",
-            "overwhelm the immune",
-            "overload the immune",
-        ],
-        "side_effects": [
-            "safe",
-            "safety",
-            "side effect",
-            "adverse event",
-            "vaers",
-            "reaction to the vaccine",
-            "reaction to the shot",
-            "after the shot",
-            "after the vaccine",
-        ],
-        "ingredients": ["thimerosal", "aluminum", "adjuvant", "preservative", "ingredient"],
-        "schedule_timing": ["schedule", "spacing", "delay", "alternative schedule", "wait"],
-        "disease_risk": [
-            "measles was pretty much gone",
-            "measles is pretty much gone",
-            "measles was gone",
-            "measles is gone",
-            "measles basically gone",
-            "thing of the past",
-            "old disease",
-            "from the past",
-            "don't see it around",
-            "do not see it around",
-            "haven't seen any cases",
-            "have not seen any cases",
-            "never seen a case",
-            "never seen it",
-            "never actually seen it",
-            "hard to picture",
-            "hard to imagine",
-            "real threat",
-            "real danger",
-            "still around",
-            "catching it",
-            "actually catching it",
-        ],
-        "effectiveness": ["effective", "efficacy", "works", "breakthrough"],
-        "trust": [
-            "data",
-            "study",
-            "studies",
-            "pharma",
-            "big pharma",
-            "trust",
-            "look into things",
-            "look things up",
-            "own research",
-            "do my own research",
-            "find out myself",
-            "find out for myself",
-            "look it up",
-            "informed decision",
-            "informed choice",
-            "conflicting information",
-            "hard to know what to believe",
-            "sort through",
-        ],
-        "autonomy": [
-            "pressured",
-            "pressure",
-            "pushed",
-            "cornered",
-            "forced",
-            "lectured",
-            "steamroll",
-            "don't like being told",
-            "my choice",
-            "my decision",
-            "right to choose",
-            "right to decide",
-            "your choice",
-            "your decision",
-            "not ready",
-            "without pressure",
-            "not pushed",
-        ],
-        "requirements": [
-            "required",
-            "requirement",
-            "mandatory",
-            "have to",
-            "need to",
-            "supposed to",
-            "allowed",
-            "okay here",
-            "okay in canada",
-            "is it okay here",
-            "is it okay in canada",
-        ],
-    }
-
-    ANALYTICAL_KEYWORDS = (
-        "analytical",
-        "data",
-        "evidence",
-        "need for cognition",
-        "epistemic",
-        "statistical",
-        "peer-reviewed",
-        "research",
-    )
-
-    CLOSURE_FOLLOWUP_CUES = (
-        "follow-up",
-        "follow up",
-        "future visit",
-        "next visit",
-        "revisit",
-        "book",
-        "appointment",
-        "vaccination clinic",
-        "come back",
-    )
-
-    CLOSURE_LITERATURE_CUES = (
-        "handout",
-        "handouts",
-        "brochure",
-        "pamphlet",
-        "literature",
-        "written information",
-        "written info",
-        "information to take home",
-        "take-home information",
-        "take home information",
-        "materials",
-        "resource",
-        "resources",
-        "printout",
-        "printed information",
-        "info sheet",
-        "read over",
-        "look over",
-    )
+    TOPICAL_CUES = message_map("lexicon.aims_state.topical_cues")
+    ANALYTICAL_KEYWORDS = tuple(message_list("lexicon.aims_state.analytical_keywords"))
+    CLOSURE_FOLLOWUP_CUES = tuple(message_list("lexicon.aims_state.closure_followup_cues"))
+    CLOSURE_LITERATURE_CUES = tuple(message_list("lexicon.aims_state.closure_literature_cues"))
 
     COMPOUND_EXPANSIONS = AimsMetricsService.COMPOUND_EXPANSIONS
     VALID_STEPS = AimsMetricsService.VALID_STEPS
 
-    def __init__(self, *, logger: Any) -> None:
+    def __init__(
+        self,
+        *,
+        logger: Any,
+        heuristic_fallback_enabled: bool = False,
+    ) -> None:
         self._logger = logger
+        self._heuristic_fallback_enabled = heuristic_fallback_enabled
 
     def update(
         self,
@@ -188,6 +56,7 @@ class AimsStateService:
         clinician_message: str,
         person_last: str,
         llm_topic: str | None = None,
+        person_events: list[Any] | None = None,
     ) -> None:
         """Update AIMS state and coaching guidance. Mutates mem and cls_payload."""
         if mem is None:
@@ -206,11 +75,24 @@ class AimsStateService:
             )
             step_main = cls_payload.get("step")
             steps = self.component_steps(step_main, cls_payload.get("steps"))
+            handled_events = apply_concern_events(
+                state,
+                person_events,
+                person_text=person_last,
+            )
 
-            if person_last:
+            if (
+                self._heuristic_fallback_enabled
+                and person_last
+                and "concern_presence" not in handled_events
+            ):
                 maybe_add_person_concern(state, person_last, self.TOPICAL_CUES, llm_topic)
 
-            if STEP_MIRROR in steps:
+            if (
+                self._heuristic_fallback_enabled
+                and STEP_MIRROR in steps
+                and "mirrored" not in handled_events
+            ):
                 mark_mirrored_multi(
                     state,
                     clinician_message,
@@ -218,7 +100,11 @@ class AimsStateService:
                     self.TOPICAL_CUES,
                     llm_topic=llm_topic,
                 )
-            if STEP_SECURE in steps:
+            if (
+                self._heuristic_fallback_enabled
+                and STEP_SECURE in steps
+                and "secured" not in handled_events
+            ):
                 mark_secured_by_topic(state, clinician_message, self.secure_topical_cues())
 
             character = mem.get(SESSION_CHARACTER)
@@ -277,41 +163,68 @@ class AimsStateService:
         character: str | None = None,
     ) -> None:
         """Apply coaching-specific guidance rules."""
+        has_structured_feedback = self._has_structured_feedback(cls_payload)
         concerns_list = state.get("parent_concerns") or []
-        if concerns_list:
+        if (
+            self._heuristic_fallback_enabled
+            and concerns_list
+            and not has_structured_feedback
+        ):
             topics: dict[str, bool] = {}
             for concern in concerns_list:
                 topic = str(concern.get("topic", "unknown"))
                 topics[topic] = topics.get(topic, False) or bool(concern.get("is_mirrored"))
 
             if all(topics.values()):
+                resolved_markers = message_list("lexicon.aims_state.resolved_concern_tip_markers")
                 filtered_tips = []
                 for tip in cls_payload.get("tips") or []:
                     tip_lower = (tip or "").lower()
-                    if not ("mirror" in tip_lower or "what else" in tip_lower):
+                    if not any(marker in tip_lower for marker in resolved_markers):
                         filtered_tips.append(tip)
                 cls_payload["tips"] = filtered_tips
 
         if step_current == STEP_ANNOUNCE and state.get("phase") == PHASE_INQUIRE_MIRROR:
-            reasons = list(cls_payload.get("reasons") or [])
-            if not any("announce after inquiry" in reason.lower() for reason in reasons):
-                reasons.insert(0, "Avoid moving to Announce after inquiry before all concerns are mirrored.")
-            cls_payload["reasons"] = reasons
+            if has_structured_feedback:
+                self._append_feedback_item(
+                    cls_payload,
+                    step=STEP_ANNOUNCE,
+                    code="announce_after_inquiry",
+                    text=message("state_feedback.announce_after_inquiry"),
+                )
+            else:
+                reasons = list(cls_payload.get("reasons") or [])
+                announce_feedback = message("state_feedback.announce_after_inquiry")
+                if not any(announce_feedback == reason for reason in reasons):
+                    reasons.insert(0, announce_feedback)
+                cls_payload["reasons"] = reasons
+                cls_payload.setdefault("tips", []).append(
+                    message("state_feedback.announce_after_inquiry_tip")
+                )
             cls_payload["score"] = min(2, int(cls_payload.get("score", 2)))
-            cls_payload.setdefault("tips", []).append(
-                "Keep it brief and invite input (e.g., 'How does that sound?')."
-            )
 
         component_steps = set(self.component_steps(step_current))
 
-        if STEP_MIRROR in component_steps:
+        if self._heuristic_fallback_enabled and STEP_MIRROR in component_steps:
             mark_mirrored_multi(state, clinician_message, person_last, self.TOPICAL_CUES)
 
-        if STEP_SECURE in component_steps and step_current != STEP_SECURE:
+        if (
+            self._heuristic_fallback_enabled
+            and STEP_SECURE in component_steps
+            and step_current != STEP_SECURE
+        ):
             mark_secured_by_topic(state, clinician_message, self.secure_topical_cues())
         elif step_current == STEP_SECURE:
-            self._apply_secure_guidance(cls_payload, state, clinician_message, person_last, character)
-        self._add_closure_plan_tip(cls_payload, state, clinician_message)
+            self._apply_secure_guidance(
+                cls_payload,
+                state,
+                clinician_message,
+                person_last,
+                character,
+                prefer_structured_feedback=has_structured_feedback,
+            )
+        if self._heuristic_fallback_enabled:
+            self._add_closure_plan_tip(cls_payload, state, clinician_message)
 
     def _apply_secure_guidance(
         self,
@@ -320,13 +233,43 @@ class AimsStateService:
         clinician_message: str,
         _person_last: str,
         character: str | None,
+        *,
+        prefer_structured_feedback: bool = False,
     ) -> None:
         first_inquire_done = state.get("first_inquire_done", False)
         if not first_inquire_done:
-            reason = "You moved into reassurance before asking about their concerns — try an open question first"
-            tip = "Ask what's on their mind (e.g., 'What are your thoughts about the vaccines we discussed?') before offering reassurance."
-            cls_payload["reasons"] = [reason] + (cls_payload.get("reasons") or [])
-            cls_payload.setdefault("tips", []).append(tip)
+            opened_with_concern_question = self._observed_open_concern_question(cls_payload)
+            if (
+                opened_with_concern_question is None
+                and self._heuristic_fallback_enabled
+            ):
+                opened_with_concern_question = opens_with_open_concern_question(clinician_message)
+            if prefer_structured_feedback:
+                code = (
+                    "secure_before_inquire_after_question"
+                    if opened_with_concern_question
+                    else "secure_before_inquire"
+                )
+                text_key = (
+                    "state_feedback.secure_before_inquire_after_question"
+                    if opened_with_concern_question
+                    else "state_feedback.secure_before_inquire"
+                )
+                self._append_feedback_item(
+                    cls_payload,
+                    step=STEP_SECURE,
+                    code=code,
+                    text=message(text_key),
+                )
+            else:
+                if opened_with_concern_question:
+                    reason = message("state_feedback.secure_before_inquire_after_question")
+                    tip = message("state_feedback.secure_before_inquire_after_question_tip")
+                else:
+                    reason = message("state_feedback.secure_before_inquire_reason")
+                    tip = message("state_feedback.secure_before_inquire_tip")
+                cls_payload["reasons"] = [reason] + (cls_payload.get("reasons") or [])
+                cls_payload.setdefault("tips", []).append(tip)
             try:
                 cls_payload["score"] = min(2, int(cls_payload.get("score", 2)))
             except Exception as e:
@@ -339,44 +282,23 @@ class AimsStateService:
         needs_mirror = self._has_material_unmirrored_concern(state)
 
         if needs_mirror and first_inquire_done:
-            self._add_secure_before_mirror_feedback(cls_payload, state, character)
+            if prefer_structured_feedback:
+                self._add_secure_before_mirror_feedback_item(cls_payload, state)
+            else:
+                self._add_secure_before_mirror_feedback(cls_payload, state, character)
         else:
             state["recent_coaching"] = []
 
-        mark_secured_by_topic(state, clinician_message, self.secure_topical_cues())
+        if self._heuristic_fallback_enabled:
+            mark_secured_by_topic(state, clinician_message, self.secure_topical_cues())
 
     @classmethod
     def secure_topical_cues(cls) -> dict[str, list[str]]:
         cues = {topic: list(topic_cues) for topic, topic_cues in cls.TOPICAL_CUES.items()}
-        cues.setdefault("requirements", []).extend(
-            [
-                "what happens",
-                "consequence",
-                "consequences",
-                "necessary",
-                "must happen",
-                "must do",
-                "must postpone",
-                "not an emergency decision",
-                "recommended today",
-                "right this minute",
-                "future visit",
-                "follow-up appointment",
-                "vaccination clinic",
-            ]
-        )
-        cues.setdefault("side_effects", []).extend(
-            [
-                "what to expect afterward",
-                "afterward",
-                "soreness",
-                "sore",
-                "tired",
-                "mild fever",
-                "needle went in",
-                "common thing you might notice",
-            ]
-        )
+        extensions = message_map("lexicon.aims_state.secure_topic_extensions")
+        for topic, topic_cues in extensions.items():
+            if isinstance(topic_cues, list):
+                cues.setdefault(topic, []).extend(str(cue) for cue in topic_cues)
         return cues
 
     @classmethod
@@ -386,6 +308,8 @@ class AimsStateService:
         state: dict[str, Any],
         clinician_message: str,
     ) -> None:
+        if cls._has_structured_feedback(cls_payload):
+            return
         if cls_payload.get("tips"):
             return
         if STEP_SECURE not in cls.component_steps(cls_payload.get("step"), cls_payload.get("steps")):
@@ -396,16 +320,25 @@ class AimsStateService:
             return
 
         text = (clinician_message or "").lower()
-        has_literature = any(cue in text for cue in cls.CLOSURE_LITERATURE_CUES)
+        has_literature = cls._has_closure_literature(text)
         has_followup = any(cue in text for cue in cls.CLOSURE_FOLLOWUP_CUES)
         if has_followup and not has_literature:
             cls_payload["tips"] = [
-                "You have a follow-up plan; offer some information to review at home so they can come back with specific questions."
+                message("state_feedback.closure_followup_without_literature")
             ]
         elif has_literature and not has_followup:
             cls_payload["tips"] = [
-                "You offered take-home information; also book a follow-up so they know when they can bring questions back."
+                message("state_feedback.closure_literature_without_followup")
             ]
+
+    @classmethod
+    def _has_closure_literature(cls, text: str) -> bool:
+        if any(cue in text for cue in cls.CLOSURE_LITERATURE_CUES):
+            return True
+        return any(
+            re.search(pattern, text)
+            for pattern in message_list("lexicon.aims_state.closure_literature_patterns")
+        )
 
     def _add_secure_before_mirror_feedback(
         self,
@@ -422,20 +355,24 @@ class AimsStateService:
 
         if repeat_count == 0:
             if self.detect_trust_style(character) == "analytical":
-                reason = "You're educating before reflecting — try validating their reasoning first; this person values having their logic acknowledged"
-                tip = "Reflect the reasoning (e.g., 'You want to weigh absolute vs. relative risk individually — did I capture that right?')."
+                reason = message("state_feedback.secure_before_mirror_analytical_reason")
+                tip = message("state_feedback.secure_before_mirror_analytical_tip")
             else:
-                reason = "You moved into education before reflecting the concern — try mirroring first so they feel heard"
-                tip = "Before educating, briefly reflect the concern (e.g., 'It feels like a lot at once — did I get that right?')."
+                reason = message("state_feedback.secure_before_mirror_reason")
+                tip = message("state_feedback.secure_before_mirror_tip")
         elif repeat_count == 1:
-            topic_hint = f" ('{first_unmirrored}')" if first_unmirrored else ""
-            reason = f"You're still educating without reflecting — the concern{topic_hint} hasn't been mirrored yet"
-            tip = f"Try reflecting the specific concern{topic_hint} before more education."
+            topic_hint = self._user_facing_topic_hint(first_unmirrored)
+            reason = message("state_feedback.secure_before_mirror_repeat_reason", topic_hint=topic_hint)
+            tip = message("state_feedback.secure_before_mirror_repeat_tip", topic_hint=topic_hint)
         else:
             count = repeat_count + 1
-            topic_hint = f" about '{first_unmirrored}'" if first_unmirrored else ""
-            reason = f"You've had {count} Secure turns without mirroring{topic_hint} — try pausing to reflect before more education"
-            tip = f"Pause and mirror: acknowledge the concern{topic_hint} before sharing more facts."
+            topic_hint = self._user_facing_topic_hint(first_unmirrored)
+            reason = message(
+                "state_feedback.secure_before_mirror_many_reason",
+                count=count,
+                topic_hint=topic_hint,
+            )
+            tip = message("state_feedback.secure_before_mirror_many_tip", topic_hint=topic_hint)
 
         cls_payload["reasons"] = [reason] + (cls_payload.get("reasons") or [])
         cls_payload.setdefault("tips", []).append(tip)
@@ -447,6 +384,70 @@ class AimsStateService:
 
         recent.append(secure_before_mirror_key)
         state["recent_coaching"] = recent[-3:]
+
+    def _add_secure_before_mirror_feedback_item(
+        self,
+        cls_payload: dict[str, Any],
+        state: dict[str, Any],
+    ) -> None:
+        recent = state.get("recent_coaching") or []
+
+        unmirrored_topics = self._unmirrored_topics_requiring_feedback(state)
+        first_unmirrored = unmirrored_topics[0] if unmirrored_topics else None
+        secure_before_mirror_key = self._secure_before_mirror_key(first_unmirrored)
+        topic_hint = self._user_facing_topic_hint(first_unmirrored)
+        self._append_feedback_item(
+            cls_payload,
+            step=STEP_SECURE,
+            code="secure_before_mirror",
+            text=message("state_feedback.secure_before_mirror", topic_hint=topic_hint),
+        )
+        try:
+            cls_payload["score"] = min(2, int(cls_payload.get("score", 2)))
+        except Exception as e:
+            self._logger.debug("Score normalization failed (structured secure before mirror): %s", e)
+            cls_payload["score"] = 2
+
+        recent.append(secure_before_mirror_key)
+        state["recent_coaching"] = recent[-3:]
+
+    @staticmethod
+    def _has_structured_feedback(cls_payload: dict[str, Any]) -> bool:
+        return bool(cls_payload.get("feedback_items") or cls_payload.get("step_feedback"))
+
+    @staticmethod
+    def _observed_open_concern_question(cls_payload: dict[str, Any]) -> bool | None:
+        observations = cls_payload.get("observations")
+        model_dump = getattr(observations, "model_dump", None)
+        if callable(model_dump):
+            observations = model_dump()
+        if not isinstance(observations, dict):
+            return None
+        value = observations.get("open_concern_question_present")
+        return value if isinstance(value, bool) else None
+
+    @staticmethod
+    def _append_feedback_item(
+        cls_payload: dict[str, Any],
+        *,
+        step: str,
+        code: str,
+        text: str,
+    ) -> None:
+        items = cls_payload.setdefault("feedback_items", [])
+        for item in items:
+            if isinstance(item, dict) and item.get("code") == code:
+                return
+            if hasattr(item, "code") and getattr(item, "code") == code:
+                return
+        items.append(
+            {
+                "step": step,
+                "tone": "improvement",
+                "code": code,
+                "text": text,
+            }
+        )
 
     @classmethod
     def _has_material_unmirrored_concern(cls, state: dict[str, Any]) -> bool:
@@ -490,6 +491,17 @@ class AimsStateService:
     def _secure_before_mirror_key(topic: str | None) -> str:
         normalized = str(topic).strip() if topic else ""
         return f"secure_before_mirror:{normalized}" if normalized else "secure_before_mirror"
+
+    @classmethod
+    def _user_facing_topic_hint(cls, topic: str | None) -> str:
+        normalized = str(topic or "").strip()
+        if not normalized:
+            return ""
+        label = message_map("state_feedback.topic_hints").get(
+            normalized,
+            normalized.replace("_", " "),
+        )
+        return f" about {label}"
 
     @classmethod
     def _secure_before_mirror_repeat_count(cls, recent: list[Any], topic: str | None) -> int:

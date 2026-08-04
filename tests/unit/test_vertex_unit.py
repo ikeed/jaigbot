@@ -133,6 +133,21 @@ def test_build_config_includes_json_schema_and_thinking_budget():
     assert cfg.thinking_config.thinking_budget == 64
 
 
+def test_build_config_prefers_thinking_level_over_budget():
+    cfg = VertexClient(project="proj", region="us-central1", model_id="model")._build_config(
+        temperature=0.1,
+        max_tokens=256,
+        system_instruction=None,
+        response_mime_type="application/json",
+        response_schema=None,
+        thinking_budget=64,
+        thinking_level="minimal",
+    )
+
+    assert cfg.thinking_config.thinking_level.value == "MINIMAL"
+    assert cfg.thinking_config.thinking_budget is None
+
+
 def test_merge_with_overlap_covers_no_space_before_and_no_progress():
     assert VertexClient.merge_with_overlap("Hello(", "world)") == "Hello(world)"
     assert VertexClient.merge_with_overlap("Already complete", "") == "Already complete"
@@ -164,6 +179,57 @@ def test_generate_text_async_raises_vertex_error_when_empty(monkeypatch):
 
     with pytest.raises(VertexAIError, match="No text candidates returned from model"):
         asyncio.run(client.generate_text_async(prompt="hello"))
+
+
+def test_generate_text_async_raises_vertex_error_for_json_max_tokens(monkeypatch):
+    class FakePart:
+        def __init__(self, text, thought=False):
+            self.text = text
+            self.thought = thought
+
+    class FakeCandidate:
+        def __init__(self):
+            self.content = SimpleNamespace(parts=[FakePart('{"patient_reply":"cut off')])
+            self.finish_reason = "MAX_TOKENS"
+            self.safety_ratings = []
+
+    class FakeResponse:
+        candidates = [FakeCandidate()]
+        usage_metadata = SimpleNamespace(
+            prompt_token_count=1,
+            candidates_token_count=768,
+            total_token_count=769,
+            thoughts_token_count=0,
+            cached_content_token_count=0,
+        )
+
+    class FakeModels:
+        @staticmethod
+        async def generate_content(**kwargs):
+            return FakeResponse()
+
+    class FakeAio:
+        models = FakeModels()
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            self.aio = FakeAio()
+
+    monkeypatch.setattr("app.vertex.genai.Client", FakeClient)
+
+    client = VertexClient(project="proj", region="us-central1", model_id="model")
+
+    import asyncio
+    import pytest
+
+    with pytest.raises(VertexAIError, match="max tokens"):
+        asyncio.run(
+            client.generate_text_async(
+                prompt="hello",
+                response_mime_type="application/json",
+                response_schema={"type": "object"},
+            )
+        )
 
 
 def test_generate_text_autocontinues_and_merges(monkeypatch):

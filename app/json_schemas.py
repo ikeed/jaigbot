@@ -14,15 +14,63 @@ except Exception:  # pragma: no cover - import error exercised in tests indirect
     Draft7Validator = None  # type: ignore
 
 
+OBSERVATIONS_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "open_concern_question_present": {"type": ["boolean", "null"]},
+        "question_count": {"type": ["integer", "null"], "minimum": 0},
+        "leading_question_present": {"type": ["boolean", "null"]},
+        "why_framing_present": {"type": ["boolean", "null"]},
+        "reflection_present": {"type": ["boolean", "null"]},
+        "accuracy_check_present": {"type": ["boolean", "null"]},
+        "autonomy_support_present": {"type": ["boolean", "null"]},
+        "safety_net_present": {"type": ["boolean", "null"]},
+        "followup_or_materials_present": {"type": ["boolean", "null"]},
+    },
+    "additionalProperties": False,
+}
+
+FEEDBACK_ITEM_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "text": {"type": "string", "minLength": 1},
+        "step": {"type": ["string", "null"]},
+        "tone": {"type": "string", "enum": ["praise", "improvement"]},
+        "code": {"type": ["string", "null"]},
+        "evidence_spans": {"type": "array", "items": {"type": "string"}},
+        "target_observation": {"type": ["string", "null"]},
+    },
+    "required": ["text"],
+    "additionalProperties": False,
+}
+
+
 CLASSIFY_SCHEMA: Dict[str, Any] = {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "type": "object",
     "properties": {
         # Allow string or null for local validation; Vertex schema will be adapted via vertex_response_schema()
-        "step": {"type": ["string", "null"], "enum": ["Announce", "Inquire", "Mirror", "Secure", "Announce+Inquire", "Mirror+Inquire", "Mirror+Secure", "Secure+Inquire", None]},
+        "step": {"type": ["string", "null"], "enum": ["Announce", "Inquire", "Mirror", "Secure", "Announce+Inquire", "Mirror+Inquire", "Mirror+Secure", "Secure+Inquire", "Mirror+Secure+Inquire", None]},
         "score": {"type": "integer", "minimum": 0, "maximum": 3},
         "reasons": {"type": "array", "items": {"type": "string"}, "minItems": 1},
         "tips": {"type": "array", "items": {"type": "string"}},
+        "steps": {"type": "array", "items": {"type": "string"}},
+        "step_feedback": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "step": {"type": "string"},
+                    "feedback": {"type": "string", "minLength": 1},
+                    "tone": {"type": "string", "enum": ["praise", "improvement"]},
+                },
+                "required": ["step", "feedback"],
+                "additionalProperties": False,
+            },
+        },
+        "phase": {"type": ["string", "null"]},
+        "observations": OBSERVATIONS_SCHEMA,
+        "feedback_items": {"type": "array", "items": FEEDBACK_ITEM_SCHEMA},
     },
     "required": ["step", "score", "reasons"],
     "additionalProperties": False,
@@ -43,13 +91,20 @@ ENDGAME_DETECT_SCHEMA: Dict[str, Any] = {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "type": "object",
     "properties": {
-        "outcome": {
+        "is_endgame": {"type": "boolean"},
+        "reason": {"type": "string"},
+        "resolution_type": {
             "type": "string",
-            "enum": ["accepted_now", "followup_literature", "not_endgame"],
+            "enum": ["accepted_vaccine", "accepted_literature", "deferred", "not_resolved"],
         },
-        "reasons": {"type": "array", "items": {"type": "string"}},
+        "summary": {"type": "string"},
+        "accepted_vaccine": {"type": ["boolean", "null"]},
+        "accepted_materials": {"type": ["boolean", "null"]},
+        "accepted_followup": {"type": ["boolean", "null"]},
+        "remaining_active_concern": {"type": ["boolean", "null"]},
+        "evidence_spans": {"type": "array", "items": {"type": "string"}},
     },
-    "required": ["outcome"],
+    "required": ["is_endgame", "reason", "resolution_type", "summary"],
     "additionalProperties": False,
 }
 
@@ -76,6 +131,37 @@ SUMMARY_SCHEMA: Dict[str, Any] = {
         "narrative": {"type": "string"},
     },
     "required": ["overallScore", "stepCoverage"],
+    "additionalProperties": False,
+}
+
+SUMMARY_ANALYSIS_SCHEMA: Dict[str, Any] = {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+        "overall_commentary": {"type": "string"},
+        "strengths": {"type": "array", "items": {"type": "string"}},
+        "growth_areas": {"type": "array", "items": {"type": "string"}},
+        "metric_notes": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "step": {
+                        "type": "string",
+                        "enum": ["Announce", "Inquire", "Mirror", "Secure"],
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": ["not_used", "used", "low", "solid", "strong"],
+                    },
+                    "text": {"type": "string", "minLength": 1},
+                },
+                "required": ["step", "status", "text"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["overall_commentary", "strengths", "growth_areas", "metric_notes"],
     "additionalProperties": False,
 }
 

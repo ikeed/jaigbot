@@ -76,10 +76,13 @@ def _make_state(phase="Secure", concerns=None):
     }
 
 
-def _state_service():
+def _state_service(*, heuristic_fallback_enabled=False):
     """Minimal state service for AIMS state transition tests."""
     import logging
-    return AimsStateService(logger=logging.getLogger("test"))
+    return AimsStateService(
+        logger=logging.getLogger("test"),
+        heuristic_fallback_enabled=heuristic_fallback_enabled,
+    )
 
 
 def test_mirror_returns_phase_to_inquire_mirror_from_secure():
@@ -152,6 +155,10 @@ def test_mirror_secure_inquire_scalar_marks_all_components():
         "You're worried about side effects. Serious side effects are rare. What else is on your mind?",
         "I'm worried about side effects.",
         llm_topic="side_effects",
+        person_events=[
+            {"event_type": "concern_mirrored", "topic": "side_effects"},
+            {"event_type": "concern_secured", "topic": "side_effects"},
+        ],
     )
 
     concern = mem["aims_state"]["parent_concerns"][0]
@@ -197,6 +204,12 @@ def test_mirror_secure_inquire_can_resolve_multiple_explicit_concerns():
         ),
         "I'm worried about side effects and aluminum.",
         llm_topic="side_effects",
+        person_events=[
+            {"event_type": "concern_mirrored", "topic": "side_effects"},
+            {"event_type": "concern_mirrored", "topic": "ingredients"},
+            {"event_type": "concern_secured", "topic": "side_effects"},
+            {"event_type": "concern_secured", "topic": "ingredients"},
+        ],
     )
 
     concerns = mem["aims_state"]["parent_concerns"]
@@ -230,6 +243,9 @@ def test_secure_inquire_scalar_marks_secure_without_premature_secure_warning():
         "Side effects are usually mild and brief. What else would help you decide?",
         "I'm worried about side effects.",
         llm_topic="side_effects",
+        person_events=[
+            {"event_type": "concern_secured", "topic": "side_effects"},
+        ],
     )
 
     concern = mem["aims_state"]["parent_concerns"][0]
@@ -252,12 +268,12 @@ def test_secure_before_mirror_first_time_gives_standard_feedback():
     ])
     cls = {"step": "Secure", "score": 2, "reasons": [], "tips": []}
     h.apply_coaching_guidance(cls, "Secure", state, "The data shows...", "I don't trust pharma")
-    assert "reflecting" in cls["reasons"][0].lower() or "mirroring" in cls["reasons"][0].lower()
+    assert "mirroring" in cls["reasons"][0].lower()
     assert state.get("recent_coaching") == ["secure_before_mirror:trust"]
 
 
 def test_secure_before_mirror_second_time_escalates_with_topic():
-    """Second repetition should name the unmirrored concern topic."""
+    """Second repetition should name the unmirrored concern in user-facing language."""
     h = _state_service()
     state = _make_state(phase="InquireMirror", concerns=[
         {"desc": "x", "topic": "trust", "is_mirrored": False, "is_secured": False},
@@ -267,6 +283,35 @@ def test_secure_before_mirror_second_time_escalates_with_topic():
     h.apply_coaching_guidance(cls, "Secure", state, "Studies show...", "I don't trust pharma")
     assert "trust" in cls["reasons"][0].lower()
     assert "still" in cls["reasons"][0].lower() or "hasn't" in cls["reasons"][0].lower()
+    assert cls["tips"][0].startswith("Mirror the specific concern")
+    assert "try mirroring" not in cls["tips"][0].lower()
+
+
+def test_secure_before_mirror_repeated_tip_does_not_leak_internal_topic_keys():
+    """Repeated feedback should not expose taxonomy labels like disease_risk."""
+    h = _state_service()
+    state = _make_state(phase="InquireMirror", concerns=[
+        {"desc": "x", "topic": "disease_risk", "is_mirrored": False, "is_secured": False},
+    ])
+    state["recent_coaching"] = ["secure_before_mirror:disease_risk"]
+    cls = {"step": "Secure", "score": 2, "reasons": [], "tips": []}
+
+    h.apply_coaching_guidance(
+        cls,
+        "Secure",
+        state,
+        "Measles can spread quickly when vaccination rates drop.",
+        "I don't see measles around here.",
+    )
+
+    feedback = " ".join(cls["reasons"] + cls["tips"])
+    assert "disease_risk" not in feedback
+    assert "'disease" not in feedback
+    assert "whether the disease still feels like a real risk" in feedback
+    assert cls["tips"][0] == (
+        "Mirror the specific concern about whether the disease still feels like a real risk "
+        "before more education."
+    )
 
 
 def test_secure_before_mirror_third_time_escalates_to_pattern():
@@ -317,7 +362,7 @@ def test_secure_before_mirror_is_not_suppressed_by_earlier_other_mirror():
     ])
     cls = {"step": "Secure", "score": 3, "reasons": [], "tips": []}
     h.apply_coaching_guidance(cls, "Secure", state, "Studies show...", "I don't trust pharma")
-    assert any("reflecting" in reason.lower() or "mirroring" in reason.lower() for reason in cls["reasons"])
+    assert any("mirroring" in reason.lower() for reason in cls["reasons"])
     assert state.get("recent_coaching") == ["secure_before_mirror:trust"]
 
 
@@ -370,7 +415,7 @@ def test_secure_before_mirror_ignores_same_evidence_sibling_concern():
 
 
 def test_secure_followup_closure_missing_literature_gets_tip():
-    h = _state_service()
+    h = _state_service(heuristic_fallback_enabled=True)
     state = _make_state(
         phase="Secure",
         concerns=[
@@ -400,8 +445,37 @@ def test_secure_followup_closure_missing_literature_gets_tip():
     ]
 
 
-def test_secure_literature_closure_missing_followup_gets_tip():
+def test_secure_closure_with_written_safety_information_gets_no_literature_tip():
     h = _state_service()
+    state = _make_state(
+        phase="Secure",
+        concerns=[
+            {
+                "desc": "wants safety evidence explained",
+                "topic": "side_effects",
+                "is_mirrored": True,
+                "is_secured": True,
+            }
+        ],
+    )
+    cls = {"step": "Secure", "score": 3, "reasons": [], "tips": []}
+
+    h.apply_coaching_guidance(
+        cls,
+        "Secure",
+        state,
+        (
+            "I will give you the written safety information now and book a "
+            "follow-up appointment so you can bring back specific questions."
+        ),
+        "That works for me.",
+    )
+
+    assert cls["tips"] == []
+
+
+def test_secure_literature_closure_missing_followup_gets_tip():
+    h = _state_service(heuristic_fallback_enabled=True)
     state = _make_state(
         phase="Secure",
         concerns=[
@@ -479,4 +553,4 @@ def test_default_persona_gets_emotional_tip():
         character="Sarah is a caring mother.",
     )
     assert "feel heard" in cls["reasons"][0].lower()
-    assert "reflect the concern" in cls["tips"][0].lower()
+    assert "mirror the concern" in cls["tips"][0].lower()

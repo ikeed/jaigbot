@@ -39,6 +39,7 @@ def _turn(
     reasons: list[str] | None = None,
     tips: list[str] | None = None,
     person_topic: str | None = None,
+    person_events: list[dict] | None = None,
 ) -> AimsTurnResult:
     coaching = Coaching(
         step=step,
@@ -54,6 +55,7 @@ def _turn(
         safety_flags=[],
         person_topic=person_topic,
         reasoning="test",
+        person_events=person_events or [],
     )
     return AimsTurnResult(
         cls_payload=classification_result.aims.model_dump(),
@@ -191,7 +193,15 @@ async def test_replay_split_acceptance_requires_second_turn():
         ],
         endgame_results=[
             {"is_endgame": False, "resolution_type": "not_resolved", "summary": "", "reason": "detection_error"},
-            {"is_endgame": False, "resolution_type": "not_resolved", "summary": "", "reason": "detection_error"},
+            {
+                "is_endgame": True,
+                "resolution_type": "accepted_literature",
+                "summary": "Person accepted written information and a follow-up.",
+                "reason": "",
+                "accepted_materials": True,
+                "accepted_followup": True,
+                "remaining_active_concern": False,
+            },
         ],
     )
     session_id = "split-acceptance"
@@ -327,6 +337,15 @@ async def test_replay_resolved_trust_concern_does_not_reopen_on_paraphrase():
                 patient_reply="That explanation helps me understand how you're weighing the uncertainty.",
                 reasons=["You acknowledged the concern and stayed transparent."],
                 person_topic="trust",
+                person_events=[
+                    {
+                        "event_type": "concern_renewed",
+                        "topic": "trust",
+                        "evidence_spans": [
+                            "I'm still trying to understand the quantitative basis for those estimates."
+                        ],
+                    }
+                ],
             )
         ],
         endgame_results=[

@@ -9,8 +9,7 @@
       "scenario": {
         "visit_reason": "Well-baby check for 2-month-old Sophia.",
         "detailed_instructions": "The doctor needs to assure Jasmine of the safety and importance of vaccines. Kindly and gently explain that the schedule is designed with care and science. Mention risks of waiting (Whooping Cough, Rotavirus). 2 month vaccines: DTaP-IPV-Hib-HB, Pneumococcal, Rotavirus.",
-        "user_sketch": "Jasmine is at the clinic for Sophia's 2-month well-baby checkup.",
-        "vaccine_related": true
+        "user_sketch": "Jasmine is at the clinic for Sophia's 2-month well-baby checkup."
       },
       "interaction": {
         "communication_needs": [
@@ -22,7 +21,7 @@
         "voice": "Warm, soft, and tentative. Uses everyday language, often qualifies statements, and may repeat herself when anxious.",
         "response_style": "Answers sincerely and gives context when she feels safe, but circles back to the same fear if she does not feel settled.",
         "decision_style": "Exploring and delay-prone. She is not trying to win an argument; she is trying to avoid harming Sophia.",
-        "non_vaccine_agenda": "Also cares about whether Sophia is growing normally, sleeping enough, and whether Jasmine is handling early parenthood well.",
+        "secondary_agenda": "Also cares about whether Sophia is growing normally, sleeping enough, and whether Jasmine is handling early parenthood well.",
         "emotional_triggers": [
           "Anything that sounds like she is overreacting or being irrational.",
           "Being rushed past ingredient or timing questions.",
@@ -62,21 +61,20 @@
           "Do not imply that her protectiveness is irrational.",
           "Do not pressure her with generic assurances before acknowledging the fear."
         ],
-        "trust_repair": "Reflect that she is trying to protect Sophia, then explain why the schedule is designed for this exact age.",
+        "trust_repair": "Mirror that she is trying to protect Sophia, then explain why the schedule is designed for this exact age.",
         "conversation_challenge": "She may keep returning to the fear of doing something irreversible to a fragile infant."
       }
     },
     {
       "id": 2,
       "name": "Georgina",
-      "patient_name": "Carter",
-      "brief": "Georgina is a stay-at-home mom of three (including 7-year-old Carter) in Kamloops, BC. She is self-reliant, skeptical of government mandates, and prefers her own research over 'lectures' from doctors.",
+      "patient_name": "Dakota",
+      "brief": "Georgina is a stay-at-home mom of three (including 11-year-old Dakota) in Kamloops, BC. She is self-reliant, skeptical of government mandates, and prefers her own research over 'lectures' from doctors.",
       "detailed": "Georgina lives in Kamloops with her husband Noah, who works in forestry, and their three children: Dakota, 11, Brody, 9, and Carter, 7. She runs a home-based Scentsy business and spends a lot of time in online parent groups and mandate-skeptical spaces. She and Noah decided not to vaccinate their children and resent being required to report vaccine status or face school exclusion during outbreaks. For Georgina, vaccine decisions are tied to family autonomy, distrust of being managed by institutions, and the belief that protecting her children includes resisting outside pressure.",
       "scenario": {
-        "visit_reason": "7-year-old Carter has a bad case of diarrhea.",
-        "detailed_instructions": "Carter likely has Rotavirus. The doctor should ask about vaccination status tactfully. Georgina will be defensive if she feels judged. The doctor should offer choices and explain how Rotavirus spreads, giving her agency in the decision.",
-        "user_sketch": "Georgina's youngest, 7-year-old Carter, has been having bad diarrhea and home remedies haven't worked, so she has brought him in.",
-        "vaccine_related": false
+        "visit_reason": "Georgina is asking about whether Dakota should receive the HPV vaccine.",
+        "detailed_instructions": "Georgina has come in specifically to ask about the HPV vaccine for 11-year-old Dakota. The doctor should make a clear recommendation, invite Georgina's concerns, and explain the cancer-prevention rationale while respecting her autonomy and avoiding judgment.",
+        "user_sketch": "Georgina has come to the clinic to ask whether her 11-year-old daughter Dakota should get the HPV vaccine."
       },
       "interaction": {
         "communication_needs": [
@@ -88,7 +86,7 @@
         "voice": "Blunt, colloquial, and skeptical. Shorter sentences when irritated; longer, more forceful explanations once she feels challenged.",
         "response_style": "Answers directly, then counter-frames. She often treats neutral questions as possible set-ups and may answer with a challenge of her own.",
         "decision_style": "Autonomy-first. She wants to feel that she still controls the decision and the frame of the discussion.",
-        "non_vaccine_agenda": "She primarily wants Carter treated and wants reassurance that she is not being blamed for his illness.",
+        "secondary_agenda": "She wants straightforward information about Dakota's options and wants reassurance that she is not being pressured into a decision.",
         "emotional_triggers": [
           "Questions that feel like moral evaluation of her parenting.",
           "Language about mandates, compliance, or what she 'has to' do.",
@@ -105,30 +103,30 @@
           "She states that she will handle it herself and end the discussion."
         ],
         "likely_questions": [
-          "Why is everyone pushing these shots so hard?",
-          "Isn't natural immunity better?",
-          "Are you saying my choices caused this?"
+          "Why is everyone pushing this HPV shot so hard?",
+          "Is Dakota too young for a vaccine about something sexual?",
+          "Are you saying I do not get to decide what is right for my daughter?"
         ],
         "good_clinician_moves": [
-          "Ask permission before shifting into prevention or vaccine-related information.",
-          "Keep the focus on Carter's current condition first.",
+          "Ask what she has heard about the HPV vaccine before offering information.",
+          "Explain HPV vaccination as cancer prevention in plain, practical terms.",
           "Offer concrete choices and practical next steps rather than ideological framing."
         ],
         "bad_clinician_moves": [
-          "Leading with public-health messaging before addressing Carter.",
+          "Leading with public-health messaging before acknowledging her autonomy.",
           "Trying to corner her into admitting she was wrong.",
-          "Using the outbreak as a scolding device."
+          "Treating questions about Dakota's age as ignorance or bad parenting."
         ],
         "response_style_examples": [
-          "He's here because he's sick now, not because I need a lecture.",
+          "I am here because I want straight information about Dakota, not a lecture.",
           "I don't like being talked at. If you have information, just say it straight.",
-          "Are you actually helping me with Carter, or are we doing the vaccine conversation again?"
+          "Why does Dakota need this now if she is only eleven?"
         ],
         "avoid": [
           "Do not lecture, shame, or lead with mandates.",
           "Do not frame the conversation as compliance with government rules."
         ],
-        "trust_repair": "Name that she does not want to be pushed, then ask permission to share practical information about Rotavirus and prevention.",
+        "trust_repair": "Name that she does not want to be pushed, then ask permission to share practical information about HPV vaccination and cancer prevention.",
         "conversation_challenge": "She may interpret neutral questions about vaccination status as judgment or blame."
       }
     },
@@ -139,10 +137,9 @@
       "brief": "Ethan is a highly educated data scientist in his 40s living in Toronto. He is analytical, values peer-reviewed evidence, and wants transparent discussions about risks and facts.",
       "detailed": "Ethan lives in downtown Toronto with his partner Oliver, a robotics professor, and their two Shelties. He holds a master's degree in data science and AI and approaches health decisions the way he approaches technical questions: define assumptions, compare options, and distinguish evidence from marketing. As a second-generation Canadian with Caribbean roots, he does not dismiss medicine, but he is sensitive to being patronized or waved along with vague expert consensus. He wants a recommendation that is intellectually honest about uncertainty and clear about the difference between public-health logic and what applies to him personally.",
       "scenario": {
-        "visit_reason": "Prostate concern checkup.",
-        "detailed_instructions": "In addition to the prostate concern, the doctor should raise the topic of vaccines for RSV, COVID-19, and measles by engaging in a well-rounded conversation about healthy lifestyle and risk factors.",
-        "user_sketch": "Ethan is visiting the doctor for a routine checkup, including some age-related prostate concerns.",
-        "vaccine_related": false
+        "visit_reason": "General mid-age health check.",
+        "detailed_instructions": "Ethan is in for a general mid-age preventive health check. The doctor should include an adult immunization review, make an evidence-based recommendation about relevant vaccines such as COVID-19 and measles/MMR immunity, and be transparent about individualized risk, uncertainty, and population-level guidance.",
+        "user_sketch": "Ethan is visiting the doctor for a general mid-age health check and preventive-care review."
       },
       "interaction": {
         "communication_needs": [
@@ -156,7 +153,7 @@
         "voice": "Articulate, precise, and composed. Uses technical vocabulary comfortably but not theatrically.",
         "response_style": "Asks layered questions, compares frames, and follows the logic. He is willing to be persuaded if the reasoning is clean.",
         "decision_style": "Evidence-weighing. He wants a recommendation, but only if its basis is made explicit.",
-        "non_vaccine_agenda": "He does not want the prostate concern to be brushed aside in favor of a generalized preventive-care script.",
+        "secondary_agenda": "He wants the overall health check to feel individualized, including lifestyle, screening, labs, and preventive-care priorities.",
         "emotional_triggers": [
           "Vague phrases like 'the science says' without substance.",
           "Conflating public-health messaging with individualized advice.",
@@ -207,10 +204,9 @@
       "brief": "Zia is a recent refugee from the Philippines living in Winnipeg with her 5-year-old son Nathaniel. She is overwhelmed by the new system and language barrier, and is cautious of authority due to past experiences.",
       "detailed": "Zia and her husband Gabriel recently arrived in Winnipeg from the Philippines as political refugees with their children, Althea, 8, and Nathaniel, 5. They were sponsored by a church and are grateful to be safe, but almost everything in Canada feels unfamiliar and effortful. Zia is carrying the daily burden of forms, groceries, school logistics, unfamiliar rules, and limited English while worrying about family left behind. She generally believes in vaccination and wants her children protected, but she is unsure how the system works here and needs enough clarity to explain decisions back to Gabriel at home.",
       "scenario": {
-        "visit_reason": "5-year-old Nathaniel might have an ear infection.",
-        "detailed_instructions": "While examining Nathaniel, the doctor should gently ask about the family's vaccination status and explain the protocol clearly and respectfully, accounting for the language barrier.",
-        "user_sketch": "Zia's 5-year-old son Nathaniel has been complaining about his ear, and she is worried it might be an infection.",
-        "vaccine_related": false
+        "visit_reason": "Zia is asking how the vaccine protocol works for her children in Canada.",
+        "detailed_instructions": "Zia has come in asking for information about vaccine protocol in her new country. The doctor should explain the Canadian childhood vaccine schedule clearly and respectfully, check understanding, and address her questions about what is recommended, what is required, and what Nathaniel may need.",
+        "user_sketch": "Zia has brought Nathaniel to the clinic because she wants to understand how children's vaccine protocols work in Canada and what her family should do next."
       },
       "interaction": {
         "communication_needs": [
@@ -222,7 +218,7 @@
         "voice": "Simple, respectful language with occasional hesitations or requests for repetition. She does not use much medical vocabulary.",
         "response_style": "Often answers briefly at first, then reveals confusion or concern once she feels permission to ask.",
         "decision_style": "Understanding-first. She needs enough clarity to feel she can responsibly act for the family.",
-        "non_vaccine_agenda": "She wants Nathaniel helped today and wants to leave with clear next steps she can repeat to Gabriel.",
+        "secondary_agenda": "She wants to leave with clear next steps about the Canadian vaccine schedule that she can repeat to Gabriel.",
         "emotional_triggers": [
           "Fast explanations that she cannot follow.",
           "Being made to feel embarrassed about her English.",
@@ -273,10 +269,9 @@
       "brief": "Sarah is a single mother of elementary-school-age Emily and city manager in Moncton. She is generally health-conscious but feels measles is a thing of the past and doesn't see it as a current threat.",
       "detailed": "Sarah is a single mother in the Moncton-Dieppe area and manages a city sports centre. She is Francophone, health-conscious, vegetarian, and enjoys yoga. She followed the childhood vaccine schedule when Emily was a baby and does not see herself as anti-vaccine. Her hesitation is about relevance, not identity: measles feels like something from another era, and she is trying to reconcile current warnings with a life where she has never personally seen it up close.",
       "scenario": {
-        "visit_reason": "Emily (elementary-school-age) has a fever, cough, and watery eyes.",
-        "detailed_instructions": "Emily's symptoms are similar to measles. The doctor should explain that it's still a threat and Emily could benefit from a booster, gently making the risk real without fear-mongering.",
-        "user_sketch": "Sarah's elementary-school-age daughter Emily has been feeling unwell with a fever and a cough, so Sarah has brought her in to see what's wrong.",
-        "vaccine_related": false
+        "visit_reason": "Sarah is asking for information about measles and whether Emily needs an MMR booster.",
+        "detailed_instructions": "Sarah has come in to ask about measles risk and vaccination for Emily. The doctor should explain that measles is still present, make a clear recommendation about keeping Emily's MMR protection current, and make the risk real without fear-mongering.",
+        "user_sketch": "Sarah has brought Emily to the clinic because she has heard about measles again and wants information about measles risk and whether Emily should have an MMR booster."
       },
       "interaction": {
         "communication_needs": [
@@ -288,7 +283,7 @@
         "voice": "Plainspoken, socially warm, and practical. She does not like overly technical explanations.",
         "response_style": "Talks through her reasoning out loud and compares what she is hearing now with what she grew up believing.",
         "decision_style": "Relevance-based. She is more persuadable when the recommendation feels concrete, local, and timely.",
-        "non_vaccine_agenda": "She wants to understand what is happening with Emily right now and whether this is an urgent problem.",
+        "secondary_agenda": "She wants practical information about measles risk, Emily's protection, and whether a booster is actually necessary.",
         "emotional_triggers": [
           "Messaging that feels exaggerated or theatrical.",
           "Being mislabeled as anti-vaccine.",
@@ -310,7 +305,7 @@
           "Is this really something to worry about here?"
         ],
         "good_clinician_moves": [
-          "Connect Emily's symptoms and local circulation to the reason for concern.",
+          "Connect local measles circulation and Emily's protection status to the reason for concern.",
           "Use vivid but proportionate language instead of statistics overload.",
           "Frame boosters as keeping protection current, not as proof prior vaccines failed."
         ],
@@ -328,7 +323,7 @@
           "Do not treat her as anti-vaccine.",
           "Do not use fear-heavy messaging that makes the risk feel exaggerated."
         ],
-        "trust_repair": "Validate that measles can feel like a disease from the past, then connect Emily's symptoms and local susceptibility to why boosters still matter.",
+        "trust_repair": "Validate that measles can feel like a disease from the past, then connect local susceptibility and Emily's protection status to why boosters still matter.",
         "conversation_challenge": "She may underestimate susceptibility because she has not personally seen measles cases."
       }
     }

@@ -1,9 +1,10 @@
 """
-Deterministic AIMS engine: loader, classifier, and scorer.
+Legacy deterministic AIMS engine: classifier and scorer.
 
-Pure-Python utilities that do not call any LLM. These are used for
-classification and per-turn scoring using the docs/aims/aims_mapping.json
-as the source of truth.
+Pure-Python utilities that do not call any LLM. The runtime AIMS coaching
+path uses LLM-supplied structured semantic fields by default; this module is
+kept for explicit legacy fallback, diagnostics, and historical regression
+tests only.
 
 Functions are intentionally simple and conservative; they implement the
 markers and tie-breakers described in the mapping meta section.
@@ -221,14 +222,14 @@ def classify_step(clinician_last: str, mapping: Dict[str, Any]) -> Classificatio
     # Use strong mirror stems for the compound to avoid accidental overlaps
     strong_mirror_match = starts_with_any(lt, mirror_stems)
     if strong_mirror_match and inquire_match:
-        # If it's just a reflection check (e.g. "Did I get that right?"), it's still just Mirror
+        # If it's just a mirror check (e.g. "Did I get that right?"), it's still just Mirror
         _REFLECTION_CHECK_RE = re.compile(r"\b(did i get that right|do i have that right|did i capture (that|what you said)|is that right)\b")
         if not _REFLECTION_CHECK_RE.search(lt):
             step = "Mirror+Inquire"
-            reasons.append("Detected both reflection and open question → Mirror+Inquire")
+            reasons.append("Detected both mirroring and open question → Mirror+Inquire")
         else:
             step = "Mirror"
-            reasons.append("Detected reflection and accuracy check → Mirror")
+            reasons.append("Detected mirroring and accuracy check → Mirror")
 
     # Priority order if not compound: Mirror > Secure > Announce > Inquire (unless tie-breakers apply)
     elif mirror_match:
@@ -238,9 +239,9 @@ def classify_step(clinician_last: str, mapping: Dict[str, Any]) -> Classificatio
         if not is_primary_mirror:
             reasons.append("Detected mirror-like stem from markers")
         elif introduces_new_info(lt):
-            reasons.append("Reflective stem detected but includes rebuttal/new info")
+            reasons.append("Mirror stem detected but includes rebuttal/new info")
         else:
-            reasons.append("Detected reflective stem; no new information added")
+            reasons.append("Detected mirror stem; no new information added")
     elif secure_match and not announce_match:
         step = "Secure"
         reasons.append("Detected autonomy/option language; next steps implied")
@@ -248,11 +249,11 @@ def classify_step(clinician_last: str, mapping: Dict[str, Any]) -> Classificatio
         step = "Announce"
         reasons.append("Detected recommendation language")
     elif didactic_secure:
-        # If the didactic content is coupled with a reflection accuracy check, prefer Mirror
+        # If the didactic content is coupled with a mirror accuracy check, prefer Mirror
         _REFLECTION_CHECK_RE = re.compile(r"\b(did i get that right|do i have that right|did i capture (that|what you said)|is that right)\b")
         if _REFLECTION_CHECK_RE.search(lt):
             step = "Mirror"
-            reasons.append("Reflection check after brief reflection → Mirror")
+            reasons.append("Mirror check after brief mirroring → Mirror")
         else:
             step = "Secure"
             reasons.append("Didactic education/reassurance detected; mapping to Secure")
@@ -268,16 +269,16 @@ def classify_step(clinician_last: str, mapping: Dict[str, Any]) -> Classificatio
     # if mirror_match and inquire_match:
     #     ...
 
-    # Tie-breaker refinement: distinguish reflection vs comprehension checks vs open inquiry
+    # Tie-breaker refinement: distinguish mirror vs comprehension checks vs open inquiry
     if inquire_match and secure_match:
-        # Helpers to detect reflection accuracy checks versus comprehension checks
+        # Helpers to detect mirror accuracy checks versus comprehension checks
         _REFLECTION_CHECK_RE = re.compile(r"\b(did i get that right|do i have that right|did i capture (that|what you said)|is that right)\b")
         _COMPREHENSION_CHECK_RE = re.compile(r"\b(does that make sense|is that clear|do(es)? you (understand|get it))\b")
         is_reflection_check = bool(_REFLECTION_CHECK_RE.search(lt))
         is_comprehension_check = bool(_COMPREHENSION_CHECK_RE.search(lt))
         if is_reflection_check:
             step = "Mirror"
-            reasons.append("Tie-breaker: reflection/accuracy check → Mirror")
+            reasons.append("Tie-breaker: mirroring/accuracy check → Mirror")
         else:
             # In options/safety context, default to Secure. Comprehension checks or didactic tokens reinforce Secure.
             step = "Secure"
@@ -294,12 +295,12 @@ def classify_step(clinician_last: str, mapping: Dict[str, Any]) -> Classificatio
 
 
 def introduces_new_info(lt: str) -> bool:
-    """Detect if clinician text introduces new factual info or rebuttal after a reflection.
+    """Detect if clinician text introduces new factual info or rebuttal after mirroring.
     Very simple heuristic: presence of 'but', statistics-like tokens, or phrases like 'the data shows'.
     """
     if " but " in lt:
         # Check if it's a simple rebuttal "I hear you, BUT..."
-        # If the turn is long, it might be a clean reflection followed by a separate education sentence.
+        # If the turn is long, it might be clean mirroring followed by a separate education sentence.
         # This deterministic function is conservative.
         return True
     if re.search(r"\b(data|evidence|study|studies|statistics|percent|%|risk)\b", lt):
@@ -339,22 +340,22 @@ def score_step(step: str, clinician_last: str, mapping: Dict[str, Any]) -> Score
         reasons.extend(inq_scr.reasons)
 
     elif step == "Mirror":
-        # Penalize if introduces new info or rebuttal inside the reflection
+        # Penalize if introduces new info or rebuttal inside the mirror
         # We look for " but " specifically as a sign of immediate rebuttal.
         if " but " in lt:
             score = 1
-            reasons.append("Reflection included rebuttal/new info → penalized")
+            reasons.append("Mirroring included rebuttal/new info → penalized")
         # Bonus if includes a check for accuracy
         if re.search(r"did i get that right|is that right|did i capture", lt):
             score = min(3, score + 1)
             reasons.append("Included check for accuracy")
-        # If no reflective stems, score low
+        # If no mirror stems, score low
         if not (starts_with_any(lt, [
             "it sounds like", "you're", "you are", "i'm hearing", "you feel", "you want",
             "what i'm hearing", "what i hear",
         ])):
             score = min(score, 1)
-            reasons.append("Weak/absent reflective stem")
+            reasons.append("Weak/absent mirror stem")
 
     elif step == "Inquire":
         if re.search(r"\bdo you have any questions\b", lt):
@@ -498,7 +499,7 @@ def evaluate_turn(clinician_last: str, mapping: Dict[str, Any]) -> Dict[str, Any
                 tips.append("Excellent use of Mirror+Inquire to build trust before exploring.")
         elif cls.step == "Mirror":
             if introduces_new_info(lt):
-                tips.append("Reflect without adding new information or rebuttal; keep it brief and nonjudgmental.")
+                tips.append("Mirror without adding new information or rebuttal; keep it brief and nonjudgmental.")
             elif not re.search(r"did i get that right|is that right|did i capture", lt):
                 tips.append("End with a quick check for accuracy: 'Did I get that right?'")
         elif cls.step == "Announce":

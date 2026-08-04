@@ -20,7 +20,10 @@ def local_aims_mapping_mock():
             }
         }
     }
-    with patch("app.aims_engine.load_mapping", return_value=mock_mapping):
+    with (
+        patch("app.aims_engine.load_mapping", return_value=mock_mapping),
+        patch("app.aims_mapping_loader.load_mapping", return_value=mock_mapping),
+    ):
         yield mock_mapping
 
 
@@ -43,7 +46,7 @@ def enable_coaching(monkeypatch):
     from app.config import settings
     monkeypatch.setattr(settings, "PROJECT_ID", "proj")
     monkeypatch.setattr(settings, "REGION", "us-central1")
-    monkeypatch.setattr(settings, "MODEL_ID", "gemini-2.5-pro")
+    monkeypatch.setattr(settings, "MODEL_ID", "gemini-3.6-flash")
     monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", True)
     
     # AIMS mapping mock is now handled globally by conftest.py
@@ -72,7 +75,8 @@ def enable_coaching(monkeypatch):
     yield
 
 
-def test_small_talk_fallback_produces_friendly_reply(caplog):
+def test_small_talk_fallback_produces_neutral_reply(caplog, monkeypatch):
+    monkeypatch.setenv("AIMS_HEURISTIC_FALLBACK_ENABLED", "true")
     caplog.set_level(logging.INFO)
     # Small talk / pleasantries that should classify as non-step
     msg = "Hello Sarah and Liam! So good to see you both — wow, he's getting so big!"
@@ -82,9 +86,9 @@ def test_small_talk_fallback_produces_friendly_reply(caplog):
     data = r.json()
     assert "reply" in data
     reply = data["reply"]
-    # Should not be a bland "Okay." and should be the expected fallback response
+    # Technical reply-generation failure should not invent a new concern.
     assert reply.strip() != "Okay."
-    assert reply == "I'm not sure — I have some questions, but I'd like to hear more."
+    assert reply == "Okay, thank you."
 
     # Coaching should indicate rapport allowed anytime
     coaching = data.get("coaching") or {}

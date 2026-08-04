@@ -19,7 +19,10 @@ def local_aims_mapping_mock():
             }
         }
     }
-    with patch("app.aims_engine.load_mapping", return_value=mock_mapping):
+    with (
+        patch("app.aims_engine.load_mapping", return_value=mock_mapping),
+        patch("app.aims_mapping_loader.load_mapping", return_value=mock_mapping),
+    ):
         yield mock_mapping
 
 
@@ -107,7 +110,7 @@ def setup_env(monkeypatch):
     from app.config import settings
     monkeypatch.setattr(settings, "PROJECT_ID", "proj")
     monkeypatch.setattr(settings, "REGION", "us-central1")
-    monkeypatch.setattr(settings, "MODEL_ID", "gemini-2.5-pro")
+    monkeypatch.setattr(settings, "MODEL_ID", "gemini-3.6-flash")
     monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", True)
     monkeypatch.setattr(m, "VertexClient", FakeVertexAimsJSON)
     

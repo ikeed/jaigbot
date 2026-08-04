@@ -17,6 +17,7 @@ from typing import Any, Dict
 from fastapi import Request
 
 from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, get_ui_attributes
+from app.message_catalog import message
 from app.models import ChatRequest
 from app.services.chat_context import ChatContext
 from app.services.security_guard import JailbreakGuard
@@ -64,7 +65,7 @@ class LegacyChatHandler:
         is_jb, jb_matches = self.jailbreak_guard.detect(body.message)
         if is_jb:
             return {
-                "reply": "I'm not able to help with that request. Let's focus on clinical conversations instead.",
+                "reply": message("legacy_chat.jailbreak_reply"),
                 "model": self.model_id,
                 "latency_ms": int((time.time() - started) * 1000),
                 "jailbreak_detected": True,
@@ -158,14 +159,14 @@ class LegacyChatHandler:
                 client_cls=self.client_cls,
             )
             
-            return (raw_response or "").strip() or "I'm sorry, I didn't understand that. Could you please rephrase?"
+            return (raw_response or "").strip() or message("legacy_chat.empty_reply")
             
         except VertexAIError:
             # Re-raise VertexAI errors so the orchestrator can handle them properly
             raise
         except Exception as e:
             self.logger.error("Legacy chat generation failed: %s", e)
-            return "I apologize, but I'm having trouble processing your request right now. Please try again."
+            return message("legacy_chat.generation_failed")
     
     async def _update_conversation_history(
         self, session_id: str, user_message: str, assistant_reply: str

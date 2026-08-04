@@ -17,11 +17,25 @@ Set `person_topic` only for an active vaccine concern in Person_last.
 Use `null` for acceptance/closure language, including agreeing to take written information home, read it over, process it, or schedule/attend a follow-up, unless the person also raises a distinct new concern in the same reply.
 Use `disease_risk` when the person says the disease feels gone, historical, rare, abstract, unlikely to affect their child, or not a real present-day threat. Do NOT force this into `effectiveness` unless they doubt that the vaccine itself works.
 
+### OPTIONAL SEMANTIC FIELDS
+When the signal is clear, include `person_events`, `aims.observations`, `aims.feedback_items`, and `resolution`.
+Use these fields for decisions the app should not infer by searching English text.
+If unsure, omit the optional field rather than guessing.
+
+### COMPACT OUTPUT RULES
+- Avoid duplicate prose across `reasons`, `step_feedback`, and `feedback_items`.
+- Keep `reasons` to at most 2 short support phrases.
+- Keep `feedback_items` to at most 3 items, with at most 1 short `evidence_spans` entry per item.
+- Keep `reasoning` to 12 words or fewer.
+
 ### OUTPUT — JSON only
 {{
   "is_small_talk": (boolean),
   "is_vaccine_relevant": (boolean),
   "person_topic": (autism | immune_load | side_effects | ingredients | schedule_timing | disease_risk | effectiveness | trust | autonomy | null),
+  "person_events": [
+    {{"event_type": "concern_raised|concern_renewed|no_active_concern|concern_mirrored|concern_secured", "topic": "topic|null", "target_concern_id": "id|null", "evidence_spans": ["short source phrase"], "confidence": "high|medium|low"}}
+  ],
   "aims": {{
     "steps": [...],
     "score": (0-3),
@@ -29,8 +43,23 @@ Use `disease_risk` when the person says the disease feels gone, historical, rare
     "tips": ["max 1, specific and actionable"],
     "step_feedback": [
       {{"step": "StepName", "feedback": "second-person feedback", "tone": "praise|improvement"}}
+    ],
+    "observations": {{
+      "open_concern_question_present": (boolean|null),
+      "question_count": (integer|null),
+      "leading_question_present": (boolean|null),
+      "why_framing_present": (boolean|null),
+      "reflection_present": (boolean|null),
+      "accuracy_check_present": (boolean|null),
+      "autonomy_support_present": (boolean|null),
+      "safety_net_present": (boolean|null),
+      "followup_or_materials_present": (boolean|null)
+    }},
+    "feedback_items": [
+      {{"step": "StepName", "tone": "praise|improvement", "code": "stable_snake_case_code", "text": "second-person feedback", "evidence_spans": ["short source phrase"], "target_observation": "observation_field|null"}}
     ]
   }},
+  "resolution": {{"is_endgame": (boolean|null), "resolution_type": "accepted_vaccine|accepted_literature|deferred|not_resolved|null", "accepted_materials": (boolean|null), "accepted_followup": (boolean|null), "accepted_vaccine": (boolean|null), "remaining_active_concern": (boolean|null), "evidence_spans": ["short source phrase"]}},
   "safety_flags": [],
   "reasoning": "brief"
 }}

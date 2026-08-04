@@ -5,6 +5,7 @@ from pydantic import field_validator
 from .constants import (
     DEFAULT_REGION,
     DEFAULT_MODEL_ID,
+    DEFAULT_CLASSIFIER_MODEL_ID,
     DEFAULT_TEMPERATURE,
     DEFAULT_MAX_TOKENS,
     DEFAULT_PORT,
@@ -29,7 +30,7 @@ class Settings(BaseSettings):
     MODEL_ID: str = DEFAULT_MODEL_ID
     TEMPERATURE: float = DEFAULT_TEMPERATURE
     MAX_TOKENS: int = DEFAULT_MAX_TOKENS
-    MODEL_FALLBACKS: List[str] = ["gemini-2.5-pro-001", "gemini-2.5-pro"]
+    MODEL_FALLBACKS: List[str] = ["gemini-3.5-flash", "gemini-3.5-flash-lite"]
     AUTO_CONTINUE_ON_MAX_TOKENS: bool = True
     MAX_CONTINUATIONS: int = 2
     SUPPRESS_VERTEXAI_DEPRECATION: bool = True
@@ -60,6 +61,9 @@ class Settings(BaseSettings):
     AIMS_COACHING_ENABLED: bool = True
     AIMS_COACHING_DEFAULT: bool = False
     AIMS_CLASSIFIER_MODE: str = "hybrid"
+    AIMS_CLASSIFIER_MODEL_ID: str = DEFAULT_CLASSIFIER_MODEL_ID
+    AIMS_CLASSIFIER_THINKING_LEVEL: Optional[str] = "minimal"
+    AIMS_CLASSIFIER_THINKING_BUDGET: Optional[int] = None
     AIMS_CLASSIFY_CONTEXT_TURNS: int = 6
     AIMS_CLASSIFY_MAX_CONCERNS: int = 3
 
@@ -183,9 +187,7 @@ class Settings(BaseSettings):
     def validate_vertex_location(cls, v, info):
         if v:
             return v
-        # info.data might not have REGION if it was not validated yet, but Pydantic handles order.
-        # However, let's just use environment directly for robustness here.
-        return os.getenv("VERTEX_LOCATION") or os.getenv("REGION") or os.getenv("GCP_REGION") or "us-central1"
+        return os.getenv("VERTEX_LOCATION") or "global"
 
     @field_validator("ALLOWED_ORIGINS", mode="before")
     @classmethod
@@ -199,7 +201,22 @@ class Settings(BaseSettings):
     def validate_model_fallbacks(cls, v):
         if isinstance(v, str):
             return [m.strip() for m in v.split(",") if m.strip()]
-        return v or ["gemini-2.5-pro-001", "gemini-2.5-pro"]
+        return v or ["gemini-3.5-flash", "gemini-3.5-flash-lite"]
+
+    @field_validator("AIMS_CLASSIFIER_THINKING_LEVEL", mode="before")
+    @classmethod
+    def validate_classifier_thinking_level(cls, v):
+        if v is None:
+            return None
+        level = str(v).strip().lower()
+        if level in {"", "none", "off", "false", "0"}:
+            return None
+        allowed = {"minimal", "low", "medium", "high"}
+        if level not in allowed:
+            raise ValueError(
+                f"AIMS_CLASSIFIER_THINKING_LEVEL must be one of {sorted(allowed)}; got {v!r}."
+            )
+        return level
 
     @field_validator("LOG_LEVEL", mode="before")
     @classmethod

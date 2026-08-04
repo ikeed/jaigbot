@@ -13,11 +13,12 @@ For local development only:
 - Export/update env vars before starting the backend:
   - `export PROJECT_ID=<new-project>`
   - `export REGION=<e.g., us-central1>`
-  - `export MODEL_ID=<e.g., gemini-2.5-pro>`
+  - `export MODEL_ID=<e.g., gemini-3.6-flash>`
+  - `export AIMS_CLASSIFIER_MODEL_ID=<e.g., gemini-3.5-flash-lite>`
 - Start: `uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload`
 - Optional Chainlit: `BACKEND_URL=http://localhost:8080/chat chainlit run chainlit_app.py`
 
-No code changes are required to talk to a different project; the backend reads PROJECT_ID/REGION/MODEL_ID from env (it also supports GCP_PROJECT_ID and GCP_REGION as fallbacks).
+No code changes are required to talk to a different project; the backend reads PROJECT_ID, REGION, VERTEX_LOCATION, MODEL_ID, and AIMS_CLASSIFIER_MODEL_ID from env (it also supports GCP_PROJECT_ID and GCP_REGION as fallbacks).
 
 ---
 
@@ -95,7 +96,8 @@ If your Actions workflow pins a container URL, update it to: `<REGION>-docker.pk
 - Set env vars on Cloud Run (or your runtime):
   - `PROJECT_ID` = `<NEW_PROJECT>`
   - `REGION` = `<REGION>`
-  - `MODEL_ID` = `<Vertex model id, e.g., gemini-2.5-pro>`
+  - `MODEL_ID` = `<Vertex model id, e.g., gemini-3.6-flash>`
+  - `AIMS_CLASSIFIER_MODEL_ID` = `<Vertex model id, e.g., gemini-3.5-flash-lite>`
   - Optional tuning vars if you use them: `TEMPERATURE`, `MAX_TOKENS`, etc.
 - Ensure the Cloud Run service is using the Runtime SA created above and has access to Vertex and Artifact Registry.
 

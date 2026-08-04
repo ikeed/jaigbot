@@ -115,6 +115,15 @@ concerns raised anywhere in the conversation, not just the last message.
   (*"most parents in your position feel the same way"*, *"it makes sense that your guard would go
   up"*) = Mirror when it validates a specific expressed concern.  This is a common clinician-style
   reflection that does NOT use formulaic stems.
+- **Affirmation is NOT mirroring** (*"You're asking thoughtful questions"*) — classify as Secure
+  autonomy support or rapport, never Mirror.
+- **Exception — `autonomy`-topic concerns**: when the open concern is that the person felt
+  pressured, pushed, cornered, or not free to decide, an explicit autonomy affirmation during
+  Secure (*"It's your decision"*, *"I respect that"*) directly resolves it — the affirmation IS
+  the answer to what was raised, so a separate reflective restatement isn't required. The
+  classifier emits `concern_mirrored` for `topic: autonomy` in the same turn as the affirmation,
+  and the unmirrored-concern Secure penalty (§2.9) does not apply. This carve-out is specific to
+  `autonomy`; affirmation still doesn't mirror any other topic.
 
 ---
 
@@ -200,7 +209,14 @@ Secure is about the relationship, not persuasion.
   provides autonomy support + tailored education is Secure (not Mirror).  Use Mirror or
   Mirror+Secure only when the reflective opening *substantially* addresses an expressed concern.
 - Securing for a concern not yet Mirrored reduces the score by 1 (does not apply to
-  Mirror+Secure).
+  Mirror+Secure, and does not apply to `autonomy`-topic concerns — see exception below).
+- **Autonomy-topic exception**: an explicit autonomy affirmation ("It's your decision", "I
+  respect that") *is* the resolving act for a concern tagged `topic: autonomy` (feeling
+  pressured, pushed, cornered, or not free to decide) — no separate reflective restatement is
+  required. The classifier emits a `concern_mirrored` event for that topic in the same turn as
+  the affirmation, and the unmirrored-concern score penalty does not apply. This exception is
+  specific to `autonomy`; affirmation still does not mirror any other topic (side_effects,
+  schedule_timing, trust, etc.) — see §2.4 Mirror precision.
 - **Mirror vs Secure decision rule**: Secure REQUIRES at least one of: (a) a factual claim or
   educational content, (b) explicit autonomy affirmation, (c) a concrete option or safety-net.
   If a turn ONLY contains reflection, validation, normalization, or emotional attunement — with
@@ -214,7 +230,7 @@ Secure is about the relationship, not persuasion.
 2. **Mirror+Secure** and **Mirror+Secure+Inquire** are valid once rapport is established; they
    count against each component step in the session metrics.
 3. Securing for a concern not yet Mirrored → score reduced by 1 (plain Secure only; not
-   Mirror+Secure).
+   Mirror+Secure; not `autonomy`-topic concerns — see §2.4 exception).
 4. Mirroring something the person never expressed → not valid Mirror.
 5. The AIMS flow is *cyclical*, not strictly linear.  Inquire and Mirror may recur after Secure
    if new concerns surface.
@@ -393,6 +409,8 @@ Vaccine relevance is True if any of the following apply:
 - Any concerns tracked with `is_mirrored == False` → no endgame, except when the person's latest
   replies clearly accept literature/materials plus follow-up. That closure is allowed because
   residual uncertainty plus a follow-up plan is a valid AIMS outcome.
+- For vaccine acceptance, stale concern state can be overridden only by the structured endgame
+  detector when it reports clear same-day consent and `remaining_active_concern == false`.
 
 ### 8.2 LLM detector (`endgame_detector.txt` prompt)
 Called when hard guards pass.  Returns:
@@ -404,9 +422,11 @@ The LLM is instructed to judge **intent, not exact wording**.  Natural language 
 three weeks should give me enough time to look things over"* = `accepted_literature`.
 
 ### 8.3 Confirmation gates
-- **`accepted_vaccine`**: requires heuristic confirmation via `EndGameDetector.detect()` (checks
-  `ACCEPT_NOW_CUES` like *"let's do it"*, *"i consent"*, *"go ahead"*).  This gate is retained
-  because consenting to vaccinate today is irreversible.
+- **`accepted_vaccine`**: requires the LLM detector to resolve the transcript as same-day vaccine
+  consent. If the structured fields are present, `accepted_vaccine == true` and
+  `remaining_active_concern == false` are sufficient to close even when the local concern tracker
+  still contains stale unsecured entries. If those structured fields are absent, unresolved concern
+  state still blocks closure.
 - **`accepted_literature`**: requires both LLM intent and deterministic transcript evidence that
   literature/materials plus a follow-up or return plan were offered/accepted. Natural language
   still reaches the LLM, but follow-up alone or literature alone cannot end the session.
@@ -438,6 +458,10 @@ a fallback.  It requires both `FOLLOWUP_CUES` and `LITERATURE_CUES` to match, or
 ## 10. Scoring Tip Policy
 
 - At most **one tip** per turn (enforced by `classify_turn`).
+- Tips must target a missing or weak behavior in the current turn. If the clinician already
+  asked an open concern question, the coach should not say to lead with an open question; it
+  should coach the actual gap instead, such as pausing, avoiding stacked questions, or keeping
+  the question neutral.
 - Tips are suppressed when all known concerns have already been mirrored (tip would be stale
   advice to mirror a concern that was already addressed).
 - "Secure before mirror" tips escalate on repetition: first occurrence = standard nudge; second

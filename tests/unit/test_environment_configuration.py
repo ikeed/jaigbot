@@ -27,7 +27,7 @@ class TestDeploymentSecrets:
         monkeypatch.setenv("CHAINLIT_AUTH_SECRET", test_secret)
 
         # Reload settings to pick up the environment variable
-        settings = Settings()
+        settings = Settings(_env_file=None)
         assert settings.CHAINLIT_AUTH_SECRET == test_secret
 
     def test_oauth_google_client_secret_available(self, monkeypatch):
@@ -60,7 +60,7 @@ class TestDeploymentVariables:
         proj_id = "test-project-12345"
         monkeypatch.setenv("PROJECT_ID", proj_id)
 
-        settings = Settings()
+        settings = Settings(_env_file=None)
         assert settings.PROJECT_ID == proj_id
 
     def test_gcp_region_variable(self, monkeypatch):
@@ -73,7 +73,7 @@ class TestDeploymentVariables:
 
     def test_model_id_variable(self, monkeypatch):
         """Verify MODEL_ID variable is accessible."""
-        model = "gemini-2.5-pro"
+        model = "gemini-3.6-flash"
         monkeypatch.setenv("MODEL_ID", model)
 
         settings = Settings()
@@ -136,7 +136,8 @@ class TestProductionConfiguration:
         deployment_vars = {
             "PROJECT_ID": "test-project",
             "REGION": "us-central1",
-            "MODEL_ID": "gemini-2.5-pro",
+            "MODEL_ID": "gemini-3.6-flash",
+            "AIMS_CLASSIFIER_MODEL_ID": "gemini-3.5-flash-lite",
             "TEMPERATURE": "0.2",
             "MAX_TOKENS": "768",
             "AIMS_COACHING_ENABLED": "true",
@@ -153,7 +154,8 @@ class TestProductionConfiguration:
         # Verify all variables are loaded
         assert settings.PROJECT_ID == "test-project"
         assert settings.REGION == "us-central1"
-        assert settings.MODEL_ID == "gemini-2.5-pro"
+        assert settings.MODEL_ID == "gemini-3.6-flash"
+        assert settings.AIMS_CLASSIFIER_MODEL_ID == "gemini-3.5-flash-lite"
         assert settings.TEMPERATURE == 0.2
         assert settings.MAX_TOKENS == 768
         assert settings.AIMS_COACHING_ENABLED is True
@@ -252,11 +254,19 @@ class TestEnvironmentVariableValidation:
         assert settings.REGION in ["us-central1", "us-west4"]  # Could be either default
 
     def test_model_id_defaults_correctly(self, monkeypatch):
-        """Verify MODEL_ID defaults to gemini-2.5-pro."""
+        """Verify MODEL_ID defaults to the current GA Gemini target."""
         monkeypatch.delenv("MODEL_ID", raising=False)
 
+        settings = Settings(_env_file=None)
+        assert settings.MODEL_ID == "gemini-3.6-flash"
+        assert settings.AIMS_CLASSIFIER_MODEL_ID == "gemini-3.5-flash-lite"
+
+    def test_classifier_thinking_level_can_be_disabled(self, monkeypatch):
+        monkeypatch.setenv("AIMS_CLASSIFIER_THINKING_LEVEL", "none")
+
         settings = Settings()
-        assert settings.MODEL_ID == "gemini-2.5-pro"
+
+        assert settings.AIMS_CLASSIFIER_THINKING_LEVEL is None
 
     def test_temperature_conversion_from_string(self, monkeypatch):
         """Verify TEMPERATURE is correctly converted from string."""
@@ -283,7 +293,7 @@ class TestDeploymentIntegration:
         deployment_vars = {
             "PROJECT_ID": "test-project",
             "REGION": "us-central1",
-            "MODEL_ID": "gemini-2.5-pro",
+            "MODEL_ID": "gemini-3.6-flash",
             "CHAINLIT_AUTH_SECRET": "test-secret",
         }
         

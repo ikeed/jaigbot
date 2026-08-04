@@ -16,9 +16,16 @@ from app.constants import (
     SESSION_SESSION_ENDED,
     SESSION_USER,
 )
+from app.message_catalog import message_list
 from app.services.chainlit.backend_client import BackendClient
 from app.services.chainlit.session_manager import SessionManager
 from app.services.chainlit.ui_handler import UIHandler
+
+
+def _has_praise_line(text: str, step: str, feedback: str) -> bool:
+    return f"{step}:\n" in text and any(
+        f"{label} {feedback}" in text for label in message_list("coaching.labels.praise")
+    )
 
 
 @pytest.fixture
@@ -109,14 +116,171 @@ def test_ui_handler_format_coach_message_filters_phase_and_empty_values():
     ui = UIHandler()
 
     formatted = ui.format_coach_message(
-        "Conversation phase: PreAnnounce | Detected step: Announce | Tip: Ask an open question"
+        "Conversation phase: PreAnnounce | Legacy: Announce | Tip: Ask an open question"
     )
 
     assert "Conversation phase" not in formatted
     assert "**Coaching**" in formatted
-    assert "- Detected step: Announce" in formatted
+    assert "Announce:" in formatted
+    assert "Legacy:" not in formatted
     assert "- Tip: Ask an open question" in formatted
     assert ui.format_coach_message("   ") == ""
+
+
+def test_ui_handler_format_coaching_message_uses_structured_payload():
+    ui = UIHandler()
+
+    formatted = ui.format_coaching_message(
+        {
+            "step": "Secure",
+            "reasons": ["You supported the decision."],
+            "tips": ["Offer a concrete next step."],
+            "step_feedback": [
+                {
+                    "step": "Secure",
+                    "tone": "praise",
+                    "feedback": "You affirmed autonomy clearly.",
+                }
+            ],
+        }
+    )
+
+    assert "**Coaching**" in formatted
+    assert "Secure:" in formatted
+    assert "- Secure:" not in formatted
+    assert _has_praise_line(formatted, "Secure", "You affirmed autonomy clearly.")
+    assert "secure: praise:" not in formatted.lower()
+    assert "- Tip: Offer a concrete next step." in formatted
+
+
+def test_ui_handler_format_coaching_message_prefers_feedback_items():
+    ui = UIHandler()
+
+    formatted = ui.format_coaching_message(
+        {
+            "step": "Inquire",
+            "reasons": ["Legacy reason should not be shown."],
+            "tips": ["Legacy tip should not show when an improvement item exists."],
+            "feedback_items": [
+                {
+                    "step": "Inquire",
+                    "tone": "improvement",
+                    "code": "ask_one_question",
+                    "text": "Ask one open concern question, then pause.",
+                }
+            ],
+        }
+    )
+
+    assert "Inquire:\n- Tip: Ask one open concern question, then pause." in formatted
+    assert "Legacy reason should not be shown" not in formatted
+    assert "Legacy tip should not show" not in formatted
+
+
+def test_ui_handler_format_coaching_message_groups_multiple_step_feedback_items():
+    ui = UIHandler()
+
+    formatted = ui.format_coaching_message(
+        {
+            "step": "Mirror+Secure",
+            "feedback_items": [
+                {
+                    "step": "Mirror",
+                    "tone": "praise",
+                    "code": "mirror_concern",
+                    "text": "You captured the person's desire for individualized data.",
+                },
+                {
+                    "step": "Mirror",
+                    "tone": "praise",
+                    "code": "mirror_accuracy_check",
+                    "text": "You checked for accuracy.",
+                },
+                {
+                    "step": "Secure",
+                    "tone": "praise",
+                    "code": "secure_tailored",
+                    "text": "You tailored the education to their question.",
+                },
+                {
+                    "step": "Secure",
+                    "tone": "praise",
+                    "code": "secure_check_in",
+                    "text": "You ended with a collaborative check-in question.",
+                },
+            ],
+        }
+    )
+
+    assert _has_praise_line(
+        formatted,
+        "Mirror",
+        "You captured the person's desire for individualized data.",
+    )
+    assert any(
+        f"{label} You checked for accuracy." in formatted
+        for label in message_list("coaching.labels.praise")
+    )
+    assert _has_praise_line(
+        formatted,
+        "Secure",
+        "You tailored the education to their question.",
+    )
+    assert any(
+        f"{label} You ended with a collaborative check-in question." in formatted
+        for label in message_list("coaching.labels.praise")
+    )
+    assert formatted.count("Mirror:\n") == 1
+    assert formatted.count("Secure:\n") == 1
+
+
+def test_ui_handler_format_coaching_message_keeps_step_improvement_with_praise():
+    ui = UIHandler()
+
+    formatted = ui.format_coaching_message(
+        {
+            "step": "Mirror",
+            "feedback_items": [
+                {
+                    "step": "Mirror",
+                    "tone": "praise",
+                    "code": "mirror_attempt",
+                    "text": "You named the person's concern.",
+                },
+                {
+                    "step": "Mirror",
+                    "tone": "improvement",
+                    "code": "mirror_timing",
+                    "text": "Mirror the timing concern before offering education.",
+                },
+            ],
+        }
+    )
+
+    assert _has_praise_line(formatted, "Mirror", "You named the person's concern.")
+    assert "Mirror:\n" in formatted
+    assert "- Tip: Mirror the timing concern before offering education." in formatted
+
+
+def test_ui_handler_format_coaching_message_labels_secure_before_mirror_as_important():
+    ui = UIHandler()
+
+    formatted = ui.format_coaching_message(
+        {
+            "step": "Secure",
+            "feedback_items": [
+                {
+                    "step": "Secure",
+                    "tone": "improvement",
+                    "code": "secure_before_mirror",
+                    "text": "Mirror the active concern before offering more education.",
+                }
+            ],
+        }
+    )
+
+    assert "Secure:\n- Important: Mirror the active concern before offering more education." in formatted
+    assert "Tip: Mirror the active concern" not in formatted
 
 
 def test_ui_handler_render_scenario_card_html_labels_and_notes():
@@ -145,14 +309,21 @@ async def test_ui_handler_send_helpers_use_expected_chainlit_calls():
         await ui.present_scenario_card("Person: Zia")
         await ui.show_error("Problem")
         await ui.send_assistant_reply("Hello")
-        await ui.send_coach_message("Detected step: Announce")
+        await ui.send_coach_message("Legacy: Announce")
+        await ui.send_coaching_message(
+            {"step": "Announce", "reasons": ["Clear recommendation."]}
+        )
         await ui.send_window_message({"type": "x"})
 
-    assert mock_msg_cls.call_count == 4
+    assert mock_msg_cls.call_count == 5
     assert "aims-scenario-briefing" in mock_msg_cls.call_args_list[0].kwargs["content"]
     assert mock_msg_cls.call_args_list[1].args == ("Problem",)
     assert mock_msg_cls.call_args_list[2].args == ("Hello",)
     assert "**Coaching**" in mock_msg_cls.call_args_list[3].kwargs["content"]
+    assert "Announce:" in mock_msg_cls.call_args_list[3].kwargs["content"]
+    assert "Legacy:" not in mock_msg_cls.call_args_list[3].kwargs["content"]
+    assert "**Coaching**" in mock_msg_cls.call_args_list[4].kwargs["content"]
+    assert "Announce:" in mock_msg_cls.call_args_list[4].kwargs["content"]
     send_window.assert_awaited_once_with({"type": "x"})
 
 
