@@ -11,7 +11,7 @@ from app.services.chainlit.orchestrator import ChainlitOrchestrator
 
 
 def _has_praise_line(text: str, step: str, feedback: str) -> bool:
-    return f"{step}:\n" in text and any(
+    return f"**{step}:**\n" in text and any(
         f"{label} {feedback}" in text for label in message_list("coaching.labels.praise")
     )
 
@@ -485,7 +485,7 @@ async def test_process_backend_response_dispatches_coaching_reply_and_coach_post
     assert mock_services["session"].history == [
         {
             "role": "coach",
-            "content": "Announce:\n- Feedback: Clear recommendation.\n- Tip: Ask how that sounds.",
+            "content": "**Announce:**\n- Feedback: Clear recommendation.\n- **Tip:** Ask how that sounds.",
             "coaching_data": coaching,
         },
         {"role": "assistant", "content": "I need to understand more."},
@@ -534,7 +534,7 @@ async def test_process_backend_response_prefers_step_feedback_over_raw_tip(
     coach_text = mock_services["session"].history[0]["content"]
     assert _has_praise_line(coach_text, "Inquire", "You opened with a broad concern question.")
     assert "praise:" not in coach_text.lower()
-    assert "Secure:\n- Tip: Pause before moving into reassurance." in coach_text
+    assert "**Secure:**\n- **Tip:** Pause before moving into reassurance." in coach_text
     assert "Tip: Try leading with an open question." not in coach_text
 
 
@@ -570,7 +570,7 @@ async def test_process_backend_response_shows_tip_with_praise_only_step_feedback
     assert _has_praise_line(coach_text, "Secure", "You led with a strong autonomy statement.")
     assert "praise:" not in coach_text.lower()
     assert (
-        "Tip: Ask a single, open-ended question to check for understanding."
+        "**Tip:** Ask a single, open-ended question to check for understanding."
         in coach_text
     )
 

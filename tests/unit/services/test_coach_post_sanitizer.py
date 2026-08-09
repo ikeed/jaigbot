@@ -252,21 +252,25 @@ def test_sanitize_endgame_bullets_handles_empty_quotes_duplicates_and_cap():
 
 
 def test_endgame_title_score_tiers_and_deferred_fallback():
+    """Title folds the Overall score into the same line; the bottom two tiers
+    (keep_practicing, needs_work) use encouraging-but-not-celebratory language
+    and emoji, since a weak score should not read as "job!" praise."""
     def _uniform(score):
         return {"runningAverage": {s: score for s in ("Announce", "Inquire", "Mirror", "Secure")}}
 
     assert endgame_title(None, outcome="deferred") == "Session Complete"
     assert endgame_title({}) == "🎉 Great job!"
-    assert endgame_title(_uniform(3.0)) == "🏆 Excellent job!"
-    assert endgame_title(_uniform(2.1)) == "🎉 Great job!"
-    assert endgame_title(_uniform(1.7)) == "👏 Good job!"
-    assert endgame_title(_uniform(1.0)) == "💪 Nice job!"
+    assert endgame_title(_uniform(3.0)) == "🏆 Excellent job — 100% overall"
+    assert endgame_title(_uniform(2.1)) == "🎉 Great job — 70% overall"
+    assert endgame_title(_uniform(1.7)) == "👏 Good job — 57% overall"
+    assert endgame_title(_uniform(1.2)) == "💪 Keep practicing — 40% overall"
+    assert endgame_title(_uniform(0.5)) == "📋 Needs work — 17% overall"
 
 
 def test_endgame_title_penalizes_core_steps_that_were_never_attempted():
     """Skipping a core step entirely (e.g. Mirror never happened) must cost at
     least as much as doing it badly - it must not be excluded from the average."""
-    assert endgame_title({"runningAverage": {"Announce": 3.0}}) == "💪 Nice job!"
+    assert endgame_title({"runningAverage": {"Announce": 3.0}}) == "📋 Needs work — 25% overall"
 
 
 def test_build_endgame_bullets_fallback_handles_absent_low_mid_high_and_invalid_input():
@@ -284,11 +288,25 @@ def test_build_endgame_bullets_fallback_handles_absent_low_mid_high_and_invalid_
         }
     )
 
-    assert bullets[0] == "Overall AIMS score: 48%"
+    assert bullets[0] == "**Overall AIMS score:** 48%"
     assert any("Announce 93%" in bullet and "well done" in bullet for bullet in bullets)
     assert any("Inquire 67%" in bullet and "remaining concerns" in bullet for bullet in bullets)
     assert any("Mirror 33%" in bullet and "mirror" in bullet for bullet in bullets)
-    assert any(bullet.startswith("Secure:") and "absent" not in bullet for bullet in bullets)
+    assert any(bullet.startswith("Secure 0%") and "absent" not in bullet for bullet in bullets)
+
+
+def test_build_endgame_bullets_fallback_can_omit_overall_score_line():
+    """AimsEndgameService.check() passes include_overall_score=False because the
+    score is already folded into endgame_title() - it must not appear twice."""
+    bullets = build_endgame_bullets_fallback(
+        {
+            "perStepCounts": {"Announce": 1, "Inquire": 1, "Mirror": 1, "Secure": 1},
+            "runningAverage": {"Announce": 2.0, "Inquire": 2.0, "Mirror": 2.0, "Secure": 2.0},
+        },
+        include_overall_score=False,
+    )
+
+    assert not any("Overall AIMS score" in bullet for bullet in bullets)
 
 
 def test_build_endgame_bullets_fallback_personalizes_with_persona_and_patient_names():
