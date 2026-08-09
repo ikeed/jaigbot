@@ -16,6 +16,7 @@ from app.constants import (
     ENDPOINT_MODELCHECK,
     ENDPOINT_DIAGNOSTICS,
     ENDPOINT_MODELS,
+    KEY_GAME_OVER,
 )
 
 
@@ -47,10 +48,11 @@ def create_system_router(
         """
         try:
             if not (sessionId and settings.MEMORY_ENABLED):
-                return {"history": []}
+                return {"history": [], "gameOver": False}
             mem = memory_store.get(sessionId) or {}
+            game_over = bool(mem.get(KEY_GAME_OVER))
             if full:
-                return {"history": mem.get("full_history") or []}
+                return {"history": mem.get("full_history") or [], "gameOver": game_over}
             hist = mem.get("history") or []
             out: list[dict[str, Any]] = []
             for it in hist:
@@ -66,10 +68,10 @@ def create_system_router(
                 except Exception as e:
                     logger.debug("Failed to parse history item: %s. Error: %s", it, e)
                     continue
-            return {"history": out}
+            return {"history": out, "gameOver": game_over}
         except Exception as e:
             logger.error("Error retrieving history for session %s: %s", sessionId, e)
-            return {"history": []}
+            return {"history": [], "gameOver": False}
 
     @router.get(ENDPOINT_CONFIG)
     async def config(

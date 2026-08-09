@@ -284,10 +284,11 @@ async def test_handle_session_resume_refreshes_backend_history(
             "scene": "Recovered scene",
         }
     )
-    mock_services["backend"].fetch_history = AsyncMock(
-        return_value=[
-            {"role": "assistant", "content": "Recovered reply"},
-        ]
+    mock_services["backend"].fetch_history_with_state = AsyncMock(
+        return_value={
+            "history": [{"role": "assistant", "content": "Recovered reply"}],
+            "gameOver": False,
+        }
     )
 
     await orchestrator.handle_session_resume(
@@ -315,6 +316,46 @@ async def test_handle_session_resume_refreshes_backend_history(
         "identifier": "user@example.com",
         "metadata": {"name": "User"},
     }
+
+
+@pytest.mark.asyncio
+async def test_handle_session_resume_locks_composer_when_already_game_over(
+    orchestrator, mock_services, monkeypatch
+):
+    """Resuming a thread whose session already ended (coach_post was produced)
+    must lock the composer immediately - without this, a clinician could keep
+    chatting in a scenario that's already finished."""
+    user = MagicMock(identifier="user@example.com", metadata={"name": "User"})
+    mock_services["session"].get_user_identifier.return_value = user.identifier
+    mock_services["session"].user = user
+    mock_services["session"].connection_id = None
+    mock_services["session"].character = None
+    mock_services["session"].scene = None
+    orchestrator._has_seen_intro_locally_or_persistently = MagicMock(return_value=True)
+    orchestrator._get_thread_id = MagicMock(return_value="thread-from-context")
+    monkeypatch.setattr(
+        "app.services.chainlit.orchestrator.set_current_thread_id",
+        MagicMock(),
+    )
+    mock_services["backend"].initialize_session = AsyncMock(
+        return_value={"character": "Character", "scene": "Scene"}
+    )
+    mock_services["backend"].fetch_history_with_state = AsyncMock(
+        return_value={
+            "history": [{"role": "assistant", "content": "Recovered reply"}],
+            "gameOver": True,
+        }
+    )
+    mock_services["ui"].send_window_message = AsyncMock()
+
+    await orchestrator.handle_session_resume(
+        {"id": "thread-1", "metadata": {"session_id": "session-1"}}
+    )
+
+    assert mock_services["session"].session_ended is True
+    mock_services["ui"].send_window_message.assert_awaited_once_with(
+        {"type": "aims_session_ended"}
+    )
 
 
 @pytest.mark.asyncio
@@ -383,8 +424,11 @@ async def test_handle_session_resume_passes_force_query(orchestrator, mock_servi
             "scene": "Scene",
         }
     )
-    mock_services["backend"].fetch_history = AsyncMock(
-        return_value=[{"role": "system", "content": "Person: Zia"}]
+    mock_services["backend"].fetch_history_with_state = AsyncMock(
+        return_value={
+            "history": [{"role": "system", "content": "Person: Zia"}],
+            "gameOver": False,
+        }
     )
     mock_services["ui"].send_window_message = AsyncMock()
 
@@ -447,7 +491,9 @@ async def test_handle_session_resume_empty_history_starts_fresh_scenario(
             "scene": "Recovered scene",
         }
     )
-    mock_services["backend"].fetch_history = AsyncMock(return_value=[])
+    mock_services["backend"].fetch_history_with_state = AsyncMock(
+        return_value={"history": [], "gameOver": False}
+    )
     orchestrator._start_scenario_flow = AsyncMock()
 
     await orchestrator.handle_session_resume({"id": "thread-1", "metadata": {}})
