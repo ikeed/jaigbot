@@ -18,6 +18,7 @@ from app.constants import (
     MSG_INTRO_REQUIRED,
     MSG_DUPLICATE_TAB,
     MSG_PERSONA_NAME,
+    MSG_SESSION_ENDED,
     MSG_THREAD_BOUND,
 )
 from app.message_catalog import message as catalog_message, message_list
@@ -232,6 +233,7 @@ class ChainlitOrchestrator:
             )
             self.session.session_ended = True
             self.session.history = []
+            await self.ui.send_window_message({"type": MSG_SESSION_ENDED})
             await self.ui.show_error(catalog_message("chainlit.report_success"))
         except Exception as e:
             await self.ui.show_error(catalog_message("chainlit.report_error", error=str(e)))
@@ -452,6 +454,8 @@ class ChainlitOrchestrator:
             title = coach_post.get("title") or catalog_message("coaching.scenario_complete_marked")
             combined = "\n".join([title, *(coach_post.get("lines") or [])])
             await self.ui.send_coach_message(combined)
+            self.session.session_ended = True
+            await self.ui.send_window_message({"type": MSG_SESSION_ENDED})
 
         self.session.history = history
 

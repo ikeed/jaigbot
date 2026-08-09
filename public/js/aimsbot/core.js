@@ -50,6 +50,28 @@
     });
   };
 
+  app.state.sessionEnded = app.state.sessionEnded || false;
+
+  // Re-applied on every decorateShell() pass (including the persistent
+  // MutationObserver in message-roles.js) since Chainlit can re-render the
+  // composer after the session has already ended.
+  app.applyComposerLockState = function () {
+    if (!app.state.sessionEnded) return;
+    document.querySelectorAll(".aimsbot-composer-input").forEach(function (textarea) {
+      if (textarea.disabled) return;
+      textarea.disabled = true;
+      textarea.placeholder = app.t("session.endedPlaceholder");
+    });
+    document.querySelectorAll(".aimsbot-composer button").forEach(function (button) {
+      button.disabled = true;
+    });
+  };
+
+  app.lockComposer = function () {
+    app.state.sessionEnded = true;
+    app.applyComposerLockState();
+  };
+
   app.prevent = function (event) {
     if (!event) return;
     event.preventDefault();
@@ -106,6 +128,8 @@
     document.querySelectorAll("aside").forEach(function (aside) {
       aside.classList.add("aimsbot-sidebar");
     });
+
+    app.applyComposerLockState();
   };
 
   app.decorateNativeDialogs = function () {
