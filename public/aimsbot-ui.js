@@ -10,7 +10,7 @@
   if (window.__aimsbotCustomJsInitialized) return;
   window.__aimsbotCustomJsInitialized = true;
 
-  const assetVersion = "20260809-coach-headings";
+  const assetVersion = "20260809-session-lock";
   window.AIMSBotUI = window.AIMSBotUI || {};
   window.AIMSBotUI.pendingWindowMessages = window.AIMSBotUI.pendingWindowMessages || [];
   window.AIMSBotUI.handleWindowMessagePayload =

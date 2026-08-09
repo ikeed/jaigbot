@@ -38,7 +38,8 @@
       logoutDescription: "Are you sure you want to logout? This will end your current session.",
       logoutConfirm: "Logout",
       loggingOut: "Logging out",
-      logoutMatchers: ["logout", "sign out"]
+      logoutMatchers: ["logout", "sign out"],
+      endedPlaceholder: "This session has ended. Start a new scenario to continue practicing."
     },
     infographic: {
       title: "Review the AIMS approach",
