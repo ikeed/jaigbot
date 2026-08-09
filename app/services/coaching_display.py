@@ -19,6 +19,11 @@ IMPORTANT_FEEDBACK_CODES = {
     "secure_before_mirror",
 }
 CLASSIFICATION_UNAVAILABLE_CODE = "classification_unavailable"
+_MIRROR_KEYWORDS = tuple(
+    kw.strip().lower()
+    for kw in message_list("lexicon.coaching_display.mirror_keywords")
+    if str(kw or "").strip()
+) or ("mirror",)
 
 
 def _as_dict(value: Any) -> dict[str, Any]:
@@ -53,7 +58,19 @@ def _feedback_code(item: Mapping[str, Any] | None) -> str:
 
 
 def _is_important_feedback(item: Mapping[str, Any] | None) -> bool:
-    return _feedback_code(item) in IMPORTANT_FEEDBACK_CODES
+    if not item:
+        return False
+    if _feedback_code(item) in IMPORTANT_FEEDBACK_CODES:
+        return True
+    # Securing without mirroring first is the cardinal AIMS sin regardless of
+    # whether it was caught by the state service's own tracked-concern check
+    # (code=secure_before_mirror) or called out by the classifier's own
+    # free-form tip text - either way it should read as Important, not Tip.
+    tone = str(item.get("tone") or "").strip().lower()
+    if tone == "praise":
+        return False
+    text = str(item.get("text") or item.get("feedback") or "").lower()
+    return any(keyword in text for keyword in _MIRROR_KEYWORDS)
 
 
 def _classification_unavailable_text(coaching: Mapping[str, Any], has_step: bool) -> str | None:
@@ -75,12 +92,19 @@ def step_feedback_label(
     tone: Any,
     feedback_index: int,
     item: Mapping[str, Any] | None = None,
+    used_labels: set[str] | None = None,
 ) -> str:
     if tone == "praise":
         praise_labels = message_list("coaching.labels.praise")
         if not praise_labels:
             praise_labels = DEFAULT_PRAISE_LABELS
-        return praise_labels[_stable_label_index(praise_labels, feedback_index, item or {})]
+        start = _stable_label_index(praise_labels, feedback_index, item or {})
+        if used_labels is not None:
+            for offset in range(len(praise_labels)):
+                candidate = praise_labels[(start + offset) % len(praise_labels)]
+                if candidate not in used_labels:
+                    return candidate
+        return praise_labels[start]
     if _is_important_feedback(item):
         return message("coaching.labels.important")
     return message("coaching.labels.tip")
@@ -165,6 +189,14 @@ def _display_feedback_items(raw_items: Any, text_key: str) -> list[dict[str, Any
         item["tone"] = tone
         displayed.append(item)
 
+    def _priority(item: dict[str, Any]) -> int:
+        if _is_important_feedback(item):
+            return 0
+        if item.get("tone") == "praise":
+            return 1
+        return 2
+
+    displayed.sort(key=_priority)
     return displayed
 
 
@@ -178,11 +210,14 @@ def _collect_feedback_groups(
     displayed_items = _display_feedback_items(raw_items, text_key)
     feedback_index = 0
     has_improvement = False
+    used_praise_labels: set[str] = set()
 
     for item in displayed_items:
         feedback = str(item.get(text_key) or "").strip()
         tone = item.get("tone")
-        label = step_feedback_label(tone, feedback_index, item)
+        label = step_feedback_label(tone, feedback_index, item, used_praise_labels)
+        if tone == "praise":
+            used_praise_labels.add(label)
         group_label = _feedback_group_label(item, fallback_step)
         _append_group_line(groups, group_label, _feedback_line(tone, label, feedback))
         if tone != "praise":

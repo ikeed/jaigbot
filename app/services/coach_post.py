@@ -354,6 +354,7 @@ def build_endgame_bullets_fallback(session_obj: Dict | None) -> List[str]:
         bullets.append(message("endgame.overall_score", pct=overall_pct))
 
     # 2. Per-step contextual feedback
+    secure_before_mirror_count = int(session_obj.get("secureBeforeMirrorCount", 0) or 0)
     for step_name in ("Announce", "Inquire", "Mirror", "Secure"):
         c = int(counts.get(step_name, 0) or 0)
         a = _avg(step_name)
@@ -365,6 +366,29 @@ def build_endgame_bullets_fallback(session_obj: Dict | None) -> List[str]:
                 persona_label=persona_label,
                 patient_label=patient_label,
             )
+
+        if step_name == "Secure" and secure_before_mirror_count > 0:
+            # Securing without mirroring first is the single most consequential
+            # AIMS mistake a clinician can make, so it always leads the Secure
+            # summary regardless of the numeric score band.
+            topic_hint = str(session_obj.get("secureBeforeMirrorTopicHint") or "")
+            if secure_before_mirror_count == 1 and topic_hint:
+                unmirrored_text = message(
+                    "endgame.fallback_bullets.Secure.unmirrored_warning_single",
+                    topic_hint=topic_hint,
+                )
+            else:
+                unmirrored_text = message(
+                    "endgame.fallback_bullets.Secure.unmirrored_warning",
+                    count=secure_before_mirror_count,
+                    times_word="time" if secure_before_mirror_count == 1 else "times",
+                    persona_label=persona_label,
+                )
+            if c == 0 or a != a:
+                bullets.append(f"Secure: {unmirrored_text}")
+            else:
+                bullets.append(f"Secure {_pct(a)}% - {unmirrored_text}")
+            continue
 
         if c == 0 or a != a:  # step not used or no score data
             bullets.append(f"{step_name}: {_step_message('absent')}")

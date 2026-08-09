@@ -21,7 +21,10 @@
         "Great work!",
         "Strong move!",
         "Beautifully handled!",
-        "That landed well!"
+        "That landed well!",
+        "Spot on!",
+        "Smart move!",
+        "That worked well!"
       ],
       "tip": "Tip",
       "important": "Important"
@@ -111,7 +114,9 @@
         "high": "education was well-tailored to the stated concerns without overwhelming.",
         "mid": "solid education; try adding an explicit check-in after key facts (e.g., \"How does that land for you?\") to avoid a lecture feel.",
         "low": "keep Secure focused: one tailored fact, linked directly to the concern, then check in (e.g., \"Does that help with the ingredient question?\"). Avoid long explanations without pauses.",
-        "absent": "provide targeted education addressing the stated concern, then check understanding."
+        "absent": "provide targeted education addressing the stated concern, then check understanding.",
+        "unmirrored_warning": "you explained before mirroring {persona_label} concern {count} {times_word} this session - people take in information better once they feel heard first.",
+        "unmirrored_warning_single": "you explained before mirroring the concern{topic_hint} - people take in information better once they feel heard first."
       }
     },
     "summary_structural_prefixes": [
@@ -674,6 +679,11 @@
           "we can do it today"
         ]
       }
+    },
+    "coaching_display": {
+      "mirror_keywords": [
+        "mirror"
+      ]
     },
     "coaching_tip_sanitizer": {
       "open_question_tip_pattern": "\\b(?:try\\s+)?(?:lead|leading|start|starting|begin|beginning)\\s+with\\s+(?:an?\\s+)?open[- ]?(?:ended[- ]?)?question\\b|\\b(?:try\\s+)?(?:ask|use)\\s+(?:an?\\s+)?open[- ]?(?:ended[- ]?)?question\\b|\\bprefer\\s+(?:what\\s+and\\s+how|what/how)\\s+questions\\b|\\b(?:ask|try asking)\\s+what'?s on (?:their|your) mind\\b|\\b(?:ask|try asking)\\s+what is on (?:their|your) mind\\b",

@@ -36,6 +36,13 @@ class AimsStateService:
     ANALYTICAL_KEYWORDS = tuple(message_list("lexicon.aims_state.analytical_keywords"))
     CLOSURE_FOLLOWUP_CUES = tuple(message_list("lexicon.aims_state.closure_followup_cues"))
     CLOSURE_LITERATURE_CUES = tuple(message_list("lexicon.aims_state.closure_literature_cues"))
+    # Shared with coaching_display._is_important_feedback - same locale key, single source
+    # of truth, so both layers agree on what counts as "about mirroring".
+    MIRROR_TIP_KEYWORDS = tuple(
+        kw.strip().lower()
+        for kw in message_list("lexicon.coaching_display.mirror_keywords")
+        if str(kw or "").strip()
+    ) or ("mirror",)
 
     COMPOUND_EXPANSIONS = AimsMetricsService.COMPOUND_EXPANSIONS
     VALID_STEPS = AimsMetricsService.VALID_STEPS
@@ -288,8 +295,13 @@ class AimsStateService:
         needs_mirror = self._has_material_unmirrored_concern(state)
 
         if needs_mirror and not is_undiscovered_concerns:
+            state["secure_before_mirror_total"] = int(state.get("secure_before_mirror_total", 0)) + 1
+            unmirrored_topics = self._unmirrored_topics_requiring_feedback(state)
+            state["secure_before_mirror_last_topic_hint"] = self._user_facing_topic_hint(
+                unmirrored_topics[0] if unmirrored_topics else None
+            )
             if prefer_structured_feedback:
-                self._add_secure_before_mirror_feedback_item(cls_payload, state)
+                self._add_secure_before_mirror_feedback_item(cls_payload, state, character)
             else:
                 self._add_secure_before_mirror_feedback(cls_payload, state, character)
         else:
@@ -382,40 +394,77 @@ class AimsStateService:
 
         cls_payload["reasons"] = [reason] + (cls_payload.get("reasons") or [])
         cls_payload.setdefault("tips", []).append(tip)
+        self._cap_score_for_unmirrored_secure(cls_payload)
+
+        recent.append(secure_before_mirror_key)
+        state["recent_coaching"] = recent[-3:]
+
+    def _cap_score_for_unmirrored_secure(self, cls_payload: dict[str, Any]) -> None:
         try:
             cls_payload["score"] = min(2, int(cls_payload.get("score", 2)))
         except Exception as e:
             self._logger.debug("Score normalization failed (secure before mirror): %s", e)
             cls_payload["score"] = 2
 
-        recent.append(secure_before_mirror_key)
-        state["recent_coaching"] = recent[-3:]
-
     def _add_secure_before_mirror_feedback_item(
         self,
         cls_payload: dict[str, Any],
         state: dict[str, Any],
+        character: str | None,
     ) -> None:
         recent = state.get("recent_coaching") or []
 
         unmirrored_topics = self._unmirrored_topics_requiring_feedback(state)
         first_unmirrored = unmirrored_topics[0] if unmirrored_topics else None
         secure_before_mirror_key = self._secure_before_mirror_key(first_unmirrored)
+        repeat_count = self._secure_before_mirror_repeat_count(recent, first_unmirrored)
         topic_hint = self._user_facing_topic_hint(first_unmirrored)
+
+        if repeat_count == 0:
+            if self.detect_trust_style(character) == "analytical":
+                text = message("state_feedback.secure_before_mirror_analytical_reason")
+            else:
+                text = message("state_feedback.secure_before_mirror_reason")
+        elif repeat_count == 1:
+            text = message("state_feedback.secure_before_mirror_repeat_reason", topic_hint=topic_hint)
+        else:
+            text = message(
+                "state_feedback.secure_before_mirror_many_reason",
+                count=repeat_count + 1,
+                topic_hint=topic_hint,
+            )
+
+        self._remove_redundant_mirror_feedback_items(cls_payload)
         self._append_feedback_item(
             cls_payload,
             step=STEP_SECURE,
             code="secure_before_mirror",
-            text=message("state_feedback.secure_before_mirror", topic_hint=topic_hint),
+            text=text,
         )
-        try:
-            cls_payload["score"] = min(2, int(cls_payload.get("score", 2)))
-        except Exception as e:
-            self._logger.debug("Score normalization failed (structured secure before mirror): %s", e)
-            cls_payload["score"] = 2
+        self._cap_score_for_unmirrored_secure(cls_payload)
 
         recent.append(secure_before_mirror_key)
         state["recent_coaching"] = recent[-3:]
+
+    @classmethod
+    def _remove_redundant_mirror_feedback_items(cls, cls_payload: dict[str, Any]) -> None:
+        """Drop any classifier-generated feedback item that already flags the same
+        secure-before-mirror problem in its own words, so the turn doesn't show two
+        differently-worded "Important" lines saying the same thing. The state
+        service's own coded item (with proper escalation) replaces it."""
+        items = cls_payload.get("feedback_items")
+        if not isinstance(items, list):
+            return
+
+        def _is_redundant(item: Any) -> bool:
+            if not isinstance(item, dict):
+                return False
+            if str(item.get("tone") or "").strip().lower() == "praise":
+                return False
+            text = str(item.get("text") or "").lower()
+            return any(keyword in text for keyword in cls.MIRROR_TIP_KEYWORDS)
+
+        cls_payload["feedback_items"] = [item for item in items if not _is_redundant(item)]
 
     @staticmethod
     def _has_structured_feedback(cls_payload: dict[str, Any]) -> bool:
