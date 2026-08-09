@@ -92,6 +92,35 @@ def test_structured_feedback_secure_before_mirror_uses_coded_state_feedback():
         == "You moved into education before mirroring the concern - try mirroring first so they feel heard"
     )
     assert state["recent_coaching"] == ["secure_before_mirror:trust"]
+    assert state["secure_before_mirror_total"] == 1
+
+
+def test_secure_before_mirror_total_accumulates_across_turns():
+    state = {
+        "phase": PHASE_INQUIRE_MIRROR,
+        "announced": True,
+        "is_undiscovered_concerns": False,
+        "parent_concerns": [
+            {
+                "topic": "trust",
+                "desc": "wants evidence addressed",
+                "is_mirrored": False,
+                "is_secured": False,
+            }
+        ],
+    }
+    service = _service()
+
+    for _ in range(3):
+        service.apply_coaching_guidance(
+            _structured_payload(),
+            STEP_SECURE,
+            state,
+            clinician_message="More evidence here.",
+            person_last="I need to trust the evidence.",
+        )
+
+    assert state["secure_before_mirror_total"] == 3
 
 
 def test_structured_feedback_secure_before_mirror_escalates_on_repeat():

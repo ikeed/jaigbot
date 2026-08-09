@@ -4,6 +4,7 @@ from typing import Any
 
 from app.constants import (
     KEY_AIMS_METRICS,
+    KEY_AIMS_STATE,
     STEP_ANNOUNCE,
     STEP_ANNOUNCE_INQUIRE,
     STEP_INQUIRE,
@@ -82,6 +83,9 @@ class AimsMetricsService:
 
                 aims["runningAverage"] = self._running_averages(aims)
 
+            aims_state = mem.get(KEY_AIMS_STATE) or {}
+            aims["secureBeforeMirrorCount"] = int(aims_state.get("secure_before_mirror_total", 0))
+
             mem[KEY_AIMS_METRICS] = aims
 
         except Exception as e:
@@ -109,6 +113,7 @@ class AimsMetricsService:
                 "runningAverage": running_avg,
                 "personaName": persona.get("name"),
                 "patientName": persona.get("patient_name"),
+                "secureBeforeMirrorCount": int(aims.get("secureBeforeMirrorCount", 0)),
             }
 
         except Exception as e:
