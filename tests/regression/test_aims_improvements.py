@@ -122,6 +122,18 @@ def test_secure_stays_in_inquire_mirror_when_unmirrored_concerns_remain():
     assert state["phase"] == "InquireMirror"
 
 
+def test_secure_advances_phase_past_pre_announce_when_unmirrored_concerns_remain():
+    """A clinician who jumps straight from Announce to Secure (skipping Inquire/Mirror
+    entirely) must not leave phase stuck at PreAnnounce forever - that silently blocks
+    AimsEndgameService.check()'s phase guard from ever running the endgame LLM call,
+    even after the person has clearly consented."""
+    h = _state_service()
+    concerns = [{"desc": "x", "topic": "t1", "is_mirrored": False, "is_secured": False}]
+    state = _make_state(phase="PreAnnounce", concerns=concerns)
+    h.update_observational_state(state, "Secure", ["Secure"])
+    assert state["phase"] == "InquireMirror"
+
+
 def test_mirror_plus_inquire_returns_phase_from_secure():
     """Mirror+Inquire compound step should return to InquireMirror from Secure."""
     h = _state_service()
