@@ -553,8 +553,14 @@ def test_accepted_vaccine_llm_result_is_trusted_without_heuristic_match_when_con
     assert result is not None, "LLM vaccine acceptance should be enough when concerns are secured"
 
 
-def test_accepted_vaccine_blocks_when_any_concern_is_not_secured():
-    """Even with LLM acceptance, unresolved concerns should block vaccine closure."""
+def test_accepted_vaccine_llm_result_is_trusted_even_when_concern_is_not_secured():
+    """The endgame prompt tells the detector its concern lists are keyword-derived and
+    often stale/incomplete, and to judge from the full transcript instead. A local
+    is_secured=False tracking gap must not veto the detector's own explicit same-day
+    consent determination - that would be the same left-hand-right-hand duplication
+    of authority the mirror gate had, just at the closure layer instead of feedback
+    text. Unsecured concerns are a Secure-quality scoring problem, not a reason to
+    keep the session open indefinitely."""
     mock_svc = _MockClassifierService(
         {
             "is_endgame": True,
@@ -587,7 +593,7 @@ def test_accepted_vaccine_blocks_when_any_concern_is_not_secured():
     }
     service = _make_endgame_service(mock_svc)
     result = _run(service.check(store["s9"], {}, None, "s9"))
-    assert result is None, "Unsecured concerns should block accepted_vaccine closure"
+    assert result is not None, "Explicit same-day consent should close the session regardless of stale local state"
 
 
 def test_accepted_vaccine_allows_when_all_concerns_are_secured():
@@ -627,6 +633,46 @@ def test_accepted_vaccine_allows_when_all_concerns_are_secured():
     assert result is not None
     assert "Great job" in result["title"]
     assert result["lines"][0].startswith("Outcome:")
+
+
+def test_accepted_literature_closes_without_structured_fields_when_heuristic_fallback_disabled():
+    """Regression test: AIMS_HEURISTIC_FALLBACK_ENABLED defaults to false and isn't set
+    in staging/prod, so heuristic_fallback_enabled=False is the real deployed condition,
+    not just a test default. When the detector's is_endgame=True/accepted_literature call
+    doesn't happen to include the accepted_materials/accepted_followup structured fields,
+    the lightweight text-cue check (no LLM call, no dependency on the heuristic-fallback
+    feature) must still be able to confirm closure - it must not have been gated behind
+    that unrelated flag such that a session with clear, repeated literature+follow-up
+    consent could never close in the actual deployed environment."""
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_literature",
+            "summary": "Person is taking a handout home and returning next week.",
+            "reason": "",
+        }
+    )
+    store = {
+        "s9c": {
+            "history": [
+                {
+                    "role": "user",
+                    "content": "Here's a handout, and let's set up a follow-up appointment for next week.",
+                },
+                {
+                    "role": "assistant",
+                    "content": (
+                        "Yes, some written information would be helpful for me to review at home, "
+                        "and a follow-up appointment in a few weeks sounds good."
+                    ),
+                },
+            ],
+            "aims_state": _literature_ready_state(),
+        }
+    }
+    service = _make_endgame_service(mock_svc, heuristic_fallback_enabled=False)
+    result = _run(service.check(store["s9c"], {}, None, "s9c"))
+    assert result is not None, "Clear literature+follow-up consent should close even with heuristic fallback off"
 
 
 def test_accepted_literature_requires_literature_and_followup_evidence():
@@ -795,8 +841,14 @@ def test_deferred_outcome_does_not_trigger_endgame():
 # Tests — pending-concerns guard (Fix 1)
 # ---------------------------------------------------------------------------
 
-def test_unmirrored_concerns_block_endgame():
-    """Endgame must be blocked when concerns exist but some are not mirrored."""
+def test_unmirrored_and_unsecured_concerns_no_longer_block_llm_determined_endgame():
+    """Previously this fixture's unmirrored concerns happened to also be unsecured, so
+    the (now-removed) is_secured veto was doing the actual blocking despite the test's
+    name suggesting a dedicated "unmirrored" gate. Neither an unmirrored nor an
+    unsecured local flag should override the detector's own explicit is_endgame
+    determination anymore - a clinician who kept skipping Mirror/Secure quality
+    should still be able to close on clear same-day consent; that failure shows up
+    in the score, not as an infinite loop."""
     mock_svc = _MockClassifierService(
         {
             "is_endgame": True,
@@ -824,7 +876,7 @@ def test_unmirrored_concerns_block_endgame():
     }
     service = _make_endgame_service(mock_svc)
     result = _run(service.check(store["s12"], {}, None, "s12"))
-    assert result is None, "Endgame should be blocked when unmirrored concerns exist"
+    assert result is not None, "Explicit LLM-determined consent should close the session"
     assert mock_svc.last_history_text != ""
 
 
