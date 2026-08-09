@@ -52,7 +52,7 @@ def test_praise_labels_do_not_repeat_within_one_coaching_turn():
     assert len(set(labels)) == 4
 
 
-def test_important_feedback_is_ordered_before_plain_tips():
+def test_important_feedback_is_ordered_before_praise_and_plain_tips():
     text = coaching_summary_text(
         {
             "step": "Secure",
@@ -86,7 +86,8 @@ def test_important_feedback_is_ordered_before_plain_tips():
     important_pos = text.index("You moved into education before mirroring the concern.")
     tip_pos = text.index("Add explicit autonomy-supportive statements")
 
-    assert praise_pos < important_pos < tip_pos
+    # Important leads even ahead of praise - it's the most consequential feedback in the turn.
+    assert important_pos < praise_pos < tip_pos
     assert text.index("Important:") < text.index("Tip:")
 
 
