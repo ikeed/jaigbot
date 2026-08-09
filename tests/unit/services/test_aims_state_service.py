@@ -89,9 +89,80 @@ def test_structured_feedback_secure_before_mirror_uses_coded_state_feedback():
     assert payload["reasons"] == ["Model reason."]
     assert (
         _feedback_item(payload, "secure_before_mirror")["text"]
-        == "Mirror the active concern about trust or evidence concerns before offering more education."
+        == "You moved into education before mirroring the concern - try mirroring first so they feel heard"
     )
     assert state["recent_coaching"] == ["secure_before_mirror:trust"]
+
+
+def test_structured_feedback_secure_before_mirror_escalates_on_repeat():
+    state = {
+        "phase": PHASE_INQUIRE_MIRROR,
+        "announced": True,
+        "is_undiscovered_concerns": False,
+        "parent_concerns": [
+            {
+                "topic": "trust",
+                "desc": "wants evidence addressed",
+                "is_mirrored": False,
+                "is_secured": False,
+            }
+        ],
+        "recent_coaching": ["secure_before_mirror:trust"],
+    }
+    payload = _structured_payload()
+
+    _service().apply_coaching_guidance(
+        payload,
+        STEP_SECURE,
+        state,
+        clinician_message="More evidence here.",
+        person_last="I need to trust the evidence.",
+    )
+
+    assert (
+        _feedback_item(payload, "secure_before_mirror")["text"]
+        == "You're still educating without mirroring - the concern about trust or evidence concerns "
+        "hasn't been mirrored yet"
+    )
+    assert state["recent_coaching"] == [
+        "secure_before_mirror:trust",
+        "secure_before_mirror:trust",
+    ]
+
+
+def test_structured_feedback_secure_before_mirror_escalates_to_pattern_level():
+    state = {
+        "phase": PHASE_INQUIRE_MIRROR,
+        "announced": True,
+        "is_undiscovered_concerns": False,
+        "parent_concerns": [
+            {
+                "topic": "trust",
+                "desc": "wants evidence addressed",
+                "is_mirrored": False,
+                "is_secured": False,
+            }
+        ],
+        "recent_coaching": [
+            "secure_before_mirror:trust",
+            "secure_before_mirror:trust",
+        ],
+    }
+    payload = _structured_payload()
+
+    _service().apply_coaching_guidance(
+        payload,
+        STEP_SECURE,
+        state,
+        clinician_message="Yet more evidence here.",
+        person_last="I need to trust the evidence.",
+    )
+
+    assert (
+        _feedback_item(payload, "secure_before_mirror")["text"]
+        == "You've had 3 Secure turns without mirroring about trust or evidence concerns - "
+        "try pausing to mirror before more education"
+    )
 
 
 def test_structured_feedback_announce_after_inquiry_uses_coded_state_feedback():

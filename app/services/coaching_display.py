@@ -75,12 +75,19 @@ def step_feedback_label(
     tone: Any,
     feedback_index: int,
     item: Mapping[str, Any] | None = None,
+    used_labels: set[str] | None = None,
 ) -> str:
     if tone == "praise":
         praise_labels = message_list("coaching.labels.praise")
         if not praise_labels:
             praise_labels = DEFAULT_PRAISE_LABELS
-        return praise_labels[_stable_label_index(praise_labels, feedback_index, item or {})]
+        start = _stable_label_index(praise_labels, feedback_index, item or {})
+        if used_labels is not None:
+            for offset in range(len(praise_labels)):
+                candidate = praise_labels[(start + offset) % len(praise_labels)]
+                if candidate not in used_labels:
+                    return candidate
+        return praise_labels[start]
     if _is_important_feedback(item):
         return message("coaching.labels.important")
     return message("coaching.labels.tip")
@@ -178,11 +185,14 @@ def _collect_feedback_groups(
     displayed_items = _display_feedback_items(raw_items, text_key)
     feedback_index = 0
     has_improvement = False
+    used_praise_labels: set[str] = set()
 
     for item in displayed_items:
         feedback = str(item.get(text_key) or "").strip()
         tone = item.get("tone")
-        label = step_feedback_label(tone, feedback_index, item)
+        label = step_feedback_label(tone, feedback_index, item, used_praise_labels)
+        if tone == "praise":
+            used_praise_labels.add(label)
         group_label = _feedback_group_label(item, fallback_step)
         _append_group_line(groups, group_label, _feedback_line(tone, label, feedback))
         if tone != "praise":
