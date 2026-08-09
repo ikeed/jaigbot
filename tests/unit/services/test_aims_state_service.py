@@ -96,6 +96,56 @@ def test_structured_feedback_secure_before_mirror_uses_coded_state_feedback():
     assert state["secure_before_mirror_last_topic_hint"] == " about trust or evidence concerns"
 
 
+def test_model_generated_mirror_skip_feedback_is_replaced_not_duplicated():
+    """The classifier can still slip in its own free-form mirror-skip commentary despite
+    the system prompt telling it not to (rule 4) - the app must not show both its coded
+    message and the model's redundant one side by side."""
+    state = {
+        "phase": PHASE_INQUIRE_MIRROR,
+        "announced": True,
+        "is_undiscovered_concerns": False,
+        "parent_concerns": [
+            {
+                "topic": "trust",
+                "desc": "wants evidence addressed",
+                "is_mirrored": False,
+                "is_secured": False,
+            }
+        ],
+    }
+    payload = _structured_payload()
+    payload["feedback_items"].append(
+        {
+            "step": STEP_SECURE,
+            "tone": "improvement",
+            "code": "model_own_mirror_gap_code",
+            "text": "You should mirror her concern before offering more education.",
+        }
+    )
+    payload["feedback_items"].append(
+        {
+            "step": STEP_SECURE,
+            "tone": "improvement",
+            "code": "missing_autonomy_language",
+            "text": "Add explicit autonomy-supportive statements to reinforce her agency.",
+        }
+    )
+
+    _service().apply_coaching_guidance(
+        payload,
+        STEP_SECURE,
+        state,
+        clinician_message="The evidence is strong.",
+        person_last="I need to trust the evidence.",
+    )
+
+    codes = _feedback_codes(payload)
+    assert codes.count("secure_before_mirror") == 1
+    assert "model_own_mirror_gap_code" not in codes
+    # Unrelated improvement feedback (not about mirroring) must survive the cleanup.
+    assert "missing_autonomy_language" in codes
+
+
 def test_secure_before_mirror_total_accumulates_across_turns():
     state = {
         "phase": PHASE_INQUIRE_MIRROR,

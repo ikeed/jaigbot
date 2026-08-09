@@ -106,7 +106,7 @@ These three behaviors look similar but are psychologically distinct:
 1. Apply AIMS only if the turn is vaccine-related.
 2. First mention of vaccines = Announce, even if phrased as a question.
 3. Use compound step arrays: ["Announce","Inquire"], ["Mirror","Inquire"], ["Mirror","Secure"], ["Secure","Inquire"], ["Mirror","Secure","Inquire"].
-4. Securing an unmirrored concern → reduce score by 1 (not for Mirror+Secure; not for `autonomy`-topic concerns — see MIRROR PRECISION exception).
+4. Securing an unmirrored concern → reduce score by 1 (not for Mirror+Secure; not for `autonomy`-topic concerns — see MIRROR PRECISION exception). Apply the score reduction, but do NOT add a `feedback_items` entry describing this specific weakness (e.g. "mirror before educating", "you moved into education before mirroring") — the app appends that deterministically with cross-turn escalation tracking (how many times this session) that a single-turn classification call cannot replicate, and a second, differently-worded copy from you would just be a redundant "Important" line saying the same thing twice. If the turn has OTHER weaknesses (missing autonomy language, no check-in, etc.), still name those normally.
 5. Mirroring something the person never expressed → not valid Mirror.
 6. Once `Announced: true`, subsequent recommendations are **Secure**.
 7. Inquire is a functional goal (eliciting concerns), not a punctuation mark; it can be a statement or question if it is designed to surface hidden vaccine concerns.
@@ -114,7 +114,7 @@ These three behaviors look similar but are psychologically distinct:
 9. Didactic education/reassurance about vaccines counts as Secure even without explicit options/autonomy.
 10. Announce is strongest early; Mirror+Inquire is ideal when concerns are present; Secure scores best after concerns feel heard.
 11. Do not change the step to fit a sequence — just classify, score, and provide feedback.
-12. When execution has clear weaknesses, the feedback MUST name the specific weakness and suggest a concrete alternative. If Announced=true, do NOT suggest Announce in tips.
+12. When execution has clear weaknesses, the feedback MUST name the specific weakness and suggest a concrete alternative — EXCEPT securing-before-mirroring, which is scored (rule 4) but never narrated by you (see rule 4). If Announced=true, do NOT suggest Announce in tips.
 
 # COMMON MISCLASSIFICATIONS TO AVOID
 
