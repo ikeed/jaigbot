@@ -412,18 +412,18 @@ def build_endgame_bullets_fallback(
                     persona_label=persona_label,
                 )
             if c == 0 or a != a:
-                bullets.append(f"Secure 0% - {unmirrored_text}")
+                bullets.append(f"**Secure 0%** - {unmirrored_text}")
             else:
-                bullets.append(f"Secure {_pct(a)}% - {unmirrored_text}")
+                bullets.append(f"**Secure {_pct(a)}%** - {unmirrored_text}")
             continue
 
         if c == 0 or a != a:  # step not used or no score data
-            bullets.append(f"{step_name} 0% - {_step_message('absent')}")
+            bullets.append(f"**{step_name} 0%** - {_step_message('absent')}")
         elif a >= _HIGH:
-            bullets.append(f"{step_name} {_pct(a)}% - {_step_message('high')}")
+            bullets.append(f"**{step_name} {_pct(a)}%** - {_step_message('high')}")
         elif a >= _MID:
-            bullets.append(f"{step_name} {_pct(a)}% - {_step_message('mid')}")
+            bullets.append(f"**{step_name} {_pct(a)}%** - {_step_message('mid')}")
         else:
-            bullets.append(f"{step_name} {_pct(a)}% - {_step_message('low')}")
+            bullets.append(f"**{step_name} {_pct(a)}%** - {_step_message('low')}")
 
     return bullets[:6]
