@@ -23,6 +23,26 @@ def _patient_label(session_obj: Dict | None) -> str:
     return message("endgame.labels.patient_possessive_default")
 
 
+_CORE_AIMS_STEPS = ("Announce", "Inquire", "Mirror", "Secure")
+
+
+def _overall_score_pct(running_average: Dict) -> int | None:
+    """Mean of all four core AIMS steps, scaled to 0-100%.
+
+    A step with no recorded turns (e.g. Mirror was never attempted) scores 0,
+    not "excluded from the average" - skipping a core step entirely must cost
+    at least as much as doing it badly, or the Overall score rewards avoiding
+    the harder steps. Returns None only when nothing at all was recorded yet.
+    """
+    if not any(isinstance(running_average.get(s), (int, float)) for s in _CORE_AIMS_STEPS):
+        return None
+    core_avgs = [
+        float(running_average[s]) if isinstance(running_average.get(s), (int, float)) else 0.0
+        for s in _CORE_AIMS_STEPS
+    ]
+    return int(round((sum(core_avgs) / (len(core_avgs) * 3.0)) * 100))
+
+
 class VaccineRelevanceGate:
     """Applies vaccine-relevance gating to a classification payload.
 
@@ -285,13 +305,9 @@ def endgame_title(session_obj: Dict | None, outcome: str = "") -> str:
         return message("endgame.titles.deferred")
     try:
         ra = (session_obj or {}).get("runningAverage") or {}
-        core_avgs = [
-            float(ra[s]) for s in ("Announce", "Inquire", "Mirror", "Secure")
-            if isinstance(ra.get(s), (int, float))
-        ]
-        if not core_avgs:
+        overall = _overall_score_pct(ra)
+        if overall is None:
             return message("endgame.titles.great")
-        overall = sum(core_avgs) / (len(core_avgs) * 3.0) * 100
         if overall >= 85:
             return message("endgame.titles.excellent")
         if overall >= 70:
@@ -346,11 +362,10 @@ def build_endgame_bullets_fallback(session_obj: Dict | None) -> List[str]:
 
     bullets: List[str] = []
 
-    # 1. Overall score from core AIMS steps that were actually used
-    core_avgs = [_avg(s) for s in ("Announce", "Inquire", "Mirror", "Secure")]
-    core_avgs = [a for a in core_avgs if a == a]  # drop NaN
-    if core_avgs:
-        overall_pct = int(round((sum(core_avgs) / (len(core_avgs) * 3.0)) * 100))
+    # 1. Overall score across all four core AIMS steps (a step never attempted
+    # scores 0, it isn't excluded - see _overall_score_pct).
+    overall_pct = _overall_score_pct(ra)
+    if overall_pct is not None:
         bullets.append(message("endgame.overall_score", pct=overall_pct))
 
     # 2. Per-step contextual feedback
