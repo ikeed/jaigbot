@@ -69,8 +69,8 @@ def test_important_feedback_is_ordered_before_plain_tips():
                 {
                     "step": "Secure",
                     "tone": "improvement",
-                    "code": "long_secure_missing_autonomy",
-                    "text": "Mirror her question before offering explanation.",
+                    "code": "missing_autonomy_language",
+                    "text": "Add explicit autonomy-supportive statements to reinforce her agency.",
                 },
                 {
                     "step": "Secure",
@@ -84,7 +84,38 @@ def test_important_feedback_is_ordered_before_plain_tips():
 
     praise_pos = text.index("You did this part well.")
     important_pos = text.index("You moved into education before mirroring the concern.")
-    tip_pos = text.index("Mirror her question before offering explanation.")
+    tip_pos = text.index("Add explicit autonomy-supportive statements")
 
     assert praise_pos < important_pos < tip_pos
+    assert text.index("Important:") < text.index("Tip:")
+
+
+def test_model_generated_mirror_tip_is_treated_as_important_regardless_of_code():
+    text = coaching_summary_text(
+        {
+            "step": "Secure",
+            "score": 1,
+            "reasons": [],
+            "tips": [],
+            "feedback_items": [
+                {
+                    "step": "Secure",
+                    "tone": "improvement",
+                    "code": "ask_one_open_question",
+                    "text": "Ask one open concern question before offering reassurance.",
+                },
+                {
+                    "step": "Secure",
+                    "tone": "improvement",
+                    "code": "some_model_specific_code",
+                    "text": "Mirror Ethan's query about personal vs. population benefit before sharing clinical facts.",
+                },
+            ],
+        }
+    )
+
+    mirror_pos = text.index("Mirror Ethan's query")
+    other_pos = text.index("Ask one open concern question")
+
+    assert mirror_pos < other_pos
     assert text.index("Important:") < text.index("Tip:")

@@ -19,6 +19,11 @@ IMPORTANT_FEEDBACK_CODES = {
     "secure_before_mirror",
 }
 CLASSIFICATION_UNAVAILABLE_CODE = "classification_unavailable"
+_MIRROR_KEYWORDS = tuple(
+    kw.strip().lower()
+    for kw in message_list("lexicon.coaching_display.mirror_keywords")
+    if str(kw or "").strip()
+) or ("mirror",)
 
 
 def _as_dict(value: Any) -> dict[str, Any]:
@@ -53,7 +58,19 @@ def _feedback_code(item: Mapping[str, Any] | None) -> str:
 
 
 def _is_important_feedback(item: Mapping[str, Any] | None) -> bool:
-    return _feedback_code(item) in IMPORTANT_FEEDBACK_CODES
+    if not item:
+        return False
+    if _feedback_code(item) in IMPORTANT_FEEDBACK_CODES:
+        return True
+    # Securing without mirroring first is the cardinal AIMS sin regardless of
+    # whether it was caught by the state service's own tracked-concern check
+    # (code=secure_before_mirror) or called out by the classifier's own
+    # free-form tip text - either way it should read as Important, not Tip.
+    tone = str(item.get("tone") or "").strip().lower()
+    if tone == "praise":
+        return False
+    text = str(item.get("text") or item.get("feedback") or "").lower()
+    return any(keyword in text for keyword in _MIRROR_KEYWORDS)
 
 
 def _classification_unavailable_text(coaching: Mapping[str, Any], has_step: bool) -> str | None:
