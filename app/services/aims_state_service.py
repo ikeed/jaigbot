@@ -289,7 +289,7 @@ class AimsStateService:
 
         if needs_mirror and not is_undiscovered_concerns:
             if prefer_structured_feedback:
-                self._add_secure_before_mirror_feedback_item(cls_payload, state)
+                self._add_secure_before_mirror_feedback_item(cls_payload, state, character)
             else:
                 self._add_secure_before_mirror_feedback(cls_payload, state, character)
         else:
@@ -395,18 +395,35 @@ class AimsStateService:
         self,
         cls_payload: dict[str, Any],
         state: dict[str, Any],
+        character: str | None,
     ) -> None:
         recent = state.get("recent_coaching") or []
 
         unmirrored_topics = self._unmirrored_topics_requiring_feedback(state)
         first_unmirrored = unmirrored_topics[0] if unmirrored_topics else None
         secure_before_mirror_key = self._secure_before_mirror_key(first_unmirrored)
+        repeat_count = self._secure_before_mirror_repeat_count(recent, first_unmirrored)
         topic_hint = self._user_facing_topic_hint(first_unmirrored)
+
+        if repeat_count == 0:
+            if self.detect_trust_style(character) == "analytical":
+                text = message("state_feedback.secure_before_mirror_analytical_reason")
+            else:
+                text = message("state_feedback.secure_before_mirror_reason")
+        elif repeat_count == 1:
+            text = message("state_feedback.secure_before_mirror_repeat_reason", topic_hint=topic_hint)
+        else:
+            text = message(
+                "state_feedback.secure_before_mirror_many_reason",
+                count=repeat_count + 1,
+                topic_hint=topic_hint,
+            )
+
         self._append_feedback_item(
             cls_payload,
             step=STEP_SECURE,
             code="secure_before_mirror",
-            text=message("state_feedback.secure_before_mirror", topic_hint=topic_hint),
+            text=text,
         )
         try:
             cls_payload["score"] = min(2, int(cls_payload.get("score", 2)))

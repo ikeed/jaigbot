@@ -192,3 +192,11 @@ jobs:
           URL=$(gcloud run services describe "$SERVICE_NAME" --region "$REGION" --format 'value(status.url)')
           echo "Service URL: $URL"
           curl -fsS "$URL/api/healthz" || true
+
+          if [[ "$APP_ENV" == "staging" ]]; then
+            PUBLIC_URL="https://staging.aimsbot.ca"
+          else
+            PUBLIC_URL="https://aimsbot.ca"
+          fi
+          echo "Public URL: $PUBLIC_URL"
+          curl -fsS "$PUBLIC_URL/api/healthz" || echo "Warning: public domain health check failed (DNS/cert may still be provisioning)" >&2
