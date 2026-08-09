@@ -228,9 +228,9 @@ async def test_replay_split_acceptance_requires_second_turn():
         ctx=ctx,
     )
 
-    assert result2["coach_post"]["title"].endswith("job!")
+    assert "% overall" in result2["coach_post"]["title"]
     assert memory_store[session_id][KEY_GAME_OVER] is True
-    assert memory_store[session_id][KEY_COACH_POST]["title"].endswith("job!")
+    assert "% overall" in memory_store[session_id][KEY_COACH_POST]["title"]
 
 
 @pytest.mark.asyncio
@@ -415,7 +415,6 @@ async def test_replay_mixed_resolution_vaccine_today_plus_literature_ends_as_vac
         ctx=ctx,
     )
 
-    assert result["coach_post"]["title"].endswith("job!")
+    assert "% overall" in result["coach_post"]["title"]
     assert "Outcome:" in result["coach_post"]["lines"][0]
-    assert any("Overall AIMS score:" in line for line in result["coach_post"]["lines"])
     assert memory_store[session_id][KEY_GAME_OVER] is True
