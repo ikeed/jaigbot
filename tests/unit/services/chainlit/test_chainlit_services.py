@@ -97,6 +97,22 @@ async def test_backend_client_fetch_history(respx_mock):
     assert len(history) == 1
     assert history[0]["content"] == "hi"
 
+
+@pytest.mark.asyncio
+async def test_backend_client_fetch_history_with_state_surfaces_game_over(respx_mock):
+    client = BackendClient(base_url="http://test")
+    respx_mock.get("http://test/history?sessionId=123").mock(
+        return_value=httpx.Response(
+            200,
+            json={"history": [{"role": "user", "content": "hi"}], "gameOver": True},
+        )
+    )
+
+    state = await client.fetch_history_with_state("123")
+    assert state["gameOver"] is True
+    assert state["history"][0]["content"] == "hi"
+
+
 def test_ui_handler_format_coach_message():
     ui = UIHandler()
     # Pipe delimited

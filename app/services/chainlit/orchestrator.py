@@ -186,8 +186,11 @@ class ChainlitOrchestrator:
                     )
 
                 # Always refresh history from backend source of truth
-                history = await self.backend.fetch_history(session_id)
-                self.session.history = history
+                history_state = await self.backend.fetch_history_with_state(session_id)
+                self.session.history = history_state.get("history") or []
+                if history_state.get("gameOver"):
+                    self.session.session_ended = True
+                    await self.ui.send_window_message({"type": MSG_SESSION_ENDED})
             except Exception as e:
                 logger.warning(
                     "Failed to refresh history during resume for %s: %s", session_id, e
