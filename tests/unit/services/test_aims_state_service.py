@@ -89,9 +89,162 @@ def test_structured_feedback_secure_before_mirror_uses_coded_state_feedback():
     assert payload["reasons"] == ["Model reason."]
     assert (
         _feedback_item(payload, "secure_before_mirror")["text"]
-        == "Mirror the active concern about trust or evidence concerns before offering more education."
+        == "You moved into education before mirroring the concern - try mirroring first so they feel heard"
     )
     assert state["recent_coaching"] == ["secure_before_mirror:trust"]
+    assert state["secure_before_mirror_total"] == 1
+    assert state["secure_before_mirror_last_topic_hint"] == " about trust or evidence concerns"
+
+
+def test_model_generated_mirror_skip_feedback_is_replaced_not_duplicated():
+    """The classifier can still slip in its own free-form mirror-skip commentary despite
+    the system prompt telling it not to (rule 4) - the app must not show both its coded
+    message and the model's redundant one side by side."""
+    state = {
+        "phase": PHASE_INQUIRE_MIRROR,
+        "announced": True,
+        "is_undiscovered_concerns": False,
+        "parent_concerns": [
+            {
+                "topic": "trust",
+                "desc": "wants evidence addressed",
+                "is_mirrored": False,
+                "is_secured": False,
+            }
+        ],
+    }
+    payload = _structured_payload()
+    payload["feedback_items"].append(
+        {
+            "step": STEP_SECURE,
+            "tone": "improvement",
+            "code": "model_own_mirror_gap_code",
+            "text": "You should mirror her concern before offering more education.",
+        }
+    )
+    payload["feedback_items"].append(
+        {
+            "step": STEP_SECURE,
+            "tone": "improvement",
+            "code": "missing_autonomy_language",
+            "text": "Add explicit autonomy-supportive statements to reinforce her agency.",
+        }
+    )
+
+    _service().apply_coaching_guidance(
+        payload,
+        STEP_SECURE,
+        state,
+        clinician_message="The evidence is strong.",
+        person_last="I need to trust the evidence.",
+    )
+
+    codes = _feedback_codes(payload)
+    assert codes.count("secure_before_mirror") == 1
+    assert "model_own_mirror_gap_code" not in codes
+    # Unrelated improvement feedback (not about mirroring) must survive the cleanup.
+    assert "missing_autonomy_language" in codes
+
+
+def test_secure_before_mirror_total_accumulates_across_turns():
+    state = {
+        "phase": PHASE_INQUIRE_MIRROR,
+        "announced": True,
+        "is_undiscovered_concerns": False,
+        "parent_concerns": [
+            {
+                "topic": "trust",
+                "desc": "wants evidence addressed",
+                "is_mirrored": False,
+                "is_secured": False,
+            }
+        ],
+    }
+    service = _service()
+
+    for _ in range(3):
+        service.apply_coaching_guidance(
+            _structured_payload(),
+            STEP_SECURE,
+            state,
+            clinician_message="More evidence here.",
+            person_last="I need to trust the evidence.",
+        )
+
+    assert state["secure_before_mirror_total"] == 3
+
+
+def test_structured_feedback_secure_before_mirror_escalates_on_repeat():
+    state = {
+        "phase": PHASE_INQUIRE_MIRROR,
+        "announced": True,
+        "is_undiscovered_concerns": False,
+        "parent_concerns": [
+            {
+                "topic": "trust",
+                "desc": "wants evidence addressed",
+                "is_mirrored": False,
+                "is_secured": False,
+            }
+        ],
+        "recent_coaching": ["secure_before_mirror:trust"],
+    }
+    payload = _structured_payload()
+
+    _service().apply_coaching_guidance(
+        payload,
+        STEP_SECURE,
+        state,
+        clinician_message="More evidence here.",
+        person_last="I need to trust the evidence.",
+    )
+
+    assert (
+        _feedback_item(payload, "secure_before_mirror")["text"]
+        == "You're still educating without mirroring - the concern about trust or evidence concerns "
+        "hasn't been mirrored yet"
+    )
+    assert state["recent_coaching"] == [
+        "secure_before_mirror:trust",
+        "secure_before_mirror:trust",
+    ]
+    assert payload["score"] == 2
+
+
+def test_structured_feedback_secure_before_mirror_escalates_to_pattern_level():
+    state = {
+        "phase": PHASE_INQUIRE_MIRROR,
+        "announced": True,
+        "is_undiscovered_concerns": False,
+        "parent_concerns": [
+            {
+                "topic": "trust",
+                "desc": "wants evidence addressed",
+                "is_mirrored": False,
+                "is_secured": False,
+            }
+        ],
+        "recent_coaching": [
+            "secure_before_mirror:trust",
+            "secure_before_mirror:trust",
+        ],
+    }
+    payload = _structured_payload()
+
+    _service().apply_coaching_guidance(
+        payload,
+        STEP_SECURE,
+        state,
+        clinician_message="Yet more evidence here.",
+        person_last="I need to trust the evidence.",
+    )
+
+    assert (
+        _feedback_item(payload, "secure_before_mirror")["text"]
+        == "You've had 3 Secure turns without mirroring about trust or evidence concerns - "
+        "try pausing to mirror before more education"
+    )
+    assert payload["score"] == 2
 
 
 def test_structured_feedback_announce_after_inquiry_uses_coded_state_feedback():

@@ -50,6 +50,85 @@ def test_endgame_fallback_inquire_mid_feedback_is_not_generic_stacked_question_w
     assert "multiple options" not in inquire
 
 
+def test_endgame_fallback_secure_leads_with_unmirrored_warning_when_present():
+    session_obj = {
+        "perStepCounts": {"Announce": 1, "Inquire": 1, "Mirror": 1, "Secure": 5},
+        "runningAverage": {
+            "Announce": 3.0,
+            "Inquire": 3.0,
+            "Mirror": 3.0,
+            "Secure": 2.9,
+        },
+        "secureBeforeMirrorCount": 3,
+    }
+
+    bullets = build_endgame_bullets_fallback(session_obj)
+    secure = next(b for b in bullets if b.startswith("Secure "))
+
+    assert "3 times this session" in secure
+    assert "before mirroring" in secure
+    assert "feel heard" in secure
+    # The high-score generic praise text must not also appear once the warning wins out.
+    assert "well-tailored" not in secure
+
+
+def test_endgame_fallback_secure_names_the_specific_concern_when_only_one_miss():
+    session_obj = {
+        "perStepCounts": {"Announce": 1, "Inquire": 1, "Mirror": 1, "Secure": 2},
+        "runningAverage": {
+            "Announce": 3.0,
+            "Inquire": 3.0,
+            "Mirror": 3.0,
+            "Secure": 2.9,
+        },
+        "secureBeforeMirrorCount": 1,
+        "secureBeforeMirrorTopicHint": " about side-effect concerns",
+    }
+
+    bullets = build_endgame_bullets_fallback(session_obj)
+    secure = next(b for b in bullets if b.startswith("Secure "))
+
+    assert "the concern about side-effect concerns" in secure
+    assert "1 time this session" not in secure
+
+
+def test_endgame_fallback_secure_falls_back_to_count_text_when_topic_hint_missing():
+    session_obj = {
+        "perStepCounts": {"Announce": 1, "Inquire": 1, "Mirror": 1, "Secure": 2},
+        "runningAverage": {
+            "Announce": 3.0,
+            "Inquire": 3.0,
+            "Mirror": 3.0,
+            "Secure": 2.9,
+        },
+        "secureBeforeMirrorCount": 1,
+    }
+
+    bullets = build_endgame_bullets_fallback(session_obj)
+    secure = next(b for b in bullets if b.startswith("Secure "))
+
+    assert "1 time this session" in secure
+
+
+def test_endgame_fallback_secure_uses_normal_tier_text_when_never_unmirrored():
+    session_obj = {
+        "perStepCounts": {"Announce": 1, "Inquire": 1, "Mirror": 1, "Secure": 2},
+        "runningAverage": {
+            "Announce": 3.0,
+            "Inquire": 3.0,
+            "Mirror": 3.0,
+            "Secure": 3.0,
+        },
+        "secureBeforeMirrorCount": 0,
+    }
+
+    bullets = build_endgame_bullets_fallback(session_obj)
+    secure = next(b for b in bullets if b.startswith("Secure "))
+
+    assert "without mirroring" not in secure
+    assert "well-tailored" in secure
+
+
 def test_aims_post_processor_normalizes_score_and_softens_autonomy_feedback():
     payload = {
         "step": "Secure",

@@ -10,8 +10,11 @@ You are an expert evaluator of clinical communication. Your task is to determine
 ### ENDGAME CRITERIA
 A session is in "Endgame" ONLY if:
 1. Vaccines have been **Announced**.
-2. All inquired concerns have been **Mirrored** and **Secured**.
+2. All inquired concerns have been **Secured** (addressed with information tailored to the concern).
    *Note*: If NO concerns were inquired/raised, this criterion is considered met after Announce and a concluding dialogue (e.g., agreeing to vaccinate or follow-up).
+   *Note*: Mirroring quality does NOT gate Endgame. A clinician who consistently jumps to Secure without
+   mirroring first should still reach Endgame once the person clearly resolves - that failure is scored
+   separately (and heavily) as a Secure-quality problem, not as a reason to keep the conversation open.
 3. A clear resolution has been reached — one of the following **two** outcomes (these are the ONLY outcomes that set `is_endgame: true`):
    - **accepted_vaccine**: The person consents to vaccinate today (one or more vaccines). This includes partial acceptance — agreeing to one vaccine now while taking literature on others. e.g. "Let's do it", "Go ahead", "We're ready", "I consent", "I'm comfortable proceeding", "That sounds like a reasonable plan", "I'm comfortable proceeding with the Tdap today and I'd appreciate reading material for the others".
    - **accepted_literature**: The person agrees to take home information AND continue the conversation later with a follow-up appointment (explicitly mentioned or strongly implied return visit). Both elements must be present. e.g. "I'll take a look at the information and we can talk about it at the next appointment", "I'd like to think it over and come back in two weeks", "Send me home with something to read and let's book a follow-up". **Mere interest in literature or appreciation of information WITHOUT intent to return is NOT an endgame.**
