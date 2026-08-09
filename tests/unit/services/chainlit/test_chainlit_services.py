@@ -250,6 +250,37 @@ def test_ui_handler_format_coaching_message_keeps_step_improvement_with_praise()
                 {
                     "step": "Mirror",
                     "tone": "improvement",
+                    "code": "some_other_gap",
+                    "text": "Slow down and pause after key facts to check understanding.",
+                },
+            ],
+        }
+    )
+
+    assert _has_praise_line(formatted, "Mirror", "You named the person's concern.")
+    assert "Mirror:\n" in formatted
+    assert "- Tip: Slow down and pause after key facts to check understanding." in formatted
+
+
+def test_ui_handler_format_coaching_message_labels_model_generated_mirror_tip_as_important():
+    """Any improvement-tone tip that mentions mirroring is the cardinal AIMS sin and must
+    read as Important, even when it comes from the classifier's own free-form text rather
+    than the state service's coded secure_before_mirror feedback."""
+    ui = UIHandler()
+
+    formatted = ui.format_coaching_message(
+        {
+            "step": "Mirror",
+            "feedback_items": [
+                {
+                    "step": "Mirror",
+                    "tone": "praise",
+                    "code": "mirror_attempt",
+                    "text": "You named the person's concern.",
+                },
+                {
+                    "step": "Mirror",
+                    "tone": "improvement",
                     "code": "mirror_timing",
                     "text": "Mirror the timing concern before offering education.",
                 },
@@ -259,7 +290,7 @@ def test_ui_handler_format_coaching_message_keeps_step_improvement_with_praise()
 
     assert _has_praise_line(formatted, "Mirror", "You named the person's concern.")
     assert "Mirror:\n" in formatted
-    assert "- Tip: Mirror the timing concern before offering education." in formatted
+    assert "- Important: Mirror the timing concern before offering education." in formatted
 
 
 def test_ui_handler_format_coaching_message_labels_secure_before_mirror_as_important():

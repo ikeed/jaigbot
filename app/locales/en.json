@@ -679,6 +679,11 @@
         ]
       }
     },
+    "coaching_display": {
+      "mirror_keywords": [
+        "mirror"
+      ]
+    },
     "coaching_tip_sanitizer": {
       "open_question_tip_pattern": "\\b(?:try\\s+)?(?:lead|leading|start|starting|begin|beginning)\\s+with\\s+(?:an?\\s+)?open[- ]?(?:ended[- ]?)?question\\b|\\b(?:try\\s+)?(?:ask|use)\\s+(?:an?\\s+)?open[- ]?(?:ended[- ]?)?question\\b|\\bprefer\\s+(?:what\\s+and\\s+how|what/how)\\s+questions\\b|\\b(?:ask|try asking)\\s+what'?s on (?:their|your) mind\\b|\\b(?:ask|try asking)\\s+what is on (?:their|your) mind\\b",
       "open_concern_question_pattern": "\\b(what|how|tell me|help me understand|could you share|can you share|would you share)\\b[^?.!]*(?:thought|concern|worr|heard|feel|mind|question|hesitan|matter|understand)",
