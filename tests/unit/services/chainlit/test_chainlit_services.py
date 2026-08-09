@@ -102,7 +102,7 @@ def test_ui_handler_format_coach_message():
     # Pipe delimited
     input_text = "Step 1 | Feedback here | Tip here"
     formatted = ui.format_coach_message(input_text)
-    assert "**Coaching**" in formatted
+    assert "**Summary**" in formatted
     assert "- Step 1" in formatted
     assert "- Feedback here" in formatted
 
@@ -120,7 +120,7 @@ def test_ui_handler_format_coach_message_filters_phase_and_empty_values():
     )
 
     assert "Conversation phase" not in formatted
-    assert "**Coaching**" in formatted
+    assert "**Summary**" in formatted
     assert "Announce:" in formatted
     assert "Legacy:" not in formatted
     assert "- Tip: Ask an open question" in formatted
@@ -350,7 +350,7 @@ async def test_ui_handler_send_helpers_use_expected_chainlit_calls():
     assert "aims-scenario-briefing" in mock_msg_cls.call_args_list[0].kwargs["content"]
     assert mock_msg_cls.call_args_list[1].args == ("Problem",)
     assert mock_msg_cls.call_args_list[2].args == ("Hello",)
-    assert "**Coaching**" in mock_msg_cls.call_args_list[3].kwargs["content"]
+    assert "**Summary**" in mock_msg_cls.call_args_list[3].kwargs["content"]
     assert "Announce:" in mock_msg_cls.call_args_list[3].kwargs["content"]
     assert "Legacy:" not in mock_msg_cls.call_args_list[3].kwargs["content"]
     assert "**Coaching**" in mock_msg_cls.call_args_list[4].kwargs["content"]
