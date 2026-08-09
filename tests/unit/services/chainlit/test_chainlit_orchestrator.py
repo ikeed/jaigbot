@@ -465,6 +465,7 @@ async def test_process_backend_response_dispatches_coaching_reply_and_coach_post
     mock_services["ui"].send_coach_message = AsyncMock()
     mock_services["ui"].send_coaching_message = AsyncMock()
     mock_services["ui"].send_assistant_reply = AsyncMock()
+    mock_services["ui"].send_window_message = AsyncMock()
 
     coaching = {
         "step": "Announce",
@@ -496,6 +497,10 @@ async def test_process_backend_response_dispatches_coaching_reply_and_coach_post
     )
     mock_services["ui"].send_assistant_reply.assert_awaited_once_with(
         "I need to understand more.", author_name="Sarah"
+    )
+    assert mock_services["session"].session_ended is True
+    mock_services["ui"].send_window_message.assert_awaited_once_with(
+        {"type": "aims_session_ended"}
     )
 
 
@@ -631,6 +636,7 @@ async def test_process_backend_response_handles_empty_coaching_and_default_coach
     mock_services["ui"].send_coach_message = AsyncMock()
     mock_services["ui"].send_coaching_message = AsyncMock()
     mock_services["ui"].send_assistant_reply = AsyncMock()
+    mock_services["ui"].send_window_message = AsyncMock()
 
     await orchestrator._process_backend_response(
         {
@@ -644,6 +650,10 @@ async def test_process_backend_response_handles_empty_coaching_and_default_coach
     mock_services["ui"].send_coaching_message.assert_not_awaited()
     mock_services["ui"].send_coach_message.assert_awaited_once_with(
         "✅ Scenario complete\nLine"
+    )
+    assert mock_services["session"].session_ended is True
+    mock_services["ui"].send_window_message.assert_awaited_once_with(
+        {"type": "aims_session_ended"}
     )
 
 
@@ -981,6 +991,7 @@ async def test_handle_report_issue(orchestrator, mock_services):
     mock_services["session"].session_id = "sess1"
     mock_services["backend"].report_issue = AsyncMock()
     mock_services["ui"].show_error = AsyncMock()
+    mock_services["ui"].send_window_message = AsyncMock()
     orchestrator._get_user_info = MagicMock(return_value=None)
 
     await orchestrator.handle_report_issue("reason")
@@ -989,4 +1000,7 @@ async def test_handle_report_issue(orchestrator, mock_services):
         session_id="sess1", reason="reason", user_info=None
     )
     assert mock_services["session"].session_ended is True
+    mock_services["ui"].send_window_message.assert_awaited_once_with(
+        {"type": "aims_session_ended"}
+    )
     mock_services["ui"].show_error.assert_called()

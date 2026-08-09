@@ -264,6 +264,7 @@
   function refreshMessages() {
     injectDataAuthors();
     keepLatestMessageVisible();
+    if (app.applyComposerLockState) app.applyComposerLockState();
   }
 
     let debounce = null;
