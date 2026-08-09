@@ -252,12 +252,21 @@ def test_sanitize_endgame_bullets_handles_empty_quotes_duplicates_and_cap():
 
 
 def test_endgame_title_score_tiers_and_deferred_fallback():
+    def _uniform(score):
+        return {"runningAverage": {s: score for s in ("Announce", "Inquire", "Mirror", "Secure")}}
+
     assert endgame_title(None, outcome="deferred") == "Session Complete"
     assert endgame_title({}) == "🎉 Great job!"
-    assert endgame_title({"runningAverage": {"Announce": 3.0}}) == "🏆 Excellent job!"
-    assert endgame_title({"runningAverage": {"Announce": 2.1}}) == "🎉 Great job!"
-    assert endgame_title({"runningAverage": {"Announce": 1.7}}) == "👏 Good job!"
-    assert endgame_title({"runningAverage": {"Announce": 1.0}}) == "💪 Nice job!"
+    assert endgame_title(_uniform(3.0)) == "🏆 Excellent job!"
+    assert endgame_title(_uniform(2.1)) == "🎉 Great job!"
+    assert endgame_title(_uniform(1.7)) == "👏 Good job!"
+    assert endgame_title(_uniform(1.0)) == "💪 Nice job!"
+
+
+def test_endgame_title_penalizes_core_steps_that_were_never_attempted():
+    """Skipping a core step entirely (e.g. Mirror never happened) must cost at
+    least as much as doing it badly - it must not be excluded from the average."""
+    assert endgame_title({"runningAverage": {"Announce": 3.0}}) == "💪 Nice job!"
 
 
 def test_build_endgame_bullets_fallback_handles_absent_low_mid_high_and_invalid_input():
@@ -275,7 +284,7 @@ def test_build_endgame_bullets_fallback_handles_absent_low_mid_high_and_invalid_
         }
     )
 
-    assert bullets[0] == "Overall AIMS score: 64%"
+    assert bullets[0] == "Overall AIMS score: 48%"
     assert any("Announce 93%" in bullet and "well done" in bullet for bullet in bullets)
     assert any("Inquire 67%" in bullet and "remaining concerns" in bullet for bullet in bullets)
     assert any("Mirror 33%" in bullet and "mirror" in bullet for bullet in bullets)
