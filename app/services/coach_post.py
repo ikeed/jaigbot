@@ -292,14 +292,17 @@ def sanitize_endgame_bullets(lines: List[str]) -> List[str]:
 
 
 def endgame_title(session_obj: Dict | None, outcome: str = "") -> str:
-    """Return a score-calibrated celebratory title for the end-of-session card.
+    """Return a score-calibrated title for the end-of-session card, with the
+    Overall AIMS score folded into the same line instead of shown separately.
 
-    Overall score (mean of core AIMS step averages, scaled to 0-100%):
-      >= 85%  -> "🎉 Excellent job!"
-      >= 70%  -> "🎉 Great job!"
-      >= 55%  -> "🎉 Good job!"
-      <  55%  -> "🎉 Nice job!"
-    Falls back to 'Great job!' when no score data is available.
+    Overall score (mean of all four core AIMS step averages, scaled to
+    0-100% - a step never attempted scores 0, see _overall_score_pct):
+      >= 85%  -> "🏆 Excellent job — N% overall"
+      >= 70%  -> "🎉 Great job — N% overall"
+      >= 55%  -> "👏 Good job — N% overall"
+      >= 35%  -> "💪 Keep practicing — N% overall"    (encouraging, not celebratory)
+      <  35%  -> "📋 Needs work — N% overall"          (encouraging, not celebratory)
+    Falls back to a plain "Great job!" (no score) when no score data is available.
     """
     if outcome == "deferred":
         return message("endgame.titles.deferred")
@@ -307,24 +310,32 @@ def endgame_title(session_obj: Dict | None, outcome: str = "") -> str:
         ra = (session_obj or {}).get("runningAverage") or {}
         overall = _overall_score_pct(ra)
         if overall is None:
-            return message("endgame.titles.great")
+            return message("endgame.titles.no_data")
         if overall >= 85:
-            return message("endgame.titles.excellent")
-        if overall >= 70:
-            return message("endgame.titles.great")
-        if overall >= 55:
-            return message("endgame.titles.good")
-        return message("endgame.titles.nice")
+            tier = "excellent"
+        elif overall >= 70:
+            tier = "great"
+        elif overall >= 55:
+            tier = "good"
+        elif overall >= 35:
+            tier = "keep_practicing"
+        else:
+            tier = "needs_work"
+        return message(f"endgame.titles.{tier}", pct=overall)
     except Exception as e:
         logger.debug(f"Error determining endgame title: {e}")
-        return message("endgame.titles.great")
+        return message("endgame.titles.no_data")
 
 
-def build_endgame_bullets_fallback(session_obj: Dict | None) -> List[str]:
+def build_endgame_bullets_fallback(
+    session_obj: Dict | None, *, include_overall_score: bool = True
+) -> List[str]:
     """Contextual, score-aware feedback bullets for the end-of-session Great Job card.
 
-    Shows overall AIMS score percentage followed by per-step feedback calibrated
-    to the clinician's actual performance in this session.
+    Shows overall AIMS score percentage (unless include_overall_score=False - the
+    score is already folded into endgame_title()'s own line, so check() omits the
+    duplicate here) followed by per-step feedback calibrated to the clinician's
+    actual performance in this session.
     """
     # Score range helpers
     _HIGH = 2.4    # >= 80%
@@ -364,9 +375,10 @@ def build_endgame_bullets_fallback(session_obj: Dict | None) -> List[str]:
 
     # 1. Overall score across all four core AIMS steps (a step never attempted
     # scores 0, it isn't excluded - see _overall_score_pct).
-    overall_pct = _overall_score_pct(ra)
-    if overall_pct is not None:
-        bullets.append(message("endgame.overall_score", pct=overall_pct))
+    if include_overall_score:
+        overall_pct = _overall_score_pct(ra)
+        if overall_pct is not None:
+            bullets.append(message("endgame.overall_score", pct=overall_pct))
 
     # 2. Per-step contextual feedback
     secure_before_mirror_count = int(session_obj.get("secureBeforeMirrorCount", 0) or 0)
@@ -400,13 +412,13 @@ def build_endgame_bullets_fallback(session_obj: Dict | None) -> List[str]:
                     persona_label=persona_label,
                 )
             if c == 0 or a != a:
-                bullets.append(f"Secure: {unmirrored_text}")
+                bullets.append(f"Secure 0% - {unmirrored_text}")
             else:
                 bullets.append(f"Secure {_pct(a)}% - {unmirrored_text}")
             continue
 
         if c == 0 or a != a:  # step not used or no score data
-            bullets.append(f"{step_name}: {_step_message('absent')}")
+            bullets.append(f"{step_name} 0% - {_step_message('absent')}")
         elif a >= _HIGH:
             bullets.append(f"{step_name} {_pct(a)}% - {_step_message('high')}")
         elif a >= _MID:

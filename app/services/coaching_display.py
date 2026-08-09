@@ -113,7 +113,7 @@ def step_feedback_label(
 def _feedback_line(tone: Any, label: str, feedback: str) -> str:
     if tone == "praise":
         return f"{label} {feedback}"
-    return f"{label}: {feedback}"
+    return f"**{label}:** {feedback}"
 
 
 def _feedback_group_label(item: Mapping[str, Any], fallback_step: str = "") -> str:
