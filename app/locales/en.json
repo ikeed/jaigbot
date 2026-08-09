@@ -11,8 +11,8 @@
   "coaching": {
     "deferred_nudge": "Nudge: The patient is deferring. Try offering specific literature or a follow-up visit to reach a clear AIMS resolution.",
     "feedback": "Feedback: {feedback}",
-    "feedback_group_header": "{label}:",
-    "step_group_header": "{step}:",
+    "feedback_group_header": "**{label}:**",
+    "step_group_header": "**{step}:**",
     "labels": {
       "praise": [
         "Good job!",
@@ -30,12 +30,12 @@
       "important": "Important"
     },
     "feedback_group": "Feedback",
-    "tip": "Tip: {tip}",
+    "tip": "**Tip:** {tip}",
     "phase_prefix": "Conversation phase:",
     "section_title": "Coaching",
     "scenario_complete": "Scenario complete",
     "scenario_complete_marked": "\u2705 Scenario complete",
-    "outcome": "Outcome: {summary}"
+    "outcome": "**Outcome:** {summary}"
   },
   "state_feedback": {
     "announce_after_inquiry": "Avoid moving to Announce after inquiry before all concerns are mirrored.",
@@ -79,12 +79,14 @@
     },
     "titles": {
       "deferred": "Session Complete",
-      "excellent": "\ud83c\udfc6 Excellent job!",
-      "great": "\ud83c\udf89 Great job!",
-      "good": "\ud83d\udc4f Good job!",
-      "nice": "\ud83d\udcaa Nice job!"
+      "no_data": "\ud83c\udf89 Great job!",
+      "excellent": "\ud83c\udfc6 Excellent job \u2014 {pct}% overall",
+      "great": "\ud83c\udf89 Great job \u2014 {pct}% overall",
+      "good": "\ud83d\udc4f Good job \u2014 {pct}% overall",
+      "keep_practicing": "\ud83d\udcaa Keep practicing \u2014 {pct}% overall",
+      "needs_work": "\ud83d\udccb Needs work \u2014 {pct}% overall"
     },
-    "overall_score": "Overall AIMS score: {pct}%",
+    "overall_score": "**Overall AIMS score:** {pct}%",
     "fallback_bullets": {
       "default": [
         "Announce: lead with a short, non-pushy recommendation and invite input.",

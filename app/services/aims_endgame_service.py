@@ -276,7 +276,11 @@ class AimsEndgameService:
                 self._logger.debug("Summary analysis failed for endgame coach post: %s", e)
 
             try:
-                fallback_bullets = build_endgame_bullets_fallback(session_obj)
+                # include_overall_score=False: the score is already folded into
+                # `title` (see endgame_title), so this would otherwise duplicate it.
+                fallback_bullets = build_endgame_bullets_fallback(
+                    session_obj, include_overall_score=False
+                )
                 if fallback_bullets:
                     lines.extend(fallback_bullets)
             except Exception as e:

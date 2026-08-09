@@ -406,7 +406,7 @@ def test_classifier_not_resolved_resolution_does_not_skip_post_reply_acceptance(
     )
 
     assert result is not None
-    assert result["lines"][0] == "Outcome: Sarah agreed to vaccinate today."
+    assert result["lines"][0] == "**Outcome:** Sarah agreed to vaccinate today."
     assert mock_svc.calls == 1
 
 
@@ -632,7 +632,7 @@ def test_accepted_vaccine_allows_when_all_concerns_are_secured():
     result = _run(service.check(store["s9b"], {}, None, "s9b"))
     assert result is not None
     assert "Great job" in result["title"]
-    assert result["lines"][0].startswith("Outcome:")
+    assert result["lines"][0].startswith("**Outcome:**")
 
 
 def test_accepted_literature_closes_without_structured_fields_when_heuristic_fallback_disabled():
@@ -1360,7 +1360,7 @@ def test_structured_accepted_literature_fields_bypass_english_cue_validation():
     service = _make_endgame_service(mock_svc)
     result = _run(service.check(store["s15_structured_lit"], {}, None, "s15_structured_lit"))
     assert result is not None
-    assert result["lines"][0] == "Outcome: Person agreed to review materials and continue later."
+    assert result["lines"][0] == "**Outcome:** Person agreed to review materials and continue later."
 
 
 def test_endgame_personalizes_generic_summary_subject_when_persona_known():
@@ -1402,7 +1402,7 @@ def test_endgame_personalizes_generic_summary_subject_when_persona_known():
 
     assert result is not None
     assert result["lines"][0] == (
-        "Outcome: Sarah agreed to take home an information sheet and return for follow-up."
+        "**Outcome:** Sarah agreed to take home an information sheet and return for follow-up."
     )
 
 
@@ -1581,7 +1581,7 @@ def test_structured_vaccine_closure_overrides_stale_unsecured_state():
         )
     )
     assert result is not None
-    assert result["lines"][0] == "Outcome: Person agreed to give the MMR booster today."
+    assert result["lines"][0] == "**Outcome:** Person agreed to give the MMR booster today."
 
 
 def test_accepted_literature_closure_uses_latest_exchange_not_old_safety_risk_mirror():
@@ -1910,8 +1910,8 @@ def test_endgame_uses_summary_analysis_bullets_when_available():
     result = _run(service.check(store["s18"], {}, session_obj, "s18"))
 
     assert result is not None
-    assert result["lines"][0] == "Outcome: Person accepted vaccination today."
-    assert any("Overall AIMS score:" in line for line in result["lines"])
+    assert result["lines"][0] == "**Outcome:** Person accepted vaccination today."
+    assert "% overall" in result["title"]
     assert "LLM bullet 1" in result["lines"]
     assert "LLM bullet 2" in result["lines"]
 
@@ -1949,8 +1949,8 @@ def test_endgame_ignores_thin_summary_analysis_and_keeps_deterministic_card():
     result = _run(service.check(store["s18b"], {}, session_obj, "s18b"))
 
     assert result is not None
-    assert result["lines"][0] == "Outcome: Person accepted vaccination today."
-    assert any("Overall AIMS score:" in line for line in result["lines"])
+    assert result["lines"][0] == "**Outcome:** Person accepted vaccination today."
+    assert "% overall" in result["title"]
     assert all("Thin summary only" not in line for line in result["lines"])
 
 
@@ -2025,5 +2025,5 @@ def test_endgame_falls_back_to_deterministic_bullets_when_summary_analysis_fails
     result = _run(service.check(store["s19"], {}, session_obj, "s19"))
 
     assert result is not None
-    assert result["lines"][0] == "Outcome: Person accepted vaccination today."
-    assert any("Overall AIMS score:" in line for line in result["lines"])
+    assert result["lines"][0] == "**Outcome:** Person accepted vaccination today."
+    assert "% overall" in result["title"]

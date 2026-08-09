@@ -407,6 +407,14 @@ body.aimsbot-shell .aimsbot-message-list {
   margin-top: 0.25rem !important;
 }
 
+/* Coach message headings ("Outcome:", "Important:", "Tip:", step names like
+   "Secure:") are wrapped in markdown bold by the backend. Browser-default
+   bold (700) reads too heavy next to body copy, so dial it back to a
+   noticeably heftier-than-body weight without going full bold. */
+.aims-message-bubble strong {
+  font-weight: 600 !important;
+}
+
 .aims-message-bubble strong:first-child {
   display: inline-block !important;
   margin-bottom: 0.25rem !important;
