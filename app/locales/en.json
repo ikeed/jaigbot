@@ -89,10 +89,10 @@
     "overall_score": "**Overall AIMS score:** {pct}%",
     "fallback_bullets": {
       "default": [
-        "Announce: lead with a short, non-pushy recommendation and invite input.",
-        "Inquire: ask open-ended questions to surface the parent's specific concerns.",
-        "Mirror: mirror their words and emotions before educating.",
-        "Secure: share one tailored fact linked to the concern, then check understanding."
+        "**Announce:** lead with a short, non-pushy recommendation and invite input.",
+        "**Inquire:** ask open-ended questions to surface the parent's specific concerns.",
+        "**Mirror:** mirror their words and emotions before educating.",
+        "**Secure:** share one tailored fact linked to the concern, then check understanding."
       ],
       "Announce": {
         "high": "clear, non-pressuring recommendation - well done.",

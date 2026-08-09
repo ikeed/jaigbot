@@ -43,7 +43,7 @@ def test_endgame_fallback_inquire_mid_feedback_is_not_generic_stacked_question_w
     }
 
     bullets = build_endgame_bullets_fallback(session_obj)
-    inquire = next(b for b in bullets if b.startswith("Inquire "))
+    inquire = next(b for b in bullets if b.startswith("**Inquire "))
 
     assert "remaining concerns" in inquire
     assert "single-barreled" not in inquire
@@ -63,7 +63,7 @@ def test_endgame_fallback_secure_leads_with_unmirrored_warning_when_present():
     }
 
     bullets = build_endgame_bullets_fallback(session_obj)
-    secure = next(b for b in bullets if b.startswith("Secure "))
+    secure = next(b for b in bullets if b.startswith("**Secure "))
 
     assert "3 times this session" in secure
     assert "before mirroring" in secure
@@ -86,7 +86,7 @@ def test_endgame_fallback_secure_names_the_specific_concern_when_only_one_miss()
     }
 
     bullets = build_endgame_bullets_fallback(session_obj)
-    secure = next(b for b in bullets if b.startswith("Secure "))
+    secure = next(b for b in bullets if b.startswith("**Secure "))
 
     assert "the concern about side-effect concerns" in secure
     assert "1 time this session" not in secure
@@ -105,7 +105,7 @@ def test_endgame_fallback_secure_falls_back_to_count_text_when_topic_hint_missin
     }
 
     bullets = build_endgame_bullets_fallback(session_obj)
-    secure = next(b for b in bullets if b.startswith("Secure "))
+    secure = next(b for b in bullets if b.startswith("**Secure "))
 
     assert "1 time this session" in secure
 
@@ -123,7 +123,7 @@ def test_endgame_fallback_secure_uses_normal_tier_text_when_never_unmirrored():
     }
 
     bullets = build_endgame_bullets_fallback(session_obj)
-    secure = next(b for b in bullets if b.startswith("Secure "))
+    secure = next(b for b in bullets if b.startswith("**Secure "))
 
     assert "without mirroring" not in secure
     assert "well-tailored" in secure
@@ -274,7 +274,7 @@ def test_endgame_title_penalizes_core_steps_that_were_never_attempted():
 
 
 def test_build_endgame_bullets_fallback_handles_absent_low_mid_high_and_invalid_input():
-    assert build_endgame_bullets_fallback(None)[0].startswith("Announce:")
+    assert build_endgame_bullets_fallback(None)[0].startswith("**Announce:**")
 
     bullets = build_endgame_bullets_fallback(
         {
@@ -292,7 +292,7 @@ def test_build_endgame_bullets_fallback_handles_absent_low_mid_high_and_invalid_
     assert any("Announce 93%" in bullet and "well done" in bullet for bullet in bullets)
     assert any("Inquire 67%" in bullet and "remaining concerns" in bullet for bullet in bullets)
     assert any("Mirror 33%" in bullet and "mirror" in bullet for bullet in bullets)
-    assert any(bullet.startswith("Secure 0%") and "absent" not in bullet for bullet in bullets)
+    assert any(bullet.startswith("**Secure 0%") and "absent" not in bullet for bullet in bullets)
 
 
 def test_build_endgame_bullets_fallback_can_omit_overall_score_line():
@@ -324,9 +324,9 @@ def test_build_endgame_bullets_fallback_personalizes_with_persona_and_patient_na
         }
     )
 
-    announce = next(b for b in bullets if b.startswith("Announce "))
-    inquire = next(b for b in bullets if b.startswith("Inquire "))
-    mirror = next(b for b in bullets if b.startswith("Mirror "))
+    announce = next(b for b in bullets if b.startswith("**Announce "))
+    inquire = next(b for b in bullets if b.startswith("**Inquire "))
+    mirror = next(b for b in bullets if b.startswith("**Mirror "))
 
     assert "Nathaniel's due for the recommended vaccine today" in announce
     assert "Carter" not in announce
