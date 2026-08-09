@@ -132,7 +132,10 @@ Query parameters:
 - `full`: optional boolean. When true, returns full history if available.
 
 Response shape is intentionally simple and may include current persona/session
-metadata in addition to history entries.
+metadata in addition to history entries. Also includes `gameOver`: `true` when
+the session already reached an end state (a coach post was produced), so
+clients resuming an old session/thread can detect that without replaying
+history.
 
 ## GET /summary
 
