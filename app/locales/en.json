@@ -114,7 +114,8 @@
         "high": "education was well-tailored to the stated concerns without overwhelming.",
         "mid": "solid education; try adding an explicit check-in after key facts (e.g., \"How does that land for you?\") to avoid a lecture feel.",
         "low": "keep Secure focused: one tailored fact, linked directly to the concern, then check in (e.g., \"Does that help with the ingredient question?\"). Avoid long explanations without pauses.",
-        "absent": "provide targeted education addressing the stated concern, then check understanding."
+        "absent": "provide targeted education addressing the stated concern, then check understanding.",
+        "unmirrored_warning": "you moved into education without mirroring the concern {count} {times_word} this session - that's the single most important habit to fix, since patients need to feel heard before they can take in information."
       }
     },
     "summary_structural_prefixes": [

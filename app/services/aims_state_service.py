@@ -288,6 +288,7 @@ class AimsStateService:
         needs_mirror = self._has_material_unmirrored_concern(state)
 
         if needs_mirror and not is_undiscovered_concerns:
+            state["secure_before_mirror_total"] = int(state.get("secure_before_mirror_total", 0)) + 1
             if prefer_structured_feedback:
                 self._add_secure_before_mirror_feedback_item(cls_payload, state, character)
             else:

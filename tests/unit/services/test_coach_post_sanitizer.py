@@ -50,6 +50,46 @@ def test_endgame_fallback_inquire_mid_feedback_is_not_generic_stacked_question_w
     assert "multiple options" not in inquire
 
 
+def test_endgame_fallback_secure_leads_with_unmirrored_warning_when_present():
+    session_obj = {
+        "perStepCounts": {"Announce": 1, "Inquire": 1, "Mirror": 1, "Secure": 5},
+        "runningAverage": {
+            "Announce": 3.0,
+            "Inquire": 3.0,
+            "Mirror": 3.0,
+            "Secure": 2.9,
+        },
+        "secureBeforeMirrorCount": 3,
+    }
+
+    bullets = build_endgame_bullets_fallback(session_obj)
+    secure = next(b for b in bullets if b.startswith("Secure "))
+
+    assert "without mirroring the concern 3 times this session" in secure
+    assert "single most important habit to fix" in secure
+    # The high-score generic praise text must not also appear once the warning wins out.
+    assert "well-tailored" not in secure
+
+
+def test_endgame_fallback_secure_uses_normal_tier_text_when_never_unmirrored():
+    session_obj = {
+        "perStepCounts": {"Announce": 1, "Inquire": 1, "Mirror": 1, "Secure": 2},
+        "runningAverage": {
+            "Announce": 3.0,
+            "Inquire": 3.0,
+            "Mirror": 3.0,
+            "Secure": 3.0,
+        },
+        "secureBeforeMirrorCount": 0,
+    }
+
+    bullets = build_endgame_bullets_fallback(session_obj)
+    secure = next(b for b in bullets if b.startswith("Secure "))
+
+    assert "without mirroring" not in secure
+    assert "well-tailored" in secure
+
+
 def test_aims_post_processor_normalizes_score_and_softens_autonomy_feedback():
     payload = {
         "step": "Secure",
