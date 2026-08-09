@@ -33,6 +33,7 @@
     "tip": "**Tip:** {tip}",
     "phase_prefix": "Conversation phase:",
     "section_title": "Coaching",
+    "summary_section_title": "Summary",
     "scenario_complete": "Scenario complete",
     "scenario_complete_marked": "\u2705 Scenario complete",
     "outcome": "**Outcome:** {summary}"

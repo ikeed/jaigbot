@@ -94,7 +94,7 @@ class UIHandler:
         title = (
             scenario_complete
             if any(scenario_complete in p for p in parts)
-            else message("coaching.section_title")
+            else message("coaching.summary_section_title")
         )
         return UIHandler._format_parts(title, parts)
 

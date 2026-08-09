@@ -131,6 +131,7 @@ MSG_NEW_CHAT = "new_chat"
 MSG_INTRO_CONTINUE = "aims_intro_continue"
 MSG_PERSONA_NAME = "aims_persona_name"
 MSG_THREAD_BOUND = "aims_thread_bound"
+MSG_SESSION_ENDED = "aims_session_ended"
 
 # OAuth Providers
 PROVIDER_GOOGLE = "google"
