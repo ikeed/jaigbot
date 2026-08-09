@@ -608,8 +608,7 @@ class AimsStateService:
         elif step_current == STEP_SECURE:
             concerns = state.get("parent_concerns") or []
             all_mirrored = all(concern.get("is_mirrored") for concern in concerns) if concerns else True
-            if all_mirrored:
-                state["phase"] = PHASE_SECURE
+            state["phase"] = PHASE_SECURE if all_mirrored else PHASE_INQUIRE_MIRROR
 
         concerns = state.get("parent_concerns") or []
         all_resolved = (
