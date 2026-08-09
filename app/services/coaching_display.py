@@ -190,9 +190,9 @@ def _display_feedback_items(raw_items: Any, text_key: str) -> list[dict[str, Any
         displayed.append(item)
 
     def _priority(item: dict[str, Any]) -> int:
-        if item.get("tone") == "praise":
-            return 0
         if _is_important_feedback(item):
+            return 0
+        if item.get("tone") == "praise":
             return 1
         return 2
 
