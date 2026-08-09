@@ -235,9 +235,16 @@ class AimsEndgameService:
                     pass
                 elif structured_literature is False:
                     is_endgame = False
-                elif not self._heuristic_fallback_enabled:
-                    is_endgame = False
                 else:
+                    # structured_literature is None: the detector's structured fields
+                    # weren't present on this call. This text-based cue check is a
+                    # lightweight local verification (no LLM call, no dependency on
+                    # the separate heuristic-fallback feature flag) - it should run
+                    # whenever the structured fields are simply missing, not only
+                    # when heuristic fallback happens to be enabled. Gating it behind
+                    # that flag meant a session with clear, repeated literature+
+                    # follow-up consent could never close in any environment where
+                    # heuristic fallback is off (the deploy default).
                     combined_lower = combined_reply_text.lower()
                     if any(cue in combined_lower for cue in EndGameDetector.PLAN_NEGATIVE_CUES):
                         is_endgame = False

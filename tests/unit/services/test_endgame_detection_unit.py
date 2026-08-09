@@ -635,6 +635,46 @@ def test_accepted_vaccine_allows_when_all_concerns_are_secured():
     assert result["lines"][0].startswith("Outcome:")
 
 
+def test_accepted_literature_closes_without_structured_fields_when_heuristic_fallback_disabled():
+    """Regression test: AIMS_HEURISTIC_FALLBACK_ENABLED defaults to false and isn't set
+    in staging/prod, so heuristic_fallback_enabled=False is the real deployed condition,
+    not just a test default. When the detector's is_endgame=True/accepted_literature call
+    doesn't happen to include the accepted_materials/accepted_followup structured fields,
+    the lightweight text-cue check (no LLM call, no dependency on the heuristic-fallback
+    feature) must still be able to confirm closure - it must not have been gated behind
+    that unrelated flag such that a session with clear, repeated literature+follow-up
+    consent could never close in the actual deployed environment."""
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_literature",
+            "summary": "Person is taking a handout home and returning next week.",
+            "reason": "",
+        }
+    )
+    store = {
+        "s9c": {
+            "history": [
+                {
+                    "role": "user",
+                    "content": "Here's a handout, and let's set up a follow-up appointment for next week.",
+                },
+                {
+                    "role": "assistant",
+                    "content": (
+                        "Yes, some written information would be helpful for me to review at home, "
+                        "and a follow-up appointment in a few weeks sounds good."
+                    ),
+                },
+            ],
+            "aims_state": _literature_ready_state(),
+        }
+    }
+    service = _make_endgame_service(mock_svc, heuristic_fallback_enabled=False)
+    result = _run(service.check(store["s9c"], {}, None, "s9c"))
+    assert result is not None, "Clear literature+follow-up consent should close even with heuristic fallback off"
+
+
 def test_accepted_literature_requires_literature_and_followup_evidence():
     """LLM accepted_literature still needs both closure pieces in the transcript."""
     mock_svc = _MockClassifierService(
