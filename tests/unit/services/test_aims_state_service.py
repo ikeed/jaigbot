@@ -93,6 +93,7 @@ def test_structured_feedback_secure_before_mirror_uses_coded_state_feedback():
     )
     assert state["recent_coaching"] == ["secure_before_mirror:trust"]
     assert state["secure_before_mirror_total"] == 1
+    assert state["secure_before_mirror_last_topic_hint"] == " about trust or evidence concerns"
 
 
 def test_secure_before_mirror_total_accumulates_across_turns():
@@ -157,6 +158,7 @@ def test_structured_feedback_secure_before_mirror_escalates_on_repeat():
         "secure_before_mirror:trust",
         "secure_before_mirror:trust",
     ]
+    assert payload["score"] == 2
 
 
 def test_structured_feedback_secure_before_mirror_escalates_to_pattern_level():
@@ -192,6 +194,7 @@ def test_structured_feedback_secure_before_mirror_escalates_to_pattern_level():
         == "You've had 3 Secure turns without mirroring about trust or evidence concerns - "
         "try pausing to mirror before more education"
     )
+    assert payload["score"] == 2
 
 
 def test_structured_feedback_announce_after_inquiry_uses_coded_state_feedback():

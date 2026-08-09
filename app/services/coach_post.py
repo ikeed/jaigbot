@@ -371,11 +371,19 @@ def build_endgame_bullets_fallback(session_obj: Dict | None) -> List[str]:
             # Securing without mirroring first is the single most consequential
             # AIMS mistake a clinician can make, so it always leads the Secure
             # summary regardless of the numeric score band.
-            unmirrored_text = message(
-                "endgame.fallback_bullets.Secure.unmirrored_warning",
-                count=secure_before_mirror_count,
-                times_word="time" if secure_before_mirror_count == 1 else "times",
-            )
+            topic_hint = str(session_obj.get("secureBeforeMirrorTopicHint") or "")
+            if secure_before_mirror_count == 1 and topic_hint:
+                unmirrored_text = message(
+                    "endgame.fallback_bullets.Secure.unmirrored_warning_single",
+                    topic_hint=topic_hint,
+                )
+            else:
+                unmirrored_text = message(
+                    "endgame.fallback_bullets.Secure.unmirrored_warning",
+                    count=secure_before_mirror_count,
+                    times_word="time" if secure_before_mirror_count == 1 else "times",
+                    persona_label=persona_label,
+                )
             if c == 0 or a != a:
                 bullets.append(f"Secure: {unmirrored_text}")
             else:

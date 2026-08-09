@@ -59,18 +59,28 @@ def test_build_summary_handles_none_empty_and_existing_scores():
 
 def test_persist_and_build_summary_carry_secure_before_mirror_count():
     service = AimsMetricsService(logger=DummyLogger())
-    mem = {KEY_AIMS_STATE: {"secure_before_mirror_total": 2}}
+    mem = {
+        KEY_AIMS_STATE: {
+            "secure_before_mirror_total": 2,
+            "secure_before_mirror_last_topic_hint": " about side-effect concerns",
+        }
+    }
 
     service.persist(mem, {"step": "Secure", "score": 1})
 
     assert mem[KEY_AIMS_METRICS]["secureBeforeMirrorCount"] == 2
-    assert service.build_summary(mem)["secureBeforeMirrorCount"] == 2
+    assert mem[KEY_AIMS_METRICS]["secureBeforeMirrorTopicHint"] == " about side-effect concerns"
+    summary = service.build_summary(mem)
+    assert summary["secureBeforeMirrorCount"] == 2
+    assert summary["secureBeforeMirrorTopicHint"] == " about side-effect concerns"
 
 
 def test_build_summary_defaults_secure_before_mirror_count_to_zero():
     service = AimsMetricsService(logger=DummyLogger())
 
-    assert service.build_summary({})["secureBeforeMirrorCount"] == 0
+    summary = service.build_summary({})
+    assert summary["secureBeforeMirrorCount"] == 0
+    assert summary["secureBeforeMirrorTopicHint"] == ""
 
 
 def test_running_average_errors_are_logged_and_skipped():
