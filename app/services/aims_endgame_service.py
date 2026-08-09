@@ -219,12 +219,13 @@ class AimsEndgameService:
                 structured_vaccine = self._structured_vaccine_resolution(result)
                 if structured_vaccine is False:
                     is_endgame = False
-
-                has_unsecured = any(not concern.get("is_secured") for concern in concerns)
-                # The detector reads the transcript; stale local concern state must not
-                # deadlock explicit same-day consent when no active concern remains.
-                if is_endgame and concerns and has_unsecured and structured_vaccine is not True:
-                    is_endgame = False
+                # No local "is_secured" veto here: the endgame prompt already tells the
+                # detector the tracked concern lists are keyword-derived and often
+                # incomplete, and to trust the full transcript instead. Vetoing the
+                # detector's own is_endgame call with that same unreliable local state
+                # was the same left-hand-right-hand duplication as the mirror gate -
+                # explicit same-day consent should close the session; unsecured concerns
+                # are a Secure-quality scoring problem, not a reason to keep it open.
 
             if is_endgame and outcome == "accepted_literature":
                 structured_literature = self._structured_literature_resolution(result)
