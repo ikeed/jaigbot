@@ -94,9 +94,25 @@ def test_history_filters_malformed_working_history_items():
         "history": [
             {"role": "user", "content": "hello"},
             {"role": "coach", "content": "hint", "coaching": {"step": "Secure"}},
-        ]
+        ],
+        "gameOver": False,
     }
     assert store["sid"]["full_history"][0]["time"] == 1
+
+
+def test_history_surfaces_game_over_so_resume_can_lock_the_composer():
+    client, _ = _client(
+        store={
+            "sid": {
+                "history": [{"role": "user", "content": "hello"}],
+                "game_over": True,
+            }
+        }
+    )
+
+    response = client.get("/history", params={"sessionId": "sid"})
+
+    assert response.json()["gameOver"] is True
 
 
 def test_history_full_and_disabled_memory_paths():
@@ -105,13 +121,17 @@ def test_history_full_and_disabled_memory_paths():
         store={"sid": {"full_history": [{"role": "user", "content": "hello", "time": 1}]}},
     )
 
-    assert client.get("/history", params={"sessionId": "sid", "full": True}).json() == {"history": []}
+    assert client.get("/history", params={"sessionId": "sid", "full": True}).json() == {
+        "history": [],
+        "gameOver": False,
+    }
 
     client, _ = _client(
         store={"sid": {"full_history": [{"role": "user", "content": "hello", "time": 1}]}}
     )
     assert client.get("/history", params={"sessionId": "sid", "full": True}).json() == {
-        "history": [{"role": "user", "content": "hello", "time": 1}]
+        "history": [{"role": "user", "content": "hello", "time": 1}],
+        "gameOver": False,
     }
 
 
@@ -124,7 +144,10 @@ def test_history_returns_empty_when_memory_store_raises():
 
     client, _ = _client(store=RaisingStore(), logger=logger)
 
-    assert client.get("/history", params={"sessionId": "sid"}).json() == {"history": []}
+    assert client.get("/history", params={"sessionId": "sid"}).json() == {
+        "history": [],
+        "gameOver": False,
+    }
     logger.error.assert_called_once()
 
 

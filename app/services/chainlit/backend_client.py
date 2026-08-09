@@ -34,21 +34,31 @@ class BackendClient:
         
         return url[:-5] if url.endswith(PATH_CHAT) else url
 
-    async def fetch_history(self, session_id: str) -> List[Dict[str, Any]]:
+    async def fetch_history_with_state(self, session_id: str) -> Dict[str, Any]:
+        """Like fetch_history, but also returns gameOver so callers that need to
+        know whether a resumed session already ended don't need a second call."""
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 r = await client.get(
-                    f"{self.base_url}{ENDPOINT_HISTORY}", 
+                    f"{self.base_url}{ENDPOINT_HISTORY}",
                     params={"sessionId": session_id}
                 )
                 if r.status_code == 200 and r.headers.get("content-type", "").startswith("application/json"):
-                    return (r.json() or {}).get("history") or []
+                    data = r.json() or {}
+                    return {
+                        "history": data.get("history") or [],
+                        "gameOver": bool(data.get("gameOver")),
+                    }
                 else:
                     logger.warning("Failed to fetch history: status=%s, content-type=%s", r.status_code, r.headers.get("content-type"))
         except Exception as e:
             logger.error("Failed to fetch history from backend: %s", e)
             pass
-        return []
+        return {"history": [], "gameOver": False}
+
+    async def fetch_history(self, session_id: str) -> List[Dict[str, Any]]:
+        state = await self.fetch_history_with_state(session_id)
+        return state.get("history") or []
 
     async def initialize_session(
         self, 
