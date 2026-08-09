@@ -85,6 +85,9 @@ class AimsMetricsService:
 
             aims_state = mem.get(KEY_AIMS_STATE) or {}
             aims["secureBeforeMirrorCount"] = int(aims_state.get("secure_before_mirror_total", 0))
+            aims["secureBeforeMirrorTopicHint"] = str(
+                aims_state.get("secure_before_mirror_last_topic_hint") or ""
+            )
 
             mem[KEY_AIMS_METRICS] = aims
 
@@ -114,6 +117,7 @@ class AimsMetricsService:
                 "personaName": persona.get("name"),
                 "patientName": persona.get("patient_name"),
                 "secureBeforeMirrorCount": int(aims.get("secureBeforeMirrorCount", 0)),
+                "secureBeforeMirrorTopicHint": str(aims.get("secureBeforeMirrorTopicHint") or ""),
             }
 
         except Exception as e:

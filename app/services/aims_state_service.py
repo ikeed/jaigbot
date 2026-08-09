@@ -289,6 +289,10 @@ class AimsStateService:
 
         if needs_mirror and not is_undiscovered_concerns:
             state["secure_before_mirror_total"] = int(state.get("secure_before_mirror_total", 0)) + 1
+            unmirrored_topics = self._unmirrored_topics_requiring_feedback(state)
+            state["secure_before_mirror_last_topic_hint"] = self._user_facing_topic_hint(
+                unmirrored_topics[0] if unmirrored_topics else None
+            )
             if prefer_structured_feedback:
                 self._add_secure_before_mirror_feedback_item(cls_payload, state, character)
             else:
@@ -383,14 +387,17 @@ class AimsStateService:
 
         cls_payload["reasons"] = [reason] + (cls_payload.get("reasons") or [])
         cls_payload.setdefault("tips", []).append(tip)
+        self._cap_score_for_unmirrored_secure(cls_payload)
+
+        recent.append(secure_before_mirror_key)
+        state["recent_coaching"] = recent[-3:]
+
+    def _cap_score_for_unmirrored_secure(self, cls_payload: dict[str, Any]) -> None:
         try:
             cls_payload["score"] = min(2, int(cls_payload.get("score", 2)))
         except Exception as e:
             self._logger.debug("Score normalization failed (secure before mirror): %s", e)
             cls_payload["score"] = 2
-
-        recent.append(secure_before_mirror_key)
-        state["recent_coaching"] = recent[-3:]
 
     def _add_secure_before_mirror_feedback_item(
         self,
@@ -426,11 +433,7 @@ class AimsStateService:
             code="secure_before_mirror",
             text=text,
         )
-        try:
-            cls_payload["score"] = min(2, int(cls_payload.get("score", 2)))
-        except Exception as e:
-            self._logger.debug("Score normalization failed (structured secure before mirror): %s", e)
-            cls_payload["score"] = 2
+        self._cap_score_for_unmirrored_secure(cls_payload)
 
         recent.append(secure_before_mirror_key)
         state["recent_coaching"] = recent[-3:]
