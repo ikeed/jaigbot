@@ -81,6 +81,185 @@ def test_build_reply_concern_state_section_distinguishes_open_and_resolved_conce
     assert "do not reopen resolved concerns as if unanswered" in section
 
 
+def test_build_reply_concern_state_section_undiscovered_checklist_entry_only():
+    """A fresh session's pre-seeded, not-yet-discovered checklist concerns must
+    not be shown as 'open' -- that would tell the roleplay model to blurt them
+    out unprompted, defeating the whole point of the checklist."""
+    section = AimsCoachingHandler._build_reply_concern_state_section(
+        {
+            "parent_concerns": [
+                {
+                    "topic": "immune_load",
+                    "desc": "Worried that several vaccines at once might be too much.",
+                    "is_discovered": False,
+                    "is_mirrored": False,
+                    "is_secured": False,
+                    "from_checklist": True,
+                }
+            ]
+        }
+    )
+
+    assert "Open concerns" not in section
+    assert "Worried that several vaccines at once might be too much." in section
+    assert "have NOT brought up yet" in section
+    assert "open concerns: none" not in section.lower()
+
+
+def test_build_reply_concern_state_section_undiscovered_plus_resolved():
+    section = AimsCoachingHandler._build_reply_concern_state_section(
+        {
+            "parent_concerns": [
+                {
+                    "topic": "autonomy",
+                    "canonical_label": "wants autonomy respected",
+                    "is_discovered": True,
+                    "is_mirrored": True,
+                    "is_secured": True,
+                    "from_checklist": True,
+                },
+                {
+                    "topic": "age_appropriateness",
+                    "desc": "Worried the vaccine isn't age-appropriate.",
+                    "is_discovered": False,
+                    "is_mirrored": False,
+                    "is_secured": False,
+                    "from_checklist": True,
+                },
+            ]
+        }
+    )
+
+    assert "Resolved concerns: wants autonomy respected." in section
+    assert "Worried the vaccine isn't age-appropriate." in section
+    # The fully-resolved marker must not fire while something is still undiscovered.
+    assert "open concerns: none" not in section.lower()
+
+
+def test_build_reply_concern_state_section_fully_resolved_has_no_open_marker_intact():
+    """A checklist concern that's discovered AND secured must still hit the
+    existing 'open concerns: none' marker so the patient-reply fallback picks
+    the resolved-tone acknowledgement -- the new undiscovered bucket must not
+    interfere with genuinely-resolved sessions."""
+    section = AimsCoachingHandler._build_reply_concern_state_section(
+        {
+            "parent_concerns": [
+                {
+                    "topic": "trust",
+                    "canonical_label": "wants evidence addressed",
+                    "is_discovered": True,
+                    "is_mirrored": True,
+                    "is_secured": True,
+                    "from_checklist": True,
+                }
+            ]
+        }
+    )
+
+    assert "open concerns: none" in section.lower()
+
+
+def test_build_classify_checklist_context_includes_desc_not_just_bare_topic():
+    """The classifier only knows a topic's canonical meaning unless told the
+    persona's specific framing -- without desc, two closely-related concerns
+    (e.g. Ethan's trust="wants to see actual data" vs.
+    effectiveness="wants individual vs population risk data") can both read
+    as the same thing to the model. Confirmed live: without this, trust never
+    got discovered across a 7-turn conversation that repeatedly asked for
+    data, because the model had no way to distinguish it from effectiveness."""
+    context = AimsCoachingHandler._build_classify_checklist_context(
+        {
+            "parent_concerns": [
+                {
+                    "topic": "trust",
+                    "desc": "Wants to see the actual data and evidence behind the recommendation before agreeing to anything.",
+                    "is_discovered": False,
+                    "from_checklist": True,
+                },
+                {
+                    "topic": "effectiveness",
+                    "desc": "Wants to know whether the recommendation reflects his individual absolute risk.",
+                    "is_discovered": True,
+                    "from_checklist": True,
+                },
+            ]
+        }
+    )
+
+    assert "trust (not yet discovered) -- Wants to see the actual data" in context
+    assert "effectiveness (discovered) -- Wants to know whether" in context
+
+
+def test_build_classify_checklist_context_handles_missing_desc_gracefully():
+    context = AimsCoachingHandler._build_classify_checklist_context(
+        {
+            "parent_concerns": [
+                {"topic": "autonomy", "is_discovered": False, "from_checklist": True},
+            ]
+        }
+    )
+
+    assert context == "autonomy (not yet discovered)"
+
+
+def test_build_classify_checklist_context_empty_without_checklist_entries():
+    assert AimsCoachingHandler._build_classify_checklist_context({"parent_concerns": []}) == ""
+    assert AimsCoachingHandler._build_classify_checklist_context(None) == ""
+
+
+def test_append_endgame_blocked_tip_adds_important_feedback_item_when_turn_already_structured():
+    cls_payload = {
+        "step": "Secure",
+        "tips": [],
+        "feedback_items": [
+            {"step": "Secure", "tone": "praise", "code": "other", "text": "Nice work."}
+        ],
+    }
+    AimsCoachingHandler._append_endgame_blocked_tip(cls_payload)
+
+    items = cls_payload["feedback_items"]
+    assert len(items) == 2
+    new_item = next(i for i in items if i["code"] == "endgame_undiscovered_concern")
+    assert new_item["step"] == "Secure"
+    assert "anything else on your mind" in new_item["text"].lower()
+    # Legacy tips must not also be touched when the turn is already structured.
+    assert cls_payload["tips"] == []
+
+
+def test_append_endgame_blocked_tip_is_idempotent():
+    """Calling it twice (e.g. a defensive re-check) must not duplicate the tip."""
+    cls_payload = {
+        "step": "Secure",
+        "feedback_items": [{"step": "Secure", "tone": "praise", "code": "other", "text": "x"}],
+    }
+    AimsCoachingHandler._append_endgame_blocked_tip(cls_payload)
+    AimsCoachingHandler._append_endgame_blocked_tip(cls_payload)
+
+    assert sum(1 for i in cls_payload["feedback_items"] if i["code"] == "endgame_undiscovered_concern") == 1
+
+
+def test_append_endgame_blocked_tip_uses_legacy_tips_when_turn_has_no_structured_feedback():
+    """A turn where the classifier omitted the optional feedback_items field (a normal
+    occurrence, not just the dormant heuristic-fallback path) must fall back to
+    prepending coaching.tips[0] -- appending to feedback_items here would make
+    coaching_display.py silently drop this turn's own reasons/tips."""
+    cls_payload = {"step": "Secure", "reasons": ["Some existing reason."], "tips": ["Existing tip."]}
+    AimsCoachingHandler._append_endgame_blocked_tip(cls_payload)
+
+    assert cls_payload.get("feedback_items") is None
+    assert cls_payload["tips"][0].lower().startswith("this doesn't look fully resolved")
+    assert "Existing tip." in cls_payload["tips"]
+    assert cls_payload["reasons"] == ["Some existing reason."]
+
+
+def test_append_endgame_blocked_tip_legacy_path_is_idempotent():
+    cls_payload = {"step": "Secure", "tips": []}
+    AimsCoachingHandler._append_endgame_blocked_tip(cls_payload)
+    AimsCoachingHandler._append_endgame_blocked_tip(cls_payload)
+
+    assert cls_payload["tips"].count(cls_payload["tips"][0]) == 1
+
+
 def _metrics(summary=None):
     metrics = Mock()
     metrics.persist.return_value = None
@@ -590,6 +769,93 @@ async def test_handle_sets_coach_post_and_game_over_for_ethan_style_literature_f
     assert result["coach_post"]["title"] == "\U0001f389 Great job!"
     assert ctx.mem[KEY_GAME_OVER] is True
     assert ctx.mem[KEY_COACH_POST]["title"] == "\U0001f389 Great job!"
+
+
+@pytest.mark.asyncio
+async def test_handle_surfaces_important_tip_and_leaves_composer_unlocked_when_endgame_backstop_blocks(
+    monkeypatch,
+):
+    """When the Endgame backstop blocks closure (aims_endgame_service.py sets
+    endgame_blocked_undiscovered on aims_state and check() returns None, exactly like
+    any other non-endgame turn), the handler must: surface the Important tip in this
+    turn's coaching payload, and NOT set KEY_GAME_OVER / a coach_post -- a blocked
+    session must not lock the composer (this is a direct interaction with the
+    already-shipped composer-lock feature and needs its own explicit test)."""
+    feedback = _feedback()
+    endgame = Mock()
+
+    async def _blocking_check(mem, *_args, **_kwargs):
+        # Mirrors what AimsEndgameService.check() actually does on a block: mutate
+        # aims_state in place, return None like any other non-endgame turn.
+        mem[KEY_AIMS_STATE]["endgame_blocked_undiscovered"] = True
+        return None
+
+    endgame.check = AsyncMock(side_effect=_blocking_check)
+
+    turn_coordinator = Mock()
+    turn_coordinator.run = AsyncMock(
+        return_value=_turn(
+            step="Secure",
+            score=2,
+            reasons=["You offered a clear next step."],
+            tips=[],
+            patient_reply="Okay, I think I'm ready to go ahead with it.",
+            # Non-empty feedback_items so this turn is on the structured path
+            # (the common case for a live LLM turn) -- exercises
+            # _append_endgame_blocked_tip's feedback_items branch here; its
+            # legacy tips-fallback branch is covered directly in
+            # test_append_endgame_blocked_tip_uses_legacy_tips_when_turn_has_no_structured_feedback.
+            feedback_items=[
+                {"step": "Secure", "tone": "praise", "code": "clear_offer", "text": "Nice, clear offer."}
+            ],
+        )
+    )
+
+    handler = _handler(
+        classifier=Mock(),
+        patient_reply=Mock(),
+        metrics=_metrics(),
+        feedback=feedback,
+        endgame=endgame,
+        turn_coordinator=turn_coordinator,
+    )
+
+    async def fake_mapping():
+        return {}
+
+    monkeypatch.setattr(handler, "_load_aims_mapping", fake_mapping)
+
+    ctx = _basic_context()
+    ctx.mem[SESSION_HISTORY] = [
+        {"role": "user", "content": "MMR is recommended today."},
+    ]
+    ctx.mem["aims_state"] = {
+        "phase": "Secure",
+        "announced": True,
+        "is_undiscovered_concerns": True,
+        "parent_concerns": [
+            {
+                "topic": "immune_load",
+                "desc": "Worried that several vaccines at once might be too much.",
+                "is_discovered": False,
+                "is_mirrored": False,
+                "is_secured": False,
+                "from_checklist": True,
+            }
+        ],
+    }
+
+    result = await handler.handle(
+        req=Mock(headers={}),
+        body=ChatRequest(message="MMR is recommended today.", sessionId="sid", coach=True),
+        ctx=ctx,
+    )
+
+    assert "coach_post" not in result
+    assert KEY_GAME_OVER not in ctx.mem
+
+    feedback_items = result["coaching"]["feedback_items"]
+    assert any(item["code"] == "endgame_undiscovered_concern" for item in feedback_items)
 
 
 @pytest.mark.asyncio

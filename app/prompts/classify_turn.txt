@@ -6,6 +6,7 @@ Recent context:
 
 - Inquired Concerns: {inquired_concerns_list}
 - Mirrored Concerns: {mirrored_concerns_list}
+- Persona checklist (topic: discovery status) — watch for these specific topics when emitting person_events, including any not in PERSON TOPIC CATEGORIES: {checklist_context}
 - Announced: {prior_announced}
 - Phase: {prior_phase}
 
@@ -16,6 +17,7 @@ Clinician_last: {clinician_last}
 Set `person_topic` only for an active vaccine concern in Person_last.
 Use `null` for acceptance/closure language, including agreeing to take written information home, read it over, process it, or schedule/attend a follow-up, unless the person also raises a distinct new concern in the same reply.
 Use `disease_risk` when the person says the disease feels gone, historical, rare, abstract, unlikely to affect their child, or not a real present-day threat. Do NOT force this into `effectiveness` unless they doubt that the vaccine itself works.
+Use `evidence` when the person asks to see the underlying data, methodology, absolute-vs-relative risk figures, or transparency about uncertainty — a calculation-oriented request for rigor. Use `trust` only when they express distrust of the source itself (clinicians, pharma, public health, or "what they've heard"). Do NOT force a data/methodology request into `trust` merely because it involves evidence or studies.
 
 ### OPTIONAL SEMANTIC FIELDS
 When the signal is clear, include `person_events`, `aims.observations`, `aims.feedback_items`, and `resolution`.
@@ -32,7 +34,7 @@ If unsure, omit the optional field rather than guessing.
 {{
   "is_small_talk": (boolean),
   "is_vaccine_relevant": (boolean),
-  "person_topic": (autism | immune_load | side_effects | ingredients | schedule_timing | disease_risk | effectiveness | trust | autonomy | null),
+  "person_topic": (autism | immune_load | side_effects | ingredients | schedule_timing | disease_risk | effectiveness | trust | evidence | autonomy | requirements | null),
   "person_events": [
     {{"event_type": "concern_raised|concern_renewed|no_active_concern|concern_mirrored|concern_secured", "topic": "topic|null", "target_concern_id": "id|null", "evidence_spans": ["short source phrase"], "confidence": "high|medium|low"}}
   ],

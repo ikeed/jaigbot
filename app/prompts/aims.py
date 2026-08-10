@@ -61,6 +61,7 @@ def build_classify_turn_prompt(
     recent_context: str = "",
     inquired_concerns_list: List[str] = None,
     mirrored_concerns_list: List[str] = None,
+    checklist_context: str | None = None,
 ) -> str:
     """Render the lean per-turn classification prompt.
 
@@ -77,6 +78,7 @@ def build_classify_turn_prompt(
         recent_context=recent_context or "(none — first turn)",
         inquired_concerns_list=", ".join(inquired_concerns_list or []),
         mirrored_concerns_list=", ".join(mirrored_concerns_list or []),
+        checklist_context=checklist_context or "(no persona checklist)",
     )
 
 

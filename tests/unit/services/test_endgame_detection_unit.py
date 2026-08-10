@@ -407,6 +407,7 @@ def test_classifier_not_resolved_resolution_does_not_skip_post_reply_acceptance(
 
     assert result is not None
     assert result["lines"][0] == "**Outcome:** Sarah agreed to vaccinate today."
+    assert result["outcome"] == "accepted_vaccine"
     assert mock_svc.calls == 1
 
 
@@ -747,6 +748,19 @@ def test_accepted_literature_succeeds_despite_undiscovered_concerns_flag():
     volunteered a concern unprompted and it had been fully addressed. That made closure
     structurally impossible for any conversation where the person raised their own concerns
     without the clinician ever being classified with an Inquire step.
+
+    Note (concern-checklist feature): is_undiscovered_concerns's *computation* changed
+    from "did the clinician ever get classified with an Inquire step" (a proxy
+    disconnected from whether concerns were actually resolved -- the old bug) to a
+    precise per-concern is_discovered check, scoped to persona-checklist entries only
+    (AimsStateService._recompute_undiscovered_concerns). A session with no checklist
+    entries and one fully mirrored+secured concern now correctly computes False, not a
+    stale True -- this fixture reflects that (a hardcoded True here, with no
+    from_checklist entries and a resolved concern, is a state the real pipeline can no
+    longer produce, and the new Endgame backstop in aims_endgame_service.py would
+    otherwise legitimately block it). The original regression this test protects
+    against -- an unprompted, fully-addressed concern must not block closure -- is
+    still covered by an accurate flag rather than by the flag being ignored.
     """
     mock_svc = _MockClassifierService(
         {
@@ -768,7 +782,7 @@ def test_accepted_literature_succeeds_despite_undiscovered_concerns_flag():
             "aims_state": {
                 "phase": "Secure",
                 "announced": True,
-                "is_undiscovered_concerns": True,
+                "is_undiscovered_concerns": False,
                 "parent_concerns": [
                     {
                         "id": "requirements",
@@ -835,6 +849,193 @@ def test_deferred_outcome_does_not_trigger_endgame():
     service = _make_endgame_service(mock_svc)
     result = _run(service.check(store["s11"], {}, None, "s11"))
     assert result is None, "Deferred should no longer trigger endgame"
+
+
+# ---------------------------------------------------------------------------
+# Tests — concern-checklist Endgame backstop (Step 6)
+# ---------------------------------------------------------------------------
+
+def _checklist_state(*, is_undiscovered: bool, phase: str = "Secure") -> dict:
+    return {
+        "phase": phase,
+        "announced": True,
+        "is_undiscovered_concerns": is_undiscovered,
+        "parent_concerns": [
+            {
+                "topic": "immune_load",
+                "desc": "Worried that several vaccines at once might be too much.",
+                "is_discovered": not is_undiscovered,
+                "is_mirrored": not is_undiscovered,
+                "is_secured": not is_undiscovered,
+                "from_checklist": True,
+            }
+        ],
+    }
+
+
+def test_backstop_blocks_accepted_vaccine_while_checklist_concern_undiscovered():
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_vaccine",
+            "summary": "Person agreed to vaccinate today.",
+            "reason": "",
+        }
+    )
+    store = {
+        "s12a": {
+            "history": [
+                {"role": "user", "content": "MMR is recommended today."},
+                {"role": "assistant", "content": "Okay, let's go ahead."},
+            ],
+            "aims_state": _checklist_state(is_undiscovered=True),
+        }
+    }
+    service = _make_endgame_service(mock_svc, heuristic_fallback_enabled=False)
+    result = _run(service.check(store["s12a"], {}, None, "s12a"))
+    assert result is None
+    assert store["s12a"]["aims_state"]["endgame_blocked_undiscovered"] is True
+
+
+def test_backstop_blocks_accepted_literature_while_checklist_concern_undiscovered():
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_literature",
+            "summary": "Person accepted information and follow-up.",
+            "reason": "",
+            "accepted_materials": True,
+            "accepted_followup": True,
+            "remaining_active_concern": False,
+        }
+    )
+    store = {
+        "s12b": {
+            "history": [
+                {"role": "user", "content": "I'll print that information and we can follow up."},
+                {"role": "assistant", "content": "That sounds good, I'll read it over."},
+            ],
+            "aims_state": _checklist_state(is_undiscovered=True),
+        }
+    }
+    service = _make_endgame_service(mock_svc, heuristic_fallback_enabled=False)
+    result = _run(service.check(store["s12b"], {}, None, "s12b"))
+    assert result is None
+    assert store["s12b"]["aims_state"]["endgame_blocked_undiscovered"] is True
+
+
+def test_backstop_does_not_block_when_all_checklist_concerns_discovered():
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_vaccine",
+            "summary": "Person agreed to vaccinate today.",
+            "reason": "",
+        }
+    )
+    store = {
+        "s12c": {
+            "history": [
+                {"role": "user", "content": "MMR is recommended today."},
+                {"role": "assistant", "content": "Okay, let's go ahead."},
+            ],
+            "aims_state": _checklist_state(is_undiscovered=False),
+        }
+    }
+    service = _make_endgame_service(mock_svc, heuristic_fallback_enabled=False)
+    result = _run(service.check(store["s12c"], {}, None, "s12c"))
+    assert result is not None
+    assert store["s12c"]["aims_state"]["endgame_blocked_undiscovered"] is False
+
+
+def test_backstop_does_not_apply_to_deferred_outcome():
+    """Undiscovered concerns must not turn a deferred resolution into a block-vs-close
+    decision -- deferred is already excluded from endgame regardless."""
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "deferred",
+            "summary": "Person deferred to a later date.",
+            "reason": "",
+        }
+    )
+    store = {
+        "s12d": {
+            "history": [
+                {"role": "user", "content": "We can discuss more at your next visit."},
+                {"role": "assistant", "content": "Yes, I would like more time to think."},
+            ],
+            "aims_state": _checklist_state(is_undiscovered=True),
+        }
+    }
+    service = _make_endgame_service(mock_svc, heuristic_fallback_enabled=False)
+    result = _run(service.check(store["s12d"], {}, None, "s12d"))
+    assert result is None
+    assert store["s12d"]["aims_state"]["endgame_blocked_undiscovered"] is False
+
+
+def test_backstop_does_not_apply_to_not_resolved_outcome():
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": False,
+            "resolution_type": "not_resolved",
+            "summary": "",
+            "reason": "",
+        }
+    )
+    store = {
+        "s12e": {
+            "history": [
+                {"role": "user", "content": "MMR is recommended today."},
+                {"role": "assistant", "content": "I'm still thinking about it."},
+            ],
+            "aims_state": _checklist_state(is_undiscovered=True),
+        }
+    }
+    service = _make_endgame_service(mock_svc, heuristic_fallback_enabled=False)
+    result = _run(service.check(store["s12e"], {}, None, "s12e"))
+    assert result is None
+    assert store["s12e"]["aims_state"]["endgame_blocked_undiscovered"] is False
+
+
+def test_backstop_ignores_ad_hoc_concerns_not_on_the_checklist():
+    """An ad-hoc (non-checklist) unmirrored/unsecured concern must not factor into the
+    backstop -- only from_checklist entries matter, and is_undiscovered_concerns is
+    already correctly scoped to those (AimsStateService._recompute_undiscovered_concerns)."""
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_vaccine",
+            "summary": "Person agreed to vaccinate today.",
+            "reason": "",
+        }
+    )
+    store = {
+        "s12f": {
+            "history": [
+                {"role": "user", "content": "MMR is recommended today."},
+                {"role": "assistant", "content": "Okay, let's go ahead."},
+            ],
+            "aims_state": {
+                "phase": "Secure",
+                "announced": True,
+                "is_undiscovered_concerns": False,
+                "parent_concerns": [
+                    {
+                        "topic": "side_effects",
+                        "desc": "worried about a rash",
+                        "is_discovered": True,
+                        "is_mirrored": True,
+                        "is_secured": True,
+                    }
+                ],
+            },
+        }
+    }
+    service = _make_endgame_service(mock_svc, heuristic_fallback_enabled=False)
+    result = _run(service.check(store["s12f"], {}, None, "s12f"))
+    assert result is not None
+    assert store["s12f"]["aims_state"]["endgame_blocked_undiscovered"] is False
 
 
 # ---------------------------------------------------------------------------

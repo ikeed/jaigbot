@@ -120,3 +120,27 @@ def test_model_generated_mirror_tip_is_treated_as_important_regardless_of_code()
 
     assert mirror_pos < other_pos
     assert text.index("Important:") < text.index("Tip:")
+
+
+def test_endgame_undiscovered_concern_code_is_treated_as_important():
+    """The concern-checklist Endgame backstop's tip (aims_coaching_handler.py's
+    _append_endgame_blocked_tip) must render as Important, not a plain Tip."""
+    text = coaching_summary_text(
+        {
+            "step": "Secure",
+            "score": 2,
+            "reasons": [],
+            "tips": [],
+            "feedback_items": [
+                {
+                    "step": "Secure",
+                    "tone": "improvement",
+                    "code": "endgame_undiscovered_concern",
+                    "text": "This doesn't look fully resolved yet.",
+                },
+            ],
+        }
+    )
+
+    assert "Important:" in text
+    assert "Tip:" not in text

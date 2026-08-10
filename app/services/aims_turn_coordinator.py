@@ -55,6 +55,7 @@ class AimsTurnCoordinator:
         scene: str | None,
         clinician_name: str | None,
         concern_state_section: str | None = None,
+        checklist_context: str | None = None,
     ) -> AimsTurnResult:
         _ = max_concerns
         task_cls = asyncio.create_task(
@@ -63,7 +64,8 @@ class AimsTurnCoordinator:
                                                    prior_phase=prior_phase, mapping=mapping,
                                                    context_turns=context_turns,
                                                    inquired_concerns_list=inquired_concerns_list,
-                                                   mirrored_concerns_list=mirrored_concerns_list)
+                                                   mirrored_concerns_list=mirrored_concerns_list,
+                                                   checklist_context=checklist_context)
         )
         task_reply = asyncio.create_task(
             self._patient_reply_service.generate(

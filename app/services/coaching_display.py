@@ -17,6 +17,7 @@ DEFAULT_PRAISE_LABELS = [
 
 IMPORTANT_FEEDBACK_CODES = {
     "secure_before_mirror",
+    "endgame_undiscovered_concern",
 }
 CLASSIFICATION_UNAVAILABLE_CODE = "classification_unavailable"
 _MIRROR_KEYWORDS = tuple(

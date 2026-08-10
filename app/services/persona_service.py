@@ -29,6 +29,13 @@ FALLBACK_PERSONA = {
         "detailed_instructions": "Assure her of vaccine safety.",
         "user_sketch": "You are at the clinic for a well-baby checkup.",
     },
+    "concerns": [
+        {
+            "id": "immune_load",
+            "topic": "immune_load",
+            "desc": "Worried that several vaccines at once might be too much for her baby to handle.",
+        },
+    ],
 }
 
 
@@ -300,5 +307,6 @@ def build_persona_session_fields(persona: dict) -> dict:
             "id": persona.get("id"),
             "name": persona.get("name"),
             "patient_name": persona.get("patient_name"),
+            "concerns": persona.get("concerns") or [],
         },
     }
