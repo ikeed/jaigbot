@@ -118,14 +118,18 @@ def test_ui_handler_format_coach_message():
     # Pipe delimited
     input_text = "Step 1 | Feedback here | Tip here"
     formatted = ui.format_coach_message(input_text)
-    assert "**Summary**" in formatted
-    assert "- Step 1" in formatted
-    assert "- Feedback here" in formatted
+    assert 'class="aims-scenario-briefing"' in formatted
+    assert '<div class="aims-scenario-title aims-summary-title">Final Summary</div>' in formatted
+    assert '<div class="aims-scenario-line">Step 1</div>' in formatted
+    assert '<div class="aims-scenario-line">Feedback here</div>' in formatted
 
     # Scenario complete
     input_text = "Scenario complete | Good job"
     formatted = ui.format_coach_message(input_text)
-    assert "**Scenario complete**" in formatted
+    assert (
+        '<div class="aims-scenario-title aims-summary-title">Scenario complete</div>'
+        in formatted
+    )
 
 
 def test_ui_handler_format_coach_message_filters_phase_and_empty_values():
@@ -136,10 +140,10 @@ def test_ui_handler_format_coach_message_filters_phase_and_empty_values():
     )
 
     assert "Conversation phase" not in formatted
-    assert "**Summary**" in formatted
-    assert "Announce:" in formatted
+    assert '<div class="aims-scenario-title aims-summary-title">Final Summary</div>' in formatted
+    assert "<strong>Announce:</strong>" in formatted
     assert "Legacy:" not in formatted
-    assert "- Tip: Ask an open question" in formatted
+    assert '<div class="aims-scenario-line">Tip: Ask an open question</div>' in formatted
     assert ui.format_coach_message("   ") == ""
 
 
@@ -366,8 +370,11 @@ async def test_ui_handler_send_helpers_use_expected_chainlit_calls():
     assert "aims-scenario-briefing" in mock_msg_cls.call_args_list[0].kwargs["content"]
     assert mock_msg_cls.call_args_list[1].args == ("Problem",)
     assert mock_msg_cls.call_args_list[2].args == ("Hello",)
-    assert "**Summary**" in mock_msg_cls.call_args_list[3].kwargs["content"]
-    assert "Announce:" in mock_msg_cls.call_args_list[3].kwargs["content"]
+    assert (
+        '<div class="aims-scenario-title aims-summary-title">Final Summary</div>'
+        in mock_msg_cls.call_args_list[3].kwargs["content"]
+    )
+    assert "<strong>Announce:</strong>" in mock_msg_cls.call_args_list[3].kwargs["content"]
     assert "Legacy:" not in mock_msg_cls.call_args_list[3].kwargs["content"]
     assert "**Coaching**" in mock_msg_cls.call_args_list[4].kwargs["content"]
     assert "Announce:" in mock_msg_cls.call_args_list[4].kwargs["content"]
