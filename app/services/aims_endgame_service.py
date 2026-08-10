@@ -316,7 +316,7 @@ class AimsEndgameService:
             if llm_commentary:
                 lines.extend(llm_commentary)
 
-            return {"title": title, "lines": lines}
+            return {"title": title, "lines": lines, "outcome": outcome}
 
         except Exception as e:
             self._logger.exception("LLM endgame detection failed: %s", e)

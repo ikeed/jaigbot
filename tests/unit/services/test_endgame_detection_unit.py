@@ -407,6 +407,7 @@ def test_classifier_not_resolved_resolution_does_not_skip_post_reply_acceptance(
 
     assert result is not None
     assert result["lines"][0] == "**Outcome:** Sarah agreed to vaccinate today."
+    assert result["outcome"] == "accepted_vaccine"
     assert mock_svc.calls == 1
 
 
