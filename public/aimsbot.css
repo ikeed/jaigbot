@@ -511,6 +511,13 @@ img[alt="AIMSBot"] {
   height: 192px !important;
 }
 
+/* "Loading your scenario…" chat-profile icon (public/avatars/spinner.svg),
+   rendered by Chainlit at a fixed h-16 w-16 (64px) - shrink from that. */
+img[src*="avatars/spinner.svg"] {
+  width: 44px !important;
+  height: 44px !important;
+}
+
 #new-chat-button {
   width: auto !important;
   padding-right: 12px !important;
