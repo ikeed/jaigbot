@@ -70,14 +70,15 @@ class AimsStateService:
             return
 
         try:
+            seeded_concerns = self._seed_parent_concerns(mem)
             state = mem.setdefault(
                 KEY_AIMS_STATE,
                 {
                     "announced": False,
                     "phase": PHASE_PRE_ANNOUNCE,
-                    "is_undiscovered_concerns": True,
+                    "is_undiscovered_concerns": bool(seeded_concerns),
                     "pending_concerns": True,
-                    "parent_concerns": [],
+                    "parent_concerns": seeded_concerns,
                 },
             )
             step_main = cls_payload.get("step")
@@ -94,12 +95,6 @@ class AimsStateService:
                 and "concern_presence" not in handled_events
             ):
                 maybe_add_person_concern(state, person_last, self.TOPICAL_CUES, llm_topic)
-
-            if state.get("parent_concerns"):
-                # A concern surfacing at all — whether the clinician drew it out with an
-                # Inquire, or the person volunteered it unprompted — means it's no longer
-                # undiscovered. See update_observational_state for the Inquire-turn trigger.
-                state["is_undiscovered_concerns"] = False
 
             if (
                 self._heuristic_fallback_enabled
@@ -120,6 +115,8 @@ class AimsStateService:
             ):
                 mark_secured_by_topic(state, clinician_message, self.secure_topical_cues())
 
+            self._recompute_undiscovered_concerns(state)
+
             character = mem.get(SESSION_CHARACTER)
             self.apply_coaching_guidance(
                 cls_payload,
@@ -129,6 +126,7 @@ class AimsStateService:
                 person_last,
                 character=character,
             )
+            self._apply_inquire_nudge(cls_payload, state, steps)
 
             self.update_observational_state(state, step_main, steps)
             cls_payload["phase"] = state.get("phase")
@@ -136,6 +134,96 @@ class AimsStateService:
 
         except Exception as e:
             self._logger.exception("AIMS state update failed: %s", e)
+
+    @staticmethod
+    def _seed_parent_concerns(mem: dict[str, Any] | None) -> list[dict[str, Any]]:
+        """Pre-seed parent_concerns from the persona's static checklist.
+
+        Each entry is tagged from_checklist=True so the Endgame backstop and
+        Inquire nudge only ever reason about the persona's own known concerns,
+        never about ad-hoc concerns _apply_concern_presence_event creates
+        organically from unrecognized topics.
+        """
+        persona = (mem or {}).get("persona") or {}
+        concerns = persona.get("concerns") or []
+        seeded: list[dict[str, Any]] = []
+        for concern in concerns:
+            if not isinstance(concern, dict):
+                continue
+            topic = concern.get("topic")
+            if not topic:
+                continue
+            seeded.append(
+                {
+                    "topic": topic,
+                    "desc": concern.get("desc") or "",
+                    "is_discovered": False,
+                    "is_mirrored": False,
+                    "is_secured": False,
+                    "from_checklist": True,
+                }
+            )
+        return seeded
+
+    @staticmethod
+    def _recompute_undiscovered_concerns(state: dict[str, Any]) -> None:
+        """Recompute is_undiscovered_concerns from the checklist's own state.
+
+        Scoped to from_checklist=True entries only - an ad-hoc concern the
+        classifier invents for an unrecognized topic must never factor into
+        this (see _apply_concern_presence_event's unknown-topic handling).
+
+        Sessions with no checklist at all (no persona data, e.g. a custom
+        character outside the persona system) have zero from_checklist
+        entries - fall back to the pre-checklist behavior for those (true
+        until any concern at all has been captured) rather than reading an
+        empty checklist as "definitely nothing to discover."
+        """
+        concerns = state.get("parent_concerns") or []
+        checklist_concerns = [c for c in concerns if c.get("from_checklist")]
+        if checklist_concerns:
+            state["is_undiscovered_concerns"] = any(
+                not concern.get("is_discovered") for concern in checklist_concerns
+            )
+        else:
+            state["is_undiscovered_concerns"] = not bool(concerns)
+
+    def _apply_inquire_nudge(
+        self,
+        cls_payload: dict[str, Any],
+        state: dict[str, Any],
+        steps: list[str],
+    ) -> None:
+        """Mid-conversation Tip: nudge toward Inquire after 2 Secure turns in a row.
+
+        Plain global integer counter (deliberately NOT secure_before_mirror's
+        topic-keyed recent_coaching mechanism - this tracks the clinician's
+        overall behavior, not a specific concern). Increments on any turn with
+        STEP_SECURE present, resets to 0 on any turn with STEP_INQUIRE present
+        (both including compounds), left unchanged on a turn with neither.
+        Fires the same flat text every qualifying turn - no escalation tiers,
+        unlike secure_before_mirror.
+        """
+        counter = int(state.get("secure_since_inquire_count", 0) or 0)
+        if STEP_INQUIRE in steps:
+            counter = 0
+        elif STEP_SECURE in steps:
+            counter += 1
+        state["secure_since_inquire_count"] = counter
+
+        if counter < 2 or not state.get("is_undiscovered_concerns"):
+            return
+
+        text = message("state_feedback.inquire_nudge_tip")
+        if self._has_structured_feedback(cls_payload):
+            self._append_feedback_item(
+                cls_payload,
+                step=STEP_INQUIRE,
+                code="inquire_nudge",
+                text=text,
+            )
+        else:
+            cls_payload.setdefault("tips", []).append(text)
 
     @classmethod
     def component_steps(cls, step_current: str | None, steps: list[str] | None = None) -> list[str]:
@@ -227,7 +315,19 @@ class AimsStateService:
             and step_current != STEP_SECURE
         ):
             mark_secured_by_topic(state, clinician_message, self.secure_topical_cues())
-        elif step_current == STEP_SECURE:
+        elif STEP_SECURE in component_steps and STEP_MIRROR not in component_steps:
+            # Exact-match on step_current == STEP_SECURE used to skip this
+            # entirely for compound steps (Secure+Inquire, Mirror+Secure,
+            # Mirror+Secure+Inquire) even though component_steps was already
+            # computed above for exactly this purpose. Secure+Inquire has no
+            # mirror this turn, so the check should apply exactly like plain
+            # Secure. Mirror+Secure(+Inquire) DO have a same-turn mirror --
+            # excluded deliberately, not just because _has_material_unmirrored_concern
+            # would self-correct for the just-mirrored concern (it would,
+            # since mirror events are applied earlier in update()), but
+            # because flagging "secure before mirror" in the same breath as
+            # a mirror the clinician just did reads as contradictory
+            # feedback, even when it's technically about a different concern.
             self._apply_secure_guidance(
                 cls_payload,
                 state,
@@ -589,7 +689,11 @@ class AimsStateService:
             in (STEP_INQUIRE, STEP_ANNOUNCE_INQUIRE, STEP_MIRROR_INQUIRE, STEP_SECURE_INQUIRE)
             or STEP_INQUIRE in all_steps
         ):
-            state["is_undiscovered_concerns"] = False
+            # Discovery is driven exclusively by per-concern matching in
+            # _apply_concern_presence_event (via _recompute_undiscovered_concerns,
+            # called before this runs), not by step classification alone - an
+            # Inquire-classified turn that doesn't happen to elicit any checklist
+            # item must not be treated as having discovered one.
             state["phase"] = PHASE_INQUIRE_MIRROR
         elif step_current == STEP_MIRROR_SECURE:
             concerns = state.get("parent_concerns") or []

@@ -108,7 +108,14 @@ class TestAnnounceInquireNormalization:
 class TestObservationalStateAnnounceInquire:
 
     def test_announce_inquire_sets_announced_and_inquire(self):
-        """Announce+Inquire should set announced=True and is_undiscovered_concerns=False."""
+        """Announce+Inquire should set announced=True and transition the phase.
+
+        `is_undiscovered_concerns` is no longer flipped by step classification
+        alone (concern-checklist feature) — it's recomputed from per-concern
+        `is_discovered` state via `AimsStateService._recompute_undiscovered_concerns`,
+        exercised in `test_aims_state_service.py`. `update_observational_state`
+        in isolation must leave the flag untouched.
+        """
         state = {
             "announced": False,
             "phase": "PreAnnounce",
@@ -119,7 +126,7 @@ class TestObservationalStateAnnounceInquire:
             state, "Announce+Inquire", ["Announce", "Inquire"]
         )
         assert state["announced"] is True
-        assert state["is_undiscovered_concerns"] is False
+        assert state["is_undiscovered_concerns"] is True
         assert state["phase"] == "InquireMirror"
 
 

@@ -2,6 +2,7 @@ import json
 import logging
 import datetime
 import subprocess
+import time
 from typing import Dict, Any, Iterable, Optional
 from google.cloud import storage
 from app.config import settings
@@ -15,6 +16,9 @@ try:
 except Exception as exc:
     logger.debug("Git hash lookup failed: %s", exc)
     GIT_HASH = "unknown"
+
+# Cap on entries kept in a user's persona index (see _record_persona_index_entry).
+PERSONA_INDEX_MAX_ENTRIES = 200
 
 class StorageService:
     """
@@ -83,8 +87,16 @@ class StorageService:
             payload = json.dumps(archive_data, indent=2)
             logger.info(f"Attempting GCS upload to bucket='{target_bucket_name}' path='{path}'")
             blob.upload_from_string(payload, content_type="application/json")
-            
+
             logger.info(f"Successfully archived session {session_id} for user {user_id} to {path}")
+
+            # The persona index always lives in the sessions bucket (see
+            # _persona_index_path / self.bucket), independent of is_report -
+            # reports upload their full transcript to a separate reports
+            # bucket, but a reported session is still a real persona
+            # interaction (with outcome "bug_report") worth indexing.
+            self._record_persona_index_entry(user_id, session_id, archive_data)
+
             return True
         except Exception as upload_exc:
             logger.error(f"Failed to upload session {session_id} to GCS: {upload_exc}", exc_info=True)
@@ -244,12 +256,102 @@ class StorageService:
             logger.error(f"Failed to download session {session_id} from GCS: {download_exc}")
             return None
 
+    def _persona_index_path(self, user_id: str) -> str:
+        return settings.gcs_path("sessions/v1", f"user_id={user_id}", "_persona_index.json")
+
+    @staticmethod
+    def _derive_index_outcome(archive_data: Dict[str, Any]) -> Optional[str]:
+        """Map the archive's exit/resolution info down to one of
+        "bug_report" | "vaccination" | "literature", or None when the
+        session never reached one of those resolutions (e.g. abandoned)."""
+        exit_context = (((archive_data.get("metadata") or {}).get("outcome") or {}).get("exitContext"))
+        if exit_context == "bug_report":
+            return "bug_report"
+        resolution_type = ((archive_data.get("analytics") or {}).get("summary") or {}).get("outcome")
+        if resolution_type == "accepted_vaccine":
+            return "vaccination"
+        if resolution_type == "accepted_literature":
+            return "literature"
+        return None
+
+    @staticmethod
+    def _build_persona_index_entry(session_id: str, persona_name: str, archive_data: Dict[str, Any]) -> Dict[str, Any]:
+        transcript = archive_data.get("transcript") or []
+        number_of_turns = sum(
+            1 for entry in transcript if isinstance(entry, dict) and entry.get("role") == ROLE_USER
+        )
+
+        running_average = ((archive_data.get("analytics") or {}).get("aims") or {}).get("runningAverage") or {}
+        try:
+            from app.services.coach_post import _overall_score_pct
+            overall_score = _overall_score_pct(running_average) if isinstance(running_average, dict) else None
+        except Exception:
+            overall_score = None
+
+        return {
+            "persona": str(persona_name),
+            "session_id": session_id,
+            "number_of_turns": number_of_turns,
+            "outcome": StorageService._derive_index_outcome(archive_data),
+            "overall_score": overall_score,
+            "announce_score": running_average.get("Announce") if isinstance(running_average, dict) else None,
+            "inquire_score": running_average.get("Inquire") if isinstance(running_average, dict) else None,
+            "mirror_score": running_average.get("Mirror") if isinstance(running_average, dict) else None,
+            "secure_score": running_average.get("Secure") if isinstance(running_average, dict) else None,
+            "ts": time.time(),
+        }
+
+    def _record_persona_index_entry(self, user_id: str, session_id: str, archive_data: Dict[str, Any]) -> None:
+        """
+        Best-effort append to a small per-user persona index, so
+        count_personas_for_user can read one small object on a cache miss
+        instead of listing and downloading every archived session transcript
+        for that user. Failures here must never affect upload_session's
+        return value, since the session archive itself already succeeded.
+        """
+        try:
+            from app.services.persona_service import extract_persona_name_from_archive
+            persona_name = extract_persona_name_from_archive(archive_data)
+            if not persona_name:
+                return
+
+            bucket = self.bucket
+            if not bucket:
+                return
+
+            path = self._persona_index_path(user_id)
+            blob = bucket.blob(path)
+            try:
+                existing = json.loads(blob.download_as_string())
+            except Exception:
+                existing = None
+            entries = existing.get("entries") if isinstance(existing, dict) else None
+            if not isinstance(entries, list):
+                entries = []
+
+            entries.append(self._build_persona_index_entry(session_id, persona_name, archive_data))
+            if len(entries) > PERSONA_INDEX_MAX_ENTRIES:
+                entries = entries[-PERSONA_INDEX_MAX_ENTRIES:]
+
+            blob.upload_from_string(json.dumps({"entries": entries}), content_type="application/json")
+        except Exception as index_exc:
+            logger.debug("Failed to update persona index for user %s: %s", user_id, index_exc)
+
     def count_personas_for_user(self, user_id: str, persona_names: Iterable[str]) -> Dict[str, int]:
         """
         Count archived sessions by persona for one user in the current APP_ENV.
 
-        This is a backfill/source-of-truth path for the Redis persona-count cache,
-        so failures return zero counts rather than blocking scenario startup.
+        Reads the small per-user persona index maintained by
+        _record_persona_index_entry instead of listing and downloading every
+        archived session transcript, so this stays cheap enough to run
+        synchronously on a Redis persona-count cache miss (e.g. right after a
+        local memory-store restart, or for any user with many archived
+        sessions). Users archived before this index existed will read as
+        zero counts until they get new sessions - that's an acceptable
+        cold-start rather than backfilling via the full scan this replaces.
+        This is a backfill/source-of-truth path for the Redis persona-count
+        cache, so failures return zero counts rather than blocking scenario
+        startup.
         """
         counts = {str(name): 0 for name in persona_names}
         if not self.bucket_name or not user_id:
@@ -259,34 +361,17 @@ class StorageService:
         if not bucket:
             return counts
 
-        prefixes = [settings.gcs_path("sessions/v1", f"user_id={user_id}") + "/"]
-        if settings.APP_ENV == "prod":
-            prefixes.append(f"sessions/v1/user_id={user_id}/")
-
         try:
-            from app.services.persona_service import extract_persona_name_from_archive
-
-            logger.info("Starting GCS persona count for user %s", user_id)
-            count = 0
-            for prefix in prefixes:
-                for blob in self.client.list_blobs(self.bucket_name, prefix=prefix):
-                    count += 1
-                    if count > 100: # Safety cap
-                        logger.warning("User %s has >100 sessions, capping count", user_id)
-                        break
-                    if not str(getattr(blob, "name", "")).endswith(".json"):
-                        continue
-                    try:
-                        data = json.loads(blob.download_as_string())
-                    except Exception as blob_exc:
-                        logger.debug("Failed to download or parse blob %s: %s", getattr(blob, "name", "unknown"), blob_exc)
-                        continue
-                    persona_name = extract_persona_name_from_archive(data)
-                    if persona_name in counts:
-                        counts[persona_name] += 1
-            logger.info("Finished GCS persona count for user %s. Processed %d blobs.", user_id, count)
+            blob = bucket.blob(self._persona_index_path(user_id))
+            data = json.loads(blob.download_as_string())
+            entries = data.get("entries") if isinstance(data, dict) else None
+            if isinstance(entries, list):
+                for entry in entries:
+                    name = entry.get("persona") if isinstance(entry, dict) else None
+                    if name in counts:
+                        counts[name] += 1
         except Exception as count_exc:
-            logger.warning("Failed to count personas for user %s from GCS: %s", user_id, count_exc)
+            logger.debug("No persona index available for user %s (or failed to read it): %s", user_id, count_exc)
         return counts
 
 # Global instance

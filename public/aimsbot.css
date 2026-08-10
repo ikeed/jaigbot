@@ -383,6 +383,10 @@ body.aimsbot-shell .aimsbot-message-list {
   content: "📋 ";
 }
 
+.aims-scenario-title.aims-summary-title::before {
+  content: none;
+}
+
 .aims-scenario-line {
   margin-bottom: 0.45rem !important;
   color: #334155 !important;
@@ -505,6 +509,13 @@ body.aimsbot-shell .aimsbot-message-list {
 img[alt="AIMSBot"] {
   width: 192px !important;
   height: 192px !important;
+}
+
+/* "Loading your scenario…" chat-profile icon (public/avatars/spinner.svg),
+   rendered by Chainlit at a fixed h-16 w-16 (64px) - shrink from that. */
+img[src*="avatars/spinner.svg"] {
+  width: 44px !important;
+  height: 44px !important;
 }
 
 #new-chat-button {

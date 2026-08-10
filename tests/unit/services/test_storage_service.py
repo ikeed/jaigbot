@@ -45,12 +45,18 @@ def test_storage_service_upload_path(mock_storage_client):
 
 def test_storage_service_structured_archive(mock_storage_client):
     service = StorageService(bucket_name="test-bucket")
-    
+
     mock_bucket = MagicMock()
     mock_blob = MagicMock()
+    mock_index_blob = MagicMock()
+    mock_index_blob.download_as_string.side_effect = ValueError("no index yet")
     service._bucket = mock_bucket
-    mock_bucket.blob.return_value = mock_blob
-    
+
+    def _blob_side_effect(path):
+        return mock_index_blob if path.endswith("_persona_index.json") else mock_blob
+
+    mock_bucket.blob.side_effect = _blob_side_effect
+
     session_data = {
         "session_started": 1716000000.0,
         "updated": 1716000500.0,
@@ -114,6 +120,23 @@ def test_storage_service_structured_archive(mock_storage_client):
     assert payload["metadata"]["outcome"]["exitContext"] == "completion"
     assert payload["config"]["persona"]["id"] == 99
     assert payload["config"]["persona"]["name"] == "Test Persona"
+
+    # Verify the persona index was updated with this session's persona and stats
+    mock_bucket.blob.assert_any_call("env=local/sessions/v1/user_id=uid@example.com/_persona_index.json")
+    index_args, _ = mock_index_blob.upload_from_string.call_args
+    index_payload = json.loads(index_args[0])
+    assert index_payload["entries"] == [{
+        "persona": "Test Persona",
+        "session_id": "sid",
+        "number_of_turns": 1,
+        "outcome": None,
+        "overall_score": 25,
+        "announce_score": 3.0,
+        "inquire_score": None,
+        "mirror_score": None,
+        "secure_score": None,
+        "ts": index_payload["entries"][0]["ts"],
+    }]
 def test_storage_service_duration_calculation_edge_cases():
     """Test that _transform_to_logical_schema handles duration calculation edge cases."""
     service = StorageService(bucket_name="test-bucket")
@@ -219,40 +242,129 @@ def test_storage_service_download_session_returns_none_on_blob_error():
     assert service.download_session("sid", "uid") is None
 
 
-def test_storage_service_count_personas_handles_blob_parse_errors_and_cap(monkeypatch):
+def test_storage_service_count_personas_reads_index(monkeypatch):
     service = StorageService(bucket_name="test-bucket")
-    service._bucket = MagicMock()
-
-    bad_blob = MagicMock(name="bad_blob")
-    bad_blob.name = "bad.json"
-    bad_blob.download_as_string.side_effect = ValueError("bad json")
-
-    ignored_blob = MagicMock(name="ignored_blob")
-    ignored_blob.name = "notes.txt"
-
-    good_blob = MagicMock(name="good_blob")
-    good_blob.name = "good.json"
-    good_blob.download_as_string.return_value = b'{"persona": {"name": "Jasmine"}}'
-
-    client = MagicMock()
-    client.list_blobs.return_value = [bad_blob, ignored_blob, good_blob]
-    service._client = client
-    monkeypatch.setattr(
-        "app.services.persona_service.extract_persona_name_from_archive",
-        lambda data: data.get("persona", {}).get("name"),
-    )
+    bucket = MagicMock()
+    index_blob = MagicMock()
+    index_blob.download_as_string.return_value = json.dumps({
+        "entries": [
+            {"persona": "Jasmine", "ts": 1.0},
+            {"persona": "Jasmine", "ts": 2.0},
+            {"persona": "Unknown Persona", "ts": 3.0},
+        ]
+    }).encode("utf-8")
+    bucket.blob.return_value = index_blob
+    service._bucket = bucket
 
     assert service.count_personas_for_user("uid", ["Jasmine", "Sophia"]) == {
-        "Jasmine": 1,
+        "Jasmine": 2,
         "Sophia": 0,
     }
+    bucket.blob.assert_called_once_with("env=local/sessions/v1/user_id=uid/_persona_index.json")
 
 
-def test_storage_service_count_personas_returns_zero_counts_on_list_failure():
+def test_storage_service_count_personas_returns_zero_when_index_missing():
     service = StorageService(bucket_name="test-bucket")
-    service._bucket = MagicMock()
-    client = MagicMock()
-    client.list_blobs.side_effect = RuntimeError("list failed")
-    service._client = client
+    bucket = MagicMock()
+    index_blob = MagicMock()
+    index_blob.download_as_string.side_effect = FileNotFoundError("no such object")
+    bucket.blob.return_value = index_blob
+    service._bucket = bucket
 
     assert service.count_personas_for_user("uid", ["Jasmine"]) == {"Jasmine": 0}
+
+
+def test_storage_service_count_personas_returns_zero_on_malformed_index():
+    service = StorageService(bucket_name="test-bucket")
+    bucket = MagicMock()
+    index_blob = MagicMock()
+    index_blob.download_as_string.return_value = b"not json"
+    bucket.blob.return_value = index_blob
+    service._bucket = bucket
+
+    assert service.count_personas_for_user("uid", ["Jasmine"]) == {"Jasmine": 0}
+
+
+def test_storage_service_record_persona_index_entry_appends_and_caps(monkeypatch):
+    from app.services import storage_service as storage_service_module
+
+    monkeypatch.setattr(storage_service_module, "PERSONA_INDEX_MAX_ENTRIES", 2)
+    service = StorageService(bucket_name="test-bucket")
+    bucket = MagicMock()
+    index_blob = MagicMock()
+    index_blob.download_as_string.return_value = json.dumps({
+        "entries": [{"persona": "Jasmine", "ts": 1.0}, {"persona": "Jasmine", "ts": 2.0}]
+    }).encode("utf-8")
+    bucket.blob.return_value = index_blob
+    service._bucket = bucket
+
+    service._record_persona_index_entry("uid", "sid-new", {"config": {"persona": {"name": "Sophia"}}})
+
+    args, _ = index_blob.upload_from_string.call_args
+    entries = json.loads(args[0])["entries"]
+    assert [e["persona"] for e in entries] == ["Jasmine", "Sophia"]
+    assert entries[-1]["session_id"] == "sid-new"
+    assert entries[-1]["number_of_turns"] == 0
+    assert entries[-1]["outcome"] is None
+    assert entries[-1]["overall_score"] is None
+
+
+def test_storage_service_record_persona_index_entry_skips_when_no_persona():
+    service = StorageService(bucket_name="test-bucket")
+    bucket = MagicMock()
+    service._bucket = bucket
+
+    service._record_persona_index_entry("uid", "sid", {"config": {"persona": {}}})
+
+    bucket.blob.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "archive_data,expected_outcome",
+    [
+        ({"metadata": {"outcome": {"exitContext": "bug_report"}}}, "bug_report"),
+        ({"analytics": {"summary": {"outcome": "accepted_vaccine"}}}, "vaccination"),
+        ({"analytics": {"summary": {"outcome": "accepted_literature"}}}, "literature"),
+        ({"analytics": {"summary": {"outcome": "deferred"}}}, None),
+        ({}, None),
+    ],
+)
+def test_storage_service_derive_index_outcome(archive_data, expected_outcome):
+    assert StorageService._derive_index_outcome(archive_data) == expected_outcome
+
+
+def test_storage_service_build_persona_index_entry_includes_turns_and_scores():
+    archive_data = {
+        "transcript": [
+            {"role": "system", "content": "card"},
+            {"role": "user", "content": "hi"},
+            {"role": "coach", "content": "coach note"},
+            {"role": "assistant", "content": "reply"},
+            {"role": "user", "content": "second turn"},
+        ],
+        "analytics": {
+            "aims": {
+                "runningAverage": {
+                    "Announce": 3.0,
+                    "Inquire": 2.0,
+                    "Mirror": 1.5,
+                    "Secure": 0.0,
+                }
+            },
+            "summary": {"outcome": "accepted_vaccine"},
+        },
+        "metadata": {"outcome": {"exitContext": "completion"}},
+    }
+
+    entry = StorageService._build_persona_index_entry("sid-123", "Jasmine", archive_data)
+
+    assert entry["session_id"] == "sid-123"
+    assert entry["persona"] == "Jasmine"
+    assert entry["number_of_turns"] == 2
+    assert entry["outcome"] == "vaccination"
+    assert entry["announce_score"] == 3.0
+    assert entry["inquire_score"] == 2.0
+    assert entry["mirror_score"] == 1.5
+    assert entry["secure_score"] == 0.0
+    assert entry["overall_score"] == 54
+    assert isinstance(entry["ts"], float)

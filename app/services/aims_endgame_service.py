@@ -179,7 +179,15 @@ class AimsEndgameService:
                 if item.get("role") in (ROLE_USER, ROLE_ASSISTANT)
             )
 
-            inquired = [concern["topic"] for concern in concerns]
+            # Checklist entries are pre-seeded from turn one, before they've
+            # actually been surfaced -- only report ones genuinely discovered
+            # so far (see the same fix in aims_coaching_handler.py's
+            # inquired_concerns_list). Non-checklist (ad-hoc) entries have no
+            # is_discovered key; they're only ever created from real
+            # evidence, so treat a missing key as discovered.
+            inquired = [
+                concern["topic"] for concern in concerns if concern.get("is_discovered", True)
+            ]
             mirrored = [concern["topic"] for concern in concerns if concern.get("is_mirrored")]
             secured = [concern["topic"] for concern in concerns if concern.get("is_secured")]
 
@@ -259,6 +267,25 @@ class AimsEndgameService:
             if outcome == "deferred":
                 is_endgame = False
 
+            # Defense-in-depth backstop: the role-play instruction (see
+            # aims_patient_reply.txt) is the primary mechanism keeping a
+            # persona from signaling closure while a checklist concern is
+            # still undiscovered -- this catches the case where the persona
+            # and the discovery matcher both slip. Recorded on aims_state
+            # (not returned from check(), which must still behave like any
+            # other non-endgame turn -- see the KEY_GAME_OVER/composer-lock
+            # contract) so the coaching layer can surface a distinct
+            # Important tip for this specific block. Always set (True or
+            # False) so a stale block from an earlier turn can't linger.
+            undiscovered_block = bool(
+                is_endgame
+                and outcome in ("accepted_vaccine", "accepted_literature")
+                and aims_state.get("is_undiscovered_concerns")
+            )
+            if undiscovered_block:
+                is_endgame = False
+            aims_state["endgame_blocked_undiscovered"] = undiscovered_block
+
             self._log_endgame_end(session_id, started, is_endgame, outcome)
 
             if not is_endgame:
@@ -289,7 +316,7 @@ class AimsEndgameService:
             if llm_commentary:
                 lines.extend(llm_commentary)
 
-            return {"title": title, "lines": lines}
+            return {"title": title, "lines": lines, "outcome": outcome}
 
         except Exception as e:
             self._logger.exception("LLM endgame detection failed: %s", e)

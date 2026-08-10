@@ -207,6 +207,208 @@ def test_apply_concern_events_mirror_and_secure_targeted_concern():
     assert concern["status"] == "resolved"
 
 
+def test_apply_concern_events_marks_checklist_concern_discovered_on_direct_match():
+    """A raised event that matches a pre-seeded checklist entry by topic must flip
+    is_discovered, so the concern-checklist backstop knows this item was surfaced."""
+    st = {
+        "parent_concerns": [
+            {
+                "topic": "immune_load",
+                "desc": "Worried that several vaccines at once might be too much.",
+                "is_discovered": False,
+                "is_mirrored": False,
+                "is_secured": False,
+                "from_checklist": True,
+            }
+        ]
+    }
+
+    handled = apply_concern_events(
+        st,
+        [
+            {
+                "event_type": "concern_raised",
+                "topic": "immune_load",
+                "evidence_spans": ["I'm worried about too many shots at once."],
+                "confidence": "high",
+            }
+        ],
+        person_text="I'm worried about too many shots at once.",
+    )
+
+    assert handled == {"concern_presence"}
+    concern = st["parent_concerns"][0]
+    assert concern["is_discovered"] is True
+    assert concern["from_checklist"] is True
+
+
+def test_apply_concern_events_unknown_topic_creates_auto_resolved_ad_hoc_concern():
+    """A raised event for a topic that matches no existing (checklist) entry creates
+    an ad-hoc concern that's immediately marked fully resolved -- it isn't part of any
+    persona's checklist, so it must never show up as an outstanding item anywhere."""
+    st = {"parent_concerns": []}
+
+    handled = apply_concern_events(
+        st,
+        [
+            {
+                "event_type": "concern_raised",
+                "topic": "side_effects",
+                "evidence_spans": ["worried about a rash"],
+                "confidence": "high",
+            }
+        ],
+        person_text="worried about a rash",
+    )
+
+    assert handled == {"concern_presence"}
+    concern = st["parent_concerns"][0]
+    assert concern.get("from_checklist") is not True
+    assert concern["is_discovered"] is True
+    assert concern["is_mirrored"] is True
+    assert concern["is_secured"] is True
+    assert concern["status"] == "resolved"
+
+
+def test_apply_concern_events_mirrored_event_marks_undiscovered_checklist_concern_discovered():
+    """A mirrored event can be the first event ever seen for a checklist entry (the
+    classifier can mirror before ever emitting a presence event for it) -- being
+    mirrored implies it was necessarily discovered."""
+    st = {
+        "parent_concerns": [
+            {
+                "topic": "schedule_timing",
+                "desc": "Worried about the vaccine schedule being rushed.",
+                "is_discovered": False,
+                "is_mirrored": False,
+                "is_secured": False,
+                "from_checklist": True,
+            }
+        ]
+    }
+
+    handled = apply_concern_events(
+        st,
+        [
+            {
+                "event_type": "concern_mirrored",
+                "topic": "schedule_timing",
+                "evidence_spans": ["why are we rushing to do this now"],
+                "confidence": "high",
+            }
+        ],
+        person_text="why are we rushing to do this now",
+    )
+
+    assert handled == {"mirrored"}
+    concern = st["parent_concerns"][0]
+    assert concern["is_discovered"] is True
+    assert concern["is_mirrored"] is True
+
+
+def test_apply_concern_events_restated_semantic_match_marks_checklist_concern_discovered():
+    """The semantic-restatement branch (event topic doesn't directly match, but the
+    text scores as the same concern) must also flip is_discovered on a checklist entry."""
+    st = {
+        "parent_concerns": [
+            {
+                "topic": "immune_load",
+                "summary": "wants immune load or spacing addressed",
+                "desc": "wants immune load or spacing addressed",
+                "evidence": [
+                    "I'm worried too many shots at once will overload her immune system."
+                ],
+                "is_discovered": False,
+                "is_mirrored": True,
+                "is_secured": False,
+                "mirror_count": 1,
+                "secure_count": 0,
+                "status": "mirrored",
+                "from_checklist": True,
+            }
+        ]
+    }
+
+    handled = apply_concern_events(
+        st,
+        [
+            {
+                "event_type": "concern_renewed",
+                "topic": "schedule_timing",
+                "evidence_spans": [
+                    "Exactly, it still feels like too many vaccines at the same time for her immune system."
+                ],
+                "confidence": "high",
+            }
+        ],
+        person_text=(
+            "Exactly, it still feels like too many vaccines at the same time "
+            "for her immune system."
+        ),
+    )
+
+    assert handled == {"concern_presence"}
+    concern = st["parent_concerns"][0]
+    assert concern["topic"] == "immune_load"
+    assert concern["is_discovered"] is True
+
+
+def test_apply_concern_events_trust_and_evidence_are_discovered_independently():
+    """Regression test for a confirmed live bug: trust (distrust of the source) and
+    evidence (wants to see the data/methodology) used to collapse onto the same
+    canonical topic ("evidence" aliased to "trust"), so a persona with both as
+    separate checklist concerns could only ever have one of them discovered no
+    matter how the conversation went -- the other stayed permanently undiscovered.
+    Confirmed these are now distinct canonical topics that discover independently."""
+    st = {
+        "parent_concerns": [
+            {
+                "topic": "trust",
+                "desc": "Wants to see the actual data and evidence behind the recommendation.",
+                "is_discovered": False,
+                "is_mirrored": False,
+                "is_secured": False,
+                "from_checklist": True,
+            },
+            {
+                "topic": "evidence",
+                "desc": "Wants to know whether the recommendation reflects his individual absolute risk.",
+                "is_discovered": False,
+                "is_mirrored": False,
+                "is_secured": False,
+                "from_checklist": True,
+            },
+        ]
+    }
+
+    handled = apply_concern_events(
+        st,
+        [
+            {
+                "event_type": "concern_raised",
+                "topic": "trust",
+                "evidence_spans": ["I don't know if I can trust what the pharmaceutical companies say."],
+                "confidence": "high",
+            },
+            {
+                "event_type": "concern_raised",
+                "topic": "evidence",
+                "evidence_spans": ["Could you share the actual absolute risk reduction numbers?"],
+                "confidence": "high",
+            },
+        ],
+        person_text=(
+            "I don't know if I can trust what the pharmaceutical companies say. "
+            "Could you share the actual absolute risk reduction numbers?"
+        ),
+    )
+
+    assert handled == {"concern_presence"}
+    by_topic = {c["topic"]: c for c in st["parent_concerns"]}
+    assert by_topic["trust"]["is_discovered"] is True
+    assert by_topic["evidence"]["is_discovered"] is True
+
+
 def test_apply_concern_events_merges_confirmation_restatement_into_existing_mirrored_concern():
     st = {
         "parent_concerns": [
@@ -517,7 +719,7 @@ def test_maybe_add_person_concern_merges_same_topic_paraphrases_and_cleans_evide
     assert len(st["parent_concerns"]) == 1
     concern = st["parent_concerns"][0]
     assert concern["id"] == "trust"
-    assert concern["desc"] == "wants evidence, uncertainty, and trust addressed"
+    assert concern["desc"] == "wants trust in the source or information addressed"
     assert len(concern["evidence"]) == 2
     assert concern["evidence"][1].startswith("It's not about denying the evidence")
 
@@ -562,14 +764,39 @@ def test_maybe_add_person_concern_merges_trust_aliases():
     )
     maybe_add_person_concern(
         st,
+        "Everyone I've talked to says something different about who to trust here.",
+        TOPICAL_CUES,
+        llm_topic="who_to_believe",
+    )
+
+    assert len(st["parent_concerns"]) == 1
+    assert st["parent_concerns"][0]["topic"] == "trust"
+    assert st["parent_concerns"][0]["desc"] == "wants trust in the source or information addressed"
+
+
+def test_maybe_add_person_concern_keeps_trust_and_evidence_as_distinct_topics():
+    """trust (distrust of the source) and evidence (wants to see the data/methodology)
+    are deliberately separate topics -- conflating them was a confirmed live bug where
+    a persona's two distinct concerns (source skepticism vs. wanting rigorous data)
+    both collapsed onto "trust" and the second one could never be discovered."""
+    st = {"parent_concerns": []}
+
+    maybe_add_person_concern(
+        st,
+        "It is hard to know who to believe when everyone says something different.",
+        TOPICAL_CUES,
+        llm_topic="conflicting information",
+    )
+    maybe_add_person_concern(
+        st,
         "I want to understand whether the evidence is being presented honestly.",
         TOPICAL_CUES,
         llm_topic="evidence",
     )
 
-    assert len(st["parent_concerns"]) == 1
-    assert st["parent_concerns"][0]["topic"] == "trust"
-    assert st["parent_concerns"][0]["desc"] == "wants evidence, uncertainty, and trust addressed"
+    assert len(st["parent_concerns"]) == 2
+    topics = {c["topic"] for c in st["parent_concerns"]}
+    assert topics == {"trust", "evidence"}
 
 
 def test_maybe_add_person_concern_acceptance_with_hedging_still_creates_concern():
