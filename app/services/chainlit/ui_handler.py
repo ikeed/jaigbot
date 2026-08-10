@@ -1,4 +1,6 @@
+import html
 import logging
+import re
 from typing import Any, Dict
 
 import chainlit as cl
@@ -28,6 +30,8 @@ from app.services.coaching_display import (
 )
 
 logger = logging.getLogger(__name__)
+
+_BOLD_SPAN_RE = re.compile(r"\*\*(.+?)\*\*")
 
 STEP_LABELS = {
     STEP_ANNOUNCE,
@@ -75,7 +79,21 @@ class UIHandler:
         return text
 
     @staticmethod
+    def _inline_html(text: str) -> str:
+        """Escape text for HTML, converting **bold** markdown spans to <strong>."""
+        out: list[str] = []
+        pos = 0
+        for m in _BOLD_SPAN_RE.finditer(text):
+            out.append(html.escape(text[pos : m.start()]))
+            out.append(f"<strong>{html.escape(m.group(1))}</strong>")
+            pos = m.end()
+        out.append(html.escape(text[pos:]))
+        return "".join(out)
+
+    @staticmethod
     def format_coach_message(text: str) -> str:
+        """Render the end-of-scenario coach summary card with the same HTML
+        styling as the scenario briefing card."""
         txt = (text or "").strip()
         if not txt:
             return ""
@@ -96,7 +114,22 @@ class UIHandler:
             if any(scenario_complete in p for p in parts)
             else message("coaching.summary_section_title")
         )
-        return UIHandler._format_parts(title, parts)
+        clean_parts = [UIHandler._normalize_part(p) for p in parts if p and p != title]
+        lines: list[str] = [
+            '<div class="aims-scenario-briefing">',
+            f'<div class="aims-scenario-title aims-summary-title">{html.escape(title)}</div>',
+        ]
+        for part in clean_parts:
+            if not part:
+                continue
+            for row in part.splitlines():
+                row = row.strip()
+                if row:
+                    lines.append(
+                        f'<div class="aims-scenario-line">{UIHandler._inline_html(row)}</div>'
+                    )
+        lines.append("</div>")
+        return "".join(lines)
 
     @staticmethod
     def format_coaching_message(coaching: dict[str, Any]) -> str:
