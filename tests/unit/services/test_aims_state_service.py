@@ -6,7 +6,10 @@ from app.constants import (
     STEP_ANNOUNCE,
     STEP_INQUIRE,
     STEP_MIRROR,
+    STEP_MIRROR_SECURE,
+    STEP_MIRROR_SECURE_INQUIRE,
     STEP_SECURE,
+    STEP_SECURE_INQUIRE,
 )
 from app.services.aims_state_service import AimsStateService
 
@@ -324,6 +327,123 @@ def test_structured_feedback_secure_before_inquire_uses_coded_state_feedback():
     assert "secure_before_inquire" in _feedback_codes(payload)
     assert payload["tips"] == []
     assert payload["reasons"] == ["Model reason."]
+
+
+def test_structured_feedback_secure_before_inquire_fires_on_secure_plus_inquire_compound():
+    """Regression test for a confirmed pre-existing bug (found via live staging
+    testing): apply_coaching_guidance used step_current == STEP_SECURE (exact string
+    match), which silently skipped the whole secure_before_inquire/secure_before_mirror
+    check for any compound step that includes Secure but isn't the bare string --
+    even though component_steps was already computed for exactly this purpose.
+    Secure+Inquire has no mirror this turn, so the check must apply exactly like
+    plain Secure."""
+    state = {
+        "phase": PHASE_INQUIRE_MIRROR,
+        "announced": True,
+        "is_undiscovered_concerns": True,
+        "parent_concerns": [],
+    }
+    payload = _structured_payload(STEP_SECURE_INQUIRE)
+
+    _service().apply_coaching_guidance(
+        payload,
+        STEP_SECURE_INQUIRE,
+        state,
+        clinician_message="Here is some reassuring information. What else is on your mind?",
+        person_last="I am uncertain.",
+    )
+
+    assert "secure_before_inquire" in _feedback_codes(payload)
+
+
+def test_structured_feedback_secure_before_mirror_fires_on_secure_plus_inquire_compound():
+    state = {
+        "phase": PHASE_INQUIRE_MIRROR,
+        "announced": True,
+        "is_undiscovered_concerns": False,
+        "parent_concerns": [
+            {
+                "topic": "trust",
+                "desc": "wants evidence addressed",
+                "is_mirrored": False,
+                "is_secured": False,
+            }
+        ],
+    }
+    payload = _structured_payload(STEP_SECURE_INQUIRE)
+
+    _service().apply_coaching_guidance(
+        payload,
+        STEP_SECURE_INQUIRE,
+        state,
+        clinician_message="More evidence here. What else is on your mind?",
+        person_last="I need to trust the evidence.",
+    )
+
+    assert "secure_before_mirror" in _feedback_codes(payload)
+
+
+def test_structured_feedback_skips_secure_checks_on_mirror_plus_secure_compound():
+    """Mirror+Secure (and Mirror+Secure+Inquire) deliberately do NOT get the
+    secure_before_inquire/secure_before_mirror check -- a mirror happened this same
+    turn, so flagging "secure before mirror" in the same breath as praising a mirror
+    the clinician just did would read as contradictory feedback, even when it's
+    technically about a different, still-unmirrored concern."""
+    state = {
+        "phase": PHASE_INQUIRE_MIRROR,
+        "announced": True,
+        "is_undiscovered_concerns": True,
+        "parent_concerns": [
+            {
+                "topic": "trust",
+                "desc": "wants evidence addressed",
+                "is_mirrored": False,
+                "is_secured": False,
+            }
+        ],
+    }
+    payload = _structured_payload(STEP_MIRROR_SECURE)
+
+    _service().apply_coaching_guidance(
+        payload,
+        STEP_MIRROR_SECURE,
+        state,
+        clinician_message="It sounds like you're worried about the evidence -- here are the facts.",
+        person_last="I need to trust the evidence.",
+    )
+
+    codes = _feedback_codes(payload)
+    assert "secure_before_inquire" not in codes
+    assert "secure_before_mirror" not in codes
+
+
+def test_structured_feedback_skips_secure_checks_on_mirror_plus_secure_plus_inquire_compound():
+    state = {
+        "phase": PHASE_INQUIRE_MIRROR,
+        "announced": True,
+        "is_undiscovered_concerns": True,
+        "parent_concerns": [
+            {
+                "topic": "trust",
+                "desc": "wants evidence addressed",
+                "is_mirrored": False,
+                "is_secured": False,
+            }
+        ],
+    }
+    payload = _structured_payload(STEP_MIRROR_SECURE_INQUIRE)
+
+    _service().apply_coaching_guidance(
+        payload,
+        STEP_MIRROR_SECURE_INQUIRE,
+        state,
+        clinician_message="It sounds like you're worried about the evidence -- here are the facts. What else is on your mind?",
+        person_last="I need to trust the evidence.",
+    )
+
+    codes = _feedback_codes(payload)
+    assert "secure_before_inquire" not in codes
+    assert "secure_before_mirror" not in codes
 
 
 def test_structured_feedback_secure_before_mirror_uses_coded_state_feedback():

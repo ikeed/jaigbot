@@ -315,7 +315,19 @@ class AimsStateService:
             and step_current != STEP_SECURE
         ):
             mark_secured_by_topic(state, clinician_message, self.secure_topical_cues())
-        elif step_current == STEP_SECURE:
+        elif STEP_SECURE in component_steps and STEP_MIRROR not in component_steps:
+            # Exact-match on step_current == STEP_SECURE used to skip this
+            # entirely for compound steps (Secure+Inquire, Mirror+Secure,
+            # Mirror+Secure+Inquire) even though component_steps was already
+            # computed above for exactly this purpose. Secure+Inquire has no
+            # mirror this turn, so the check should apply exactly like plain
+            # Secure. Mirror+Secure(+Inquire) DO have a same-turn mirror --
+            # excluded deliberately, not just because _has_material_unmirrored_concern
+            # would self-correct for the just-mirrored concern (it would,
+            # since mirror events are applied earlier in update()), but
+            # because flagging "secure before mirror" in the same breath as
+            # a mirror the clinician just did reads as contradictory
+            # feedback, even when it's technically about a different concern.
             self._apply_secure_guidance(
                 cls_payload,
                 state,
