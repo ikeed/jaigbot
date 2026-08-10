@@ -181,6 +181,11 @@ class AimsStateService:
         """
         concerns = state.get("parent_concerns") or []
         checklist_concerns = [c for c in concerns if c.get("from_checklist")]
+        print(
+            "!!!!! DEBUG _recompute_undiscovered_concerns: "
+            + repr([(c.get("topic"), c.get("is_discovered"), c.get("from_checklist")) for c in concerns]),
+            flush=True,
+        )
         if checklist_concerns:
             state["is_undiscovered_concerns"] = any(
                 not concern.get("is_discovered") for concern in checklist_concerns
