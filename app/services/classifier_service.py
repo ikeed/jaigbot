@@ -58,7 +58,8 @@ class ClassifierService:
 
     async def classify_turn(self, *, clinician_message: str, person_last: str, history: List[Dict[str, str]],
                             prior_announced: bool, prior_phase: str, mapping: Dict[str, Any], context_turns: int = 3,
-                            inquired_concerns_list: List[str] = None, mirrored_concerns_list: List[str] = None) -> ClassifierResult:
+                            inquired_concerns_list: List[str] = None, mirrored_concerns_list: List[str] = None,
+                            checklist_context: str | None = None) -> ClassifierResult:
         """Perform unified classification for a clinician turn."""
         
         # 1. Build the prompt (split: static system instruction + lean per-turn prompt)
@@ -75,6 +76,7 @@ class ClassifierService:
             recent_context=recent_ctx,
             inquired_concerns_list=inquired_concerns_list,
             mirrored_concerns_list=mirrored_concerns_list,
+            checklist_context=checklist_context,
         )
 
         # 3. Call Gemini

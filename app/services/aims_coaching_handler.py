@@ -86,9 +86,29 @@ class AimsCoachingHandler:
         if not concerns:
             return message("patient_reply.concern_state.none_tracked")
 
+        undiscovered_topics: list[str] = []
         open_topics: list[str] = []
         resolved_topics: list[str] = []
         for concern in concerns:
+            # An undiscovered checklist entry hasn't been touched by
+            # _normalize_existing_concern yet, so its authored `desc` (from
+            # personas.json) is still intact -- prefer that over the bare
+            # topic slug for richer roleplay grounding on what to eventually
+            # reveal. Once discovered, canonical_label/summary take over as
+            # usual.
+            is_undiscovered_checklist_entry = concern.get(
+                "from_checklist"
+            ) and not concern.get("is_discovered")
+            if is_undiscovered_checklist_entry:
+                label = str(
+                    concern.get("desc") or concern.get("topic") or message(
+                        "patient_reply.concern_state.unspecified"
+                    )
+                ).strip()
+                if label and label not in undiscovered_topics:
+                    undiscovered_topics.append(label)
+                continue
+
             topic = str(
                 concern.get("canonical_label")
                 or concern.get("summary")
@@ -104,19 +124,127 @@ class AimsCoachingHandler:
                 if topic not in open_topics:
                     open_topics.append(topic)
 
-        if not open_topics and resolved_topics:
-            return message(
+        if not open_topics and not resolved_topics and not undiscovered_topics:
+            return message("patient_reply.concern_state.none_tracked")
+
+        # The "open concerns: none" marker (see open_none_resolved) drives the
+        # patient-reply fallback's resolved-tone acknowledgement -- it must
+        # only fire when NOTHING remains, including nothing undiscovered.
+        if not open_topics and not undiscovered_topics and resolved_topics:
+            section = message(
                 "patient_reply.concern_state.open_none_resolved",
                 resolved=", ".join(resolved_topics),
             )
-        if open_topics and resolved_topics:
-            return message(
+        elif not open_topics and resolved_topics:
+            section = message(
+                "patient_reply.concern_state.resolved_pending_more",
+                resolved=", ".join(resolved_topics),
+            )
+        elif open_topics and resolved_topics:
+            section = message(
                 "patient_reply.concern_state.open_and_resolved",
                 open=", ".join(open_topics),
                 resolved=", ".join(resolved_topics),
             )
-        return message("patient_reply.concern_state.open_only", open=", ".join(open_topics))
-    
+        elif open_topics:
+            section = message("patient_reply.concern_state.open_only", open=", ".join(open_topics))
+        else:
+            section = message("patient_reply.concern_state.nothing_surfaced_yet")
+
+        if undiscovered_topics:
+            section = (
+                f"{section} "
+                + message(
+                    "patient_reply.concern_state.undiscovered_present",
+                    undiscovered=", ".join(undiscovered_topics),
+                )
+            )
+        return section
+
+    @staticmethod
+    def _build_classify_checklist_context(state: dict[str, Any] | None) -> str:
+        """Persona checklist topics + discovery state for the classify_turn prompt.
+
+        Scoped to from_checklist=True entries only -- ad-hoc concerns aren't
+        part of the persona's known checklist and would just be noise here.
+        Naturally carries scenario-local topics (e.g. Georgina's
+        age_appropriateness) alongside the shared PERSON_TOPIC_CATEGORIES
+        ones, since it renders whatever the persona's checklist contains.
+
+        Includes each concern's authored `desc`, not just its bare topic
+        name -- the classifier only knows a topic's *canonical* meaning
+        (e.g. "trust" = distrust of sources/institutions per
+        PERSON_TOPIC_CATEGORIES) unless told otherwise. A persona's specific
+        framing of that topic can diverge from the canonical definition (a
+        persona's "trust" concern might really be phrased as an evidence
+        demand), and without the desc the classifier has no way to recognize
+        persona-specific language as matching that checklist entry --
+        confirmed live: without this, one persona's two concerns were
+        classified as the same topic every turn because their bare topic
+        names both effectively meant "wants data" to the model with no
+        further grounding.
+        """
+        concerns = [
+            c for c in (state or {}).get("parent_concerns") or [] if c.get("from_checklist")
+        ]
+        if not concerns:
+            return ""
+
+        def _render(c: dict[str, Any]) -> str:
+            status = "discovered" if c.get("is_discovered") else "not yet discovered"
+            entry = f"{c.get('topic')} ({status})"
+            desc = c.get("desc")
+            return f"{entry} -- {desc}" if desc else entry
+
+        return "; ".join(_render(c) for c in concerns)
+
+    @staticmethod
+    def _append_endgame_blocked_tip(cls_payload: dict[str, Any]) -> None:
+        """Surface the escalated Important tip for an endgame-backstop block.
+
+        code="endgame_undiscovered_concern" is registered in
+        coaching_display.py's IMPORTANT_FEEDBACK_CODES so this renders as
+        "Important", not "Tip".
+
+        Branches on whether this turn's classification already used
+        structured feedback (feedback_items/step_feedback), mirroring
+        AimsStateService._apply_secure_guidance's prefer_structured_feedback
+        pattern -- coaching_display.py's coaching_message_parts only renders
+        the legacy `reasons`/`tips` fallback when there are NO feedback_items,
+        so unconditionally appending here would silently swallow this turn's
+        own reasons/tips whenever the classifier happened to omit the
+        optional feedback_items field (a normal, non-error occurrence, not
+        just the dormant heuristic-fallback path).
+        """
+        text = message("endgame.undiscovered_concern_tip")
+        has_structured_feedback = bool(
+            cls_payload.get("feedback_items") or cls_payload.get("step_feedback")
+        )
+        if has_structured_feedback:
+            items = cls_payload.setdefault("feedback_items", [])
+            if any(
+                isinstance(item, dict) and item.get("code") == "endgame_undiscovered_concern"
+                for item in items
+            ):
+                return
+            items.append(
+                {
+                    "step": cls_payload.get("step"),
+                    "tone": "improvement",
+                    "code": "endgame_undiscovered_concern",
+                    "text": text,
+                }
+            )
+        else:
+            # Legacy path: only coaching.tips[0] is ever displayed
+            # (coaching_display.py), so insert at the front rather than
+            # append -- this block is the most consequential thing to
+            # surface for the turn.
+            tips = list(cls_payload.get("tips") or [])
+            if text not in tips:
+                tips.insert(0, text)
+            cls_payload["tips"] = tips
+
     def __init__(
         self,
         *,
@@ -280,6 +408,7 @@ class AimsCoachingHandler:
         prior_announced = bool(prior_state.get("announced", False))
         prior_phase = prior_state.get("phase", PHASE_PRE_ANNOUNCE)
         concern_state_section = self._build_reply_concern_state_section(prior_state)
+        checklist_context = self._build_classify_checklist_context(prior_state)
 
         turn = await self.turn_coordinator.run(
             clinician_message=body.message,
@@ -291,7 +420,14 @@ class AimsCoachingHandler:
             context_turns=settings.AIMS_CLASSIFY_CONTEXT_TURNS,
             max_concerns=settings.AIMS_CLASSIFY_MAX_CONCERNS,
             inquired_concerns_list=[
-                c["topic"] for c in (prior_state or {}).get("parent_concerns", [])
+                c["topic"]
+                for c in (prior_state or {}).get("parent_concerns", [])
+                # Checklist entries are pre-seeded from turn one, before they've
+                # actually been surfaced -- only list ones genuinely discovered
+                # so far. Non-checklist (ad-hoc) entries have no is_discovered
+                # key; they're only ever created from real evidence, so treat
+                # a missing key as discovered.
+                if c.get("is_discovered", True)
             ],
             mirrored_concerns_list=[
                 c["topic"]
@@ -304,6 +440,7 @@ class AimsCoachingHandler:
             scene=ctx.effective_scene,
             clinician_name=clinician_display_name_from_user_info(ctx.user_info),
             concern_state_section=concern_state_section,
+            checklist_context=checklist_context,
         )
         cls_payload = turn.cls_payload
         is_small_talk = turn.is_small_talk
@@ -461,7 +598,20 @@ class AimsCoachingHandler:
             session_obj,
             ctx.session_id,
         )
-        
+
+        # The endgame backstop (aims_endgame_service.py) blocked a would-be
+        # closure because a checklist concern is still undiscovered -- it
+        # can't return that fact through coach_post (check() must behave
+        # like any other non-endgame turn), so it flags aims_state instead.
+        # Note: this lands in the live turn's coaching.tips but not in the
+        # coach_feedback_history_service note already appended above, since
+        # that snapshot is taken before check() runs (it must stay between
+        # the user/assistant history entries for replay ordering).
+        if mem is not None and (mem.get(KEY_AIMS_STATE) or {}).get(
+            "endgame_blocked_undiscovered"
+        ):
+            self._append_endgame_blocked_tip(cls_payload)
+
         # Save coach_post to memory if it exists, so it can be archived
         if coach_post and mem is not None:
             mem[KEY_COACH_POST] = coach_post
