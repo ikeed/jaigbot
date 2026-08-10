@@ -204,5 +204,6 @@ class AimsTurnCoordinatorDependency(Protocol):
         scene: str | None,
         clinician_name: str | None,
         concern_state_section: str | None = None,
+        checklist_context: str | None = None,
     ) -> AimsTurnResult:
         ...

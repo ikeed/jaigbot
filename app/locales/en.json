@@ -58,6 +58,7 @@
     "secure_before_mirror_tip": "Before educating, briefly mirror the concern (e.g., 'It feels like a lot at once - did I get that right?').",
     "secure_before_mirror_many_reason": "You've had {count} Secure turns without mirroring{topic_hint} - try pausing to mirror before more education",
     "secure_before_mirror_many_tip": "Pause and mirror: acknowledge the concern{topic_hint} before sharing more facts.",
+    "inquire_nudge_tip": "You've been reassuring for a couple of turns now without asking a new open question - there may be more on their mind. Try asking what else they're thinking about.",
     "topic_hints": {
       "autism": "autism concerns",
       "immune_load": "immune load or spacing concerns",
@@ -66,9 +67,11 @@
       "schedule_timing": "timing or schedule concerns",
       "disease_risk": "whether the disease still feels like a real risk",
       "effectiveness": "effectiveness or benefit concerns",
-      "trust": "trust or evidence concerns",
+      "trust": "trust in the source or information concerns",
+      "evidence": "wanting to see the underlying data or methodology",
       "autonomy": "choice or pressure concerns",
-      "requirements": "school or system requirements"
+      "requirements": "school or system requirements",
+      "age_appropriateness": "concerns about whether this is age-appropriate"
     }
   },
   "endgame": {
@@ -88,6 +91,7 @@
       "needs_work": "\ud83d\udccb Needs work \u2014 {pct}% overall"
     },
     "overall_score": "**Overall AIMS score:** {pct}%",
+    "undiscovered_concern_tip": "This doesn't look fully resolved yet -- there's still something on their mind that hasn't come up. Before wrapping up, try a sweep-up question like \"is there anything else on your mind?\"",
     "fallback_bullets": {
       "default": [
         "**Announce:** lead with a short, non-pushy recommendation and invite input.",
@@ -153,7 +157,10 @@
       "open_none_resolved": "Open concerns: none. Resolved concerns: {resolved}. Do not reopen resolved concerns as if unanswered.",
       "open_and_resolved": "Open concerns: {open}. Resolved concerns: {resolved}. Focus on open concerns; do not reopen resolved concerns as if unanswered.",
       "open_only": "Open concerns: {open}.",
-      "open_none_marker": "open concerns: none"
+      "open_none_marker": "open concerns: none",
+      "nothing_surfaced_yet": "Nothing has been raised out loud yet.",
+      "resolved_pending_more": "Resolved concerns: {resolved}. Nothing else has been raised out loud yet.",
+      "undiscovered_present": "You privately also have these concerns on your mind that you have NOT brought up yet: {undiscovered}. Do not volunteer them outright."
     }
   },
   "validation": {
@@ -730,7 +737,8 @@
         "schedule_timing": "wants timing or schedule addressed",
         "disease_risk": "wants disease risk addressed",
         "effectiveness": "wants effectiveness and benefit addressed",
-        "trust": "wants evidence, uncertainty, and trust addressed",
+        "trust": "wants trust in the source or information addressed",
+        "evidence": "wants underlying data, methodology, or uncertainty addressed",
         "autonomy": "wants decision authority respected",
         "requirements": "wants rules, requirements, and consequences explained"
       },
@@ -766,11 +774,13 @@
         "benefit": "effectiveness",
         "benefits": "effectiveness",
         "conflicting_information": "trust",
-        "evidence": "trust",
         "pharma": "trust",
         "trust": "trust",
-        "uncertainty": "trust",
         "who_to_believe": "trust",
+        "evidence": "evidence",
+        "methodology": "evidence",
+        "data_transparency": "evidence",
+        "uncertainty": "evidence",
         "choice": "autonomy",
         "decision_authority": "autonomy",
         "pressure": "autonomy",

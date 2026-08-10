@@ -10,10 +10,13 @@ incrementally to avoid large diffs while preserving behavior.
 """
 from __future__ import annotations
 
+import logging
 import re
 from typing import Dict, Iterable, List, Mapping, Optional, Set
 
 from app.message_catalog import message, message_list, message_map
+
+logger = logging.getLogger(__name__)
 
 TopicalCues = Mapping[str, Iterable[str]]
 Concern = Dict[str, object]
@@ -375,24 +378,38 @@ def _apply_concern_presence_event(
         restated = _find_restated_existing_concern(concerns, evidence_items, person_text)
         if restated:
             _merge_evidence(restated, evidence_items)
+            restated["is_discovered"] = True
             _sync_concern_status(restated)
         return
 
     existing = _find_event_target(concerns, event)
     if existing:
         _merge_evidence(existing, evidence_items)
+        existing["is_discovered"] = True
         _sync_concern_status(existing)
         return
 
     restated = _find_restated_existing_concern(concerns, evidence_items, person_text)
     if restated:
         _merge_evidence(restated, evidence_items)
+        restated["is_discovered"] = True
         _sync_concern_status(restated)
         return
 
     new_concern = _new_concern(event.get("topic"), evidence_items)
     if new_concern is None:
         return
+    # Ad-hoc concern not on the persona's checklist (from_checklist is unset) --
+    # mark it fully resolved immediately so it can't be mistaken for an
+    # outstanding checklist item by the endgame backstop or downstream context.
+    new_concern["is_discovered"] = True
+    new_concern["is_mirrored"] = True
+    new_concern["is_secured"] = True
+    _sync_concern_status(new_concern)
+    logger.info(
+        "New ad-hoc concern '%s' created outside the persona checklist; auto-resolved.",
+        new_concern.get("topic"),
+    )
     concerns.append(new_concern)
 
 
@@ -420,6 +437,10 @@ def _apply_mirrored_event(
             return
         concerns.append(concern)
 
+    # A mirrored concern was necessarily discovered -- this can be the first
+    # event seen for a checklist entry if the classifier mirrors before ever
+    # emitting a presence event for it (see the comment above).
+    concern["is_discovered"] = True
     concern["is_mirrored"] = True
     concern["mirror_count"] = _count(concern.get("mirror_count")) + 1
     _sync_concern_status(concern)

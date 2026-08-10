@@ -11,6 +11,23 @@
         "detailed_instructions": "The doctor needs to assure Jasmine of the safety and importance of vaccines. Kindly and gently explain that the schedule is designed with care and science. Mention risks of waiting (Whooping Cough, Rotavirus). 2 month vaccines: DTaP-IPV-Hib-HB, Pneumococcal, Rotavirus.",
         "user_sketch": "Jasmine is at the clinic for Sophia's 2-month well-baby checkup."
       },
+      "concerns": [
+        {
+          "id": "immune_load",
+          "topic": "immune_load",
+          "desc": "Worried that giving Sophia several vaccines at once, at just 2 months old, might be too much for her small body to handle."
+        },
+        {
+          "id": "ingredients",
+          "topic": "ingredients",
+          "desc": "Wants to know exactly what is in the vaccines being recommended for Sophia."
+        },
+        {
+          "id": "schedule_timing",
+          "topic": "schedule_timing",
+          "desc": "Wondering whether it would be safer to wait and space out or delay some of Sophia's vaccines."
+        }
+      ],
       "interaction": {
         "communication_needs": [
           "Needs reassurance that her caution does not make her a bad mother.",
@@ -76,6 +93,18 @@
         "detailed_instructions": "Georgina has come in specifically to ask about the HPV vaccine for 11-year-old Dakota. The doctor should make a clear recommendation, invite Georgina's concerns, and explain the cancer-prevention rationale while respecting her autonomy and avoiding judgment.",
         "user_sketch": "Georgina has come to the clinic to ask whether her 11-year-old daughter Dakota should get the HPV vaccine."
       },
+      "concerns": [
+        {
+          "id": "autonomy",
+          "topic": "autonomy",
+          "desc": "Feels pressured by the recommendation and wants to be sure she still gets to decide what's right for Dakota."
+        },
+        {
+          "id": "age_appropriateness",
+          "topic": "age_appropriateness",
+          "desc": "Thinks Dakota, at 11, may be too young for a vaccine associated with a sexually transmitted infection."
+        }
+      ],
       "interaction": {
         "communication_needs": [
           "Needs the clinician to avoid sounding like an authority figure enforcing rules.",
@@ -141,6 +170,18 @@
         "detailed_instructions": "Ethan is in for a general mid-age preventive health check. The doctor should include an adult immunization review, make an evidence-based recommendation about relevant vaccines such as COVID-19 and measles/MMR immunity, and be transparent about individualized risk, uncertainty, and population-level guidance.",
         "user_sketch": "Ethan is visiting the doctor for a general mid-age health check and preventive-care review."
       },
+      "concerns": [
+        {
+          "id": "evidence",
+          "topic": "evidence",
+          "desc": "Wants to see the actual data, methodology, and honest uncertainty behind the recommendation, not just a confident assertion, before agreeing to anything."
+        },
+        {
+          "id": "effectiveness",
+          "topic": "effectiveness",
+          "desc": "Wants to know whether the recommendation reflects his individual absolute risk or is really a population-level public health recommendation."
+        }
+      ],
       "interaction": {
         "communication_needs": [
           "Needs assumptions and uncertainty made explicit.",
@@ -208,6 +249,18 @@
         "detailed_instructions": "Zia has come in asking for information about vaccine protocol in her new country. The doctor should explain the Canadian childhood vaccine schedule clearly and respectfully, check understanding, and address her questions about what is recommended, what is required, and what Nathaniel may need.",
         "user_sketch": "Zia has brought Nathaniel to the clinic because she wants to understand how children's vaccine protocols work in Canada and what her family should do next."
       },
+      "concerns": [
+        {
+          "id": "requirements",
+          "topic": "requirements",
+          "desc": "Wants to know whether these vaccines are actually required for Nathaniel, e.g. for school, or optional."
+        },
+        {
+          "id": "side_effects",
+          "topic": "side_effects",
+          "desc": "Worried about whether the vaccines will be safe for Nathaniel and what side effects to watch for."
+        }
+      ],
       "interaction": {
         "communication_needs": [
           "Needs plain language, slow pacing, and checks for understanding.",
@@ -273,6 +326,18 @@
         "detailed_instructions": "Sarah has come in to ask about measles risk and vaccination for Emily. The doctor should explain that measles is still present, make a clear recommendation about keeping Emily's MMR protection current, and make the risk real without fear-mongering.",
         "user_sketch": "Sarah has brought Emily to the clinic because she has heard about measles again and wants information about measles risk and whether Emily should have an MMR booster."
       },
+      "concerns": [
+        {
+          "id": "disease_risk",
+          "topic": "disease_risk",
+          "desc": "Feels measles is a disease of the past and doesn't understand why it's a real risk for Emily now."
+        },
+        {
+          "id": "effectiveness",
+          "topic": "effectiveness",
+          "desc": "Wonders why Emily would need a booster if measles is supposedly controlled by everyone else already being vaccinated."
+        }
+      ],
       "interaction": {
         "communication_needs": [
           "Needs the risk made concrete without scare tactics.",

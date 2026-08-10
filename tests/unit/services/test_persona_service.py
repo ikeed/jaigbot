@@ -4,6 +4,27 @@ from app.memory_store import InMemoryStore
 from app.services import persona_service
 
 
+def test_every_persona_has_one_to_three_well_formed_concerns():
+    for persona in persona_service.load_personas():
+        concerns = persona.get("concerns")
+        assert concerns, f"{persona.get('name')} has no concerns"
+        assert 1 <= len(concerns) <= 3, f"{persona.get('name')} has {len(concerns)} concerns"
+        ids = [c.get("id") for c in concerns]
+        assert len(ids) == len(set(ids)), f"{persona.get('name')} has duplicate concern ids"
+        for concern in concerns:
+            assert concern.get("id"), f"{persona.get('name')} concern missing id"
+            assert concern.get("topic"), f"{persona.get('name')} concern missing topic"
+            assert concern.get("desc"), f"{persona.get('name')} concern missing desc"
+
+
+def test_fallback_persona_has_a_valid_concerns_list():
+    concerns = persona_service.FALLBACK_PERSONA.get("concerns")
+    assert concerns
+    assert 1 <= len(concerns) <= 3
+    for concern in concerns:
+        assert concern.get("id") and concern.get("topic") and concern.get("desc")
+
+
 def test_weighted_selection_uses_inverse_interaction_counts():
     personas = [{"name": "A"}, {"name": "B"}, {"name": "C"}]
     counts = {"A": 0, "B": 1, "C": 4}

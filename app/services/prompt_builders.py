@@ -36,6 +36,7 @@ class AimsPromptBuilder:
         recent_context: str = "",
         inquired_concerns_list: list[str] = None,
         mirrored_concerns_list: list[str] = None,
+        checklist_context: str | None = None,
     ) -> str:
         """Render the lean per-turn classification prompt (dynamic content only)."""
         return _build_classify_turn(
@@ -46,6 +47,7 @@ class AimsPromptBuilder:
             recent_context=recent_context,
             inquired_concerns_list=inquired_concerns_list,
             mirrored_concerns_list=mirrored_concerns_list,
+            checklist_context=checklist_context,
         )
 
     @staticmethod

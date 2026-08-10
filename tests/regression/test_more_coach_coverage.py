@@ -172,7 +172,13 @@ def test_topic_mirroring_and_securing_state_updates(monkeypatch):
     assert any(c.get("is_secured") for c in state["parent_concerns"]) is True
 
 
-def test_zia_style_required_and_safe_reply_seeds_distinct_concerns_and_flags_secure_before_mirror(monkeypatch):
+def test_zia_style_required_and_safe_reply_seeds_distinct_concerns_auto_resolved(monkeypatch):
+    """Concerns raised via person_events with no persona checklist are ad-hoc --
+    per the concern-checklist design, ad-hoc entries are auto-resolved
+    (is_discovered/is_mirrored/is_secured=True) immediately on creation, so
+    they no longer trigger the 'secure before mirror' penalty. That penalty
+    still applies to persona-checklist concerns (see
+    test_aims_state_service.py's secure-before-mirror coverage)."""
     setup_env(monkeypatch)
     c = TestClient(m.app)
     sess = "zia-required-safe"
@@ -219,12 +225,13 @@ def test_zia_style_required_and_safe_reply_seeds_distinct_concerns_and_flags_sec
     data = r2.json()
 
     reasons = " ".join(data["coaching"]["reasons"]).lower()
-    assert "mirroring" in reasons
+    assert "mirroring" not in reasons
 
     concerns = m.MEMORY_STORE[sess]["aims_state"]["parent_concerns"]
     assert {c["topic"] for c in concerns} == {"requirements", "side_effects"}
-    assert any(not c["is_mirrored"] for c in concerns)
-    assert m.MEMORY_STORE[sess]["aims_state"]["pending_concerns"] is True
+    assert all(c["is_mirrored"] and c["is_secured"] for c in concerns)
+    # Both concerns are ad-hoc and auto-resolved, so nothing is left pending.
+    assert m.MEMORY_STORE[sess]["aims_state"]["pending_concerns"] is False
 
 
 def test_running_average_populated(monkeypatch):
