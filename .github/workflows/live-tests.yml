@@ -11,10 +11,15 @@ permissions:
 env:
   PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
   REGION: ${{ vars.GCP_REGION }}
-  VERTEX_LOCATION: ${{ vars.VERTEX_LOCATION }}
-  MODEL_ID: ${{ vars.MODEL_ID }}
-  AIMS_CLASSIFIER_MODEL_ID: ${{ vars.AIMS_CLASSIFIER_MODEL_ID }}
-  AIMS_CLASSIFIER_THINKING_LEVEL: ${{ vars.AIMS_CLASSIFIER_THINKING_LEVEL }}
+  # Hardcoded defaults (not vars.*) -- deploy.yaml's vars.MODEL_ID etc. are
+  # not actually set at the repo level; deploy.yaml only survives this
+  # because its gcloud command has inline bash `:-default` fallbacks. This
+  # job sets a real env var directly, so it needs a real value, matching
+  # quality.yml's simulated-environment pattern.
+  VERTEX_LOCATION: global
+  MODEL_ID: gemini-3.6-flash
+  AIMS_CLASSIFIER_MODEL_ID: gemini-3.5-flash-lite
+  AIMS_CLASSIFIER_THINKING_LEVEL: minimal
   AIMS_COACHING_ENABLED: "true"
   AIMS_COACHING_DEFAULT: "true"
   MEMORY_BACKEND: memory
