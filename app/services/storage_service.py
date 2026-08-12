@@ -60,10 +60,22 @@ class StorageService:
                 logger.error(f"Failed to initialize GCS reports bucket {self.reports_bucket_name}: {reports_bucket_exc}")
         return self._reports_bucket
 
-    def upload_session(self, session_id: str, user_id: str, session_data: Dict[str, Any], is_report: bool = False) -> bool:
+    def upload_session(
+        self,
+        session_id: str,
+        user_id: str,
+        session_data: Dict[str, Any],
+        is_report: bool = False,
+        finalize_persona_index: bool = False,
+    ) -> bool:
         """
         Uploads session data to GCS.
         Path: env={APP_ENV}/sessions/v1/user_id={user_id}/session_id={session_id}.json
+
+        Called on every chat turn (open sessions included), so most calls must
+        NOT touch the persona index - only a caller that knows the session has
+        actually concluded (endgame sweep in prune_expired, or an explicit bug
+        report) should pass finalize_persona_index=True.
         """
         target_bucket_name = self.reports_bucket_name if is_report else self.bucket_name
         bucket = self.reports_bucket if is_report else self.bucket
@@ -81,7 +93,7 @@ class StorageService:
         archive_data = self._transform_to_logical_schema(session_id, user_id, session_data)
 
         path = settings.gcs_path("sessions/v1", f"user_id={user_id}", f"session_id={session_id}.json")
-        
+
         try:
             blob = bucket.blob(path)
             payload = json.dumps(archive_data, indent=2)
@@ -95,7 +107,8 @@ class StorageService:
             # reports upload their full transcript to a separate reports
             # bucket, but a reported session is still a real persona
             # interaction (with outcome "bug_report") worth indexing.
-            self._record_persona_index_entry(user_id, session_id, archive_data)
+            if finalize_persona_index:
+                self._record_persona_index_entry(user_id, session_id, archive_data)
 
             return True
         except Exception as upload_exc:
@@ -184,7 +197,12 @@ class StorageService:
             },
             "outcome": {
                 "isGameOver": data.get("game_over", False),
-                "exitContext": "bug_report" if "error_report" in data else "completion" if data.get("game_over") else "abandoned",
+                "exitContext": (
+                    "bug_report" if "error_report" in data
+                    else "completion" if data.get("game_over")
+                    else "abandoned" if data.get("exit_context") == "abandoned"
+                    else "open"
+                ),
                 "report": {
                     "reason": data.get("error_report"),
                     "reportedAt": data.get("reported_at")
@@ -262,11 +280,15 @@ class StorageService:
     @staticmethod
     def _derive_index_outcome(archive_data: Dict[str, Any]) -> Optional[str]:
         """Map the archive's exit/resolution info down to one of
-        "bug_report" | "vaccination" | "literature", or None when the
-        session never reached one of those resolutions (e.g. abandoned)."""
+        "bug_report" | "abandoned" | "open" | "vaccination" | "literature",
+        or None when the session completed without one of those resolutions."""
         exit_context = (((archive_data.get("metadata") or {}).get("outcome") or {}).get("exitContext"))
         if exit_context == "bug_report":
             return "bug_report"
+        if exit_context == "abandoned":
+            return "abandoned"
+        if exit_context == "open":
+            return "open"
         resolution_type = ((archive_data.get("analytics") or {}).get("summary") or {}).get("outcome")
         if resolution_type == "accepted_vaccine":
             return "vaccination"
@@ -301,13 +323,40 @@ class StorageService:
             "ts": time.time(),
         }
 
+    def record_open_session(self, user_id: str, session_id: str, persona_name: Optional[str]) -> None:
+        """
+        Best-effort: append an "open" row to the user's persona index when a
+        brand-new session is assigned a persona, so the index reflects every
+        session from the moment it starts (not just ones that reach a final
+        resolution). prune_expired() later finds this row by session_id and
+        overwrites its outcome once the session concludes or goes stale.
+        """
+        if not persona_name:
+            return
+        self._upsert_persona_index_entry(user_id, {
+            "persona": str(persona_name),
+            "session_id": session_id,
+            "number_of_turns": 0,
+            "outcome": "open",
+            "overall_score": None,
+            "announce_score": None,
+            "inquire_score": None,
+            "mirror_score": None,
+            "secure_score": None,
+            "ts": time.time(),
+        })
+
     def _record_persona_index_entry(self, user_id: str, session_id: str, archive_data: Dict[str, Any]) -> None:
         """
-        Best-effort append to a small per-user persona index, so
+        Best-effort upsert into a small per-user persona index, so
         count_personas_for_user can read one small object on a cache miss
         instead of listing and downloading every archived session transcript
         for that user. Failures here must never affect upload_session's
         return value, since the session archive itself already succeeded.
+
+        Only call this once a session has truly concluded (it overwrites the
+        "open" row record_open_session created at session start, matched by
+        session_id, instead of appending a duplicate).
         """
         try:
             from app.services.persona_service import extract_persona_name_from_archive
@@ -315,6 +364,16 @@ class StorageService:
             if not persona_name:
                 return
 
+            self._upsert_persona_index_entry(
+                user_id, self._build_persona_index_entry(session_id, persona_name, archive_data)
+            )
+        except Exception as index_exc:
+            logger.debug("Failed to update persona index for user %s: %s", user_id, index_exc)
+
+    def _upsert_persona_index_entry(self, user_id: str, entry: Dict[str, Any]) -> None:
+        """Write `entry` into the user's persona index, replacing any existing
+        row with the same session_id in place rather than appending a duplicate."""
+        try:
             bucket = self.bucket
             if not bucket:
                 return
@@ -329,7 +388,15 @@ class StorageService:
             if not isinstance(entries, list):
                 entries = []
 
-            entries.append(self._build_persona_index_entry(session_id, persona_name, archive_data))
+            session_id = entry.get("session_id")
+            match_idx = next(
+                (i for i, e in enumerate(entries) if isinstance(e, dict) and e.get("session_id") == session_id),
+                None,
+            )
+            if match_idx is not None:
+                entries[match_idx] = entry
+            else:
+                entries.append(entry)
             if len(entries) > PERSONA_INDEX_MAX_ENTRIES:
                 entries = entries[-PERSONA_INDEX_MAX_ENTRIES:]
 
