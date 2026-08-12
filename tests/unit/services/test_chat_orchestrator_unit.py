@@ -122,6 +122,51 @@ async def test_handle_chat_routes_to_coaching_when_enabled(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_handle_chat_coaching_archives_every_turn_even_without_endgame(monkeypatch):
+    """A mid-conversation turn (no coach_post) must still queue a GCS archive,
+    marked as an open/in-progress write, so abandoned sessions are visible."""
+    orchestrator = _orchestrator(memory_store={"sid": {"history": [], "user_info": {}}})
+    ctx = _ctx(user_info={"identifier": "doctor@example.com"})
+    orchestrator.context_builder.build = MagicMock(return_value=ctx)
+
+    class FakeAimsHandler:
+        def __init__(self, **kwargs):
+            pass
+
+        @staticmethod
+        async def handle(req, body, ctx):
+            return {
+                "reply": "patient",
+                "model": "model",
+                "latency_ms": 12,
+                "coaching": {"step": "Announce"},
+                "session": {"totalTurns": 1},
+                # No coach_post: the game is still in progress this turn.
+            }
+
+    monkeypatch.setattr("app.services.aims_coaching_handler.AimsCoachingHandler", FakeAimsHandler)
+    background = MagicMock()
+
+    response = await orchestrator.handle_chat(
+        _request(),
+        ChatRequest(message="hello", sessionId="sid", coach=True),
+        background,
+    )
+
+    payload = _body(response)
+    assert "coachPost" not in payload
+    assert "gameOver" not in payload
+    background.add_task.assert_called_once()
+    _, session_id, user_id, archive_data = background.add_task.call_args.args
+    assert session_id == "sid"
+    assert user_id == "doctor@example.com"
+    assert archive_data["game_over"] is False
+    assert archive_data["exported_via"] == "turn"
+    assert "coach_post" not in archive_data
+    assert "session_ended" not in orchestrator.memory_store["sid"]
+
+
+@pytest.mark.asyncio
 async def test_handle_chat_routes_to_legacy_and_includes_optional_fields(monkeypatch):
     orchestrator = _orchestrator(aims_config={"enabled": False, "force_default": False})
     orchestrator.context_builder.build = MagicMock(return_value=_ctx())
