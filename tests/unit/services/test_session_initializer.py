@@ -57,3 +57,53 @@ def test_initialize_session_clears_stale_active_connection_before_blocking():
 
     assert response["alreadyActive"] is False
     assert memory_store["session-1"]["active_connections"] == ["new-connection"]
+
+
+def test_initialize_session_records_open_persona_entry_synchronously(monkeypatch):
+    storage = MagicMock()
+    monkeypatch.setattr("app.services.storage_service.storage_service", storage)
+
+    body = SimpleNamespace(
+        sessionId="session-new",
+        connectionId=None,
+        personaId="Jasmine",
+        character=None,
+        scene=None,
+        userInfo={"identifier": "doctor@example.com"},
+        initialCard=None,
+        force=False,
+    )
+
+    initialize_session(body, memory_store={}, memory_enabled=True, logger=MagicMock())
+
+    storage.record_open_session.assert_called_once_with("doctor@example.com", "session-new", "Jasmine")
+
+
+def test_initialize_session_queues_open_persona_entry_on_background_tasks(monkeypatch):
+    storage = MagicMock()
+    monkeypatch.setattr("app.services.storage_service.storage_service", storage)
+    background_tasks = MagicMock()
+
+    body = SimpleNamespace(
+        sessionId="session-new",
+        connectionId=None,
+        personaId="Jasmine",
+        character=None,
+        scene=None,
+        userInfo={"identifier": "doctor@example.com"},
+        initialCard=None,
+        force=False,
+    )
+
+    initialize_session(
+        body,
+        memory_store={},
+        memory_enabled=True,
+        logger=MagicMock(),
+        background_tasks=background_tasks,
+    )
+
+    storage.record_open_session.assert_not_called()
+    background_tasks.add_task.assert_called_once_with(
+        storage.record_open_session, "doctor@example.com", "session-new", "Jasmine"
+    )

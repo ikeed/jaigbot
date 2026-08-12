@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends
 from pydantic import BaseModel
 
 from app.services.session_initializer import deregister_session_connection, initialize_session
@@ -35,13 +35,18 @@ def create_session_router(
     router = APIRouter()
 
     @router.post(ENDPOINT_SESSION)
-    async def init_session(body: SessionInitRequest, memory_store=Depends(get_memory_store)):
+    async def init_session(
+        body: SessionInitRequest,
+        background_tasks: BackgroundTasks,
+        memory_store=Depends(get_memory_store),
+    ):
         """Register a session in the memory store before chat messages arrive."""
         return initialize_session(
             body,
             memory_store=memory_store,
             memory_enabled=settings.MEMORY_ENABLED,
             logger=logger,
+            background_tasks=background_tasks,
         )
 
     @router.post(ENDPOINT_DEREGISTER)

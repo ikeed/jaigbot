@@ -22,6 +22,7 @@ def initialize_session(
     memory_store: Any,
     memory_enabled: bool,
     logger: logging.Logger,
+    background_tasks: Any = None,
 ) -> dict:
     """Initialize or refresh a Chainlit-backed session.
 
@@ -119,9 +120,27 @@ def initialize_session(
         }
         if selected_persona:
             user_info = body.userInfo if isinstance(body.userInfo, dict) else {}
+            user_id = user_info.get("identifier")
             record_persona_interaction_once(
-                user_info.get("identifier"), sid, selected_persona, memory_store
+                user_id, sid, selected_persona, memory_store
             )
+            # Seed the GCS persona index with an "open" row for this session so
+            # abandoned/in-progress conversations show up there too, not just
+            # ones that reach a final resolution. prune_expired() later finds
+            # this row by session_id and overwrites its outcome.
+            try:
+                from app.services.storage_service import storage_service
+
+                persona_name = selected_persona.get("name")
+                gcs_user_id = user_id or "anonymous"
+                if background_tasks is not None:
+                    background_tasks.add_task(
+                        storage_service.record_open_session, gcs_user_id, sid, persona_name
+                    )
+                else:
+                    storage_service.record_open_session(gcs_user_id, sid, persona_name)
+            except Exception as exc:
+                logger.debug("Failed to record open persona index entry for %s: %s", sid, exc)
 
         if character:
             card_content = initial_card or _scenario_card_from_character(character)

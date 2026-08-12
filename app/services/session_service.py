@@ -162,10 +162,18 @@ class SessionService:
                         "exported_via": "prune_expired",
                         "pruned_at": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(now))
                     }
+                    # This is the one place a session's final state gets decided:
+                    # it went stale without ever reaching game_over or a report,
+                    # so it's genuinely abandoned rather than still in progress.
+                    if not archive_data.get("game_over") and "error_report" not in archive_data:
+                        archive_data["exit_context"] = "abandoned"
                     try:
                         # Note: prune_expired is usually called in the background or between requests,
                         # so we call upload_session directly (blocking this minor loop, not the user).
-                        storage_service.upload_session(sid, user_id, archive_data)
+                        # finalize_persona_index=True: prune_expired is the single point that
+                        # settles a session's outcome (completed, abandoned, or reported), so
+                        # this is where the "open" persona-index row gets its final outcome.
+                        storage_service.upload_session(sid, user_id, archive_data, finalize_persona_index=True)
                     except Exception as e:
                         logger.debug("Failed to archive session %s during prune: %s", sid, e)
                         

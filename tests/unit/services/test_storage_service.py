@@ -92,9 +92,9 @@ def test_storage_service_structured_archive(mock_storage_client):
         "game_over": True
     }
     
-    result = service.upload_session("sid", "uid@example.com", session_data)
+    result = service.upload_session("sid", "uid@example.com", session_data, finalize_persona_index=True)
     assert result is True
-    
+
     args, kwargs = mock_blob.upload_from_string.call_args
     payload = json.loads(args[0])
 
@@ -319,10 +319,109 @@ def test_storage_service_record_persona_index_entry_skips_when_no_persona():
     bucket.blob.assert_not_called()
 
 
+def test_storage_service_record_persona_index_entry_overwrites_matching_session_id(monkeypatch):
+    service = StorageService(bucket_name="test-bucket")
+    bucket = MagicMock()
+    index_blob = MagicMock()
+    index_blob.download_as_string.return_value = json.dumps({
+        "entries": [
+            {"persona": "Jasmine", "session_id": "sid-open", "outcome": "open", "ts": 1.0},
+            {"persona": "Sophia", "session_id": "sid-other", "outcome": "vaccination", "ts": 2.0},
+        ]
+    }).encode("utf-8")
+    bucket.blob.return_value = index_blob
+    service._bucket = bucket
+
+    service._record_persona_index_entry(
+        "uid", "sid-open", {"config": {"persona": {"name": "Jasmine"}}, "metadata": {"outcome": {"exitContext": "abandoned"}}}
+    )
+
+    args, _ = index_blob.upload_from_string.call_args
+    entries = json.loads(args[0])["entries"]
+    # Same number of entries: the "open" row was overwritten in place, not duplicated.
+    assert len(entries) == 2
+    updated = next(e for e in entries if e["session_id"] == "sid-open")
+    assert updated["outcome"] == "abandoned"
+    assert next(e for e in entries if e["session_id"] == "sid-other")["outcome"] == "vaccination"
+
+
+def test_storage_service_record_open_session_appends_open_row():
+    service = StorageService(bucket_name="test-bucket")
+    bucket = MagicMock()
+    index_blob = MagicMock()
+    index_blob.download_as_string.side_effect = ValueError("no index yet")
+    bucket.blob.return_value = index_blob
+    service._bucket = bucket
+
+    service.record_open_session("uid", "sid-1", "Jasmine")
+
+    args, _ = index_blob.upload_from_string.call_args
+    entries = json.loads(args[0])["entries"]
+    assert entries == [{
+        "persona": "Jasmine",
+        "session_id": "sid-1",
+        "number_of_turns": 0,
+        "outcome": "open",
+        "overall_score": None,
+        "announce_score": None,
+        "inquire_score": None,
+        "mirror_score": None,
+        "secure_score": None,
+        "ts": entries[0]["ts"],
+    }]
+
+
+def test_storage_service_record_open_session_skips_when_no_persona():
+    service = StorageService(bucket_name="test-bucket")
+    bucket = MagicMock()
+    service._bucket = bucket
+
+    service.record_open_session("uid", "sid-1", None)
+
+    bucket.blob.assert_not_called()
+
+
+def test_storage_service_upload_session_does_not_touch_persona_index_by_default(mock_storage_client):
+    """Per-turn writes must not call finalize_persona_index=True implicitly -
+    only prune_expired()/handle_report opt in, or every turn would spam a
+    duplicate/overwrite of the persona index."""
+    service = StorageService(bucket_name="test-bucket")
+    bucket = MagicMock()
+    session_blob = MagicMock()
+    bucket.blob.return_value = session_blob
+    service._bucket = bucket
+
+    session_data = {"config": {"persona": {"name": "Jasmine"}}, "persona": {"name": "Jasmine"}}
+    assert service.upload_session("sid", "uid", session_data) is True
+
+    bucket.blob.assert_called_once_with("env=local/sessions/v1/user_id=uid/session_id=sid.json")
+
+
+@pytest.mark.parametrize(
+    "session_data,expected_exit_context",
+    [
+        ({}, "open"),
+        ({"game_over": False}, "open"),
+        ({"exit_context": "abandoned"}, "abandoned"),
+        ({"game_over": True}, "completion"),
+        ({"error_report": "bad reply"}, "bug_report"),
+        # game_over wins over an abandoned override (a session that completed
+        # then went stale is a completion, not an abandonment).
+        ({"game_over": True, "exit_context": "abandoned"}, "completion"),
+    ],
+)
+def test_storage_service_transform_exit_context(session_data, expected_exit_context):
+    service = StorageService(bucket_name="test-bucket")
+    result = service._transform_to_logical_schema("sid", "uid", {**session_data, "full_history": []})
+    assert result["metadata"]["outcome"]["exitContext"] == expected_exit_context
+
+
 @pytest.mark.parametrize(
     "archive_data,expected_outcome",
     [
         ({"metadata": {"outcome": {"exitContext": "bug_report"}}}, "bug_report"),
+        ({"metadata": {"outcome": {"exitContext": "abandoned"}}}, "abandoned"),
+        ({"metadata": {"outcome": {"exitContext": "open"}}}, "open"),
         ({"analytics": {"summary": {"outcome": "accepted_vaccine"}}}, "vaccination"),
         ({"analytics": {"summary": {"outcome": "accepted_literature"}}}, "literature"),
         ({"analytics": {"summary": {"outcome": "deferred"}}}, None),

@@ -173,6 +173,39 @@ def test_prune_expired_archives_and_removes_old_sessions(monkeypatch):
     assert archive_data["exported_via"] == "prune_expired"
     assert archive_data["session_id"] == "expired"
     assert archive_data["user_id"] == "doctor@example.com"
+    # Session never reached game_over or a report before going stale, so
+    # prune_expired settles its final outcome as abandoned.
+    assert archive_data["exit_context"] == "abandoned"
+    assert storage.upload_session.call_args.kwargs["finalize_persona_index"] is True
+
+
+def test_prune_expired_does_not_mark_completed_sessions_abandoned(monkeypatch):
+    now = 1_800_000_000.0
+    store = {
+        "finished": {
+            "history": [],
+            "full_history": [],
+            "updated": now - 120,
+            "game_over": True,
+            "user_info": {"identifier": "doctor@example.com"},
+        },
+    }
+    storage = MagicMock()
+    monkeypatch.setattr("time.time", lambda: now)
+    monkeypatch.setattr("app.services.storage_service.storage_service", storage)
+
+    svc = SessionService(
+        store,
+        cookie=CookieSettings(name="sid", secure=False, samesite="lax", max_age=3600),
+        memory_enabled=True,
+        memory_max_turns=8,
+        memory_ttl_seconds=60,
+    )
+
+    svc.prune_expired()
+
+    archive_data = storage.upload_session.call_args.args[2]
+    assert "exit_context" not in archive_data
 
 
 def test_prune_expired_removes_session_when_archive_fails(monkeypatch):
