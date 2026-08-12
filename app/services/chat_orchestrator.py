@@ -187,39 +187,46 @@ class ChatOrchestrator:
                 pass
             
             # Add optional coach post for end-game scenarios
-            if result.get("coach_post"):
+            game_over = bool(result.get("coach_post"))
+            if game_over:
                 response_payload["coachPost"] = result["coach_post"]
                 response_payload["gameOver"] = True
-                
-                # Trigger background archive to GCS
-                if self.background_tasks:
-                    try:
-                        mem = self.session_service.get_mem(ctx.session_id)
-                        # Use identifier (email) from user_info if present
-                        user_id = ctx.user_info.get("identifier") if ctx.user_info else None
-                        if not user_id:
-                            user_id = "anonymous"
-                            
-                        # Enrich mem with endgame status for the archive
+
+            # Persist the session to GCS on every turn (not just at endgame) so
+            # abandoned/in-progress conversations are visible too - prune_expired()
+            # is what later marks a still-open session as "abandoned"; this write
+            # just keeps the object current with the latest turn.
+            if self.background_tasks:
+                try:
+                    mem = self.session_service.get_mem(ctx.session_id)
+                    # Use identifier (email) from user_info if present
+                    user_id = ctx.user_info.get("identifier") if ctx.user_info else None
+                    if not user_id:
+                        user_id = "anonymous"
+
+                    if game_over:
                         mem["session_ended"] = time.time()
                         self.memory_store[ctx.session_id] = mem
-                        archive_data = {
-                            **mem,
-                            "session_id": ctx.session_id,
-                            "user_id": user_id,
-                            "game_over": True,
-                            "coach_post": result["coach_post"],
-                            "exported_via": "endgame"
-                        }
-                        self.background_tasks.add_task(
-                            storage_service.upload_session,
-                            ctx.session_id,
-                            user_id,
-                            archive_data
-                        )
-                    except Exception as archive_err:
-                        self.logger.warning(f"Failed to queue GCS archive for session {ctx.session_id}: {archive_err}")
-            
+
+                    archive_data = {
+                        **mem,
+                        "session_id": ctx.session_id,
+                        "user_id": user_id,
+                        "game_over": game_over,
+                        "exported_via": "endgame" if game_over else "turn",
+                    }
+                    if game_over:
+                        archive_data["coach_post"] = result["coach_post"]
+
+                    self.background_tasks.add_task(
+                        storage_service.upload_session,
+                        ctx.session_id,
+                        user_id,
+                        archive_data
+                    )
+                except Exception as archive_err:
+                    self.logger.warning(f"Failed to queue GCS archive for session {ctx.session_id}: {archive_err}")
+
             resp = JSONResponse(status_code=200, content=response_payload)
             
             # Set session cookie
@@ -413,18 +420,23 @@ class ChatOrchestrator:
                 "reported_at": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
             }
 
-            # Trigger background archive
+            # Trigger background archive. finalize_persona_index=True: a report
+            # ends the session immediately (popped from the store below), so it
+            # never reaches prune_expired() to settle its persona-index outcome.
             if self.background_tasks:
                 self.background_tasks.add_task(
                     storage_service.upload_session,
                     session_id,
                     user_id,
                     archive_data,
-                    is_report=True
+                    is_report=True,
+                    finalize_persona_index=True,
                 )
             else:
                 # Fallback to synchronous if no background tasks (rare)
-                storage_service.upload_session(session_id, user_id, archive_data, is_report=True)
+                storage_service.upload_session(
+                    session_id, user_id, archive_data, is_report=True, finalize_persona_index=True
+                )
 
             # Clear session from memory store
             self.memory_store.pop(session_id, None)
