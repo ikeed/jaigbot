@@ -1,0 +1,137 @@
+{
+  "date": "2026-08-29",
+  "model": "gemini-3.6-flash",
+  "cases": 38,
+  "classifier_leg_latency_ms": {
+    "default_thinking": {
+      "p50": 9168,
+      "p90": 13219,
+      "mean": 9891
+    },
+    "minimal_thinking": {
+      "p50": 5235,
+      "p90": 6046,
+      "mean": 5227
+    }
+  },
+  "end_to_end_turn_latency_ms": {
+    "default": {
+      "p50": 14221,
+      "mean": 16618,
+      "max": 22936
+    },
+    "minimal": {
+      "p50": 11031,
+      "mean": 11364,
+      "max": 18086
+    }
+  },
+  "blind_judgements": {
+    "n": 76,
+    "passes": 2,
+    "cross_pass_agreement": {
+      "cls": 38,
+      "txt": 31,
+      "score": 38
+    },
+    "classification": {
+      "default": 2,
+      "minimal": 0,
+      "tie": 74
+    },
+    "coaching_text": {
+      "default": 13,
+      "minimal": 23,
+      "tie": 40
+    },
+    "score_calibration": {
+      "default": 4,
+      "minimal": 0,
+      "tie": 72
+    }
+  },
+  "consistent_wins": {
+    "txt": [
+      [
+        "borderline#evidence_after_mirror",
+        "default"
+      ],
+      [
+        "ethan#4",
+        "default"
+      ],
+      [
+        "ethan#7",
+        "minimal"
+      ],
+      [
+        "ethan#10",
+        "default"
+      ],
+      [
+        "ethan#9",
+        "minimal"
+      ],
+      [
+        "jasmine#1",
+        "minimal"
+      ],
+      [
+        "jasmine#6",
+        "minimal"
+      ],
+      [
+        "jasmine#8",
+        "minimal"
+      ],
+      [
+        "sophia#1",
+        "minimal"
+      ],
+      [
+        "sophia#10",
+        "default"
+      ],
+      [
+        "sophia#3",
+        "default"
+      ],
+      [
+        "sophia#5",
+        "default"
+      ],
+      [
+        "sophia#7",
+        "minimal"
+      ],
+      [
+        "sophia#9",
+        "minimal"
+      ]
+    ],
+    "score": [
+      [
+        "borderline#evidence_after_mirror",
+        "default"
+      ],
+      [
+        "ethan#4",
+        "default"
+      ]
+    ],
+    "cls": [
+      [
+        "ethan#10",
+        "default"
+      ]
+    ]
+  },
+  "material_difference_cases": {
+    "borderline#evidence_after_mirror": "default",
+    "ethan#10": "default",
+    "ethan#4": "default",
+    "ethan#9": "minimal",
+    "sophia#10": "default"
+  },
+  "decision": "keep AIMS_CLASSIFIER_THINKING_LEVEL unset (model default thinking)"
+}
