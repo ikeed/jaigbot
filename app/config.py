@@ -62,7 +62,11 @@ class Settings(BaseSettings):
     AIMS_COACHING_DEFAULT: bool = False
     AIMS_CLASSIFIER_MODE: str = "hybrid"
     AIMS_CLASSIFIER_MODEL_ID: str = DEFAULT_CLASSIFIER_MODEL_ID
-    AIMS_CLASSIFIER_THINKING_LEVEL: Optional[str] = "minimal"
+    # None sends no ThinkingConfig at all, leaving the model's own default. This is what
+    # production has actually been doing, because the configured value never reached
+    # ClassifierService. Set to "minimal" to cut per-turn latency and cost, but benchmark
+    # the borderline scenarios first — see scripts/benchmark_classifier_models.py.
+    AIMS_CLASSIFIER_THINKING_LEVEL: Optional[str] = None
     AIMS_CLASSIFIER_THINKING_BUDGET: Optional[int] = None
     AIMS_CLASSIFY_CONTEXT_TURNS: int = 6
     AIMS_CLASSIFY_MAX_CONCERNS: int = 3

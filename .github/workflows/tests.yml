@@ -37,8 +37,7 @@ jobs:
           REGION: us-central1
           VERTEX_LOCATION: global
           MODEL_ID: gemini-3.6-flash
-          AIMS_CLASSIFIER_MODEL_ID: gemini-3.5-flash-lite
-          AIMS_CLASSIFIER_THINKING_LEVEL: minimal
+          AIMS_CLASSIFIER_MODEL_ID: gemini-3.6-flash
           TEMPERATURE: "0.2"
           MAX_TOKENS: "768"
           AIMS_COACHING_ENABLED: "true"
