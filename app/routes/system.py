@@ -162,8 +162,14 @@ def create_system_router(
         }
 
     @router.get(ENDPOINT_MODELS)
-    async def list_models(request: Request):
-        """List available google/publisher models in this project+region using ADC."""
+    def list_models(request: Request):
+        """List available google/publisher models in this project+region using ADC.
+
+        Deliberately sync: google.auth.default() and AuthorizedSession.get() are both
+        blocking, and declaring the endpoint `async` ran them on the event loop, stalling
+        every concurrent request for the duration. FastAPI dispatches sync endpoints to a
+        worker thread.
+        """
         import google.auth
         from google.auth.transport.requests import AuthorizedSession
 

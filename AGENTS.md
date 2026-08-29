@@ -46,7 +46,9 @@ Runtime shapes:
 Before changing AIMS classification, scoring, phase progression, or endgame
 behavior, read `docs/aims/classification-scoring-rules.md` and the service map
 in `docs/aims/README.md`. Use `docs/aims/AIMS_Approach_Summary.md` for theory
-and `docs/aims/aims_mapping.json` for deterministic fallback data.
+and `docs/aims/aims_mapping.json` for the deterministic engine's mapping data.
+That engine is gated behind `AIMS_HEURISTIC_FALLBACK_ENABLED` (default `false`)
+and does not run in any deployed environment — see `docs/aims/README.md`.
 
 ## Token-Efficient Workflow
 

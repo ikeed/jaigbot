@@ -17,7 +17,7 @@ Project structure (top-level)
 - pytest.ini — Pytest options (coverage on app/)
 
 Python version
-- Use Python 3.11 locally and in CI unless otherwise stated.
+- Use Python 3.13 locally and in CI (pinned in `.python-version`) unless otherwise stated.
 
 Environment variables expected by the backend
 - PROJECT_ID — GCP project ID (required for live calls)

@@ -1,20 +1,57 @@
 from typing import Optional, Tuple, List, Dict, Any
 import logging
-import os
 import json
+import threading
 
 from google import genai
 from google.genai import types
 from google.genai.errors import APIError
 
-# Configurable behavior via env vars
-AUTO_CONTINUE_ON_MAX_TOKENS = os.getenv("AUTO_CONTINUE_ON_MAX_TOKENS", "true").lower() == "true"
-MAX_CONTINUATIONS = int(os.getenv("MAX_CONTINUATIONS", "2"))
-# Continuation strategy tuning
-CONTINUE_TAIL_CHARS = int(os.getenv("CONTINUE_TAIL_CHARS", "500"))
-CONTINUE_INSTRUCTION_ENABLED = os.getenv("CONTINUE_INSTRUCTION_ENABLED", "true").lower() == "true"
-MIN_CONTINUE_GROWTH = int(os.getenv("MIN_CONTINUE_GROWTH", "10"))
+# Continuation behaviour now comes from app.config.Settings, resolved per call. It used to
+# be read here with os.getenv at import time, which meant /config and /diagnostics reported
+# settings.* while this module used whatever the environment held when it was first
+# imported — and under `uvicorn app.main:app` those disagree, because only run_app.py and
+# chainlit_app.py push .env into os.environ.
 MAX_TOKEN_FINISH_REASONS = frozenset({"MAX_TOKENS", "MAX_TOKEN", "MAX_OUTPUT_TOKENS"})
+
+# Gen AI clients, shared per (project, location). A VertexClient is constructed per LLM
+# call — two to four times per coaching turn — and each one used to build its own
+# genai.Client, which means its own google.auth.default() resolution and access-token
+# fetch, plus its own TLS setup. The model id is deliberately NOT part of the key: it is a
+# per-request argument to generate_content, never client state, so one client serves every
+# model and the model-fallback loop costs nothing extra.
+#
+# The factory object is part of the key, and that detail is load-bearing. Tests
+# monkeypatch app.vertex.genai.Client with a fresh fake class per test; keying on
+# (project, location) alone hands one test's fake to the next test, which breaks 6 of the
+# 15 tests in tests/unit/test_vertex_unit.py. Keying on the factory makes cross-test bleed
+# impossible by construction, since monkeypatch installs a new class object each time.
+#
+# KNOWN TRADE-OFF, worth reading before debugging a mysterious stall: sharing a client
+# also shares its aiohttp connection pool, so requests now reuse keep-alive connections.
+# When the server closes one first, google-genai raises ServerDisconnectedError (or
+# ClientOSError) and retries once after `1 + random.randint(0, 9)` seconds
+# (google/genai/_api_client.py, non-streaming path). Building a fresh client per call made
+# that essentially unhittable because every request opened a new connection. The same
+# applies inside VertexGateway's model-fallback loop, which no longer gets a fresh
+# transport per attempt. Measured turn latency still improved sharply (mean 19.1s -> 13.4s,
+# max 31.6s -> 14.8s over 9 live turns), so this is worth it — but a sporadic multi-second
+# stall under the AIMS_CLASSIFY_BUDGET_S budget would point here first.
+_CLIENT_CACHE: Dict[Tuple[Any, ...], Any] = {}
+_CLIENT_CACHE_LOCK = threading.Lock()
+
+
+def reset_genai_client_cache() -> None:
+    """Drop every cached Gen AI client.
+
+    Mainly for tests and long-running scripts: the SDK keeps a per-event-loop aiohttp
+    session and auth lock on each client and never prunes them, so a client reused across
+    many loops (``asyncio.run`` per iteration, or pytest's per-test loop under
+    ``asyncio_mode = auto``) retains every loop it has seen. Production runs a single loop
+    and does not need this.
+    """
+    with _CLIENT_CACHE_LOCK:
+        _CLIENT_CACHE.clear()
 
 
 class VertexAIError(Exception):
@@ -55,19 +92,36 @@ class VertexClient:
         self._client: Optional[genai.Client] = None
 
     def _get_client(self) -> genai.Client:
-        """Return a cached Gen AI client configured for Vertex AI.
+        """Return a Gen AI client for this project/location, shared across instances.
 
-        The client is created on first call and reused for subsequent
-        requests, avoiding redundant HTTP session and auth setup.
+        The per-instance memo below only ever helped when the same VertexClient was
+        reused, which never happens: callers build a fresh one per LLM call. The shared
+        cache is what actually avoids re-resolving credentials and re-establishing TLS on
+        every request.
         """
-        if self._client is None:
-            self._client = genai.Client(
-                vertexai=True,
-                project=self.project,
-                location=self.region,
-                http_options=types.HttpOptions(api_version="v1"),
-            )
-        return self._client
+        if self._client is not None:
+            return self._client
+
+        # Resolved at call time, never at import and never as a default argument, so that
+        # monkeypatching app.vertex.genai.Client is effective.
+        factory = genai.Client
+        key = (self.project, self.region, factory)
+
+        client = _CLIENT_CACHE.get(key)
+        if client is None:
+            with _CLIENT_CACHE_LOCK:
+                client = _CLIENT_CACHE.get(key)
+                if client is None:
+                    client = factory(
+                        vertexai=True,
+                        project=self.project,
+                        location=self.region,
+                        http_options=types.HttpOptions(api_version="v1"),
+                    )
+                    _CLIENT_CACHE[key] = client
+
+        self._client = client
+        return client
 
     @staticmethod
     def _sanitize_response_schema(schema: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -360,12 +414,24 @@ class VertexClient:
     ) -> tuple[str, dict]:
         """Generate text and return both the text and useful metadata for logging.
 
-        If the model halts with finishReason == MAX_TOKENS and AUTO_CONTINUE_ON_MAX_TOKENS
-        is enabled, this method will automatically send up to MAX_CONTINUATIONS
-        "continue" turns and concatenate the results.
+        If the model halts with finishReason == MAX_TOKENS and
+        settings.AUTO_CONTINUE_ON_MAX_TOKENS is enabled, this method will automatically
+        send up to settings.MAX_CONTINUATIONS "continue" turns and concatenate the
+        results.
 
         The return shape is (text, meta_dict).
         """
+        # Imported here rather than at module scope: app.config builds Settings() on
+        # import, whose PROJECT_ID validator calls google.auth.default(). Importing
+        # app.vertex must stay free of that network/credential side effect.
+        from app.config import settings
+
+        auto_continue = settings.AUTO_CONTINUE_ON_MAX_TOKENS
+        max_continuations = settings.MAX_CONTINUATIONS
+        continue_tail_chars = settings.CONTINUE_TAIL_CHARS
+        continue_instruction_enabled = settings.CONTINUE_INSTRUCTION_ENABLED
+        min_continue_growth = settings.MIN_CONTINUE_GROWTH
+
         try:
             client = self._get_client()
             config = self._build_config(
@@ -404,13 +470,13 @@ class VertexClient:
             continuation_count = 0
             no_progress_break = False
             while (
-                AUTO_CONTINUE_ON_MAX_TOKENS
+                auto_continue
                 and meta_local.get("finishReason") in MAX_TOKEN_FINISH_REASONS
-                and continuation_count < MAX_CONTINUATIONS
+                and continuation_count < max_continuations
             ):
                 continuation_count += 1
-                tail = (text or "")[-CONTINUE_TAIL_CHARS:]
-                if CONTINUE_INSTRUCTION_ENABLED:
+                tail = (text or "")[-continue_tail_chars:]
+                if continue_instruction_enabled:
                     cont_prompt = (
                         "Please continue exactly where you left off without repeating previous text.\n"
                         "Tail context follows. Continue seamlessly after it:\n" + tail + "\n(End of tail)"
@@ -420,7 +486,7 @@ class VertexClient:
 
                 self.logger.debug(
                     "Auto-continue #%s (tail_chars=%s, instr=%s)",
-                    continuation_count, len(tail), CONTINUE_INSTRUCTION_ENABLED,
+                    continuation_count, len(tail), continue_instruction_enabled,
                 )
                 next_resp = chat.send_message(cont_prompt)
                 next_text, next_meta = self._extract_response(next_resp)
@@ -438,7 +504,7 @@ class VertexClient:
                     "textLen": len(text),
                 })
 
-                if len(text) - prev_len < MIN_CONTINUE_GROWTH:
+                if len(text) - prev_len < min_continue_growth:
                     no_progress_break = True
                     break
                 if next_meta.get("finishReason") not in MAX_TOKEN_FINISH_REASONS:
@@ -466,8 +532,8 @@ class VertexClient:
                 "continuationCount": continuation_count,
                 "transport": "genai_sdk",
                 "noProgressBreak": no_progress_break,
-                "continueTailChars": CONTINUE_TAIL_CHARS,
-                "continuationInstructionEnabled": CONTINUE_INSTRUCTION_ENABLED,
+                "continueTailChars": continue_tail_chars,
+                "continuationInstructionEnabled": continue_instruction_enabled,
             }
 
             return text, meta

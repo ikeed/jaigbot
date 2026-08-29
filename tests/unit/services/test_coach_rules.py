@@ -75,7 +75,7 @@ def test_non_vax_gating_sets_null_step(monkeypatch):
 
 def test_tip_suppression_when_all_concerns_mirrored(monkeypatch):
     setup_env(monkeypatch)
-    monkeypatch.setenv("AIMS_HEURISTIC_FALLBACK_ENABLED", "true")
+    monkeypatch.setattr(settings, "AIMS_HEURISTIC_FALLBACK_ENABLED", True)
     c = TestClient(m.app)
     sess = "tip-sess"
     # Preload state: no unmirrored concerns remain
