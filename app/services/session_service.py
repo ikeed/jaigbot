@@ -168,8 +168,9 @@ class SessionService:
                     if not archive_data.get("game_over") and "error_report" not in archive_data:
                         archive_data["exit_context"] = "abandoned"
                     try:
-                        # Note: prune_expired is usually called in the background or between requests,
-                        # so we call upload_session directly (blocking this minor loop, not the user).
+                        # WARNING: this upload is synchronous and prune_expired runs inside the
+                        # request path (ChatContextBuilder.build, roughly 1 request in 29), so
+                        # this does block a user's turn once per expired session.
                         # finalize_persona_index=True: prune_expired is the single point that
                         # settles a session's outcome (completed, abandoned, or reported), so
                         # this is where the "open" persona-index row gets its final outcome.

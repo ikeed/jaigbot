@@ -7,15 +7,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 AIMSBot is a FastAPI + Chainlit application that simulates vaccine-hesitancy conversations and coaches
 clinicians on the AIMS communication method (Announce, Inquire, Mirror, Secure). Gemini on Vertex AI
 generates simulated patient/parent replies and classifies clinician turns against the AIMS protocol, with
-deterministic fallbacks and session-level scoring when the LLM is unavailable.
+session-level scoring. When the LLM is unavailable the turn degrades to a neutral "classification
+unavailable" result — see the classification note below before assuming a deterministic fallback runs.
 
 ## Commands
 
 ### Setup
 ```bash
-./scripts/setup_dev.sh   # creates .venv, installs requirements.txt, seeds .env from .env.example, sets up .chainlit/
+./scripts/setup_dev.sh   # creates .venv, installs requirements.txt + requirements-dev.txt, seeds .env from .env.example, sets up .chainlit/
 ```
-Python 3.13 is used in CI (`.python-version`); some docs still reference 3.11 — prefer 3.13.
+Python 3.13 (pinned in `.python-version`) is used locally and in CI.
+
+`requirements.txt` is runtime-only — it is what the Docker image installs. Test and lint tooling
+(pytest, ruff, mypy, bandit) lives in `requirements-dev.txt`, which pins the linter versions CI uses.
+Do not add dev-only packages to `requirements.txt`.
 
 ### Running locally
 ```bash
@@ -74,7 +79,7 @@ owner when testing behavior rather than testing through `AimsCoachingHandler`, w
 | Area | Owner |
 |------|-------|
 | Turn orchestration, API response assembly | `app/services/aims_coaching_handler.py` |
-| Parallel classifier + patient-reply calls, deterministic classification fallback | `app/services/aims_turn_coordinator.py` |
+| Parallel classifier + patient-reply calls, classification-unavailable result, flag-gated heuristic fallback | `app/services/aims_turn_coordinator.py` |
 | LLM AIMS classification, endgame LLM call | `app/services/classifier_service.py` |
 | Roleplayed patient reply generation, JSON validation, jailbreak handling | `app/services/patient_reply_service.py` |
 | LLM refinement of fallback coaching text only | `app/services/aims_feedback_service.py` |
@@ -87,9 +92,17 @@ owner when testing behavior rather than testing through `AimsCoachingHandler`, w
 
 The classifier recognizes nine step values including compounds (`Announce+Inquire`, `Mirror+Inquire`,
 `Mirror+Secure`, `Secure+Inquire`, `Mirror+Secure+Inquire`). The LLM classifier
-(`app/services/classifier_service.py`) is the primary path; `app/aims_engine.py` with
-`docs/aims/aims_mapping.json` is the deterministic fallback used on LLM timeout/failure. Before touching
-classification, scoring, phase progression, or endgame behavior, read
+(`app/services/classifier_service.py`) is the only classification path that runs in any deployed
+environment.
+
+**The deterministic engine does not run in production.** `app/aims_engine.py` and
+`docs/aims/aims_mapping.json` sit behind `AIMS_HEURISTIC_FALLBACK_ENABLED`, which defaults to `false`
+and is not set in `.env.example` or any workflow. On LLM timeout/failure
+`app/services/aims_turn_coordinator.py` returns a neutral "classification unavailable" result instead.
+Treat `aims_engine.py` as test-only unless you have deliberately enabled that flag; do not assume a
+turn is scored deterministically when the LLM call fails.
+
+Before touching classification, scoring, phase progression, or endgame behavior, read
 `docs/aims/classification-scoring-rules.md` (canonical rules reference) and `docs/aims/README.md` (service
 map). `docs/aims/AIMS_Approach_Summary.md` is the underlying academic theory (Parrish-Sprowl et al., 2023).
 
@@ -117,7 +130,8 @@ version pinned in `requirements.txt` rather than assuming API shape.
 SSO is enforced automatically once any `OAUTH_*_CLIENT_ID` is configured (Google/Facebook/Apple plus Okta,
 Auth0, Cognito, GitLab, Descope, Keycloak). See `run_app.py`, `app/security/` (`auth.py`, `oauth.py`,
 `jailbreak.py`), and `docs/sso-setup.md`. Without OAuth but with `CHAINLIT_AUTH_SECRET` set, a dev-only
-password login (`admin`/`admin`) is used.
+password login is enabled: the username comes from `AUTH_USERNAME` (default `admin`) and the password
+from `AUTH_PASSWORD`, which has no default — if it is unset, every login attempt is rejected.
 
 ## Branching and CI
 

@@ -12,9 +12,12 @@ This directory contains the AIMS communication protocol as implemented in AIMSBo
   (Parrish-Sprowl et al., 2023).  Describes the theoretical AIMS framework; does not describe
   implementation details.
 
-- **aims_mapping.json** — Operational mapping used by the deterministic fallback engine
+- **aims_mapping.json** — Operational mapping used by the deterministic engine
   (`app/aims_engine.py`).  The LLM classifier (`app/services/classifier_service.py`) is the
-  primary path; this file is consulted on LLM timeout or failure.
+  only path that runs in a deployed environment.  The deterministic engine is gated behind
+  `AIMS_HEURISTIC_FALLBACK_ENABLED`, which defaults to `false` and is not set in
+  `.env.example` or any workflow, so on LLM timeout or failure the turn currently returns a
+  neutral "classification unavailable" result rather than consulting this file.
 
 - **implementation-plan.md** — Historical implementation notes (may be outdated).
 
