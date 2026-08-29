@@ -1,6 +1,5 @@
 from typing import Optional, Tuple, List, Dict, Any
 import logging
-import os
 import json
 import threading
 
@@ -8,13 +7,11 @@ from google import genai
 from google.genai import types
 from google.genai.errors import APIError
 
-# Configurable behavior via env vars
-AUTO_CONTINUE_ON_MAX_TOKENS = os.getenv("AUTO_CONTINUE_ON_MAX_TOKENS", "true").lower() == "true"
-MAX_CONTINUATIONS = int(os.getenv("MAX_CONTINUATIONS", "2"))
-# Continuation strategy tuning
-CONTINUE_TAIL_CHARS = int(os.getenv("CONTINUE_TAIL_CHARS", "500"))
-CONTINUE_INSTRUCTION_ENABLED = os.getenv("CONTINUE_INSTRUCTION_ENABLED", "true").lower() == "true"
-MIN_CONTINUE_GROWTH = int(os.getenv("MIN_CONTINUE_GROWTH", "10"))
+# Continuation behaviour now comes from app.config.Settings, resolved per call. It used to
+# be read here with os.getenv at import time, which meant /config and /diagnostics reported
+# settings.* while this module used whatever the environment held when it was first
+# imported — and under `uvicorn app.main:app` those disagree, because only run_app.py and
+# chainlit_app.py push .env into os.environ.
 MAX_TOKEN_FINISH_REASONS = frozenset({"MAX_TOKENS", "MAX_TOKEN", "MAX_OUTPUT_TOKENS"})
 
 # Gen AI clients, shared per (project, location). A VertexClient is constructed per LLM
@@ -417,12 +414,24 @@ class VertexClient:
     ) -> tuple[str, dict]:
         """Generate text and return both the text and useful metadata for logging.
 
-        If the model halts with finishReason == MAX_TOKENS and AUTO_CONTINUE_ON_MAX_TOKENS
-        is enabled, this method will automatically send up to MAX_CONTINUATIONS
-        "continue" turns and concatenate the results.
+        If the model halts with finishReason == MAX_TOKENS and
+        settings.AUTO_CONTINUE_ON_MAX_TOKENS is enabled, this method will automatically
+        send up to settings.MAX_CONTINUATIONS "continue" turns and concatenate the
+        results.
 
         The return shape is (text, meta_dict).
         """
+        # Imported here rather than at module scope: app.config builds Settings() on
+        # import, whose PROJECT_ID validator calls google.auth.default(). Importing
+        # app.vertex must stay free of that network/credential side effect.
+        from app.config import settings
+
+        auto_continue = settings.AUTO_CONTINUE_ON_MAX_TOKENS
+        max_continuations = settings.MAX_CONTINUATIONS
+        continue_tail_chars = settings.CONTINUE_TAIL_CHARS
+        continue_instruction_enabled = settings.CONTINUE_INSTRUCTION_ENABLED
+        min_continue_growth = settings.MIN_CONTINUE_GROWTH
+
         try:
             client = self._get_client()
             config = self._build_config(
@@ -461,13 +470,13 @@ class VertexClient:
             continuation_count = 0
             no_progress_break = False
             while (
-                AUTO_CONTINUE_ON_MAX_TOKENS
+                auto_continue
                 and meta_local.get("finishReason") in MAX_TOKEN_FINISH_REASONS
-                and continuation_count < MAX_CONTINUATIONS
+                and continuation_count < max_continuations
             ):
                 continuation_count += 1
-                tail = (text or "")[-CONTINUE_TAIL_CHARS:]
-                if CONTINUE_INSTRUCTION_ENABLED:
+                tail = (text or "")[-continue_tail_chars:]
+                if continue_instruction_enabled:
                     cont_prompt = (
                         "Please continue exactly where you left off without repeating previous text.\n"
                         "Tail context follows. Continue seamlessly after it:\n" + tail + "\n(End of tail)"
@@ -477,7 +486,7 @@ class VertexClient:
 
                 self.logger.debug(
                     "Auto-continue #%s (tail_chars=%s, instr=%s)",
-                    continuation_count, len(tail), CONTINUE_INSTRUCTION_ENABLED,
+                    continuation_count, len(tail), continue_instruction_enabled,
                 )
                 next_resp = chat.send_message(cont_prompt)
                 next_text, next_meta = self._extract_response(next_resp)
@@ -495,7 +504,7 @@ class VertexClient:
                     "textLen": len(text),
                 })
 
-                if len(text) - prev_len < MIN_CONTINUE_GROWTH:
+                if len(text) - prev_len < min_continue_growth:
                     no_progress_break = True
                     break
                 if next_meta.get("finishReason") not in MAX_TOKEN_FINISH_REASONS:
@@ -523,8 +532,8 @@ class VertexClient:
                 "continuationCount": continuation_count,
                 "transport": "genai_sdk",
                 "noProgressBreak": no_progress_break,
-                "continueTailChars": CONTINUE_TAIL_CHARS,
-                "continuationInstructionEnabled": CONTINUE_INSTRUCTION_ENABLED,
+                "continueTailChars": continue_tail_chars,
+                "continuationInstructionEnabled": continue_instruction_enabled,
             }
 
             return text, meta

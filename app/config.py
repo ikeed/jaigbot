@@ -82,6 +82,20 @@ class Settings(BaseSettings):
     AIMS_CLASSIFY_CONTEXT_TURNS: int = 6
     AIMS_CLASSIFY_MAX_CONCERNS: int = 3
 
+    # Per-call tuning for the latency/cost-sensitive JSON tasks. These were read with
+    # os.getenv inside AimsCoachingHandler, so /config and /diagnostics could not see them
+    # and they were untyped. AIMS_ENDGAME_TEMPERATURE and AIMS_ENDGAME_MAX_TOKENS are
+    # deliberately absent: they were assigned and never read, because endgame detection
+    # moved into ClassifierService.detect_endgame's shared classify call.
+    AIMS_CLASSIFY_TEMPERATURE: float = 0.1
+    AIMS_CLASSIFY_MAX_TOKENS: int = 4096
+    AIMS_CLASSIFY_BUDGET_S: float = 60.0
+    # None means "derive from MAX_TOKENS at call time" — see AimsCoachingHandler.
+    AIMS_REPLY_MAX_TOKENS: int | None = None
+    # Gates the deterministic engine in app/aims_engine.py. Off in every deployed
+    # environment; see docs/aims/README.md before turning it on.
+    AIMS_HEURISTIC_FALLBACK_ENABLED: bool = False
+
     # Storage and Archiving
     SESSIONS_BUCKET_NAME: Optional[str] = "aimsbot-chat-sessions"
     REPORTS_BUCKET_NAME: Optional[str] = "aimsbot-bug-reports"
@@ -217,6 +231,21 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return [m.strip() for m in v.split(",") if m.strip()]
         return v or ["gemini-3.5-flash", "gemini-3.5-flash-lite"]
+
+    @field_validator("AIMS_HEURISTIC_FALLBACK_ENABLED", mode="before")
+    @classmethod
+    def validate_heuristic_fallback_enabled(cls, v):
+        """Preserve the exact coercion this flag had as an os.getenv read.
+
+        The legacy expression was
+        ``os.getenv(...).strip().lower() not in {"0", "false", "no", "off"}``,
+        so it stripped whitespace and treated any unrecognised value as True. Pydantic's
+        own bool parsing does neither — it rejects " false " and "maybe" outright — and a
+        ValidationError here would fail startup on a value that used to work.
+        """
+        if isinstance(v, bool) or v is None:
+            return v
+        return str(v).strip().lower() not in {"0", "false", "no", "off"}
 
     @field_validator("AIMS_CLASSIFIER_THINKING_LEVEL", mode="before")
     @classmethod

@@ -13,7 +13,6 @@ Behavior-preserving extraction from the massive coaching section in app.main.cha
 """
 from __future__ import annotations
 
-import os
 import time
 import uuid
 from types import SimpleNamespace
@@ -279,18 +278,21 @@ class AimsCoachingHandler:
         self.temperature = self.vertex_config.temperature
         self.max_tokens = self.vertex_config.max_tokens
         
-        # Per-call tuning (env-configurable) for latency/cost-sensitive JSON tasks
-        self.classify_temperature = float(os.getenv("AIMS_CLASSIFY_TEMPERATURE", "0.1"))
-        self.classify_max_tokens = int(os.getenv("AIMS_CLASSIFY_MAX_TOKENS", "4096"))
-        self.endgame_temperature = float(os.getenv("AIMS_ENDGAME_TEMPERATURE", "0.1"))
-        self.endgame_max_tokens = int(os.getenv("AIMS_ENDGAME_MAX_TOKENS", "192"))
-        self.reply_max_tokens = int(
-            os.getenv("AIMS_REPLY_MAX_TOKENS", str(max(self.max_tokens, 1536)))
-        )
-        self.classify_budget_s = float(os.getenv("AIMS_CLASSIFY_BUDGET_S", "60.0"))
-        self.heuristic_fallback_enabled = (
-            os.getenv("AIMS_HEURISTIC_FALLBACK_ENABLED", "false").strip().lower()
-            not in {"0", "false", "no", "off"}
+        # Per-call tuning for latency/cost-sensitive JSON tasks. These arrive through the
+        # injected config rather than being read from the environment here, so they are
+        # typed, visible on /config, and overridable by tests without touching os.environ.
+        # AIMS_ENDGAME_TEMPERATURE/AIMS_ENDGAME_MAX_TOKENS used to be read here and were
+        # never consumed by anything — endgame detection runs through
+        # ClassifierService.detect_endgame, which uses the classify values.
+        self.classify_temperature = self.vertex_config.classify_temperature
+        self.classify_max_tokens = self.vertex_config.classify_max_tokens
+        self.classify_budget_s = self.vertex_config.classify_budget_s
+        self.heuristic_fallback_enabled = self.vertex_config.heuristic_fallback_enabled
+        # Unset means "track the main token budget, with a floor for a full patient turn".
+        self.reply_max_tokens = (
+            self.vertex_config.reply_max_tokens
+            if self.vertex_config.reply_max_tokens is not None
+            else max(self.max_tokens, 1536)
         )
 
         # Allow tests to monkeypatch the client via app.main.VertexClient
