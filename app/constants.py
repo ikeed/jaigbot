@@ -11,7 +11,7 @@ ENV_HOST = "HOST"
 ENV_PORT = "PORT"
 
 # App Metadata
-APP_TITLE = "AIMSBot (Gemini Enterprise)"
+APP_TITLE = "AIMSBot (Gemini on Vertex AI)"
 APP_VERSION = "0.3.0"
 
 # Mounting Paths
@@ -52,7 +52,12 @@ DEFAULT_CHAT_TARGET = "chainlit_app.py"
 DEFAULT_REGION = "us-west4"
 DEFAULT_MODEL_ID = "gemini-3.6-flash"
 DEFAULT_MODEL_FLASH = "gemini-3.5-flash"
-DEFAULT_CLASSIFIER_MODEL_ID = "gemini-3.5-flash-lite"
+# Deliberately the same model as DEFAULT_MODEL_ID. Classification ran on the main
+# model for a month while the configured value never reached ClassifierService; when
+# that plumbing was fixed we kept the model that had actually been serving production
+# rather than switching to flash-lite untested. Changing this changes live
+# classification quality — benchmark with scripts/benchmark_classifier_models.py first.
+DEFAULT_CLASSIFIER_MODEL_ID = "gemini-3.6-flash"
 DEFAULT_APP_ENV = "local"
 DEFAULT_PORT = 8080
 DEFAULT_MEMORY_TTL = 1296000  # 15 days

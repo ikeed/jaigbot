@@ -14,7 +14,7 @@ For local development only:
   - `export PROJECT_ID=<new-project>`
   - `export REGION=<e.g., us-central1>`
   - `export MODEL_ID=<e.g., gemini-3.6-flash>`
-  - `export AIMS_CLASSIFIER_MODEL_ID=<e.g., gemini-3.5-flash-lite>`
+  - `export AIMS_CLASSIFIER_MODEL_ID=<e.g., gemini-3.6-flash>`
 - Start: `uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload`
 - Optional Chainlit: `BACKEND_URL=http://localhost:8080/chat chainlit run chainlit_app.py`
 
@@ -97,7 +97,7 @@ If your Actions workflow pins a container URL, update it to: `<REGION>-docker.pk
   - `PROJECT_ID` = `<NEW_PROJECT>`
   - `REGION` = `<REGION>`
   - `MODEL_ID` = `<Vertex model id, e.g., gemini-3.6-flash>`
-  - `AIMS_CLASSIFIER_MODEL_ID` = `<Vertex model id, e.g., gemini-3.5-flash-lite>`
+  - `AIMS_CLASSIFIER_MODEL_ID` = `<Vertex model id, e.g., gemini-3.6-flash>`
   - Optional tuning vars if you use them: `TEMPERATURE`, `MAX_TOKENS`, etc.
 - Ensure the Cloud Run service is using the Runtime SA created above and has access to Vertex and Artifact Registry.
 

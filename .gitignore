@@ -39,3 +39,8 @@ console.log
 /tests/.chainlit/translations/
 /tests/.chainlit/config.toml
 /coverage.xml
+
+# Python build artifacts
+*.egg-info/
+build/
+dist/

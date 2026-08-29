@@ -5,8 +5,7 @@ These helpers are pure functions with minimal dependencies, designed for
 composition and easy mocking. They intentionally accept inputs such as
 `topical_cues` to avoid hidden globals and to keep responsibilities clear.
 
-They are currently not yet wired into app.main; wiring will be done
-incrementally to avoid large diffs while preserving behavior.
+Consumed by app.services.aims_state_service.
 """
 from __future__ import annotations
 

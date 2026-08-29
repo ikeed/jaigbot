@@ -254,12 +254,75 @@ class TestEnvironmentVariableValidation:
         assert settings.REGION in ["us-central1", "us-west4"]  # Could be either default
 
     def test_model_id_defaults_correctly(self, monkeypatch):
-        """Verify MODEL_ID defaults to the current GA Gemini target."""
+        """Verify MODEL_ID defaults to the current GA Gemini target.
+
+        Both env vars must be cleared: CI sets them, so without the delenv calls this
+        asserted on the ambient environment rather than on the defaults.
+        """
         monkeypatch.delenv("MODEL_ID", raising=False)
+        monkeypatch.delenv("AIMS_CLASSIFIER_MODEL_ID", raising=False)
 
         settings = Settings(_env_file=None)
         assert settings.MODEL_ID == "gemini-3.6-flash"
-        assert settings.AIMS_CLASSIFIER_MODEL_ID == "gemini-3.5-flash-lite"
+        # The classifier deliberately defaults to the same model as MODEL_ID; see the
+        # comment on DEFAULT_CLASSIFIER_MODEL_ID in app/constants.py.
+        assert settings.AIMS_CLASSIFIER_MODEL_ID == "gemini-3.6-flash"
+
+    def test_aims_tuning_knobs_have_their_legacy_defaults(self, monkeypatch):
+        """These moved out of os.getenv in AimsCoachingHandler; defaults must not drift.
+
+        ``_env_file=None`` matters: Settings reads .env, so without it a developer's local
+        .env would make this pass or fail depending on their machine.
+        """
+        for name in (
+            "AIMS_CLASSIFY_TEMPERATURE",
+            "AIMS_CLASSIFY_MAX_TOKENS",
+            "AIMS_CLASSIFY_BUDGET_S",
+            "AIMS_REPLY_MAX_TOKENS",
+            "AIMS_HEURISTIC_FALLBACK_ENABLED",
+        ):
+            monkeypatch.delenv(name, raising=False)
+
+        settings = Settings(_env_file=None)
+
+        assert settings.AIMS_CLASSIFY_TEMPERATURE == 0.1
+        assert settings.AIMS_CLASSIFY_MAX_TOKENS == 4096
+        assert settings.AIMS_CLASSIFY_BUDGET_S == 60.0
+        # None means "derive from MAX_TOKENS"; the handler applies max(max_tokens, 1536).
+        assert settings.AIMS_REPLY_MAX_TOKENS is None
+        # Off in every deployed environment — see docs/aims/README.md.
+        assert settings.AIMS_HEURISTIC_FALLBACK_ENABLED is False
+
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("true", True), ("1", True), ("yes", True), ("maybe", True),
+            (" TRUE ", True), ("false", False), (" false ", False),
+            ("0", False), ("no", False), ("off", False),
+        ],
+    )
+    def test_heuristic_fallback_flag_matches_legacy_coercion(self, monkeypatch, raw, expected):
+        """Parity with ``os.getenv(...).strip().lower() not in {"0","false","no","off"}``.
+
+        Pydantic's own bool parsing rejects both " false " and "maybe", either of which
+        would now fail startup on a value that previously worked.
+        """
+        monkeypatch.setenv("AIMS_HEURISTIC_FALLBACK_ENABLED", raw)
+        assert Settings(_env_file=None).AIMS_HEURISTIC_FALLBACK_ENABLED is expected
+
+    def test_classifier_thinking_level_defaults_to_unset(self, monkeypatch):
+        """No ThinkingConfig is sent unless explicitly configured.
+
+        app/vertex.py only builds a ThinkingConfig when thinking_level or
+        thinking_budget is set. Benchmarking rejected "minimal" as the default:
+        faster, but it over-scores against the rubric. See app/config.py.
+        """
+        monkeypatch.delenv("AIMS_CLASSIFIER_THINKING_LEVEL", raising=False)
+        monkeypatch.delenv("AIMS_CLASSIFIER_THINKING_BUDGET", raising=False)
+
+        settings = Settings(_env_file=None)
+        assert settings.AIMS_CLASSIFIER_THINKING_LEVEL is None
+        assert settings.AIMS_CLASSIFIER_THINKING_BUDGET is None
 
     def test_classifier_thinking_level_can_be_disabled(self, monkeypatch):
         monkeypatch.setenv("AIMS_CLASSIFIER_THINKING_LEVEL", "none")

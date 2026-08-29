@@ -9,6 +9,63 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+INTEGRATION_DIR = os.path.join(os.path.dirname(__file__), "integration")
+
+
+class LiveVertexCallInTestError(RuntimeError):
+    """Raised when a test outside tests/integration/ tries to open a real Vertex client."""
+
+
+@pytest.fixture(autouse=True)
+def block_live_vertex_clients(request, monkeypatch):
+    """Fail loudly if a non-integration test constructs a real Gen AI client.
+
+    The suite is supposed to be hermetic, but it was not: mocks were installed on some
+    module-level ``VertexClient`` names and not others, so any path that received the real
+    class explicitly (app.main passes it as ``client_cls``) reached Vertex for real. That
+    only ever surfaced for developers with Application Default Credentials configured —
+    CI has none, so CI stayed green while the suite quietly spent tokens locally.
+
+    Blocking ``genai.Client`` itself is deliberate: it is the single point where a network
+    client is actually created, so this catches the mistake no matter which wrapper leaked.
+
+    tests/integration/ is exempt; it is live by design and gated on the ``live_llm`` marker.
+    """
+    if str(request.node.fspath).startswith(INTEGRATION_DIR):
+        yield []
+        return
+
+    violations: list[str] = []
+    message = (
+        "A real google.genai.Client was constructed in a non-integration test.\n"
+        "This would make a live Vertex AI call and spend tokens.\n"
+        "Patch the VertexClient binding the code under test actually uses — note that "
+        "app/main.py passes its own imported class through as client_cls — or move the "
+        "test to tests/integration/ and mark it @pytest.mark.live_llm."
+    )
+
+    def _blocked(*args, **kwargs):
+        # Record before raising. Much of the app wraps LLM calls in `except Exception`,
+        # so raising alone can be swallowed and the test would still pass; the recorded
+        # violation is re-raised at teardown where nothing can catch it.
+        violations.append(f"project={kwargs.get('project')!r} location={kwargs.get('location')!r}")
+        raise LiveVertexCallInTestError(message)
+
+    monkeypatch.setattr("google.genai.Client", _blocked)
+    # app.vertex did `from google import genai`, so it resolves genai.Client at call time;
+    # patching the attribute on that module object covers it. Guarded in case it changes.
+    monkeypatch.setattr("app.vertex.genai.Client", _blocked, raising=False)
+
+    # Yielded so a test that trips the guard deliberately (see
+    # tests/unit/test_dependency_integrity.py) can clear the record and avoid failing
+    # teardown. Ordinary tests never request this fixture by name.
+    yield violations
+
+    if violations:
+        raise LiveVertexCallInTestError(
+            f"{message}\n\nAttempted client constructions: {violations}"
+        )
+
 
 @pytest.fixture(scope="session", autouse=True)
 def aims_mapping_mock():
@@ -103,9 +160,32 @@ def vertex_client_mock(monkeypatch):
         def generate_text_json(*args, **kwargs):
             return json.dumps({"patient_reply": "Mock JSON reply"})
 
-    monkeypatch.setattr("app.vertex.VertexClient", MockVertexClient)
-    monkeypatch.setattr("app.services.classifier_service.VertexClient", MockVertexClient)
-    monkeypatch.setattr("app.services.vertex_helpers.VertexClient", MockVertexClient)
+    # Rebinding app.vertex.VertexClient does not retroactively change names already
+    # imported elsewhere, so each importing module needs its own patch.
+    #
+    # app.main is the one that actually matters. _vertex_config() reads the module global
+    # on every request and passes it as client_cls, which AimsCoachingHandler hands to
+    # ClassifierService, and ClassifierService calls self.client_cls(...) in preference to
+    # its own default. Missing app.main here is what let the suite reach live Vertex
+    # whenever the developer had Application Default Credentials configured.
+    #
+    # Note that the classifier_service and vertex_helpers entries below are belt-and-braces
+    # only: those modules bind VertexClient as a *default argument*, which captures the
+    # class object at import time, so monkeypatching the module attribute cannot reach it
+    # (ClassifierService.__init__.__kwdefaults__["client_cls"] still points at the real
+    # class afterwards). They are kept because the names are also read at runtime in some
+    # paths, but do not rely on them to make a test hermetic — block_live_vertex_clients
+    # above is the real backstop.
+    for target in (
+        "app.vertex.VertexClient",
+        "app.main.VertexClient",
+        "app.services.classifier_service.VertexClient",
+        "app.services.vertex_helpers.VertexClient",
+        "app.services.aims_coaching_handler.VertexClient",
+        "app.services.legacy_chat_handler.VertexClient",
+        "app.services.vertex_gateway.DefaultVertexClient",
+    ):
+        monkeypatch.setattr(target, MockVertexClient)
     return MockVertexClient
 
 

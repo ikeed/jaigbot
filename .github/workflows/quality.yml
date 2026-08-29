@@ -12,8 +12,7 @@ env:
   REGION: us-central1
   VERTEX_LOCATION: global
   MODEL_ID: gemini-3.6-flash
-  AIMS_CLASSIFIER_MODEL_ID: gemini-3.5-flash-lite
-  AIMS_CLASSIFIER_THINKING_LEVEL: minimal
+  AIMS_CLASSIFIER_MODEL_ID: gemini-3.6-flash
   TEMPERATURE: "0.2"
   MAX_TOKENS: "768"
   AIMS_COACHING_ENABLED: "true"
@@ -32,10 +31,8 @@ jobs:
         uses: actions/setup-python@v6.2.0
         with:
           python-version: '3.13'
-      - name: Install Linting Tools
-        run: pip install ruff==0.15.15 mypy==1.18.2 bandit==1.9.4
       - name: Install Dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt -r requirements-dev.txt
       - name: Run Ruff
         run: ruff check .
       - name: Run Mypy
@@ -57,7 +54,7 @@ jobs:
         with:
           python-version: '3.13'
       - name: Install Dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt -r requirements-dev.txt
       - name: Run Tests with Coverage
         run: |
           export PYTHONPATH="$GITHUB_WORKSPACE:${PYTHONPATH:-}"

@@ -4,6 +4,7 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
+from app.config import settings
 from app.main import app
 
 
@@ -76,7 +77,7 @@ def enable_coaching(monkeypatch):
 
 
 def test_small_talk_fallback_produces_neutral_reply(caplog, monkeypatch):
-    monkeypatch.setenv("AIMS_HEURISTIC_FALLBACK_ENABLED", "true")
+    monkeypatch.setattr(settings, "AIMS_HEURISTIC_FALLBACK_ENABLED", True)
     caplog.set_level(logging.INFO)
     # Small talk / pleasantries that should classify as non-step
     msg = "Hello Sarah and Liam! So good to see you both — wow, he's getting so big!"

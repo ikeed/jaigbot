@@ -1,9 +1,8 @@
 """
 Telemetry utilities for structured JSON logging with size caps.
 
-Phase 1 extraction goal: centralize logging helpers used by app.main
-so they are reusable and testable without FastAPI context. Keep
-functions small and pure.
+Centralizes the logging helpers used by app.main so they are reusable and
+testable without FastAPI context. Keep functions small and pure.
 """
 from __future__ import annotations
 

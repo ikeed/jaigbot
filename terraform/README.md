@@ -71,7 +71,7 @@ Set the following in your GitHub repo (Settings → Secrets and variables):
   - GAR_REPO       = var.gar_repo
   - SERVICE_NAME   = var.service_name
   - MODEL_ID       = gemini-3.6-flash (or your choice)
-  - AIMS_CLASSIFIER_MODEL_ID = gemini-3.5-flash-lite (or your choice)
+  - AIMS_CLASSIFIER_MODEL_ID = gemini-3.6-flash (or your choice)
   - TEMPERATURE    = 0.2
   - MAX_TOKENS     = 256
 

@@ -18,8 +18,7 @@ env:
   # quality.yml's simulated-environment pattern.
   VERTEX_LOCATION: global
   MODEL_ID: gemini-3.6-flash
-  AIMS_CLASSIFIER_MODEL_ID: gemini-3.5-flash-lite
-  AIMS_CLASSIFIER_THINKING_LEVEL: minimal
+  AIMS_CLASSIFIER_MODEL_ID: gemini-3.6-flash
   AIMS_COACHING_ENABLED: "true"
   AIMS_COACHING_DEFAULT: "true"
   MEMORY_BACKEND: memory
@@ -48,7 +47,7 @@ jobs:
           python-version: '3.13'
 
       - name: Install Dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt -r requirements-dev.txt
 
       - name: Validate auth configuration
         run: |

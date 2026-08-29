@@ -113,10 +113,6 @@ class BackendClient:
                 "userInfo": user_info,
                 "coach": coach_enabled
             }
-            # Use the full URL for chat (including /api/chat if that's what BACKEND_URL points to)
-            # Actually, let's just use PATH_CHAT consistently if base_url is root.
-            # But get_backend_url in chainlit_app.py was a bit fuzzy.
-            # Let's use the resolved base_url + PATH_CHAT.
             resp = await client.post(
                 f"{self.base_url}{PATH_CHAT}", 
                 json=payload, 

@@ -10,7 +10,7 @@ This guide shows how to:
 
 ## Prerequisites
 - Tools locally:
-  - Python 3.11
+  - Python 3.13
   - gcloud SDK
   - Terraform >= 1.6 for infrastructure changes
   - Docker (optional for local container build)
@@ -102,7 +102,7 @@ Repository Settings → Secrets and variables:
   - GAR_REPO       = terraform var gar_repo (e.g., cr-demo)
   - SERVICE_NAME   = terraform var service_name (e.g., aimsbot)
   - MODEL_ID       = gemini-3.6-flash
-  - AIMS_CLASSIFIER_MODEL_ID = gemini-3.5-flash-lite
+  - AIMS_CLASSIFIER_MODEL_ID = gemini-3.6-flash
   - AIMS_CLASSIFIER_THINKING_LEVEL = minimal
   - TEMPERATURE    = 0.2
   - MAX_TOKENS     = 256
