@@ -1,5 +1,6 @@
 import logging
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -42,6 +43,17 @@ def get_memory_store(request: Request):
 def get_model_check(request: Request) -> dict:
     return getattr(request.app.state, "model_check", {"available": "unknown"})
 
+
+def _vertex_client_factory(**kwargs: Any) -> Any:
+    """Construct a VertexClient, resolving the class at call time.
+
+    include_router() runs at import, so handing the class itself to a router factory
+    freezes the real VertexClient into that router's closure, where monkeypatching
+    app.main.VertexClient can never reach it. Callers only ever call this with keyword
+    arguments (see VertexGateway), so a factory is a transparent substitute.
+    """
+    return VertexClient(**kwargs)
+
 # Optional CORS
 if settings.ALLOWED_ORIGINS:
     app.add_middleware(
@@ -76,7 +88,7 @@ app.include_router(create_summary_router(
     settings=settings,
     logger=logger,
     get_memory_store=get_memory_store,
-    vertex_client_cls=VertexClient,
+    vertex_client_cls=_vertex_client_factory,
 ))
 app.include_router(create_session_router(
     settings=settings,
