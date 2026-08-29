@@ -10,7 +10,7 @@ This guide shows how to:
 
 ## Prerequisites
 - Tools locally:
-  - Python 3.11
+  - Python 3.13
   - gcloud SDK
   - Terraform >= 1.6 for infrastructure changes
   - Docker (optional for local container build)

@@ -3,7 +3,10 @@
 This repository contains a FastAPI + Chainlit application for simulated
 vaccine-hesitancy conversations and AIMS communication coaching. The backend
 uses Gemini on Vertex AI for patient/parent replies and AIMS classification,
-with deterministic fallbacks and session-level metrics.
+with session-level metrics. The LLM classifier is the only classification path
+that runs in a deployed environment; the deterministic engine in
+`app/aims_engine.py` sits behind `AIMS_HEURISTIC_FALLBACK_ENABLED`, which
+defaults to off.
 
 **TL;DR — Where things are:**
 
@@ -33,15 +36,15 @@ For a new checkout, run the bootstrap script:
 ./scripts/setup_dev.sh
 ```
 
-It creates `.venv`, installs `requirements.txt`, creates `.env` from `.env.example` if needed, creates `.chainlit/`, and enables local session persistence with `MEMORY_PERSIST_PATH=.chainlit/session_memory.json`.
+It creates `.venv`, installs `requirements.txt` and `requirements-dev.txt`, creates `.env` from `.env.example` if needed, creates `.chainlit/`, and enables local session persistence with `MEMORY_PERSIST_PATH=.chainlit/session_memory.json`.
 
 Manual setup is also fine:
 
-1. Install dependencies (Python 3.11):
+1. Install dependencies (Python 3.13):
    ```bash
    python3 -m venv .venv
    source .venv/bin/activate
-   pip install -r requirements.txt
+   pip install -r requirements.txt -r requirements-dev.txt
    ```
 2. Set up environment variables. `PROJECT_ID` and `REGION` are auto-detected
    if `gcloud` or standard GCP variables are configured. `VERTEX_LOCATION` can
@@ -116,7 +119,7 @@ If you want a custom SSO login page *before* the Chainlit UI (as requested), use
 
 **Note on Local Testing:**
 - If you configure an OAuth provider, the app will **only** show the SSO sign-in options. Password login will be disabled to ensure only SSO is used.
-- If no OAuth providers are configured but `CHAINLIT_AUTH_SECRET` is set, the app will fall back to a simple password login (User: `admin` / Password: `admin`) for development convenience.
+- If no OAuth providers are configured but `CHAINLIT_AUTH_SECRET` is set, the app falls back to a simple password login for development convenience. The username is `AUTH_USERNAME` (default `admin`) and the password is `AUTH_PASSWORD`, which has no default — leave it unset and all logins are rejected.
 
 ## Chainlit UI
 

@@ -26,9 +26,8 @@ def initialize_session(
 ) -> dict:
     """Initialize or refresh a Chainlit-backed session.
 
-    This is a behavior-preserving extraction from app.main.init_session. Keep
-    route-specific request validation in FastAPI; this function owns session
-    memory mutation and response shaping.
+    Keep route-specific request validation in FastAPI; this function owns
+    session memory mutation and response shaping.
     """
     if not memory_enabled:
         return {"status": "ok"}

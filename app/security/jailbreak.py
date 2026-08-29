@@ -1,10 +1,7 @@
 """
 Security helpers for jailbreak and meta-prompt detection.
 
-This module is extracted as part of Phase 1 to improve separation of concerns.
-Initial version provides function stubs mirroring the responsibilities of the
-inline helpers currently inside app.main.chat(). In subsequent commits, the
-logic will be moved verbatim to preserve behavior.
+Consumed by app.services.security_guard.
 
 Do not import heavy FastAPI or app state here. Keep pure functions for easy
 unit testing.
