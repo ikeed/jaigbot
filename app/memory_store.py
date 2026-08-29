@@ -13,6 +13,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import tempfile
+import threading
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 module_logger = logging.getLogger(__name__)
@@ -27,6 +29,11 @@ class InMemoryStore:
     def __init__(self, persist_path: Optional[str] = None) -> None:
         self._persist_path = persist_path
         self._store: Dict[str, Dict[str, Any]] = {}
+        # Mutations and persistence must be serialized. Writes used to happen only on the
+        # event-loop thread, which serialized them for free; background work now runs in a
+        # worker threadpool, so two threads can reach _persist concurrently. Reentrant
+        # because the mutating methods hold the lock while calling _persist.
+        self._lock = threading.RLock()
         self._load()
 
     def _load(self) -> None:
@@ -51,16 +58,30 @@ class InMemoryStore:
             self._store = {}
 
     def _persist(self) -> None:
+        """Serialize the store to disk. Callers must hold ``self._lock``."""
         if not self._persist_path:
             return
         try:
             directory = os.path.dirname(self._persist_path)
             if directory:
                 os.makedirs(directory, exist_ok=True)
-            tmp_path = f"{self._persist_path}.tmp"
-            with open(tmp_path, "w", encoding="utf-8") as f:
-                json.dump(self._store, f, ensure_ascii=False)
-            os.replace(tmp_path, self._persist_path)
+            # A per-write temp file, not a single shared "<path>.tmp": two concurrent
+            # writers sharing one temp path interleave their output and then both rename
+            # it, leaving truncated or mixed JSON behind.
+            fd, tmp_path = tempfile.mkstemp(
+                dir=directory or ".", prefix=os.path.basename(self._persist_path) + ".", suffix=".tmp"
+            )
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(self._store, f, ensure_ascii=False)
+                os.replace(tmp_path, self._persist_path)
+            except BaseException:
+                # Never leave the temp file behind on a failed write.
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
         except Exception as e:
             module_logger.error("Failed to persist memory store to %s: %s", self._persist_path, e)
             pass
@@ -72,8 +93,9 @@ class InMemoryStore:
         return self._store[key]
 
     def __setitem__(self, key: str, value: Dict[str, Any]) -> None:
-        self._store[key] = value
-        self._persist()
+        with self._lock:
+            self._store[key] = value
+            self._persist()
 
     # noinspection PyUnusedLocal
     def set(self, key: str, value: Dict[str, Any], ttl: Optional[int] = None) -> None:
@@ -83,12 +105,16 @@ class InMemoryStore:
         return key in self._store
 
     def items(self) -> List[Tuple[str, Dict[str, Any]]]:
-        return list(self._store.items())
+        # Snapshot under the lock: callers iterate this while other threads may be
+        # mutating the store (prune_expired walks every session and pops as it goes).
+        with self._lock:
+            return list(self._store.items())
 
     def pop(self, key: str, default: Any = None) -> Any:
-        value = self._store.pop(key, default)
-        self._persist()
-        return value
+        with self._lock:
+            value = self._store.pop(key, default)
+            self._persist()
+            return value
 
     def __len__(self) -> int:  # pragma: no cover - trivial
         return len(self._store)
