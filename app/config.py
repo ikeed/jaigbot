@@ -62,10 +62,21 @@ class Settings(BaseSettings):
     AIMS_COACHING_DEFAULT: bool = False
     AIMS_CLASSIFIER_MODE: str = "hybrid"
     AIMS_CLASSIFIER_MODEL_ID: str = DEFAULT_CLASSIFIER_MODEL_ID
-    # None sends no ThinkingConfig at all, leaving the model's own default. This is what
-    # production has actually been doing, because the configured value never reached
-    # ClassifierService. Set to "minimal" to cut per-turn latency and cost, but benchmark
-    # the borderline scenarios first — see scripts/benchmark_classifier_models.py.
+    # None sends no ThinkingConfig, leaving the model's own reasoning budget. This is what
+    # production already runs, and a benchmark on 2026-08-29 says keep it.
+    #
+    # Measured on gemini-3.6-flash over 38 labelled turns from the transcript replay
+    # suites (scripts/benchmark_classifier_configs.py), plus 76 blind, position-swapped
+    # pairwise judgements of the coaching output against
+    # docs/aims/classification-scoring-rules.md:
+    #   "minimal" is ~32% faster end to end (mean turn 16.6s -> 11.4s) and ties on 74/76
+    #   classification and 72/76 score judgements. But every non-tie went the same way:
+    #   default won 2 classification and 4 score-calibration verdicts, "minimal" won none.
+    #   "minimal" over-scores — awarding 3 where the rubric caps at 2 — and in one case
+    #   credited autonomy support the clinician never gave. Material coaching errors ran
+    #   4/38 cases for "minimal" against 1/38 for default.
+    # For a tool whose whole output is the score and the coaching note, that trade is not
+    # worth 5 seconds. Revisit if latency becomes the binding constraint.
     AIMS_CLASSIFIER_THINKING_LEVEL: Optional[str] = None
     AIMS_CLASSIFIER_THINKING_BUDGET: Optional[int] = None
     AIMS_CLASSIFY_CONTEXT_TURNS: int = 6

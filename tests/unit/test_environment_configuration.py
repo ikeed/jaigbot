@@ -271,8 +271,9 @@ class TestEnvironmentVariableValidation:
     def test_classifier_thinking_level_defaults_to_unset(self, monkeypatch):
         """No ThinkingConfig is sent unless explicitly configured.
 
-        This matches what production has actually been running. app/vertex.py only
-        builds a ThinkingConfig when thinking_level or thinking_budget is set.
+        app/vertex.py only builds a ThinkingConfig when thinking_level or
+        thinking_budget is set. Benchmarking rejected "minimal" as the default:
+        faster, but it over-scores against the rubric. See app/config.py.
         """
         monkeypatch.delenv("AIMS_CLASSIFIER_THINKING_LEVEL", raising=False)
         monkeypatch.delenv("AIMS_CLASSIFIER_THINKING_BUDGET", raising=False)
