@@ -179,7 +179,6 @@ def vertex_client_mock(monkeypatch):
     for target in (
         "app.vertex.VertexClient",
         "app.main.VertexClient",
-        "app.runtime.VertexClient",
         "app.services.classifier_service.VertexClient",
         "app.services.vertex_helpers.VertexClient",
         "app.services.aims_coaching_handler.VertexClient",

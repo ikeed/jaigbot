@@ -2,6 +2,7 @@ from typing import Optional, Tuple, List, Dict, Any
 import logging
 import os
 import json
+import threading
 
 from google import genai
 from google.genai import types
@@ -15,6 +16,45 @@ CONTINUE_TAIL_CHARS = int(os.getenv("CONTINUE_TAIL_CHARS", "500"))
 CONTINUE_INSTRUCTION_ENABLED = os.getenv("CONTINUE_INSTRUCTION_ENABLED", "true").lower() == "true"
 MIN_CONTINUE_GROWTH = int(os.getenv("MIN_CONTINUE_GROWTH", "10"))
 MAX_TOKEN_FINISH_REASONS = frozenset({"MAX_TOKENS", "MAX_TOKEN", "MAX_OUTPUT_TOKENS"})
+
+# Gen AI clients, shared per (project, location). A VertexClient is constructed per LLM
+# call — two to four times per coaching turn — and each one used to build its own
+# genai.Client, which means its own google.auth.default() resolution and access-token
+# fetch, plus its own TLS setup. The model id is deliberately NOT part of the key: it is a
+# per-request argument to generate_content, never client state, so one client serves every
+# model and the model-fallback loop costs nothing extra.
+#
+# The factory object is part of the key, and that detail is load-bearing. Tests
+# monkeypatch app.vertex.genai.Client with a fresh fake class per test; keying on
+# (project, location) alone hands one test's fake to the next test, which breaks 6 of the
+# 15 tests in tests/unit/test_vertex_unit.py. Keying on the factory makes cross-test bleed
+# impossible by construction, since monkeypatch installs a new class object each time.
+#
+# KNOWN TRADE-OFF, worth reading before debugging a mysterious stall: sharing a client
+# also shares its aiohttp connection pool, so requests now reuse keep-alive connections.
+# When the server closes one first, google-genai raises ServerDisconnectedError (or
+# ClientOSError) and retries once after `1 + random.randint(0, 9)` seconds
+# (google/genai/_api_client.py, non-streaming path). Building a fresh client per call made
+# that essentially unhittable because every request opened a new connection. The same
+# applies inside VertexGateway's model-fallback loop, which no longer gets a fresh
+# transport per attempt. Measured turn latency still improved sharply (mean 19.1s -> 13.4s,
+# max 31.6s -> 14.8s over 9 live turns), so this is worth it — but a sporadic multi-second
+# stall under the AIMS_CLASSIFY_BUDGET_S budget would point here first.
+_CLIENT_CACHE: Dict[Tuple[Any, ...], Any] = {}
+_CLIENT_CACHE_LOCK = threading.Lock()
+
+
+def reset_genai_client_cache() -> None:
+    """Drop every cached Gen AI client.
+
+    Mainly for tests and long-running scripts: the SDK keeps a per-event-loop aiohttp
+    session and auth lock on each client and never prunes them, so a client reused across
+    many loops (``asyncio.run`` per iteration, or pytest's per-test loop under
+    ``asyncio_mode = auto``) retains every loop it has seen. Production runs a single loop
+    and does not need this.
+    """
+    with _CLIENT_CACHE_LOCK:
+        _CLIENT_CACHE.clear()
 
 
 class VertexAIError(Exception):
@@ -55,19 +95,36 @@ class VertexClient:
         self._client: Optional[genai.Client] = None
 
     def _get_client(self) -> genai.Client:
-        """Return a cached Gen AI client configured for Vertex AI.
+        """Return a Gen AI client for this project/location, shared across instances.
 
-        The client is created on first call and reused for subsequent
-        requests, avoiding redundant HTTP session and auth setup.
+        The per-instance memo below only ever helped when the same VertexClient was
+        reused, which never happens: callers build a fresh one per LLM call. The shared
+        cache is what actually avoids re-resolving credentials and re-establishing TLS on
+        every request.
         """
-        if self._client is None:
-            self._client = genai.Client(
-                vertexai=True,
-                project=self.project,
-                location=self.region,
-                http_options=types.HttpOptions(api_version="v1"),
-            )
-        return self._client
+        if self._client is not None:
+            return self._client
+
+        # Resolved at call time, never at import and never as a default argument, so that
+        # monkeypatching app.vertex.genai.Client is effective.
+        factory = genai.Client
+        key = (self.project, self.region, factory)
+
+        client = _CLIENT_CACHE.get(key)
+        if client is None:
+            with _CLIENT_CACHE_LOCK:
+                client = _CLIENT_CACHE.get(key)
+                if client is None:
+                    client = factory(
+                        vertexai=True,
+                        project=self.project,
+                        location=self.region,
+                        http_options=types.HttpOptions(api_version="v1"),
+                    )
+                    _CLIENT_CACHE[key] = client
+
+        self._client = client
+        return client
 
     @staticmethod
     def _sanitize_response_schema(schema: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
