@@ -254,12 +254,32 @@ class TestEnvironmentVariableValidation:
         assert settings.REGION in ["us-central1", "us-west4"]  # Could be either default
 
     def test_model_id_defaults_correctly(self, monkeypatch):
-        """Verify MODEL_ID defaults to the current GA Gemini target."""
+        """Verify MODEL_ID defaults to the current GA Gemini target.
+
+        Both env vars must be cleared: CI sets them, so without the delenv calls this
+        asserted on the ambient environment rather than on the defaults.
+        """
         monkeypatch.delenv("MODEL_ID", raising=False)
+        monkeypatch.delenv("AIMS_CLASSIFIER_MODEL_ID", raising=False)
 
         settings = Settings(_env_file=None)
         assert settings.MODEL_ID == "gemini-3.6-flash"
-        assert settings.AIMS_CLASSIFIER_MODEL_ID == "gemini-3.5-flash-lite"
+        # The classifier deliberately defaults to the same model as MODEL_ID; see the
+        # comment on DEFAULT_CLASSIFIER_MODEL_ID in app/constants.py.
+        assert settings.AIMS_CLASSIFIER_MODEL_ID == "gemini-3.6-flash"
+
+    def test_classifier_thinking_level_defaults_to_unset(self, monkeypatch):
+        """No ThinkingConfig is sent unless explicitly configured.
+
+        This matches what production has actually been running. app/vertex.py only
+        builds a ThinkingConfig when thinking_level or thinking_budget is set.
+        """
+        monkeypatch.delenv("AIMS_CLASSIFIER_THINKING_LEVEL", raising=False)
+        monkeypatch.delenv("AIMS_CLASSIFIER_THINKING_BUDGET", raising=False)
+
+        settings = Settings(_env_file=None)
+        assert settings.AIMS_CLASSIFIER_THINKING_LEVEL is None
+        assert settings.AIMS_CLASSIFIER_THINKING_BUDGET is None
 
     def test_classifier_thinking_level_can_be_disabled(self, monkeypatch):
         monkeypatch.setenv("AIMS_CLASSIFIER_THINKING_LEVEL", "none")
