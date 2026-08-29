@@ -107,6 +107,11 @@ def _vertex_config() -> dict:
         "classifier_thinking_budget": settings.AIMS_CLASSIFIER_THINKING_BUDGET,
         "temperature": settings.TEMPERATURE,
         "max_tokens": settings.MAX_TOKENS,
+        "classify_temperature": settings.AIMS_CLASSIFY_TEMPERATURE,
+        "classify_max_tokens": settings.AIMS_CLASSIFY_MAX_TOKENS,
+        "classify_budget_s": settings.AIMS_CLASSIFY_BUDGET_S,
+        "reply_max_tokens": settings.AIMS_REPLY_MAX_TOKENS,
+        "heuristic_fallback_enabled": settings.AIMS_HEURISTIC_FALLBACK_ENABLED,
         # Pass client class from app.main so tests can monkeypatch m.VertexClient.
         "client_cls": VertexClient,
     }
