@@ -54,6 +54,9 @@ class ChatOrchestrator:
         self.aims_coaching_enabled = aims_config.get("enabled", False)
         self.force_coach_default = bool(aims_config.get("force_default", False))
         
+        # Retained so keys this class does not model (classifier_model_id,
+        # classifier_thinking_*) still reach AimsCoachingHandler.
+        self.vertex_config = dict(vertex_config)
         self.project_id = vertex_config.get("project_id")
         self.region = vertex_config.get("region", "us-central1")
         self.vertex_location = vertex_config.get("vertex_location", "us-central1")
@@ -147,6 +150,7 @@ class ChatOrchestrator:
         handler = AimsCoachingHandler(
             memory_store=self.memory_store,
             vertex_config={
+                **self.vertex_config,
                 "project_id": self.project_id,
                 "region": self.region,
                 "vertex_location": self.vertex_location,
