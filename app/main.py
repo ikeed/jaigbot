@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
 from .http_handlers import get_request_id as _get_request_id, install_http_handlers
 from .vertex import VertexClient
-from .runtime import VertexClientCache, create_memory_store, get_logging_config
+from .runtime import create_memory_store, get_logging_config
 from .routes.chat import create_chat_router
 from .routes.session import create_session_router
 from .routes.summary import create_summary_router
@@ -16,7 +16,6 @@ from .routes.system import create_system_router
 from .services.model_preflight import run_model_preflight
 from .constants import APP_TITLE, APP_VERSION
 
-_VERTEX_CLIENT_CACHE = VertexClientCache()
 
 logging.basicConfig(**get_logging_config(settings))
 logger = logging.getLogger("app")
@@ -28,7 +27,6 @@ MEMORY_STORE = create_memory_store(settings, logger)
 async def _lifespan(application: FastAPI):
     """Application lifespan: run startup tasks before yielding, cleanup after."""
     application.state.memory_store = MEMORY_STORE
-    application.state.vertex_client_cache = _VERTEX_CLIENT_CACHE
     await _model_preflight(application)
     yield
 

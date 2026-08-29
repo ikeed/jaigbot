@@ -111,6 +111,89 @@ def test_get_client_caches_instance(monkeypatch):
     assert created[0]["location"] == "us-central1"
 
 
+def test_get_client_shared_across_instances_and_models(monkeypatch):
+    """Separate VertexClients for the same project/location share one Gen AI client.
+
+    This is the whole point of the cache: callers build a VertexClient per LLM call, and
+    the model id is a per-request argument rather than client state, so a single client
+    serves the classifier, the patient reply and every model-fallback attempt.
+    """
+    created = []
+
+    class FakeGenAIClient:
+        def __init__(self, **kwargs):
+            created.append(kwargs)
+
+    monkeypatch.setattr("app.vertex.genai.Client", FakeGenAIClient)
+
+    a = VertexClient(project="proj", region="us-central1", model_id="model-a")
+    b = VertexClient(project="proj", region="us-central1", model_id="model-b")
+
+    assert a._get_client() is b._get_client()
+    assert len(created) == 1
+
+
+def test_get_client_not_shared_across_locations(monkeypatch):
+    created = []
+
+    class FakeGenAIClient:
+        def __init__(self, **kwargs):
+            created.append(kwargs)
+
+    monkeypatch.setattr("app.vertex.genai.Client", FakeGenAIClient)
+
+    here = VertexClient(project="proj", region="us-central1", model_id="model")
+    there = VertexClient(project="proj", region="global", model_id="model")
+
+    assert here._get_client() is not there._get_client()
+    assert len(created) == 2
+
+
+def test_get_client_ignores_entry_from_a_different_factory(monkeypatch):
+    """The regression guard for the naive cache key.
+
+    Keyed on (project, location) alone, this cache would hand FactoryA's client to the
+    second VertexClient even though the factory has been re-patched — which is exactly how
+    a per-test monkeypatched fake leaks into the next test. Written naively, this test
+    fails; six others in this file fail with it.
+    """
+    class FactoryA:
+        def __init__(self, **kwargs):
+            pass
+
+    class FactoryB:
+        def __init__(self, **kwargs):
+            pass
+
+    monkeypatch.setattr("app.vertex.genai.Client", FactoryA)
+    first = VertexClient(project="proj", region="us-central1", model_id="m")._get_client()
+    assert isinstance(first, FactoryA)
+
+    monkeypatch.setattr("app.vertex.genai.Client", FactoryB)
+    second = VertexClient(project="proj", region="us-central1", model_id="m")._get_client()
+    assert isinstance(second, FactoryB)
+
+
+def test_reset_genai_client_cache_forces_reconstruction(monkeypatch):
+    created = []
+
+    class FakeGenAIClient:
+        def __init__(self, **kwargs):
+            created.append(kwargs)
+
+    monkeypatch.setattr("app.vertex.genai.Client", FakeGenAIClient)
+
+    VertexClient(project="proj", region="us-central1", model_id="m")._get_client()
+    assert len(created) == 1
+
+    from app.vertex import reset_genai_client_cache
+
+    reset_genai_client_cache()
+
+    VertexClient(project="proj", region="us-central1", model_id="m")._get_client()
+    assert len(created) == 2
+
+
 def test_build_config_includes_json_schema_and_thinking_budget():
     cfg = VertexClient(project="proj", region="us-central1", model_id="model")._build_config(
         temperature=0.1,
