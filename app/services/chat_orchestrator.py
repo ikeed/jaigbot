@@ -13,6 +13,8 @@ Behavior-preserving refactoring of the massive app.main.chat() function.
 """
 from __future__ import annotations
 
+import asyncio
+
 import json
 import time
 from typing import Any, Optional
@@ -104,7 +106,18 @@ class ChatOrchestrator:
             ctx = self.context_builder.build(
                 req, body.sessionId, body.character, body.scene, body.userInfo
             )
-            
+
+            # The TTL prune archives every expired session to GCS. Running it inline meant
+            # roughly one request in 29 paid for that, on the event loop. Queue it instead;
+            # Starlette runs sync background callables in a worker thread after the
+            # response. No synchronous fallback when background_tasks is absent — that only
+            # happens in tests, and doing the work inline is the behaviour being removed.
+            if ctx.prune_due:
+                if background_tasks is not None:
+                    background_tasks.add_task(self.session_service.prune_expired)
+                else:
+                    self.logger.debug("prune due but no BackgroundTasks available; skipping")
+
             # Route to appropriate handler
             if self.aims_coaching_enabled and (getattr(body, "coach", False) or self.force_coach_default):
                 return await self._handle_coaching_path(req, body, ctx)
@@ -403,7 +416,10 @@ class ChatOrchestrator:
             if not mem:
                 # If no session found in memory, try to fetch from GCS
                 self.logger.info(f"Session {session_id} not in memory, checking GCS for user {user_id}")
-                downloaded = storage_service.download_session(session_id, user_id)
+                # Blocking GCS read; keep it off the event loop.
+                downloaded = await asyncio.to_thread(
+                    storage_service.download_session, session_id, user_id
+                )
                 mem = downloaded or {}
                 
                 if not mem:

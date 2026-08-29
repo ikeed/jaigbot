@@ -14,6 +14,7 @@ Design goals:
 from __future__ import annotations
 
 import logging
+import threading
 import time
 import uuid
 from dataclasses import dataclass
@@ -22,6 +23,12 @@ from typing import Any, Optional, Tuple
 from app.chat_roles import ROLE_USER, ROLE_ASSISTANT
 
 logger = logging.getLogger(__name__)
+
+# Single-flight guard for prune_expired. It runs in a worker thread now rather than on the
+# event loop, so two overlapping requests could otherwise prune concurrently and race each
+# other's read-modify-write of the GCS persona index. Module-level because SessionService
+# is constructed per request.
+_PRUNE_LOCK = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -131,9 +138,13 @@ class SessionService:
         kept.reverse()
         return kept
 
-    # TTL prune (invoked occasionally by API layer)
+    # TTL prune. Queued onto the request's BackgroundTasks by ChatOrchestrator and run in
+    # Starlette's worker threadpool after the response has been sent.
     def prune_expired(self) -> None:
         if not self.memory_enabled:
+            return
+        if not _PRUNE_LOCK.acquire(blocking=False):
+            logger.debug("prune_expired already running; skipping this turn")
             return
         try:
             from app.services.storage_service import storage_service
@@ -168,9 +179,9 @@ class SessionService:
                     if not archive_data.get("game_over") and "error_report" not in archive_data:
                         archive_data["exit_context"] = "abandoned"
                     try:
-                        # WARNING: this upload is synchronous and prune_expired runs inside the
-                        # request path (ChatContextBuilder.build, roughly 1 request in 29), so
-                        # this does block a user's turn once per expired session.
+                        # This upload is synchronous, but prune_expired now runs in a
+                        # background worker thread after the response, so it no longer
+                        # blocks a user's turn.
                         # finalize_persona_index=True: prune_expired is the single point that
                         # settles a session's outcome (completed, abandoned, or reported), so
                         # this is where the "open" persona-index row gets its final outcome.
@@ -182,6 +193,8 @@ class SessionService:
         except Exception as e:
             # best-effort only
             logger.debug("Error during prune_expired: %s", e)
+        finally:
+            _PRUNE_LOCK.release()
 
     # -------- HTTP cookie helper --------
     def apply_cookie(self, response, session_id: str) -> None:
