@@ -5,14 +5,20 @@ description = "AIMS coaching chatbot powered by Gemini on Vertex AI"
 requires-python = ">=3.13"
 # All dependencies live in requirements.txt (single source of truth).
 # This file provides PEP 621 project metadata only.
-dynamic = ["dependencies"]
+dynamic = ["dependencies", "optional-dependencies"]
 
 [build-system]
 requires = ["setuptools>=68"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
+
+# Without this, flat-layout auto-discovery treats public/, skills/ and terraform/
+# as importable packages and refuses to build.
+[tool.setuptools.packages.find]
+include = ["app*", "docs*"]
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
+optional-dependencies.dev = {file = ["requirements-dev.txt"]}
 
 [tool.ruff.lint.per-file-ignores]
 # These entrypoints intentionally sanitize environment variables before importing
