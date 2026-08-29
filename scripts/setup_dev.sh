@@ -19,7 +19,7 @@ source "$VENV_DIR/bin/activate"
 
 echo "[setup_dev] Installing Python dependencies"
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+python -m pip install -r requirements.txt -r requirements-dev.txt
 
 mkdir -p .chainlit
 
