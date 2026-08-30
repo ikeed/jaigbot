@@ -16,7 +16,9 @@ unavailable" result — see the classification note below before assuming a dete
 ```bash
 ./scripts/setup_dev.sh   # creates .venv, installs requirements.txt + requirements-dev.txt, seeds .env from .env.example, sets up .chainlit/
 ```
-Python 3.13 (pinned in `.python-version`) is used locally and in CI.
+Python 3.13 (pinned in `.python-version`) is used locally and in CI. Node.js is also required —
+`tests/unit/frontend/` shells out to `node` to test the vanilla-JS frontend modules (`brew install node@20`
+if missing); `setup_dev.sh` warns if it's not on `PATH`.
 
 `requirements.txt` is runtime-only — it is what the Docker image installs. Test and lint tooling
 (pytest, ruff, mypy, bandit) lives in `requirements-dev.txt`, which pins the linter versions CI uses.
