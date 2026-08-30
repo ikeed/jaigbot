@@ -418,3 +418,112 @@ async def test_replay_mixed_resolution_vaccine_today_plus_literature_ends_as_vac
     assert "% overall" in result["coach_post"]["title"]
     assert "Outcome:" in result["coach_post"]["lines"][0]
     assert memory_store[session_id][KEY_GAME_OVER] is True
+
+
+def _checklist_state_for_replay() -> dict:
+    """A persona with one checklist concern that never gets discovered - reproduces
+    the live-verified stuck-loop bug: the endgame backstop blocks every closing turn
+    forever because nothing in this scripted conversation ever surfaces it."""
+    return {
+        "announced": True,
+        "phase": "Secure",
+        "is_undiscovered_concerns": True,
+        "pending_concerns": False,
+        "parent_concerns": [
+            {
+                "topic": "immune_load",
+                "desc": "worried that several vaccines at once might be too much",
+                "is_discovered": False,
+                "is_mirrored": False,
+                "is_secured": False,
+                "from_checklist": True,
+            }
+        ],
+        "recent_coaching": [],
+    }
+
+
+@pytest.mark.asyncio
+async def test_replay_stuck_undiscovered_backstop_eventually_closes_after_sweep_and_literature():
+    """Reproduces the live-verified bug deterministically: a persona checklist concern
+    that never gets discovered blocks every closing turn forever (turns 1-4), until the
+    clinician has both offered literature AND made one genuine Inquire sweep that still
+    didn't surface it (turn 5) - at which point the session can finally close (turn 6)."""
+    accepted_result = {
+        "is_endgame": True,
+        "resolution_type": "accepted_vaccine",
+        "summary": "Person agreed to vaccinate today.",
+        "reason": "",
+    }
+    handler, memory_store = _handler(
+        turn_results=[
+            _turn(step="Secure", score=2, patient_reply="Okay, that's a lot to take in."),
+            _turn(step="Secure", score=2, patient_reply="I appreciate you explaining that."),
+            _turn(step="Secure", score=2, patient_reply="Thank you for being patient."),
+            _turn(step="Secure", score=2, patient_reply="I understand, thank you."),
+            _turn(step="Inquire", score=2, patient_reply="No, I think that's everything."),
+            _turn(step="Secure", score=2, patient_reply="Okay, let's go ahead then."),
+        ],
+        endgame_results=[
+            accepted_result,  # turn 1: still blocked (nothing discovered yet)
+            accepted_result,  # turn 2: still blocked
+            accepted_result,  # turn 3: still blocked
+            accepted_result,  # turn 4: still blocked
+            {"is_endgame": False, "resolution_type": "not_resolved", "summary": "", "reason": ""},  # turn 5: Inquire sweep, not a closing attempt
+            accepted_result,  # turn 6: bypass applies, session closes
+        ],
+    )
+    session_id = "stuck-undiscovered-then-resolves"
+    mem = {
+        SESSION_HISTORY: [],
+        "full_history": [],
+        KEY_AIMS_STATE: _checklist_state_for_replay(),
+        KEY_UPDATED: time.time(),
+    }
+    ctx = _context(session_id=session_id, mem=mem, person_last="I'm not sure about all these vaccines at once.")
+
+    messages = [
+        "Here's a handout with all the information to take home.",
+        "We won't do the needles today; take your time.",
+        "No rush at all, we'll revisit at your next visit.",
+        "You too, take care.",
+        "Is there anything else on your mind before you head out today?",
+        "Not at all, you're welcome. Goodbye, take care.",
+    ]
+
+    results = []
+    # Asserted immediately after each turn, before the next turn mutates the same
+    # stored session dict - memory_store[session_id] is one mutable object across the
+    # whole conversation, so checking it only after the full loop would silently read
+    # back the FINAL (turn 6) state for every earlier "did it stay blocked" assertion.
+    for i, msg in enumerate(messages):
+        result = await handler.handle(
+            req=None,
+            body=ChatRequest(message=msg, sessionId=session_id, coach=True),
+            ctx=ctx,
+        )
+        results.append(result)
+        state_after = memory_store[session_id][KEY_AIMS_STATE]
+
+        if i < 4:
+            # Turns 1-4: the backstop keeps blocking closure - nothing was ever
+            # discovered, so the same accepted_vaccine outcome is vetoed every time.
+            assert "coach_post" not in result, f"turn {i + 1} closed prematurely"
+            assert memory_store[session_id].get(KEY_GAME_OVER, False) is False
+            assert state_after["endgame_blocked_undiscovered"] is True
+        elif i == 4:
+            # Turn 5: the genuine Inquire sweep still doesn't discover anything, but is
+            # now recorded as a real attempt.
+            assert "coach_post" not in result
+            assert state_after["patient_unreceptive_to_further_inquire"] is True
+            assert state_after["literature_offered"] is True
+        else:
+            # Turn 6: with a genuine sweep attempt AND literature already offered, the
+            # same accepted_vaccine outcome that was blocked four times in a row now
+            # closes.
+            assert memory_store[session_id][KEY_GAME_OVER] is True
+            assert state_after["endgame_blocked_undiscovered"] is False
+            assert "% overall" in result["coach_post"]["title"]
+
+        if i < len(messages) - 1:
+            _sync_ctx(ctx, memory_store, result)

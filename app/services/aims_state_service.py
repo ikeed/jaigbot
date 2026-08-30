@@ -81,6 +81,11 @@ class AimsStateService:
                     "parent_concerns": seeded_concerns,
                 },
             )
+            # Captured before apply_concern_events runs below, so this reflects the
+            # turn's starting value - _update_sweep_attempt_tracking needs to compare
+            # "was something undiscovered going into this turn" against the recomputed
+            # value after the turn's own discovery matching has had its chance.
+            was_undiscovered_before = bool(state.get("is_undiscovered_concerns"))
             step_main = cls_payload.get("step")
             steps = self.component_steps(step_main, cls_payload.get("steps"))
             handled_events = apply_concern_events(
@@ -116,6 +121,8 @@ class AimsStateService:
                 mark_secured_by_topic(state, clinician_message, self.secure_topical_cues())
 
             self._recompute_undiscovered_concerns(state)
+            self._update_sweep_attempt_tracking(state, steps, was_undiscovered_before)
+            self._update_closure_signals(state, clinician_message)
 
             character = mem.get(SESSION_CHARACTER)
             self.apply_coaching_guidance(
@@ -187,6 +194,59 @@ class AimsStateService:
             )
         else:
             state["is_undiscovered_concerns"] = not bool(concerns)
+
+    @staticmethod
+    def _update_sweep_attempt_tracking(
+        state: dict[str, Any], steps: list[str], was_undiscovered_before: bool
+    ) -> None:
+        """Track whether the clinician has genuinely tried to surface a hidden concern.
+
+        A checklist concern's is_discovered only flips via the classifier's structured
+        semantic matching (see conversation_service.apply_concern_events) - never merely
+        because the clinician asked an open question and the patient said "no, that's
+        everything." Without this, a persona that simply never volunteers a checklist
+        topic leaves is_undiscovered_concerns permanently true, and the endgame backstop
+        (aims_endgame_service.py) blocks every closing turn forever with no way out.
+
+        This counts a turn as a genuine sweep attempt only when Inquire was present AND
+        something was still undiscovered going in AND it's STILL undiscovered after this
+        turn's own recompute - i.e. the clinician asked, and it didn't surface anything.
+        One such attempt is treated as sufficient signal (a real "no" is real
+        information; asking the identical question again isn't going to produce a
+        different answer) - see aims_endgame_service.py for how this is consumed.
+        """
+        if not was_undiscovered_before:
+            return
+        if state.get("is_undiscovered_concerns"):
+            if STEP_INQUIRE in steps:
+                attempts = int(state.get("sweep_inquire_attempts_since_undiscovered", 0) or 0) + 1
+                state["sweep_inquire_attempts_since_undiscovered"] = attempts
+                if attempts >= 1:
+                    # Sticky - deliberately never reset back to False once set. This is
+                    # consumed as a one-way "the clinician has genuinely tried" signal
+                    # for the endgame bypass; un-sticking it would let a single later
+                    # discovery re-arm the backstop's most restrictive state right when
+                    # the conversation is closest to resolving.
+                    state["patient_unreceptive_to_further_inquire"] = True
+            # else: neither Secure-only nor any other non-Inquire turn changes the
+            # counter - only a genuine Inquire attempt counts, matching the "unchanged
+            # on neither" spirit of _apply_inquire_nudge's own counter.
+        else:
+            state["sweep_inquire_attempts_since_undiscovered"] = 0
+
+    @classmethod
+    def _update_closure_signals(cls, state: dict[str, Any], clinician_message: str) -> None:
+        """Track, across the whole session, whether literature/follow-up were offered.
+
+        Sticky (only ever sets True, never unsets) - this replaces _add_closure_plan_tip's
+        old behavior of re-scanning only the current turn's text, which missed anything
+        offered earlier in the conversation. Reuses the existing cue matchers as-is.
+        """
+        text = (clinician_message or "").lower()
+        if cls._has_closure_literature(text):
+            state["literature_offered"] = True
+        if any(cue in text for cue in cls.CLOSURE_FOLLOWUP_CUES):
+            state["followup_confirmed"] = True
 
     def _apply_inquire_nudge(
         self,
@@ -336,8 +396,7 @@ class AimsStateService:
                 character,
                 prefer_structured_feedback=has_structured_feedback,
             )
-        if self._heuristic_fallback_enabled:
-            self._add_closure_plan_tip(cls_payload, state, clinician_message)
+        self._add_closure_plan_tip(cls_payload, state, clinician_message)
 
     def _apply_secure_guidance(
         self,
@@ -424,30 +483,48 @@ class AimsStateService:
         cls,
         cls_payload: dict[str, Any],
         state: dict[str, Any],
-        clinician_message: str,
+        _clinician_message: str,
     ) -> None:
-        if cls._has_structured_feedback(cls_payload):
-            return
-        if cls_payload.get("tips"):
-            return
+        """Nudge toward completing the closure plan: literature and/or a follow-up.
+
+        Reads the session-level literature_offered/followup_confirmed flags (set by
+        _update_closure_signals every turn) rather than re-scanning only the current
+        turn's text, so an offer made several turns ago is still remembered.
+
+        The mirrored-completeness gate is bypassed when
+        patient_unreceptive_to_further_inquire is set: once the clinician has genuinely
+        tried to surface a hidden concern and the patient isn't giving anything more,
+        nothing further can be mirrored, and this nudge is exactly the guidance that
+        scenario needs - suppressing it here would silently defeat the whole point of
+        tracking that flag.
+        """
         if STEP_SECURE not in cls.component_steps(cls_payload.get("step"), cls_payload.get("steps")):
             return
 
         concerns = state.get("parent_concerns") or []
-        if concerns and not all(concern.get("is_mirrored") for concern in concerns):
+        unreceptive = bool(state.get("patient_unreceptive_to_further_inquire"))
+        if concerns and not all(concern.get("is_mirrored") for concern in concerns) and not unreceptive:
             return
 
-        text = (clinician_message or "").lower()
-        has_literature = cls._has_closure_literature(text)
-        has_followup = any(cue in text for cue in cls.CLOSURE_FOLLOWUP_CUES)
+        has_literature = bool(state.get("literature_offered"))
+        has_followup = bool(state.get("followup_confirmed"))
+
         if has_followup and not has_literature:
-            cls_payload["tips"] = [
-                message("state_feedback.closure_followup_without_literature")
-            ]
+            code = "closure_followup_without_literature"
+            text = message("state_feedback.closure_followup_without_literature")
         elif has_literature and not has_followup:
-            cls_payload["tips"] = [
-                message("state_feedback.closure_literature_without_followup")
-            ]
+            code = "closure_literature_without_followup"
+            text = message("state_feedback.closure_literature_without_followup")
+        elif not has_literature and not has_followup:
+            code = "offer_literature"
+            text = message("state_feedback.offer_literature_tip")
+        else:
+            return  # both already offered - nothing to nudge
+
+        if cls._has_structured_feedback(cls_payload):
+            cls._append_feedback_item(cls_payload, step=STEP_SECURE, code=code, text=text)
+        elif not cls_payload.get("tips"):
+            cls_payload["tips"] = [text]
 
     @classmethod
     def _has_closure_literature(cls, text: str) -> bool:

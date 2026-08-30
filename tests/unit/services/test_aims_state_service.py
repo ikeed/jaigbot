@@ -692,11 +692,19 @@ def test_structured_feedback_announce_after_inquiry_uses_coded_state_feedback():
     assert payload["reasons"] == ["Model reason."]
 
 
-def test_structured_feedback_suppresses_closure_plan_tip_heuristics():
+def test_structured_feedback_keeps_closure_plan_tip_out_of_legacy_tips():
+    """The closure-plan tip runs unconditionally now, but must still prefer
+    feedback_items over legacy tips when structured feedback is active - the
+    literature_offered/followup_confirmed flags are set (as _update_closure_signals
+    would have from an earlier turn) so there is nothing left to nudge, isolating
+    this test to its original point: tips stays empty either way.
+    """
     state = {
         "phase": PHASE_INQUIRE_MIRROR,
         "announced": True,
         "is_undiscovered_concerns": False,
+        "literature_offered": True,
+        "followup_confirmed": True,
         "parent_concerns": [
             {
                 "topic": "trust",
@@ -717,4 +725,203 @@ def test_structured_feedback_suppresses_closure_plan_tip_heuristics():
     )
 
     assert payload["tips"] == []
+    assert _feedback_codes(payload) == ["model_praise"]
+
+
+# ---------------------------------------------------------------------------
+# Tests -- patient-unreceptive sweep tracking (graceful endgame close)
+# ---------------------------------------------------------------------------
+
+def test_sweep_tracking_increments_on_unproductive_inquire():
+    state = {"is_undiscovered_concerns": True}
+    AimsStateService._update_sweep_attempt_tracking(
+        state, [STEP_INQUIRE], was_undiscovered_before=True
+    )
+    assert state["sweep_inquire_attempts_since_undiscovered"] == 1
+    assert state["patient_unreceptive_to_further_inquire"] is True
+
+
+def test_sweep_tracking_does_not_increment_when_discovery_succeeded_this_turn():
+    state = {"is_undiscovered_concerns": False}
+    AimsStateService._update_sweep_attempt_tracking(
+        state, [STEP_INQUIRE], was_undiscovered_before=True
+    )
+    assert state.get("sweep_inquire_attempts_since_undiscovered") == 0
+    assert "patient_unreceptive_to_further_inquire" not in state
+
+
+def test_sweep_tracking_does_not_increment_on_non_inquire_step():
+    state = {"is_undiscovered_concerns": True}
+    AimsStateService._update_sweep_attempt_tracking(
+        state, [STEP_SECURE], was_undiscovered_before=True
+    )
+    assert "sweep_inquire_attempts_since_undiscovered" not in state
+    assert "patient_unreceptive_to_further_inquire" not in state
+
+
+def test_sweep_tracking_no_op_when_nothing_was_undiscovered_going_in():
+    state = {"is_undiscovered_concerns": True}
+    AimsStateService._update_sweep_attempt_tracking(
+        state, [STEP_INQUIRE], was_undiscovered_before=False
+    )
+    assert "sweep_inquire_attempts_since_undiscovered" not in state
+    assert "patient_unreceptive_to_further_inquire" not in state
+
+
+def test_sweep_tracking_flag_is_sticky_across_a_later_successful_discovery():
+    state = {
+        "is_undiscovered_concerns": True,
+        "patient_unreceptive_to_further_inquire": True,
+        "sweep_inquire_attempts_since_undiscovered": 1,
+    }
+    # Discovery succeeds on a later turn -- the counter resets, but the sticky
+    # flag must NOT un-set, since it's consumed as a one-way endgame-bypass signal.
+    AimsStateService._update_sweep_attempt_tracking(
+        state, [STEP_MIRROR], was_undiscovered_before=True
+    )
+    state["is_undiscovered_concerns"] = False
+    AimsStateService._update_sweep_attempt_tracking(
+        state, [], was_undiscovered_before=True
+    )
+    assert state["sweep_inquire_attempts_since_undiscovered"] == 0
+    assert state["patient_unreceptive_to_further_inquire"] is True
+
+
+# ---------------------------------------------------------------------------
+# Tests -- persistent closure signal tracking (literature/follow-up)
+# ---------------------------------------------------------------------------
+
+def test_closure_signals_sets_literature_offered_from_cue():
+    state = {}
+    AimsStateService._update_closure_signals(
+        state, "I'll send you home with a handout to review."
+    )
+    assert state["literature_offered"] is True
+    assert "followup_confirmed" not in state
+
+
+def test_closure_signals_sets_followup_confirmed_from_cue():
+    state = {}
+    AimsStateService._update_closure_signals(
+        state, "Let's book a follow-up appointment."
+    )
+    assert state["followup_confirmed"] is True
+    assert "literature_offered" not in state
+
+
+def test_closure_signals_are_sticky_once_true():
+    state = {"literature_offered": True}
+    AimsStateService._update_closure_signals(state, "Have a good day, goodbye.")
+    assert state["literature_offered"] is True  # not un-set by a turn with no cues
+
+
+def test_closure_signals_both_can_be_set_from_the_same_turn():
+    state = {}
+    AimsStateService._update_closure_signals(
+        state, "Here's a handout, and let's book a follow-up too."
+    )
+    assert state["literature_offered"] is True
+    assert state["followup_confirmed"] is True
+
+
+# ---------------------------------------------------------------------------
+# Tests -- rewritten _add_closure_plan_tip (runs unconditionally now)
+# ---------------------------------------------------------------------------
+
+def test_closure_plan_tip_runs_unconditionally_without_heuristic_fallback():
+    """Regression test for the original dead-code bug: this nudge previously never
+    fired in any deployed environment because it was gated behind
+    AIMS_HEURISTIC_FALLBACK_ENABLED (default False everywhere). Explicitly construct
+    the service with heuristic_fallback_enabled=False (the deployed default) and prove
+    the tip still fires."""
+    service = AimsStateService(logger=logging.getLogger("test"), heuristic_fallback_enabled=False)
+    payload = _structured_payload(STEP_SECURE)
+    state = {
+        "parent_concerns": [
+            {"topic": "side_effects", "is_mirrored": True, "is_secured": True}
+        ],
+    }
+    service.apply_coaching_guidance(
+        payload, STEP_SECURE, state, "That's completely your call.", "Thanks."
+    )
+    assert "offer_literature" in _feedback_codes(payload)
+
+
+def test_closure_plan_tip_fires_offer_literature_when_neither_offered_and_all_mirrored():
+    payload = _structured_payload(STEP_SECURE)
+    state = {
+        "parent_concerns": [
+            {"topic": "side_effects", "is_mirrored": True, "is_secured": True}
+        ],
+    }
+    AimsStateService._add_closure_plan_tip(payload, state, "irrelevant")
+    codes = _feedback_codes(payload)
+    assert "offer_literature" in codes
+    texts = [item["text"] for item in payload["feedback_items"] if item.get("code") == "offer_literature"]
+    assert texts == [
+        "You haven't offered anything to take home or booked a follow-up yet; "
+        "try offering some information to review, or scheduling a follow-up "
+        "so they know when to bring questions back."
+    ]
+
+
+def test_closure_plan_tip_offer_literature_bypasses_mirrored_gate_when_patient_unreceptive():
+    """This is the fix the design pressure-test caught: without the bypass, the
+    mirrored-completeness gate would silently suppress the new nudge in exactly the
+    scenario it exists to help (the concern was never discovered, so it was never
+    mirrored either)."""
+    payload = _structured_payload(STEP_SECURE)
+    state = {
+        "parent_concerns": [
+            {"topic": "immune_load", "is_mirrored": False, "is_secured": False}
+        ],
+        "patient_unreceptive_to_further_inquire": True,
+    }
+    AimsStateService._add_closure_plan_tip(payload, state, "irrelevant")
+    assert "offer_literature" in _feedback_codes(payload)
+
+
+def test_closure_plan_tip_suppressed_by_unmirrored_concern_without_unreceptive_flag():
+    """Sibling/negative case for the fix above: the bypass must require the flag, not
+    fire unconditionally regardless of mirror state."""
+    payload = _structured_payload(STEP_SECURE)
+    state = {
+        "parent_concerns": [
+            {"topic": "immune_load", "is_mirrored": False, "is_secured": False}
+        ],
+    }
+    AimsStateService._add_closure_plan_tip(payload, state, "irrelevant")
+    assert _feedback_codes(payload) == ["model_praise"]
+
+
+def test_closure_plan_tip_literature_without_followup_uses_sticky_flag_not_current_turn_text():
+    """Proves the state is read from persistent session flags, not re-scanned from the
+    current turn's text -- literature was offered on an earlier turn, and the current
+    clinician_message has no literature cue in it at all."""
+    payload = _structured_payload(STEP_SECURE)
+    state = {
+        "parent_concerns": [],
+        "literature_offered": True,
+    }
+    AimsStateService._add_closure_plan_tip(
+        payload, state, "How are you feeling about everything?"
+    )
+    assert "closure_literature_without_followup" in _feedback_codes(payload)
+
+
+def test_closure_plan_tip_silent_once_both_offered():
+    payload = _structured_payload(STEP_SECURE)
+    state = {
+        "parent_concerns": [],
+        "literature_offered": True,
+        "followup_confirmed": True,
+    }
+    AimsStateService._add_closure_plan_tip(payload, state, "irrelevant")
+    assert _feedback_codes(payload) == ["model_praise"]
+
+
+def test_closure_plan_tip_does_not_fire_without_secure_step():
+    payload = _structured_payload(STEP_INQUIRE)
+    state = {"parent_concerns": []}
+    AimsStateService._add_closure_plan_tip(payload, state, "irrelevant")
     assert _feedback_codes(payload) == ["model_praise"]

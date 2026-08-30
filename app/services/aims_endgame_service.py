@@ -277,10 +277,34 @@ class AimsEndgameService:
             # contract) so the coaching layer can surface a distinct
             # Important tip for this specific block. Always set (True or
             # False) so a stale block from an earlier turn can't linger.
+            #
+            # patient_unreceptive_bypass: without this, the block above is
+            # permanent whenever a persona simply never volunteers a checklist
+            # topic -- confirmed live, the same turn can praise the clinician
+            # for an exemplary sweep-up Inquire and still repeat "try a
+            # sweep-up question" verbatim, forever, because is_discovered only
+            # flips via the classifier's structured matching, never merely
+            # because the clinician asked and the patient said no. The bypass
+            # requires BOTH that a genuine Inquire sweep already came up empty
+            # (aims_state_service.AimsStateService._update_sweep_attempt_tracking,
+            # sets patient_unreceptive_to_further_inquire) AND that literature
+            # was actually offered at some point (_update_closure_signals sets
+            # literature_offered) -- so the very first accepted-outcome turn is
+            # still fully protected (both start unset), and closure still
+            # requires the clinician to have actually given something to take
+            # home, not merely given up asking. Applies identically to
+            # accepted_vaccine and accepted_literature -- "endgame is endgame,"
+            # no special-casing between the two closing outcomes (see
+            # docs/aims/concern-checklist-plan.md #4.3).
+            patient_unreceptive_bypass = bool(
+                aims_state.get("patient_unreceptive_to_further_inquire")
+                and aims_state.get("literature_offered")
+            )
             undiscovered_block = bool(
                 is_endgame
                 and outcome in ("accepted_vaccine", "accepted_literature")
                 and aims_state.get("is_undiscovered_concerns")
+                and not patient_unreceptive_bypass
             )
             if undiscovered_block:
                 is_endgame = False
