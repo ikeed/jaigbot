@@ -1,9 +1,29 @@
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
 from typing import Any
 
 from .memory_store import InMemoryStore, RedisStore
+
+
+def delegating_lifespan(backend_app: Any) -> Any:
+    """Lifespan for a parent app that runs a mounted backend app's own lifespan.
+
+    Starlette does not run lifespan handlers for mounted sub-apps, so in
+    unified mode (run_app.py mounting app.main under /api) the backend's
+    startup work -- the model preflight, app.state seeding -- silently never
+    executed. Delegating to the backend's own lifespan_context keeps unified
+    mode in sync with whatever app.main's lifespan does now or in the future,
+    instead of duplicating its body here.
+    """
+
+    @asynccontextmanager
+    async def _lifespan(_parent: Any):
+        async with backend_app.router.lifespan_context(backend_app):
+            yield
+
+    return _lifespan
 
 
 def get_logging_config(settings: Any) -> dict[str, Any]:
