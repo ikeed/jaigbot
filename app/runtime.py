@@ -1,10 +1,40 @@
 from __future__ import annotations
 
+import json
 import logging
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from typing import Any
 
 from .memory_store import InMemoryStore, RedisStore
+
+
+class JsonFormatter(logging.Formatter):
+    """Emit each record as one JSON object.
+
+    The app's log call sites mostly build a JSON string and pass it as the log
+    message (log_event, the request/exception handlers). Under a plain text
+    formatter, aggregators saw that JSON embedded inside a text line -- an
+    opaque message, not structured fields. Here a dict-shaped message is merged
+    into the output object top-level; plain-string messages land under
+    "message". timestamp/severity/logger are set last so a message can never
+    clobber them.
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        message = record.getMessage()
+        payload: dict[str, Any]
+        try:
+            parsed = json.loads(message)
+        except (TypeError, ValueError):
+            parsed = None
+        payload = dict(parsed) if isinstance(parsed, dict) else {"message": message}
+        payload["timestamp"] = datetime.fromtimestamp(record.created, tz=UTC).isoformat()
+        payload["severity"] = record.levelname
+        payload["logger"] = record.name
+        if record.exc_info:
+            payload["exc_info"] = self.formatException(record.exc_info)
+        return json.dumps(payload, default=str)
 
 
 def delegating_lifespan(backend_app: Any) -> Any:
@@ -27,14 +57,22 @@ def delegating_lifespan(backend_app: Any) -> Any:
 
 
 def get_logging_config(settings: Any) -> dict[str, Any]:
-    """Build root logging config: local file capture, cloud stdout/stderr."""
-    config: dict[str, Any] = {
-        "level": getattr(logging, settings.LOG_LEVEL, logging.INFO),
-        "format": "%(asctime)s %(levelname)s [%(name)s] %(message)s",
-    }
+    """Build root logging config: local file capture, cloud stdout/stderr.
+
+    Handlers carry a JsonFormatter so every line is one structured JSON
+    object (see JsonFormatter). delay=True keeps the local file from being
+    created until something actually logs.
+    """
+    handler: logging.Handler
     if settings.APP_ENV == "local":
-        config["filename"] = "./console.log"
-    return config
+        handler = logging.FileHandler("./console.log", delay=True)
+    else:
+        handler = logging.StreamHandler()
+    handler.setFormatter(JsonFormatter())
+    return {
+        "level": getattr(logging, settings.LOG_LEVEL, logging.INFO),
+        "handlers": [handler],
+    }
 
 
 def create_memory_store(settings: Any, logger: logging.Logger | None = None) -> Any:
