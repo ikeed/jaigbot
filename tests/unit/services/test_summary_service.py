@@ -59,6 +59,29 @@ def test_structured_analysis_bullets_returns_none_for_legacy_text():
     assert _structured_analysis_bullets(narrative, {}) is None
 
 
+def test_structured_analysis_bullets_strips_prose_preamble_before_fenced_json():
+    # Reproduces a real staging leak: the model prepended "Here is the JSON
+    # requested:" before the fenced block instead of returning it bare, so
+    # the raw.startswith("```") check missed it and the preamble fell through
+    # to the raw-line fallback, rendering as a visible summary bullet.
+    narrative = (
+        "Here is the JSON requested:\n\n```json\n"
+        '{"overall_commentary":"Good work.","strengths":[],"growth_areas":[],"metric_notes":[]}\n'
+        "```"
+    )
+
+    assert _structured_analysis_bullets(narrative, {}) == ["Good work."]
+
+
+def test_structured_analysis_bullets_strips_prose_preamble_before_bare_json():
+    narrative = (
+        'Here is the JSON requested:\n{"overall_commentary":"Good work.",'
+        '"strengths":[],"growth_areas":[],"metric_notes":[]}'
+    )
+
+    assert _structured_analysis_bullets(narrative, {}) == ["Good work."]
+
+
 def test_legacy_metrics_consistency_still_rewrites_text_fallback():
     bullets = _enforce_metrics_consistency(
         ["Mirror was skipped.", "Keep this."],

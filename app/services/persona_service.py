@@ -139,6 +139,22 @@ def persona_counted_key(user_id: str, session_id: str) -> str:
     return f"persona_counted:{digest}"
 
 
+def persona_last_key(user_id: str) -> str:
+    return f"persona_last:{_user_hash(user_id)}"
+
+
+def get_last_persona_name(user_id: str, store: Any) -> str | None:
+    value = store.get(persona_last_key(user_id))
+    name = value.get("name") if isinstance(value, dict) else None
+    return str(name) if name else None
+
+
+def save_last_persona_name(user_id: str, name: str, store: Any) -> None:
+    if not name:
+        return
+    _store_set(store, persona_last_key(user_id), {"name": name, "updated": time.time()}, ttl=0)
+
+
 def _store_set(store: Any, key: str, value: dict, *, ttl: int = 0) -> None:
     setter = getattr(store, "set", None)
     if callable(setter):
@@ -185,11 +201,18 @@ def get_persona_counts(
     return normalized
 
 
-def choose_weighted_persona(personas: list[dict], counts: dict[str, int]) -> dict:
+def choose_weighted_persona(
+    personas: list[dict], counts: dict[str, int], *, exclude_name: str | None = None
+) -> dict:
     if not personas:
         return FALLBACK_PERSONA
-    weights = [1.0 / (int(counts.get(_text_value(p.get("name")), 0) or 0) + 1.0) for p in personas]
-    return random.choices(personas, weights=weights, k=1)[0]
+    candidates = personas
+    if exclude_name and len(personas) > 1:
+        filtered = [p for p in personas if _text_value(p.get("name")) != exclude_name]
+        if filtered:
+            candidates = filtered
+    weights = [1.0 / (int(counts.get(_text_value(p.get("name")), 0) or 0) + 1.0) for p in candidates]
+    return random.choices(candidates, weights=weights, k=1)[0]
 
 
 def select_persona_for_user(
@@ -202,7 +225,11 @@ def select_persona_for_user(
         return load_robust_persona()
     personas = load_personas()
     counts = get_persona_counts(user_id, store, load_counts=load_counts)
-    return choose_weighted_persona(personas, counts)
+    last_name = get_last_persona_name(user_id, store) if user_id else None
+    chosen = choose_weighted_persona(personas, counts, exclude_name=last_name)
+    if user_id:
+        save_last_persona_name(user_id, str(chosen.get("name") or ""), store)
+    return chosen
 
 
 def record_persona_interaction_once(user_id: str | None, session_id: str, persona: dict, store: Any) -> bool:
