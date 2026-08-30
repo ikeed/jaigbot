@@ -1,8 +1,11 @@
-from app.services.chat_helpers import recent_context as _recent_context, extract_recent_concerns
+from app.prompts.aims import (
+    build_classify_turn_prompt as _build_classify_turn,
+)
 from app.prompts.aims import (
     build_endgame_detector_prompt as _build_endgame,
+)
+from app.prompts.aims import (
     get_classify_system_instruction as _get_classify_sysinstruction,
-    build_classify_turn_prompt as _build_classify_turn,
 )
 
 
@@ -12,14 +15,6 @@ class AimsPromptBuilder:
     This class composes existing pure helpers to avoid behavior drift while
     grouping responsibilities for easier unit testing.
     """
-
-    @staticmethod
-    def recent_context(history: list[dict], n_turns: int) -> str:
-        return _recent_context(history, n_turns)
-
-    @staticmethod
-    def extract_recent_concerns(history: list[dict], max_items: int) -> list[str]:
-        return extract_recent_concerns(history, max_items)
 
     @staticmethod
     def get_classify_system_instruction() -> str:

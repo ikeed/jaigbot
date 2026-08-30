@@ -8,14 +8,11 @@ unit testing.
 """
 from __future__ import annotations
 
-from typing import Optional
-
-
 # Keep regex definitions local to avoid cross-module coupling for now.
 # If they are duplicated elsewhere, we will centralize them in app/constants.py
 
 
-def is_jailbreak_or_meta(text: Optional[str]) -> bool:
+def is_jailbreak_or_meta(text: str | None) -> bool:
     """Return True if the provided text appears to be jailbreak or meta instructions.
 
     Note: This is a placeholder for the existing inlined logic. The exact

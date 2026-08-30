@@ -1,10 +1,9 @@
 import html
 import logging
 import re
-from typing import Any, Dict
+from typing import Any
 
 import chainlit as cl
-
 from app.chat_roles import (
     ROLE_ASSISTANT,
     ROLE_COACH,
@@ -26,6 +25,8 @@ from app.constants import (
 from app.message_catalog import message
 from app.services.coaching_display import (
     coaching_message_parts,
+)
+from app.services.coaching_display import (
     coaching_summary_text as build_coaching_summary_text,
 )
 
@@ -70,10 +71,7 @@ class UIHandler:
     @staticmethod
     def _normalize_part(part: str) -> str:
         text = (part or "").strip()
-        if ":" in text:
-            step = text.split(":", 1)[1].strip()
-        else:
-            step = ""
+        step = text.split(":", 1)[1].strip() if ":" in text else ""
         if step in STEP_LABELS:
             return message("coaching.step_group_header", step=step) if step else ""
         return text
@@ -167,7 +165,7 @@ class UIHandler:
 
     async def present_scenario_card(self, card: str):
         await cl.Message(
-            content=self.render_scenario_card_html(card), 
+            content=self.render_scenario_card_html(card),
             **get_ui_attributes(ROLE_SYSTEM)
         ).send()
 
@@ -176,7 +174,7 @@ class UIHandler:
         await cl.Message(message, **get_ui_attributes(ROLE_SYSTEM)).send()
 
     @staticmethod
-    async def send_window_message(payload: Dict[str, Any]):
+    async def send_window_message(payload: dict[str, Any]):
         await cl.send_window_message(payload)
 
     @staticmethod
@@ -197,7 +195,7 @@ class UIHandler:
 
     async def send_coach_message(self, content: str):
         await cl.Message(
-            content=self.format_coach_message(content), 
+            content=self.format_coach_message(content),
             **get_ui_attributes(ROLE_COACH)
         ).send()
 

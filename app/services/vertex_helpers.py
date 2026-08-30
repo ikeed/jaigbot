@@ -2,7 +2,7 @@ import contextvars
 import json
 import logging
 import re
-from typing import Any, Optional
+from typing import Any
 
 from ..vertex import VertexAIError, VertexClient
 
@@ -11,20 +11,20 @@ _logger = logging.getLogger(__name__)
 # Track the model that produced the most recent response, per async task.
 # Using ContextVar instead of a module-level global avoids race conditions
 # when multiple requests are handled concurrently in the same event loop.
-_last_model_used_var: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+_last_model_used_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "_last_model_used", default=None
 )
 
 
-def get_last_model_used() -> Optional[str]:
+def get_last_model_used() -> str | None:
     return _last_model_used_var.get()
 
 
-def _coerce_json_object(value: Any) -> Optional[dict[Any, Any]]:
+def _coerce_json_object(value: Any) -> dict[Any, Any] | None:
     return value if isinstance(value, dict) else None
 
 
-def _extract_json_payload(text: str) -> Optional[dict[Any, Any]]:
+def _extract_json_payload(text: str) -> dict[Any, Any] | None:
     """Extract a JSON value from a model response without manual brace scanning.
 
     Strategy (stable and maintainable):
@@ -69,7 +69,7 @@ def _extract_json_payload(text: str) -> Optional[dict[Any, Any]]:
         return None
 
 
-def _maybe_extract_patient_reply(obj: Optional[dict]) -> Optional[str]:
+def _maybe_extract_patient_reply(obj: dict | None) -> str | None:
     """If obj looks like our REPLY_SCHEMA, return the patient_reply string."""
     if isinstance(obj, dict):
         val = obj.get("patient_reply")
@@ -87,7 +87,7 @@ def vertex_call_with_fallback_text(
     temperature: float,
     max_tokens: int,
     prompt: str,
-    system_instruction: Optional[str],
+    system_instruction: str | None,
     log_path: str,
     logger,
     client_cls: type = VertexClient,
@@ -184,7 +184,7 @@ async def avertex_call_with_fallback_text(
     temperature: float,
     max_tokens: int,
     prompt: str,
-    system_instruction: Optional[str],
+    system_instruction: str | None,
     log_path: str,
     logger,
     client_cls: type = VertexClient,
@@ -279,15 +279,15 @@ async def avertex_call_with_fallback_json(
     temperature: float,
     max_tokens: int,
     prompt: str,
-    system_instruction: Optional[str],
+    system_instruction: str | None,
     schema: dict,
     log_path: str,
     logger,
     client_cls: type = VertexClient,
 ) -> str:
     """Async variant of vertex_call_with_fallback_json."""
-    from .vertex_gateway import VertexGateway
     from ..json_schemas import vertex_response_schema
+    from .vertex_gateway import VertexGateway
 
     models_to_try = [primary_model] + [m for m in fallbacks if m and m != primary_model]
     tried: list[str] = []

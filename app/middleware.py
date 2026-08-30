@@ -110,10 +110,7 @@ class JavaScriptRequiredMiddleware(BaseHTTPMiddleware):
             is_gzipped = "gzip" in encoding
 
             try:
-                if is_gzipped:
-                    decompressed_body = gzip.decompress(body)
-                else:
-                    decompressed_body = body
+                decompressed_body = gzip.decompress(body) if is_gzipped else body
             except Exception:
                 # If decompression fails, return original response
                 return self._response_with_body(response, body)

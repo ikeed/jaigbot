@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import List, Tuple
-
 from app.security.jailbreak import (
     is_jailbreak_or_meta as sec_is_jailbreak_or_meta,
 )
@@ -38,7 +36,7 @@ class JailbreakGuard:
         "roleplay as assistant",
     ]
 
-    def detect(self, user_text: str) -> Tuple[bool, List[str]]:
+    def detect(self, user_text: str) -> tuple[bool, list[str]]:
         u = (user_text or "").lower()
         matched = [c for c in self.LEGACY_CUES if c in u]
         jb = bool(sec_is_jailbreak_or_meta(user_text))

@@ -4,7 +4,7 @@ import json
 import logging
 import time
 import uuid
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse
 module_logger = logging.getLogger(__name__)
 
 
-def get_request_id(request: Request) -> Optional[str]:
+def get_request_id(request: Request) -> str | None:
     header = request.headers.get("x-cloud-trace-context") or request.headers.get("x-request-id")
     if header:
         return header

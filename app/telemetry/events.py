@@ -6,8 +6,9 @@ testable without FastAPI context. Keep functions small and pure.
 """
 from __future__ import annotations
 
+import contextlib
 import json
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 def truncate_for_log(s: str, cap: int) -> str:
@@ -29,7 +30,7 @@ def truncate_for_log(s: str, cap: int) -> str:
             return ""
 
 
-def log_event(logger, event_name: str, *, caps: Optional[Dict[str, int]] = None, sessionId: Optional[str] = None, userInfo: Optional[dict] = None, **fields: Any) -> None:
+def log_event(logger, event_name: str, *, caps: dict[str, int] | None = None, sessionId: str | None = None, userInfo: dict | None = None, **fields: Any) -> None:
     """Emit a single JSON event line via the provided logger.
 
     - logger: a standard logging.Logger-like object with .info()
@@ -39,7 +40,7 @@ def log_event(logger, event_name: str, *, caps: Optional[Dict[str, int]] = None,
     - userInfo: user identity metadata to include in top-level
     - **fields: arbitrary event fields
     """
-    payload: Dict[str, Any] = {"event": event_name}
+    payload: dict[str, Any] = {"event": event_name}
     if sessionId:
         payload["sessionId"] = sessionId
     if userInfo:
@@ -57,17 +58,13 @@ def log_event(logger, event_name: str, *, caps: Optional[Dict[str, int]] = None,
     except (TypeError, ValueError) as json_err:
         # Fall back to best-effort string logging if JSON serialization fails
         # noinspection PyBroadException
-        try:
+        with contextlib.suppress(Exception):
             logger.warning("Telemetry JSON serialization failed: %s. Payload: %s", json_err, str(payload))
-        except Exception:
-            pass
     except Exception as e:
         # Catch-all for other logger issues
         # noinspection PyBroadException
-        try:
+        with contextlib.suppress(Exception):
             logger.debug("Unexpected telemetry logging error: %s", e)
-        except Exception:
-            pass
 
 
 __all__ = ["truncate_for_log", "log_event"]

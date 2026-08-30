@@ -2,12 +2,19 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, cast
 
 from chainlit.data.base import BaseDataLayer
 from chainlit.element import ElementDict
 from chainlit.step import StepDict
-from chainlit.types import Feedback, PageInfo, PaginatedResponse, Pagination, ThreadDict, ThreadFilter
+from chainlit.types import (
+    Feedback,
+    PageInfo,
+    PaginatedResponse,
+    Pagination,
+    ThreadDict,
+    ThreadFilter,
+)
 from chainlit.user import PersistedUser, User
 from chainlit.utils import utc_now
 
@@ -46,7 +53,7 @@ def _legacy_thread_key(thread_id: str) -> str:
     return f"{LEGACY_THREAD_KEY_PREFIX}{thread_id}"
 
 
-def _thread_keys(thread_id: str) -> List[str]:
+def _thread_keys(thread_id: str) -> list[str]:
     return [_thread_key(thread_id), _legacy_thread_key(thread_id)]
 
 
@@ -58,11 +65,11 @@ def _is_thread_key(key: str) -> bool:
     return key.startswith(_thread_key_prefix()) or key.startswith(LEGACY_THREAD_KEY_PREFIX)
 
 
-def _step_time(step: Dict[str, Any]) -> str:
+def _step_time(step: dict[str, Any]) -> str:
     return step.get("start") or step.get("createdAt") or step.get("end") or ""
 
 
-def _ordered_steps(steps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _ordered_steps(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Return steps in the order Chainlit's resume renderer expects.
 
     Chainlit can persist run steps after the messages created inside those runs.
@@ -72,7 +79,7 @@ def _ordered_steps(steps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return sorted(steps or [], key=lambda step: (_step_time(step), step.get("id") or ""))
 
 
-def _is_transient_disconnect_error_step(step: Dict[str, Any]) -> bool:
+def _is_transient_disconnect_error_step(step: dict[str, Any]) -> bool:
     return (
         step.get("type") == "assistant_message"
         and step.get("name") == "Error"
@@ -81,7 +88,7 @@ def _is_transient_disconnect_error_step(step: Dict[str, Any]) -> bool:
     )
 
 
-def _canonical_session_id(thread: Dict[str, Any]) -> str:
+def _canonical_session_id(thread: dict[str, Any]) -> str:
     metadata = thread.get("metadata") or {}
     return str(metadata.get("session_id") or thread.get("id") or "")
 
@@ -98,24 +105,24 @@ class MemoryDataLayer(BaseDataLayer):
     def __init__(self, store: Any) -> None:
         self.store = store
 
-    def _get(self, key: str) -> Dict[str, Any] | None:
+    def _get(self, key: str) -> dict[str, Any] | None:
         value = self.store.get(key)
         return dict(value) if isinstance(value, dict) else None
 
-    def _put(self, key: str, value: Dict[str, Any]) -> None:
+    def _put(self, key: str, value: dict[str, Any]) -> None:
         self.store[key] = value
 
-    def _get_first(self, keys: List[str]) -> Dict[str, Any] | None:
+    def _get_first(self, keys: list[str]) -> dict[str, Any] | None:
         for key in keys:
             value = self._get(key)
             if value:
                 return value
         return None
 
-    def _get_thread(self, thread_id: str) -> Dict[str, Any] | None:
+    def _get_thread(self, thread_id: str) -> dict[str, Any] | None:
         return self._get_first(_thread_keys(thread_id))
 
-    def _clean_thread_steps(self, thread: Dict[str, Any]) -> Dict[str, Any]:
+    def _clean_thread_steps(self, thread: dict[str, Any]) -> dict[str, Any]:
         original_steps = thread.get("steps", [])
         clean_steps = _ordered_steps([
             step for step in original_steps
@@ -128,7 +135,7 @@ class MemoryDataLayer(BaseDataLayer):
             thread["steps"] = clean_steps
         return thread
 
-    def _ensure_thread(self, thread_id: str) -> Dict[str, Any]:
+    def _ensure_thread(self, thread_id: str) -> dict[str, Any]:
         key = _thread_key(thread_id)
         thread = self._get_thread(thread_id)
         if thread:
@@ -151,13 +158,13 @@ class MemoryDataLayer(BaseDataLayer):
         self._put(key, thread)
         return thread
 
-    def _find_user_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
+    def _find_user_by_id(self, user_id: str) -> dict[str, Any] | None:
         for key, value in self.store.items():
             if _is_user_key(key) and value.get("id") == user_id:
                 return value
         return None
 
-    async def get_user(self, identifier: str) -> Optional[PersistedUser]:
+    async def get_user(self, identifier: str) -> PersistedUser | None:
         user = self._get_first([_user_key(identifier), _legacy_user_key(identifier)])
         if not user:
             return None
@@ -169,7 +176,7 @@ class MemoryDataLayer(BaseDataLayer):
             metadata=user.get("metadata") or {},
         )
 
-    async def create_user(self, user: User) -> Optional[PersistedUser]:
+    async def create_user(self, user: User) -> PersistedUser | None:
         existing = await self.get_user(user.identifier)
         if existing:
             return existing
@@ -197,7 +204,7 @@ class MemoryDataLayer(BaseDataLayer):
         thread["elements"] = elements
         self._put(_thread_key(thread["id"]), thread)
 
-    async def get_element(self, thread_id: str, element_id: str) -> Optional[ElementDict]:
+    async def get_element(self, thread_id: str, element_id: str) -> ElementDict | None:
         thread = self._get_thread(thread_id)
         if not thread:
             return None
@@ -206,7 +213,7 @@ class MemoryDataLayer(BaseDataLayer):
                 return cast(ElementDict, element)
         return None
 
-    async def delete_element(self, element_id: str, thread_id: Optional[str] = None):
+    async def delete_element(self, element_id: str, thread_id: str | None = None):
         if not thread_id:
             return
         thread = self._get_thread(thread_id)
@@ -215,7 +222,7 @@ class MemoryDataLayer(BaseDataLayer):
         thread["elements"] = [e for e in thread.get("elements", []) if e.get("id") != element_id]
         self._put(_thread_key(thread_id), thread)
 
-    async def create_step(self, step_dict: Dict[str, Any]):
+    async def create_step(self, step_dict: dict[str, Any]):
         if _is_transient_disconnect_error_step(step_dict):
             return
         thread_id = step_dict["threadId"]
@@ -225,7 +232,7 @@ class MemoryDataLayer(BaseDataLayer):
         thread["steps"] = _ordered_steps(steps)
         self._put(_thread_key(thread_id), thread)
 
-    async def update_step(self, step_dict: Dict[str, Any]):
+    async def update_step(self, step_dict: dict[str, Any]):
         await self.create_step(step_dict)
 
     async def delete_step(self, step_id: str):
@@ -246,7 +253,7 @@ class MemoryDataLayer(BaseDataLayer):
     async def list_threads(
         self, pagination: Pagination, filters: ThreadFilter
     ) -> PaginatedResponse[ThreadDict]:
-        threads: List[ThreadDict] = []
+        threads: list[ThreadDict] = []
         canonical_thread_ids = {
             value.get("id")
             for key, value in self.store.items()
@@ -282,7 +289,7 @@ class MemoryDataLayer(BaseDataLayer):
             data=page,
         )
 
-    async def get_thread(self, thread_id: str) -> Optional[ThreadDict]:
+    async def get_thread(self, thread_id: str) -> ThreadDict | None:
         thread = self._get_thread(thread_id)
         if not thread:
             return None
@@ -294,10 +301,10 @@ class MemoryDataLayer(BaseDataLayer):
     async def update_thread(
         self,
         thread_id: str,
-        name: Optional[str] = None,
-        user_id: Optional[str] = None,
-        metadata: Optional[Dict] = None,
-        tags: Optional[List[str]] = None,
+        name: str | None = None,
+        user_id: str | None = None,
+        metadata: dict | None = None,
+        tags: list[str] | None = None,
     ):
         thread = self._ensure_thread(thread_id)
         if name is not None:
@@ -318,8 +325,8 @@ class MemoryDataLayer(BaseDataLayer):
     async def close(self) -> None:
         return None
 
-    async def get_favorite_steps(self, user_id: str) -> List[StepDict]:
-        favorites: List[StepDict] = []
+    async def get_favorite_steps(self, user_id: str) -> list[StepDict]:
+        favorites: list[StepDict] = []
         for key, value in self.store.items():
             if not _is_thread_key(key) or value.get("userId") != user_id:
                 continue
