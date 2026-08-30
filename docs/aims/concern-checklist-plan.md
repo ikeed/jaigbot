@@ -1028,3 +1028,43 @@ alias:
   completely untouched. Worth a dedicated look on its own later, not bundled
   here.
 - Resume/backward-compat handling for sessions started before this ships.
+
+---
+
+## 8. Addendum (2026-08-30): the backstop firing was not actually rare
+
+§5 assumed the Python-side backstop would "rarely fire" because the persona
+role-play instruction (§3.4) is the primary defense. In live manual testing on
+staging, the backstop fired on every closing-shaped turn for 5+ consecutive
+turns in one real conversation — the persona repeatedly signaled a polite,
+resolved-sounding close (warm goodbyes, gratitude) while a checklist concern
+sat permanently `is_discovered: False`, because nothing in the conversation
+ever happened to match it semantically. There was no designed behavior for
+what happens when the backstop keeps firing — the clinician just kept
+receiving the same "Important" `undiscovered_concern_tip` verbatim, once even
+in the same turn as explicit praise for having just asked the sweep-up
+question it was recommending.
+
+Added `patient_unreceptive_to_further_inquire` and `literature_offered` as two
+new sticky `aims_state` fields (`AimsStateService._update_sweep_attempt_tracking`
+/ `_update_closure_signals`, both called from `update()`). Once a genuine
+Inquire sweep has come up empty AND literature has been offered, the backstop
+in `aims_endgame_service.check()` is bypassed for that session — closure still
+requires literature to have actually been given, not merely that the clinician
+gave up asking, and the very first accepted-outcome turn is still fully
+protected since both flags start unset.
+
+Separately, `AimsStateService._add_closure_plan_tip` — the reciprocal
+literature/follow-up nudges from §3.6 — turned out to be dead code in every
+deployed environment: its caller only invoked it when
+`AIMS_HEURISTIC_FALLBACK_ENABLED` was `True` (default `False` everywhere), and
+even then it early-returned whenever the classifier's `feedback_items` were
+present (the classifier's default output shape). No conversation had ever
+actually been nudged to offer literature. It now runs unconditionally, reads
+the new persistent `literature_offered`/`followup_confirmed` flags instead of
+re-scanning only the current turn's text, and gained a third case —
+`state_feedback.offer_literature_tip` — for when neither has been offered yet.
+
+This is intentionally a small, narrow change to the two files it touches
+(`aims_state_service.py`, `aims_endgame_service.py`) and does not revisit §7's
+deferred items; the heuristic-fallback system itself remains untouched.
