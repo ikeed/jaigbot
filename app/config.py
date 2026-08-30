@@ -1,20 +1,22 @@
 import os
-from typing import List, Optional
-from pydantic_settings import BaseSettings, SettingsConfigDict
+
 from pydantic import field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
 from .constants import (
-    DEFAULT_REGION,
-    DEFAULT_MODEL_ID,
-    DEFAULT_CLASSIFIER_MODEL_ID,
-    DEFAULT_TEMPERATURE,
-    DEFAULT_MAX_TOKENS,
-    DEFAULT_PORT,
     DEFAULT_APP_ENV,
-    DEFAULT_MEMORY_TTL,
+    DEFAULT_CLASSIFIER_MODEL_ID,
+    DEFAULT_MAX_TOKENS,
     DEFAULT_MAX_TURNS,
+    DEFAULT_MEMORY_TTL,
+    DEFAULT_MODEL_ID,
+    DEFAULT_PORT,
+    DEFAULT_REGION,
+    DEFAULT_TEMPERATURE,
     PREFIX_AIMS,
-    PREFIX_SESSION
+    PREFIX_SESSION,
 )
+
 
 class Settings(BaseSettings):
     # Deployment environment namespace. Cloud Run must set this explicitly so
@@ -22,15 +24,15 @@ class Settings(BaseSettings):
     APP_ENV: str = ""
 
     # GCP Configuration
-    PROJECT_ID: Optional[str] = None
+    PROJECT_ID: str | None = None
     REGION: str = DEFAULT_REGION
-    VERTEX_LOCATION: Optional[str] = None
-    
+    VERTEX_LOCATION: str | None = None
+
     # Model Configuration
     MODEL_ID: str = DEFAULT_MODEL_ID
     TEMPERATURE: float = DEFAULT_TEMPERATURE
     MAX_TOKENS: int = DEFAULT_MAX_TOKENS
-    MODEL_FALLBACKS: List[str] = ["gemini-3.5-flash", "gemini-3.5-flash-lite"]
+    MODEL_FALLBACKS: list[str] = ["gemini-3.5-flash", "gemini-3.5-flash-lite"]
     AUTO_CONTINUE_ON_MAX_TOKENS: bool = True
     MAX_CONTINUATIONS: int = 2
     SUPPRESS_VERTEXAI_DEPRECATION: bool = True
@@ -48,15 +50,15 @@ class Settings(BaseSettings):
     PORT: int = DEFAULT_PORT
     LOG_LEVEL: str = "INFO"
     DEBUG_MODE: bool = False
-    ALLOWED_ORIGINS: List[str] = []
-    
+    ALLOWED_ORIGINS: list[str] = []
+
     # Logging configuration
     LOG_REQUEST_BODY_MAX: int = 1024
     LOG_HEADERS: bool = False
     LOG_RESPONSE_PREVIEW_MAX: int = 512
     SAFETY_LOG_CAP: int = 16384
     EXPOSE_UPSTREAM_ERROR: bool = False
-    
+
     # AIMS Coaching configuration
     AIMS_COACHING_ENABLED: bool = True
     AIMS_COACHING_DEFAULT: bool = False
@@ -77,8 +79,8 @@ class Settings(BaseSettings):
     #   4/38 cases for "minimal" against 1/38 for default.
     # For a tool whose whole output is the score and the coaching note, that trade is not
     # worth 5 seconds. Revisit if latency becomes the binding constraint.
-    AIMS_CLASSIFIER_THINKING_LEVEL: Optional[str] = None
-    AIMS_CLASSIFIER_THINKING_BUDGET: Optional[int] = None
+    AIMS_CLASSIFIER_THINKING_LEVEL: str | None = None
+    AIMS_CLASSIFIER_THINKING_BUDGET: int | None = None
     AIMS_CLASSIFY_CONTEXT_TURNS: int = 6
     AIMS_CLASSIFY_MAX_CONCERNS: int = 3
 
@@ -97,50 +99,50 @@ class Settings(BaseSettings):
     AIMS_HEURISTIC_FALLBACK_ENABLED: bool = False
 
     # Storage and Archiving
-    SESSIONS_BUCKET_NAME: Optional[str] = "aimsbot-chat-sessions"
-    REPORTS_BUCKET_NAME: Optional[str] = "aimsbot-bug-reports"
+    SESSIONS_BUCKET_NAME: str | None = "aimsbot-chat-sessions"
+    REPORTS_BUCKET_NAME: str | None = "aimsbot-bug-reports"
 
     # Memory and Session configuration
     MEMORY_ENABLED: bool = True
     MEMORY_MAX_TURNS: int = DEFAULT_MAX_TURNS
     MEMORY_TTL_SECONDS: int = DEFAULT_MEMORY_TTL
     MEMORY_BACKEND: str = "memory"  # memory or redis
-    MEMORY_PERSIST_PATH: Optional[str] = None
-    REDIS_URL: Optional[str] = None
-    REDIS_HOST: Optional[str] = None
+    MEMORY_PERSIST_PATH: str | None = None
+    REDIS_URL: str | None = None
+    REDIS_HOST: str | None = None
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
-    REDIS_PASSWORD: Optional[str] = None
-    REDIS_PREFIX: Optional[str] = None
-    
+    REDIS_PASSWORD: str | None = None
+    REDIS_PREFIX: str | None = None
+
     # Session cookie configuration
     SESSION_COOKIE_NAME: str = "sessionId"
     SESSION_COOKIE_SECURE: bool = False
     SESSION_COOKIE_SAMESITE: str = "lax"
-    SESSION_COOKIE_MAX_AGE: Optional[int] = None
-    
+    SESSION_COOKIE_MAX_AGE: int | None = None
+
     # Chainlit specific UI configuration
-    CHAINLIT_AUTH_SECRET: Optional[str] = None
-    CHAINLIT_COACH_DEFAULT: Optional[bool] = None
-    BACKEND_URL: Optional[str] = None
+    CHAINLIT_AUTH_SECRET: str | None = None
+    CHAINLIT_COACH_DEFAULT: bool | None = None
+    BACKEND_URL: str | None = None
     CHAINLIT_HTTP_TIMEOUT: float = 15.0
     ENABLE_PASSWORD_AUTH: bool = False
-    
+
     # Session and Persona overrides
-    FIXED_SESSION_ID: Optional[str] = None
-    SESSION_ID: Optional[str] = None
-    PERSONA_INDEX: Optional[int] = None
-    CHARACTER_SYSTEM: Optional[str] = None
-    SCENE_OBJECTIVES: Optional[str] = None
-    
+    FIXED_SESSION_ID: str | None = None
+    SESSION_ID: str | None = None
+    PERSONA_INDEX: int | None = None
+    CHARACTER_SYSTEM: str | None = None
+    SCENE_OBJECTIVES: str | None = None
+
     # Avatar configuration
-    PATIENT_AVATAR_PATH: Optional[str] = None
-    PATIENT_AVATAR_URL: Optional[str] = None
-    DOCTOR_AVATAR_PATH: Optional[str] = None
-    DOCTOR_AVATAR_URL: Optional[str] = None
-    COACH_AVATAR_PATH: Optional[str] = None
-    COACH_AVATAR_URL: Optional[str] = None
-    
+    PATIENT_AVATAR_PATH: str | None = None
+    PATIENT_AVATAR_URL: str | None = None
+    DOCTOR_AVATAR_PATH: str | None = None
+    DOCTOR_AVATAR_URL: str | None = None
+    COACH_AVATAR_PATH: str | None = None
+    COACH_AVATAR_URL: str | None = None
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -167,7 +169,7 @@ class Settings(BaseSettings):
         return f"{PREFIX_AIMS}:{self.APP_ENV}:{PREFIX_SESSION}:"
 
     @property
-    def redis_fallback_prefixes(self) -> List[str]:
+    def redis_fallback_prefixes(self) -> list[str]:
         if self.REDIS_PREFIX:
             return []
         if self.APP_ENV == "prod":
@@ -188,7 +190,7 @@ class Settings(BaseSettings):
         if not v:
             # 1. Check common environment variables
             v = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT") or os.getenv("GCP_PROJECT_ID")
-            
+
         if not v:
             # 2. Try to get it from Google Auth default (if available)
             # noinspection PyBroadException

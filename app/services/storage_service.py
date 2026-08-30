@@ -1,12 +1,15 @@
+import datetime
 import json
 import logging
-import datetime
 import subprocess
 import time
-from typing import Dict, Any, Iterable, Optional
+from collections.abc import Iterable
+from typing import Any
+
 from google.cloud import storage
-from app.config import settings
+
 from app.chat_roles import ROLE_ASSISTANT, ROLE_COACH, ROLE_SYSTEM, ROLE_USER
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -25,12 +28,12 @@ class StorageService:
     Service for archiving session data to Google Cloud Storage.
     """
 
-    def __init__(self, bucket_name: Optional[str] = None):
+    def __init__(self, bucket_name: str | None = None):
         self.bucket_name = bucket_name or settings.SESSIONS_BUCKET_NAME
         self.reports_bucket_name = settings.REPORTS_BUCKET_NAME
-        self._client: Optional[storage.Client] = None
-        self._bucket: Optional[storage.Bucket] = None
-        self._reports_bucket: Optional[storage.Bucket] = None
+        self._client: storage.Client | None = None
+        self._bucket: storage.Bucket | None = None
+        self._reports_bucket: storage.Bucket | None = None
 
     @property
     def client(self) -> storage.Client:
@@ -39,7 +42,7 @@ class StorageService:
         return self._client
 
     @property
-    def bucket(self) -> Optional[storage.Bucket]:
+    def bucket(self) -> storage.Bucket | None:
         if not self.bucket_name:
             return None
         if self._bucket is None:
@@ -50,7 +53,7 @@ class StorageService:
         return self._bucket
 
     @property
-    def reports_bucket(self) -> Optional[storage.Bucket]:
+    def reports_bucket(self) -> storage.Bucket | None:
         if not self.reports_bucket_name:
             return None
         if self._reports_bucket is None:
@@ -64,7 +67,7 @@ class StorageService:
         self,
         session_id: str,
         user_id: str,
-        session_data: Dict[str, Any],
+        session_data: dict[str, Any],
         is_report: bool = False,
         finalize_persona_index: bool = False,
     ) -> bool:
@@ -116,7 +119,7 @@ class StorageService:
             return False
 
     @staticmethod
-    def _transform_to_logical_schema(session_id: str, user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    def _transform_to_logical_schema(session_id: str, user_id: str, data: dict[str, Any]) -> dict[str, Any]:
         """Convert messy internal memory to structured logical schema."""
         started_at = data.get("session_started")
         ended_at = data.get("session_ended") or data.get("updated")
@@ -133,7 +136,7 @@ class StorageService:
             if ts is None:
                 return None
             try:
-                return datetime.datetime.fromtimestamp(float(ts), datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+                return datetime.datetime.fromtimestamp(float(ts), datetime.UTC).isoformat().replace("+00:00", "Z")
             except (TypeError, ValueError):
                 logger.warning("Could not format ISO timestamp: %s", ts)
                 return None
@@ -247,7 +250,7 @@ class StorageService:
             "analytics": analytics
         }
 
-    def download_session(self, session_id: str, user_id: str) -> Optional[dict]:
+    def download_session(self, session_id: str, user_id: str) -> dict | None:
         """
         Downloads session data from GCS.
         Path: env={APP_ENV}/sessions/v1/user_id={user_id}/session_id={session_id}.json
@@ -267,7 +270,7 @@ class StorageService:
                 blob = bucket.blob(legacy_path)
             if not blob.exists():
                 return None
-            
+
             content = blob.download_as_string()
             return json.loads(content)
         except Exception as download_exc:
@@ -278,7 +281,7 @@ class StorageService:
         return settings.gcs_path("sessions/v1", f"user_id={user_id}", "_persona_index.json")
 
     @staticmethod
-    def _derive_index_outcome(archive_data: Dict[str, Any]) -> Optional[str]:
+    def _derive_index_outcome(archive_data: dict[str, Any]) -> str | None:
         """Map the archive's exit/resolution info down to one of
         "bug_report" | "abandoned" | "open" | "vaccination" | "literature",
         or None when the session completed without one of those resolutions."""
@@ -297,7 +300,7 @@ class StorageService:
         return None
 
     @staticmethod
-    def _build_persona_index_entry(session_id: str, persona_name: str, archive_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _build_persona_index_entry(session_id: str, persona_name: str, archive_data: dict[str, Any]) -> dict[str, Any]:
         transcript = archive_data.get("transcript") or []
         number_of_turns = sum(
             1 for entry in transcript if isinstance(entry, dict) and entry.get("role") == ROLE_USER
@@ -323,7 +326,7 @@ class StorageService:
             "ts": time.time(),
         }
 
-    def record_open_session(self, user_id: str, session_id: str, persona_name: Optional[str]) -> None:
+    def record_open_session(self, user_id: str, session_id: str, persona_name: str | None) -> None:
         """
         Best-effort: append an "open" row to the user's persona index when a
         brand-new session is assigned a persona, so the index reflects every
@@ -346,7 +349,7 @@ class StorageService:
             "ts": time.time(),
         })
 
-    def _record_persona_index_entry(self, user_id: str, session_id: str, archive_data: Dict[str, Any]) -> None:
+    def _record_persona_index_entry(self, user_id: str, session_id: str, archive_data: dict[str, Any]) -> None:
         """
         Best-effort upsert into a small per-user persona index, so
         count_personas_for_user can read one small object on a cache miss
@@ -370,7 +373,7 @@ class StorageService:
         except Exception as index_exc:
             logger.debug("Failed to update persona index for user %s: %s", user_id, index_exc)
 
-    def _upsert_persona_index_entry(self, user_id: str, entry: Dict[str, Any]) -> None:
+    def _upsert_persona_index_entry(self, user_id: str, entry: dict[str, Any]) -> None:
         """Write `entry` into the user's persona index, replacing any existing
         row with the same session_id in place rather than appending a duplicate."""
         try:
@@ -404,7 +407,7 @@ class StorageService:
         except Exception as index_exc:
             logger.debug("Failed to update persona index for user %s: %s", user_id, index_exc)
 
-    def count_personas_for_user(self, user_id: str, persona_names: Iterable[str]) -> Dict[str, int]:
+    def count_personas_for_user(self, user_id: str, persona_names: Iterable[str]) -> dict[str, int]:
         """
         Count archived sessions by persona for one user in the current APP_ENV.
 

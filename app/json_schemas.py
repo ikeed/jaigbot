@@ -5,7 +5,7 @@ We intentionally keep schemas tiny to reduce JSON compliance risk.
 """
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 # noinspection PyBroadException
 try:
@@ -14,7 +14,7 @@ except Exception:  # pragma: no cover - import error exercised in tests indirect
     Draft7Validator = None  # type: ignore
 
 
-OBSERVATIONS_SCHEMA: Dict[str, Any] = {
+OBSERVATIONS_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
         "open_concern_question_present": {"type": ["boolean", "null"]},
@@ -30,7 +30,7 @@ OBSERVATIONS_SCHEMA: Dict[str, Any] = {
     "additionalProperties": False,
 }
 
-FEEDBACK_ITEM_SCHEMA: Dict[str, Any] = {
+FEEDBACK_ITEM_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
         "text": {"type": "string", "minLength": 1},
@@ -45,7 +45,7 @@ FEEDBACK_ITEM_SCHEMA: Dict[str, Any] = {
 }
 
 
-CLASSIFY_SCHEMA: Dict[str, Any] = {
+CLASSIFY_SCHEMA: dict[str, Any] = {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "type": "object",
     "properties": {
@@ -76,7 +76,7 @@ CLASSIFY_SCHEMA: Dict[str, Any] = {
     "additionalProperties": False,
 }
 
-REPLY_SCHEMA: Dict[str, Any] = {
+REPLY_SCHEMA: dict[str, Any] = {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "type": "object",
     "properties": {
@@ -87,7 +87,7 @@ REPLY_SCHEMA: Dict[str, Any] = {
 }
 
 # LLM-based endgame detection schema
-ENDGAME_DETECT_SCHEMA: Dict[str, Any] = {
+ENDGAME_DETECT_SCHEMA: dict[str, Any] = {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "type": "object",
     "properties": {
@@ -108,7 +108,7 @@ ENDGAME_DETECT_SCHEMA: Dict[str, Any] = {
     "additionalProperties": False,
 }
 
-SUMMARY_SCHEMA: Dict[str, Any] = {
+SUMMARY_SCHEMA: dict[str, Any] = {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "type": "object",
     "properties": {
@@ -134,7 +134,7 @@ SUMMARY_SCHEMA: Dict[str, Any] = {
     "additionalProperties": False,
 }
 
-SUMMARY_ANALYSIS_SCHEMA: Dict[str, Any] = {
+SUMMARY_ANALYSIS_SCHEMA: dict[str, Any] = {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "type": "object",
     "properties": {
@@ -179,7 +179,7 @@ def _sanitize_for_vertex(value: Any) -> Any:
     The adapter is conservative and only touches known incompatibilities.
     """
     if isinstance(value, dict):
-        out: Dict[str, Any] = {}
+        out: dict[str, Any] = {}
         # Handle $schema drop early
         for k, v in value.items():
             if k == "$schema":
@@ -211,12 +211,12 @@ def _sanitize_for_vertex(value: Any) -> Any:
         return value
 
 
-def vertex_response_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
+def vertex_response_schema(schema: dict[str, Any]) -> dict[str, Any]:
     """Return a deep-copied, Vertex-compatible schema from a standard JSON Schema dict."""
     return _sanitize_for_vertex(schema)
 
 
-def validate_json(instance: Dict[str, Any], schema: Dict[str, Any]) -> None:
+def validate_json(instance: dict[str, Any], schema: dict[str, Any]) -> None:
     """Validate instance against schema; raise SchemaValidationError on failure."""
     if Draft7Validator is None:
         # If jsonschema is not installed, fail closed so we notice in tests.

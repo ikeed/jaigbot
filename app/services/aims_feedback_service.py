@@ -257,10 +257,7 @@ class AimsFeedbackService:
         s = (text or "").strip()
         if s.startswith("```"):
             first_newline = s.find("\n")
-            if first_newline != -1:
-                s = s[first_newline + 1:]
-            else:
-                s = s[3:]
+            s = s[first_newline + 1:] if first_newline != -1 else s[3:]
             if s.rstrip().endswith("```"):
                 s = s.rstrip()[:-3].rstrip()
         return s

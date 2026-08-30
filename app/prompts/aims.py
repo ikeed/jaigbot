@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from typing import List
 
 from .loader import load_and_render
 
@@ -59,8 +58,8 @@ def build_classify_turn_prompt(
     prior_announced: bool,
     prior_phase: str,
     recent_context: str = "",
-    inquired_concerns_list: List[str] = None,
-    mirrored_concerns_list: List[str] = None,
+    inquired_concerns_list: list[str] = None,
+    mirrored_concerns_list: list[str] = None,
     checklist_context: str | None = None,
 ) -> str:
     """Render the lean per-turn classification prompt.
@@ -86,9 +85,9 @@ def build_endgame_detector_prompt(
     *,
     history_text: str,
     announced: bool,
-    inquired_concerns: List[str],
-    mirrored_concerns: List[str],
-    secured_concerns: List[str],
+    inquired_concerns: list[str],
+    mirrored_concerns: list[str],
+    secured_concerns: list[str],
 ) -> str:
     """Render the endgame detector prompt."""
     return load_and_render(

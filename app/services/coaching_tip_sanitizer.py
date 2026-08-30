@@ -7,7 +7,6 @@ from app.constants import STEP_INQUIRE
 from app.message_catalog import catalog_value, message, message_map
 from app.services.aims_metrics_service import AimsMetricsService
 
-
 _OPEN_QUESTION_TIP_RE = re.compile(
     str(catalog_value("lexicon.coaching_tip_sanitizer.open_question_tip_pattern", default="$^")),
     re.IGNORECASE,

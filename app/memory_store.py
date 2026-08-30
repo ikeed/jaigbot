@@ -10,12 +10,13 @@ configuration values via the constructor in app.main.
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
 import tempfile
 import threading
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, cast
 
 module_logger = logging.getLogger(__name__)
 
@@ -26,9 +27,9 @@ class InMemoryStore:
     Implements a minimal dict-like interface that the app expects.
     """
 
-    def __init__(self, persist_path: Optional[str] = None) -> None:
+    def __init__(self, persist_path: str | None = None) -> None:
         self._persist_path = persist_path
-        self._store: Dict[str, Dict[str, Any]] = {}
+        self._store: dict[str, dict[str, Any]] = {}
         # Mutations and persistence must be serialized. Writes used to happen only on the
         # event-loop thread, which serialized them for free; background work now runs in a
         # worker threadpool, so two threads can reach _persist concurrently. Reentrant
@@ -40,7 +41,7 @@ class InMemoryStore:
         if not self._persist_path:
             return
         try:
-            with open(self._persist_path, "r", encoding="utf-8") as f:
+            with open(self._persist_path, encoding="utf-8") as f:
                 data = json.load(f)
             if isinstance(data, dict):
                 self._store = {
@@ -77,34 +78,32 @@ class InMemoryStore:
                 os.replace(tmp_path, self._persist_path)
             except BaseException:
                 # Never leave the temp file behind on a failed write.
-                try:
+                with contextlib.suppress(OSError):
                     os.unlink(tmp_path)
-                except OSError:
-                    pass
                 raise
         except Exception as e:
             module_logger.error("Failed to persist memory store to %s: %s", self._persist_path, e)
             pass
 
-    def get(self, key: str) -> Optional[Dict[str, Any]]:
+    def get(self, key: str) -> dict[str, Any] | None:
         return self._store.get(key)
 
-    def __getitem__(self, key: str) -> Dict[str, Any]:
+    def __getitem__(self, key: str) -> dict[str, Any]:
         return self._store[key]
 
-    def __setitem__(self, key: str, value: Dict[str, Any]) -> None:
+    def __setitem__(self, key: str, value: dict[str, Any]) -> None:
         with self._lock:
             self._store[key] = value
             self._persist()
 
     # noinspection PyUnusedLocal
-    def set(self, key: str, value: Dict[str, Any], ttl: Optional[int] = None) -> None:
+    def set(self, key: str, value: dict[str, Any], ttl: int | None = None) -> None:
         self.__setitem__(key, value)
 
     def __contains__(self, key: str) -> bool:  # pragma: no cover - trivial
         return key in self._store
 
-    def items(self) -> List[Tuple[str, Dict[str, Any]]]:
+    def items(self) -> list[tuple[str, dict[str, Any]]]:
         # Snapshot under the lock: callers iterate this while other threads may be
         # mutating the store (prune_expired walks every session and pops as it goes).
         with self._lock:
@@ -134,22 +133,22 @@ class RedisStore:
     def __init__(
         self,
         *,
-        url: Optional[str] = None,
-        host: Optional[str] = None,
+        url: str | None = None,
+        host: str | None = None,
         port: int = 6379,
         db: int = 0,
-        password: Optional[str] = None,
+        password: str | None = None,
         prefix: str = "aims:session:",
-        fallback_prefixes: Optional[List[str]] = None,
+        fallback_prefixes: list[str] | None = None,
         ttl: int = 3600,
-        logger: Optional[logging.Logger] = None,
+        logger: logging.Logger | None = None,
     ) -> None:
         self.logger = logger or logging.getLogger(__name__)
         try:
             import redis  # type: ignore
         except Exception as e:
             self.logger.error("Failed to import Redis library: %s", e)
-            raise RuntimeError(f"Redis library not available: {e}")
+            raise RuntimeError(f"Redis library not available: {e}") from e
 
         self._prefix = prefix
         self._fallback_prefixes = [p for p in fallback_prefixes or [] if p and p != prefix]
@@ -164,15 +163,15 @@ class RedisStore:
         try:
             self.r.ping()
         except Exception as e:  # pragma: no cover - network error path
-            raise RuntimeError(f"Cannot connect to Redis: {e}")
+            raise RuntimeError(f"Cannot connect to Redis: {e}") from e
 
     def _k(self, key: str) -> str:
         return f"{self._prefix}{key}"
 
-    def _candidate_keys(self, key: str) -> List[str]:
+    def _candidate_keys(self, key: str) -> list[str]:
         return [self._k(key), *[f"{prefix}{key}" for prefix in self._fallback_prefixes]]
 
-    def get(self, key: str) -> Optional[Dict[str, Any]]:
+    def get(self, key: str) -> dict[str, Any] | None:
         for redis_key in self._candidate_keys(key):
             raw = self.r.get(redis_key)
             if not raw:
@@ -184,7 +183,7 @@ class RedisStore:
                 return None
         return None
 
-    def set(self, key: str, value: Dict[str, Any], ttl: Optional[int] = None) -> None:
+    def set(self, key: str, value: dict[str, Any], ttl: int | None = None) -> None:
         try:
             raw = json.dumps(value)
         except Exception as e:
@@ -197,11 +196,11 @@ class RedisStore:
             pipe.expire(self._k(key), effective_ttl)
         pipe.execute()
 
-    def __setitem__(self, key: str, value: Dict[str, Any]) -> None:
+    def __setitem__(self, key: str, value: dict[str, Any]) -> None:
         self.set(key, value)
 
-    def items(self) -> List[Tuple[str, Dict[str, Any]]]:
-        out: List[Tuple[str, Dict[str, Any]]] = []
+    def items(self) -> list[tuple[str, dict[str, Any]]]:
+        out: list[tuple[str, dict[str, Any]]] = []
         seen = set()
         for prefix in [self._prefix, *self._fallback_prefixes]:
             cursor = 0
@@ -210,7 +209,7 @@ class RedisStore:
                 cursor, keys = self.r.scan(cursor=cursor, match=pattern, count=200)
                 if keys:
                     vals = self.r.mget(keys)
-                    for k, v in zip(keys, vals):
+                    for k, v in zip(keys, vals, strict=True):
                         if not v:
                             continue
                         redis_key = k.decode("utf-8") if isinstance(k, bytes) else str(k)
@@ -223,7 +222,7 @@ class RedisStore:
                             sid = redis_key[len(prefix) :]
                             if sid not in seen:
                                 seen.add(sid)
-                                out.append((sid, cast(Dict[str, Any], data)))
+                                out.append((sid, cast(dict[str, Any], data)))
                 if cursor == 0:
                     break
         return out

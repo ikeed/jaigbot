@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from typing import Optional, Any
+from typing import Any
 
 from app.chat_roles import ROLE_ASSISTANT
 from app.persona import DEFAULT_CHARACTER, DEFAULT_SCENE
@@ -15,12 +15,12 @@ class ChatContext:
     session_id: str
     generated_session: bool
     mem: dict
-    effective_character: Optional[str]
-    effective_scene: Optional[str]
-    system_instruction: Optional[str]
+    effective_character: str | None
+    effective_scene: str | None
+    system_instruction: str | None
     history_text: str
     person_last: str
-    user_info: Optional[dict] = None
+    user_info: dict | None = None
     # True when this request's turn of the modulo came up for a TTL prune. The builder no
     # longer runs the prune itself: it is blocking GCS work that used to stall the request
     # on the event loop. ChatOrchestrator queues it onto BackgroundTasks instead.
@@ -56,7 +56,7 @@ class ChatContextBuilder:
         self.memory_ttl_seconds = int(memory_ttl_seconds)
         self._do_prune_mod = int(do_prune_mod)
 
-    def build(self, req: Any, body_session_id: Optional[str], character: Optional[str], scene: Optional[str], user_info: Optional[dict] = None) -> ChatContext:
+    def build(self, req: Any, body_session_id: str | None, character: str | None, scene: str | None, user_info: dict | None = None) -> ChatContext:
         # Occasional TTL prune (same modulo behaviour), but only *flagged* here — see
         # ChatContext.prune_due. Running it inline archived every expired session to GCS
         # synchronously, inside the request.
