@@ -1,7 +1,6 @@
 import datetime
 import json
 import logging
-import subprocess
 import time
 from collections.abc import Iterable
 from typing import Any
@@ -12,13 +11,6 @@ from app.chat_roles import ROLE_ASSISTANT, ROLE_COACH, ROLE_SYSTEM, ROLE_USER
 from app.config import settings
 
 logger = logging.getLogger(__name__)
-
-# Cache git hash once at startup
-try:
-    GIT_HASH = subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode('ascii').strip()
-except Exception as exc:
-    logger.debug("Git hash lookup failed: %s", exc)
-    GIT_HASH = "unknown"
 
 # Cap on entries kept in a user's persona index (see _record_persona_index_entry).
 PERSONA_INDEX_MAX_ENTRIES = 200
@@ -192,7 +184,7 @@ class StorageService:
         metadata = {
             "sessionId": session_id,
             "userId": user_id,
-            "gitHash": GIT_HASH,
+            "gitHash": settings.GIT_SHA,
             "timestamps": {
                 "startedAt": iso(started_at),
                 "endedAt": iso(ended_at),

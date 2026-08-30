@@ -221,7 +221,6 @@ Common runtime flags:
 
 - `AIMS_COACHING_ENABLED`
 - `AIMS_COACHING_DEFAULT`
-- `AIMS_CLASSIFIER_MODE`
 - `APP_ENV` (`local`, `staging`, or `prod`; required on Cloud Run)
 - `MEMORY_ENABLED`
 - `MEMORY_BACKEND`
@@ -237,7 +236,6 @@ Common runtime flags:
 - `MAX_TOKENS`
 - `LOG_LEVEL`
 - `LOG_RESPONSE_PREVIEW_MAX`
-- `SAFETY_LOG_CAP`
 - `CHAINLIT_AUTH_SECRET`
 - `BACKEND_URL`
 

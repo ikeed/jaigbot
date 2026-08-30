@@ -8,6 +8,25 @@ def mock_storage_client():
     with patch("google.cloud.storage.Client") as mock:
         yield mock
 
+def test_archive_data_reports_git_hash_from_settings(monkeypatch, mock_storage_client):
+    """gitHash comes from settings.GIT_SHA (set by the Dockerfile's GIT_SHA
+    build arg, passed by the deploy workflow from GITHUB_SHA), not from
+    `git rev-parse` at runtime -- .git isn't copied into the image, so that
+    always resolved to "unknown" in every deployed environment."""
+    monkeypatch.setattr("app.config.settings.GIT_SHA", "abc1234")
+    service = StorageService(bucket_name="test-bucket")
+
+    mock_bucket = MagicMock()
+    mock_blob = MagicMock()
+    service._bucket = mock_bucket
+    mock_bucket.blob.return_value = mock_blob
+
+    service.upload_session("sid", "uid", {"data": "test"})
+
+    uploaded = json.loads(mock_blob.upload_from_string.call_args[0][0])
+    assert uploaded["metadata"]["gitHash"] == "abc1234"
+
+
 def test_storage_service_skips_when_no_bucket(monkeypatch):
     monkeypatch.setattr("app.config.settings.SESSIONS_BUCKET_NAME", None)
     service = StorageService(bucket_name=None)

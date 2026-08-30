@@ -7,8 +7,6 @@ from app.prompts.aims import (
 from app.prompts.aims import (
     get_classify_system_instruction as _get_classify_sysinstruction,
 )
-from app.services.chat_helpers import extract_recent_concerns
-from app.services.chat_helpers import recent_context as _recent_context
 
 
 class AimsPromptBuilder:
@@ -17,14 +15,6 @@ class AimsPromptBuilder:
     This class composes existing pure helpers to avoid behavior drift while
     grouping responsibilities for easier unit testing.
     """
-
-    @staticmethod
-    def recent_context(history: list[dict], n_turns: int) -> str:
-        return _recent_context(history, n_turns)
-
-    @staticmethod
-    def extract_recent_concerns(history: list[dict], max_items: int) -> list[str]:
-        return extract_recent_concerns(history, max_items)
 
     @staticmethod
     def get_classify_system_instruction() -> str:
