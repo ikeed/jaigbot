@@ -612,6 +612,7 @@ class AimsStateService:
             )
 
         self._remove_redundant_mirror_feedback_items(cls_payload)
+        self._remove_secure_praise_before_mirror(cls_payload)
         self._append_feedback_item(
             cls_payload,
             step=STEP_SECURE,
@@ -642,6 +643,25 @@ class AimsStateService:
             return any(keyword in text for keyword in cls.MIRROR_TIP_KEYWORDS)
 
         cls_payload["feedback_items"] = [item for item in items if not _is_redundant(item)]
+
+    @staticmethod
+    def _remove_secure_praise_before_mirror(cls_payload: dict[str, Any]) -> None:
+        """Drop praise for this turn's Secure content when the turn is about to be
+        flagged with the "secure before mirror" Important item -- praising the same
+        content the Important item calls premature undermines the correction."""
+        items = cls_payload.get("feedback_items")
+        if not isinstance(items, list):
+            return
+
+        def _is_secure_praise(item: Any) -> bool:
+            if not isinstance(item, dict):
+                return False
+            return (
+                str(item.get("tone") or "").strip().lower() == "praise"
+                and item.get("step") == STEP_SECURE
+            )
+
+        cls_payload["feedback_items"] = [item for item in items if not _is_secure_praise(item)]
 
     @staticmethod
     def _has_structured_feedback(cls_payload: dict[str, Any]) -> bool:

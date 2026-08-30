@@ -272,6 +272,10 @@ def sanitize_endgame_bullets(lines: List[str]) -> List[str]:
             continue
         if sl.startswith("patient_reply"):
             continue
+        # Drop a leading "here is/here's the json..." preamble line the model
+        # sometimes emits before the actual JSON block instead of returning it bare
+        if re.match(r"^here('s|\s+is)\s+the\s+json\b", sl):
+            continue
         # Drop any line that is just an opening/closing brace with optional quote
         if s.strip().strip('"\'') in ("{", "}"):
             continue

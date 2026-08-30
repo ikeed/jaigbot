@@ -268,12 +268,68 @@ def test_select_and_record_persona_edge_cases(monkeypatch):
     monkeypatch.setattr(persona_service, "load_personas", lambda: [{"name": "A"}, {"name": "B"}])
     assert persona_service.choose_weighted_persona([], {}) == persona_service.FALLBACK_PERSONA
 
-    monkeypatch.setattr(persona_service, "choose_weighted_persona", lambda personas, counts: personas[1])
+    monkeypatch.setattr(
+        persona_service,
+        "choose_weighted_persona",
+        lambda personas, counts, *, exclude_name=None: personas[1],
+    )
 
     assert persona_service.select_persona_for_user("doctor@example.com", store)["name"] == "B"
     assert persona_service.record_persona_interaction_once(None, "sid", {"name": "A"}, store) is False
     assert persona_service.record_persona_interaction_once("doctor@example.com", "", {"name": "A"}, store) is False
     assert persona_service.record_persona_interaction_once("doctor@example.com", "sid", {"name": ""}, store) is False
+
+
+def test_choose_weighted_persona_excludes_last_shown_name():
+    personas = [{"name": "A"}, {"name": "B"}, {"name": "C"}]
+    counts = {"A": 0, "B": 0, "C": 0}
+
+    with patch("app.services.persona_service.random.choices") as choices:
+        choices.return_value = [personas[1]]
+        persona_service.choose_weighted_persona(personas, counts, exclude_name="A")
+
+    args, kwargs = choices.call_args
+    assert args[0] == [personas[1], personas[2]]  # "A" excluded from the candidate pool
+
+
+def test_choose_weighted_persona_falls_back_to_full_pool_when_exclude_leaves_nothing():
+    # Only one persona exists and it's also the last one shown -- excluding it
+    # would leave no candidates, so the exclusion is ignored rather than
+    # crashing or picking nothing.
+    personas = [{"name": "A"}]
+    counts = {"A": 0}
+
+    with patch("app.services.persona_service.random.choices") as choices:
+        choices.return_value = [personas[0]]
+        persona_service.choose_weighted_persona(personas, counts, exclude_name="A")
+
+    args, _kwargs = choices.call_args
+    assert args[0] == personas
+
+
+def test_select_persona_for_user_avoids_repeating_last_persona(monkeypatch):
+    store = InMemoryStore()
+    monkeypatch.setattr(persona_service.settings, "PERSONA_INDEX", None)
+    monkeypatch.setattr(
+        persona_service,
+        "load_personas",
+        lambda: [{"name": "A"}, {"name": "B"}],
+    )
+    persona_service.save_last_persona_name("doctor@example.com", "A", store)
+
+    captured = {}
+
+    def fake_choose(personas, counts, *, exclude_name=None):
+        captured["exclude_name"] = exclude_name
+        return {"name": "B"}
+
+    monkeypatch.setattr(persona_service, "choose_weighted_persona", fake_choose)
+
+    selected = persona_service.select_persona_for_user("doctor@example.com", store)
+
+    assert captured["exclude_name"] == "A"
+    assert selected["name"] == "B"
+    assert persona_service.get_last_persona_name("doctor@example.com", store) == "B"
 
 
 def test_build_persona_session_fields_omits_vaccine_transition_note(monkeypatch):

@@ -190,11 +190,22 @@ def _structured_analysis_bullets(
     if not raw:
         return None
 
-    if raw.startswith("```"):
+    # The model sometimes prepends prose before the JSON block (e.g. "Here is
+    # the JSON requested:") instead of returning it bare. Locate the fence or
+    # the opening brace wherever it actually starts rather than requiring it
+    # at position 0, so that preamble doesn't fall through to the raw-line
+    # fallback and leak into the rendered summary.
+    fence_idx = raw.find("```")
+    if fence_idx != -1:
+        raw = raw[fence_idx:]
         first_newline = raw.find("\n")
         raw = raw[first_newline + 1:] if first_newline != -1 else raw[3:]
         if raw.rstrip().endswith("```"):
             raw = raw.rstrip()[:-3].rstrip()
+    elif not raw.startswith("{"):
+        brace_idx = raw.find("{")
+        if brace_idx != -1:
+            raw = raw[brace_idx:]
 
     if not raw.startswith("{"):
         return None
