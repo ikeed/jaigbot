@@ -855,8 +855,14 @@ def test_deferred_outcome_does_not_trigger_endgame():
 # Tests — concern-checklist Endgame backstop (Step 6)
 # ---------------------------------------------------------------------------
 
-def _checklist_state(*, is_undiscovered: bool, phase: str = "Secure") -> dict:
-    return {
+def _checklist_state(
+    *,
+    is_undiscovered: bool,
+    phase: str = "Secure",
+    patient_unreceptive: bool = False,
+    literature_offered: bool = False,
+) -> dict:
+    state = {
         "phase": phase,
         "announced": True,
         "is_undiscovered_concerns": is_undiscovered,
@@ -871,6 +877,11 @@ def _checklist_state(*, is_undiscovered: bool, phase: str = "Secure") -> dict:
             }
         ],
     }
+    if patient_unreceptive:
+        state["patient_unreceptive_to_further_inquire"] = True
+    if literature_offered:
+        state["literature_offered"] = True
+    return state
 
 
 def test_backstop_blocks_accepted_vaccine_while_checklist_concern_undiscovered():
@@ -1036,6 +1047,126 @@ def test_backstop_ignores_ad_hoc_concerns_not_on_the_checklist():
     result = _run(service.check(store["s12f"], {}, None, "s12f"))
     assert result is not None
     assert store["s12f"]["aims_state"]["endgame_blocked_undiscovered"] is False
+
+
+def test_backstop_bypassed_when_patient_unreceptive_and_literature_offered():
+    """Live-verified bug: without this bypass, a persona that never volunteers a
+    checklist topic blocks every closing turn forever, even after the clinician has
+    genuinely tried (a real Inquire sweep) and offered literature. One prior failed
+    sweep plus literature offered is enough to let this specific outcome close."""
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_vaccine",
+            "summary": "Person agreed to vaccinate today.",
+            "reason": "",
+        }
+    )
+    store = {
+        "s12g": {
+            "history": [
+                {"role": "user", "content": "MMR is recommended today."},
+                {"role": "assistant", "content": "Okay, let's go ahead."},
+            ],
+            "aims_state": _checklist_state(
+                is_undiscovered=True, patient_unreceptive=True, literature_offered=True
+            ),
+        }
+    }
+    service = _make_endgame_service(mock_svc, heuristic_fallback_enabled=False)
+    result = _run(service.check(store["s12g"], {}, None, "s12g"))
+    assert result is not None
+    assert store["s12g"]["aims_state"]["endgame_blocked_undiscovered"] is False
+
+
+def test_backstop_bypass_applies_to_accepted_literature_outcome_too():
+    """Symmetry check: the bypass must apply identically to accepted_literature, not
+    only accepted_vaccine -- "endgame is endgame," no special-casing between the two
+    closing outcomes (docs/aims/concern-checklist-plan.md #4.3)."""
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_literature",
+            "summary": "Person accepted information and follow-up.",
+            "reason": "",
+            "accepted_materials": True,
+            "accepted_followup": True,
+            "remaining_active_concern": False,
+        }
+    )
+    store = {
+        "s12h": {
+            "history": [
+                {"role": "user", "content": "I'll print that information and we can follow up."},
+                {"role": "assistant", "content": "That sounds good, I'll read it over."},
+            ],
+            "aims_state": _checklist_state(
+                is_undiscovered=True, patient_unreceptive=True, literature_offered=True
+            ),
+        }
+    }
+    service = _make_endgame_service(mock_svc, heuristic_fallback_enabled=False)
+    result = _run(service.check(store["s12h"], {}, None, "s12h"))
+    assert result is not None
+    assert store["s12h"]["aims_state"]["endgame_blocked_undiscovered"] is False
+
+
+def test_backstop_still_blocks_when_unreceptive_but_literature_never_offered():
+    """The clinician giving up on Inquire alone is not sufficient -- closure still
+    requires that literature was actually offered at some point, not merely that the
+    clinician stopped asking."""
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_vaccine",
+            "summary": "Person agreed to vaccinate today.",
+            "reason": "",
+        }
+    )
+    store = {
+        "s12i": {
+            "history": [
+                {"role": "user", "content": "MMR is recommended today."},
+                {"role": "assistant", "content": "Okay, let's go ahead."},
+            ],
+            "aims_state": _checklist_state(
+                is_undiscovered=True, patient_unreceptive=True, literature_offered=False
+            ),
+        }
+    }
+    service = _make_endgame_service(mock_svc, heuristic_fallback_enabled=False)
+    result = _run(service.check(store["s12i"], {}, None, "s12i"))
+    assert result is None
+    assert store["s12i"]["aims_state"]["endgame_blocked_undiscovered"] is True
+
+
+def test_backstop_still_blocks_literature_offered_but_no_sweep_attempt_yet():
+    """First-attempt protection must survive: literature alone, with no genuine Inquire
+    sweep having come up empty yet, still blocks -- the backstop still catches a
+    persona/matcher slip on the very first accepted-outcome turn."""
+    mock_svc = _MockClassifierService(
+        {
+            "is_endgame": True,
+            "resolution_type": "accepted_vaccine",
+            "summary": "Person agreed to vaccinate today.",
+            "reason": "",
+        }
+    )
+    store = {
+        "s12j": {
+            "history": [
+                {"role": "user", "content": "MMR is recommended today."},
+                {"role": "assistant", "content": "Okay, let's go ahead."},
+            ],
+            "aims_state": _checklist_state(
+                is_undiscovered=True, patient_unreceptive=False, literature_offered=True
+            ),
+        }
+    }
+    service = _make_endgame_service(mock_svc, heuristic_fallback_enabled=False)
+    result = _run(service.check(store["s12j"], {}, None, "s12j"))
+    assert result is None
+    assert store["s12j"]["aims_state"]["endgame_blocked_undiscovered"] is True
 
 
 # ---------------------------------------------------------------------------

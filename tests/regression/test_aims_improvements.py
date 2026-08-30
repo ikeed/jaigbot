@@ -427,7 +427,12 @@ def test_secure_before_mirror_ignores_same_evidence_sibling_concern():
 
 
 def test_secure_followup_closure_missing_literature_gets_tip():
-    h = _state_service(heuristic_fallback_enabled=True)
+    # literature_offered/followup_confirmed are session-level state set by
+    # AimsStateService._update_closure_signals (called from update(), not from
+    # apply_coaching_guidance) - set the sticky flag directly here to exercise
+    # _add_closure_plan_tip's own branching in isolation, same as the fixture
+    # already does for is_mirrored/is_secured on parent_concerns.
+    h = _state_service()
     state = _make_state(
         phase="Secure",
         concerns=[
@@ -439,6 +444,7 @@ def test_secure_followup_closure_missing_literature_gets_tip():
             }
         ],
     )
+    state["followup_confirmed"] = True
     cls = {"step": "Secure+Inquire", "score": 3, "reasons": [], "tips": []}
 
     h.apply_coaching_guidance(
@@ -470,6 +476,8 @@ def test_secure_closure_with_written_safety_information_gets_no_literature_tip()
             }
         ],
     )
+    state["literature_offered"] = True
+    state["followup_confirmed"] = True
     cls = {"step": "Secure", "score": 3, "reasons": [], "tips": []}
 
     h.apply_coaching_guidance(
@@ -487,7 +495,7 @@ def test_secure_closure_with_written_safety_information_gets_no_literature_tip()
 
 
 def test_secure_literature_closure_missing_followup_gets_tip():
-    h = _state_service(heuristic_fallback_enabled=True)
+    h = _state_service()
     state = _make_state(
         phase="Secure",
         concerns=[
@@ -499,6 +507,7 @@ def test_secure_literature_closure_missing_followup_gets_tip():
             }
         ],
     )
+    state["literature_offered"] = True
     cls = {"step": "Secure", "score": 3, "reasons": [], "tips": []}
 
     h.apply_coaching_guidance(
@@ -511,6 +520,44 @@ def test_secure_literature_closure_missing_followup_gets_tip():
 
     assert cls["tips"] == [
         "You offered take-home information; also book a follow-up so they know when they can bring questions back."
+    ]
+
+
+def test_secure_closure_with_neither_literature_nor_followup_gets_offer_literature_tip():
+    """New behavior: when nothing has been offered yet, nudge toward literature.
+
+    This is the fix for the live-verified stuck-loop bug: previously this case fell
+    through _add_closure_plan_tip silently (no branch matched has_literature=False,
+    has_followup=False), and since the tip function was also gated behind the disabled
+    AIMS_HEURISTIC_FALLBACK_ENABLED flag, no conversation was ever nudged to offer
+    literature at all.
+    """
+    h = _state_service()
+    state = _make_state(
+        phase="Secure",
+        concerns=[
+            {
+                "desc": "wants safety evidence explained",
+                "topic": "side_effects",
+                "is_mirrored": True,
+                "is_secured": True,
+            }
+        ],
+    )
+    cls = {"step": "Secure", "score": 3, "reasons": [], "tips": []}
+
+    h.apply_coaching_guidance(
+        cls,
+        "Secure",
+        state,
+        "That's completely your decision, and I respect that.",
+        "Thanks for listening.",
+    )
+
+    assert cls["tips"] == [
+        "You haven't offered anything to take home or booked a follow-up yet; "
+        "try offering some information to review, or scheduling a follow-up "
+        "so they know when to bring questions back."
     ]
 
 
