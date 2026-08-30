@@ -30,9 +30,12 @@ from app.constants import (
 from app.main import app as backend_app
 from app.middleware import AuthRedirectMiddleware, JavaScriptRequiredMiddleware
 from app.routes.ui import router as ui_router
+from app.runtime import delegating_lifespan
 from app.security.oauth import is_valid_env_val
 
-app = FastAPI()
+# Starlette doesn't run lifespan for mounted sub-apps, so the backend's startup
+# (model preflight, app.state seeding) must be delegated explicitly here.
+app = FastAPI(lifespan=delegating_lifespan(backend_app))
 
 # 1. Update BACKEND_URL for this unified process
 port = settings.PORT
