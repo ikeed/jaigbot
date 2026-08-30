@@ -150,21 +150,39 @@ def _redact_body_fields(body: Any, *, settings: Any) -> Any:
     return body
 
 
+def _safe_body_for_log(body_bytes: bytes, *, settings: Any) -> Any:
+    """Redact a request body for logging, or hide it if it can't be parsed.
+
+    Redaction works by field name, so it can only be applied to a JSON object.
+    Anything else (malformed JSON, a bare array, binary) can't be redacted
+    field-by-field, so it is withheld entirely unless DEBUG_MODE -- emitting it
+    raw is how persona prompts and clinician messages leaked into logs before.
+    """
+    try:
+        parsed = json.loads(body_bytes.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        module_logger.debug("Request body is not decodable JSON: %s", e)
+        parsed = None
+
+    if isinstance(parsed, dict):
+        return _redact_body_fields(parsed, settings=settings)
+
+    if not settings.DEBUG_MODE:
+        return "<unparsed body hidden>"
+    try:
+        return body_bytes.decode("utf-8", errors="replace")
+    except Exception as e:  # pragma: no cover - errors="replace" does not raise
+        module_logger.debug("Failed to decode request body as UTF-8: %s", e)
+        return "<binary>"
+
+
 async def _request_body_for_log(request: Request, *, settings: Any) -> Any:
-    body_logged = None
-    if request.method in ("POST", "PUT", "PATCH"):
-        raw = await _read_body(request)
-        if raw:
-            try:
-                body_logged = _redact_body_fields(json.loads(raw.decode("utf-8")), settings=settings)
-            except (json.JSONDecodeError, UnicodeDecodeError) as e:
-                module_logger.debug("Failed to decode request body as JSON: %s", e)
-                try:
-                    body_logged = raw.decode("utf-8", errors="replace")
-                except Exception as e:
-                    module_logger.debug("Failed to decode request body as UTF-8: %s", e)
-                    body_logged = "<binary>"
-    return body_logged
+    if request.method not in ("POST", "PUT", "PATCH"):
+        return None
+    raw = await _read_body(request)
+    if not raw:
+        return None
+    return _safe_body_for_log(raw, settings=settings)
 
 
 async def _read_body(request: Request) -> bytes:
@@ -176,18 +194,24 @@ async def _read_body(request: Request) -> bytes:
 
 
 def _body_preview_for_log(body_bytes: bytes, *, settings: Any) -> Any:
-    body_preview = body_bytes[:settings.LOG_REQUEST_BODY_MAX]
-    if not body_preview:
+    """Redacted, size-capped preview of a request body.
+
+    The cap is applied AFTER parsing and redacting, never before. Truncating
+    first corrupted the JSON for any body larger than the cap, which fell
+    through to the raw-text branch and logged the clinician's message and the
+    persona prompt verbatim -- a real /chat payload is ~2KB against a 1KB
+    default cap, so that was every coaching turn.
+    """
+    cap = int(getattr(settings, "LOG_REQUEST_BODY_MAX", 0) or 0)
+    if not body_bytes or cap <= 0:
         return None
-    try:
-        return _redact_body_fields(json.loads(body_preview.decode("utf-8")), settings=settings)
-    except (json.JSONDecodeError, UnicodeDecodeError) as e:
-        module_logger.debug("Failed to decode body preview as JSON: %s", e)
-        try:
-            return body_preview.decode("utf-8", errors="replace")
-        except Exception as e:
-            module_logger.debug("Failed to decode body preview as UTF-8: %s", e)
-            return "<binary>"
+
+    safe = _safe_body_for_log(body_bytes, settings=settings)
+    if isinstance(safe, str):
+        return safe[:cap]
+
+    rendered = json.dumps(safe, default=str)
+    return safe if len(rendered) <= cap else rendered[:cap]
 
 
 def _headers_for_log(request: Request, *, settings: Any) -> dict | None:
