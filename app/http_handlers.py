@@ -96,16 +96,11 @@ def install_http_handlers(app: FastAPI, *, settings: Any, logger: logging.Logger
         request.state.request_id = req_id
 
         start = time.time()
+        # Reading the body here is safe for downstream handlers: Starlette's
+        # BaseHTTPMiddleware wraps this request in a _CachedRequest whose
+        # wrapped_receive replays the cached body to the downstream app once
+        # .body() has been called in a dispatch function.
         body_bytes = await _read_body(request)
-
-        async def receive():
-            return {"type": "http.request", "body": body_bytes, "more_body": False}
-
-        try:
-            request._receive = receive  # type: ignore[attr-defined]
-        except Exception as e:
-            logger.debug("Failed to patch request._receive: %s", e)
-            pass
 
         client_host = request.client.host if request.client is not None else None
         logger.info(json.dumps({

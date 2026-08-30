@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -161,6 +162,12 @@ def _app_with_handlers(logger):
     async def validate(payload: _Payload):
         return payload.model_dump()
 
+    @app.post("/raw-double-read")
+    async def raw_double_read(request: http_handlers.Request):
+        first = await request.body()
+        second = await request.body()
+        return {"first": first.decode(), "second": second.decode()}
+
     @app.get("/boom")
     async def boom():
         raise RuntimeError("boom")
@@ -196,6 +203,49 @@ def test_installed_http_handlers_format_validation_and_unhandled_errors():
     assert validation.json()["error"]["requestId"] == "req-3"
     assert boom.status_code == 500
     assert boom.json()["error"]["requestId"] == "req-4"
+
+
+def test_log_requests_body_read_does_not_starve_downstream_handlers():
+    """log_requests reads the full request body for logging before the route
+    runs. Starlette's BaseHTTPMiddleware replays a body cached via .body() to
+    the downstream app (_CachedRequest.wrapped_receive), which is what lets the
+    route still parse the body -- this used to be (redundantly) papered over by
+    monkeypatching the private request._receive, since removed. This test
+    guards the replay invariant itself: if the middleware's body read ever
+    starts consuming the stream in a way downstream can't recover from (e.g.
+    switching .body() to raw stream consumption), the route sees an empty body
+    and this fails."""
+    logger = MagicMock()
+    client = TestClient(_app_with_handlers(logger), raise_server_exceptions=False)
+
+    parsed = client.post("/validate", json={"message": "hello"})
+    assert parsed.status_code == 200
+    assert parsed.json() == {"message": "hello"}
+
+    double = client.post("/raw-double-read", content=b'{"message": "raw"}')
+    assert double.status_code == 200
+    assert double.json() == {"first": '{"message": "raw"}', "second": '{"message": "raw"}'}
+
+
+def test_validation_error_log_still_captures_request_body():
+    """on_validation_error re-reads the body for its structured log line after
+    the route already consumed it -- works because Starlette hands exception
+    handlers the same Request instance the route used, whose ._body is cached.
+    Pinned here so a refactor that breaks that sharing shows up as a test
+    failure, not as silently-empty bodies in validation logs."""
+    logger = MagicMock()
+    client = TestClient(_app_with_handlers(logger), raise_server_exceptions=False)
+
+    response = client.post("/validate", json={"wrong": "shape"})
+
+    assert response.status_code == 422
+    validation_logs = [
+        json.loads(call.args[0])
+        for call in logger.warning.call_args_list
+        if call.args and isinstance(call.args[0], str) and "request_validation_error" in call.args[0]
+    ]
+    assert validation_logs, "expected a request_validation_error log line"
+    assert validation_logs[0]["body"] == {"wrong": "shape"}
 
 
 @pytest.mark.asyncio
