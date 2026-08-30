@@ -59,10 +59,10 @@ def test_unrelated_packages_are_not_installed(module: str):
         importlib.import_module(module)
 
 
-def test_live_vertex_guard_is_active(block_live_vertex_clients):
+def test_live_gemini_guard_is_active(block_live_gemini_clients):
     """The hermeticity guard must actually block real client construction.
 
-    Without this, ``block_live_vertex_clients`` could silently stop working — a patch
+    Without this, ``block_live_gemini_clients`` could silently stop working — a patch
     target gets renamed, the fixture stops being autouse — and the suite would go back to
     spending real tokens on any machine with credentials while still passing in CI.
     """
@@ -72,20 +72,20 @@ def test_live_vertex_guard_is_active(block_live_vertex_clients):
         genai.Client(vertexai=True, project="should-never-be-reached", location="global")
 
     # Tripped on purpose; clear it so the fixture's teardown check does not fail us.
-    block_live_vertex_clients.clear()
+    block_live_gemini_clients.clear()
 
 
-def test_app_vertex_resolves_the_guarded_client(block_live_vertex_clients):
-    """The symbol app.vertex actually calls must be the guarded one.
+def test_app_gemini_resolves_the_guarded_client(block_live_gemini_clients):
+    """The symbol app.gemini_client actually calls must be the guarded one.
 
-    VertexClient._get_client() calls ``genai.Client(...)``, resolving it off the module
+    GeminiClient._get_client() calls ``genai.Client(...)``, resolving it off the module
     object at call time. Asserting on that exact symbol catches the case where the guard
-    patches somewhere app.vertex no longer looks — the test above would still pass while
+    patches somewhere app.gemini_client no longer looks — the test above would still pass while
     the real code path escaped entirely.
     """
-    import app.vertex as vertex_module
+    import app.gemini_client as gemini_client_module
 
     with pytest.raises(RuntimeError, match="real google.genai.Client"):
-        vertex_module.genai.Client(vertexai=True, project="nope", location="global")
+        gemini_client_module.genai.Client(vertexai=True, project="nope", location="global")
 
-    block_live_vertex_clients.clear()
+    block_live_gemini_clients.clear()

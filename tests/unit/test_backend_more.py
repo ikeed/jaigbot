@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 import app.main as m
 from app.config import settings
 from app.main import app
-from app.vertex import VertexAIError
+from app.gemini_client import GeminiError
 
 client = TestClient(app)
 
@@ -36,7 +36,7 @@ def test_healthz_config_diagnostics(monkeypatch):
     assert diag["memory"]["backend"] == settings.MEMORY_BACKEND
 
 
-class FakeVertexEcho:
+class FakeGeminiEcho:
     def __init__(self, project: str, region: str, model_id: str):
         self.model_id = model_id
 
@@ -46,40 +46,40 @@ class FakeVertexEcho:
         return f"echo: {prompt}"
 
 
-class FakeVertexFallback:
+class FakeGeminiFallback:
     def __init__(self, project: str, region: str, model_id: str):
         self.model_id = model_id
 
     def generate_text(self, prompt: str, temperature: float, max_tokens: int):
         # Primary model fails with 404; fallback succeeds
         if self.model_id == "bad-primary":
-            raise VertexAIError("not found", status_code=404)
+            raise GeminiError("not found", status_code=404)
         return "ok-from-fallback"
 
 
-class FakeVertexUpstreamError:
+class FakeGeminiUpstreamError:
     def __init__(self, project: str, region: str, model_id: str):
         self.model_id = model_id
 
     def generate_text(self, prompt: str, temperature: float, max_tokens: int):
-        raise VertexAIError("boom", status_code=500)
+        raise GeminiError("boom", status_code=500)
 
 
 def test_session_cookie_and_memory_persistence(monkeypatch):
     # Arrange
-    from app.services import vertex_helpers
+    from app.services import gemini_helpers
     
     monkeypatch.setattr(settings, "PROJECT_ID", "proj")
     monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", False)
     _unset_secure_cookie_for_tests(monkeypatch)
     
-    # Mock async vertex helper to echo the prompt
+    # Mock async gemini helper to echo the prompt
     async def mock_echo_call(*args, **kwargs):
         prompt = kwargs.get('prompt', 'hello')
         return f"echo: {prompt}"
     
     # Mock the async function used by the handler
-    monkeypatch.setattr(vertex_helpers, "avertex_call_with_fallback_text", mock_echo_call)
+    monkeypatch.setattr(gemini_helpers, "agemini_call_with_fallback_text", mock_echo_call)
 
     # First call: no sessionId provided, backend should issue Set-Cookie
     r1 = client.post("/chat", json={"message": "hello"})
@@ -108,7 +108,7 @@ def test_session_cookie_and_memory_persistence(monkeypatch):
 
 def test_model_fallback_success(monkeypatch):
     # Arrange: primary fails with 404, fallback succeeds
-    from app.services import vertex_helpers
+    from app.services import gemini_helpers
     
     monkeypatch.setattr(settings, "PROJECT_ID", "proj")
     monkeypatch.setattr(settings, "MODEL_ID", "bad-primary")
@@ -116,17 +116,17 @@ def test_model_fallback_success(monkeypatch):
     monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", False)
     _unset_secure_cookie_for_tests(monkeypatch)
     
-    # Mock the async vertex helper to simulate fallback success
+    # Mock the async gemini helper to simulate fallback success
     async def mock_fallback_call(*args, **kwargs):
         return "ok-from-fallback"
     
     # Mock the async function used by the handler
-    monkeypatch.setattr(vertex_helpers, "avertex_call_with_fallback_text", mock_fallback_call)
+    monkeypatch.setattr(gemini_helpers, "agemini_call_with_fallback_text", mock_fallback_call)
 
     r = client.post("/chat", json={"message": "hi"})
     assert r.status_code == 200
     data = r.json()
-    # With mocked vertex calls, the model field comes from get_last_model_used()
+    # With mocked gemini calls, the model field comes from get_last_model_used()
     # which may carry a stale value from prior tests. The important assertion is
     # that the reply came through successfully.
     assert isinstance(data["model"], str)
@@ -138,19 +138,19 @@ def test_model_fallback_success(monkeypatch):
 
 def test_upstream_error_maps_to_502_and_sets_cookie(monkeypatch):
     # Arrange
-    from app.services import vertex_helpers
-    from app.vertex import VertexAIError
+    from app.services import gemini_helpers
+    from app.gemini_client import GeminiError
     
     monkeypatch.setattr(settings, "PROJECT_ID", "proj")
     monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", False)
     _unset_secure_cookie_for_tests(monkeypatch)
     
-    # Mock async vertex helper to raise upstream error
+    # Mock async gemini helper to raise upstream error
     async def mock_error_call(*args, **kwargs):
-        raise VertexAIError("boom", status_code=500)
+        raise GeminiError("boom", status_code=500)
     
     # Mock the async function used by the handler
-    monkeypatch.setattr(vertex_helpers, "avertex_call_with_fallback_text", mock_error_call)
+    monkeypatch.setattr(gemini_helpers, "agemini_call_with_fallback_text", mock_error_call)
 
     r = client.post("/chat", json={"message": "hi"})
     assert r.status_code == 502
@@ -180,20 +180,20 @@ def test_config_session_cookie_fields_reflect_env(monkeypatch):
 
 
 def test_model_not_found_no_fallback_returns_404(monkeypatch):
-    from app.services import vertex_helpers
-    from app.vertex import VertexAIError
+    from app.services import gemini_helpers
+    from app.gemini_client import GeminiError
     
     monkeypatch.setattr(settings, "PROJECT_ID", "proj")
     monkeypatch.setattr(settings, "MODEL_FALLBACKS", [])
     monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", False)
     _unset_secure_cookie_for_tests(monkeypatch)
     
-    # Mock async vertex helper to raise 404 error
+    # Mock async gemini helper to raise 404 error
     async def mock_404_call(*args, **kwargs):
-        raise VertexAIError("missing", status_code=404)
+        raise GeminiError("missing", status_code=404)
     
     # Mock the async function used by the handler
-    monkeypatch.setattr(vertex_helpers, "avertex_call_with_fallback_text", mock_404_call)
+    monkeypatch.setattr(gemini_helpers, "agemini_call_with_fallback_text", mock_404_call)
 
     r = client.post("/chat", json={"message": "hi"})
     assert r.status_code == 404

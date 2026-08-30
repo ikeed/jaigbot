@@ -4,7 +4,7 @@ import logging
 import re
 from typing import Any
 
-from ..vertex import VertexAIError, VertexClient
+from ..gemini_client import GeminiClient, GeminiError
 
 _logger = logging.getLogger(__name__)
 
@@ -78,7 +78,7 @@ def _maybe_extract_patient_reply(obj: dict | None) -> str | None:
     return None
 
 
-def vertex_call_with_fallback_text(
+def gemini_call_with_fallback_text(
     *,
     project: str,
     region: str,
@@ -90,15 +90,15 @@ def vertex_call_with_fallback_text(
     system_instruction: str | None,
     log_path: str,
     logger,
-    client_cls: type = VertexClient,
+    client_cls: type = GeminiClient,
 ) -> str:
-    """Generate a text response using Vertex with model fallback logging.
+    """Generate a text response using Gemini with model fallback logging.
 
     Preserves the same event shape used by existing logs. Tries JSON schema path first
     (reply schema embedded via gateway) and falls back to plain text generation when
     unsupported.
     """
-    from .vertex_gateway import VertexGateway
+    from .gemini_gateway import GeminiGateway
 
     models_to_try = [primary_model] + [m for m in fallbacks if m and m != primary_model]
     tried: list[str] = []
@@ -109,7 +109,7 @@ def vertex_call_with_fallback_text(
         logger.info(
             json.dumps(
                 {
-                    "event": "vertex_model_fallback",
+                    "event": "gemini_model_fallback",
                     "path": log_path,
                     "failedModel": failed_mid,
                     "next": next_model,
@@ -117,7 +117,7 @@ def vertex_call_with_fallback_text(
             )
         )
 
-    gateway = VertexGateway(
+    gateway = GeminiGateway(
         project=project,
         region=region,
         primary_model=primary_model,
@@ -162,10 +162,10 @@ def vertex_call_with_fallback_text(
         except Exception as e:
             _logger.warning("Secondary generate_text call failed for legacy path: %s", e)
             return result
-    except VertexAIError:
+    except GeminiError:
         raise
     except Exception as e:
-        _logger.error("Primary vertex call failed: %s", e)
+        _logger.error("Primary gemini call failed: %s", e)
         result = gateway.generate_text(
             prompt=prompt,
             system_instruction=system_instruction,
@@ -175,7 +175,7 @@ def vertex_call_with_fallback_text(
         return result
 
 
-async def avertex_call_with_fallback_text(
+async def agemini_call_with_fallback_text(
     *,
     project: str,
     region: str,
@@ -187,13 +187,13 @@ async def avertex_call_with_fallback_text(
     system_instruction: str | None,
     log_path: str,
     logger,
-    client_cls: type = VertexClient,
+    client_cls: type = GeminiClient,
 ) -> str:
-    """Async variant of vertex_call_with_fallback_text.
+    """Async variant of gemini_call_with_fallback_text.
 
     Uses native async gateway calls instead of blocking threads.
     """
-    from .vertex_gateway import VertexGateway
+    from .gemini_gateway import GeminiGateway
 
     models_to_try = [primary_model] + [m for m in fallbacks if m and m != primary_model]
     tried: list[str] = []
@@ -204,7 +204,7 @@ async def avertex_call_with_fallback_text(
         logger.info(
             json.dumps(
                 {
-                    "event": "vertex_model_fallback",
+                    "event": "gemini_model_fallback",
                     "path": log_path,
                     "failedModel": failed_mid,
                     "next": next_model,
@@ -212,7 +212,7 @@ async def avertex_call_with_fallback_text(
             )
         )
 
-    gateway = VertexGateway(
+    gateway = GeminiGateway(
         project=project,
         region=region,
         primary_model=primary_model,
@@ -257,10 +257,10 @@ async def avertex_call_with_fallback_text(
         except Exception as e:
             _logger.warning("Secondary agenerate_text call failed for legacy path: %s", e)
             return result
-    except VertexAIError:
+    except GeminiError:
         raise
     except Exception as e:
-        _logger.error("Primary avertex call failed: %s", e)
+        _logger.error("Primary agemini call failed: %s", e)
         result = await gateway.agenerate_text(
             prompt=prompt,
             system_instruction=system_instruction,
@@ -270,7 +270,7 @@ async def avertex_call_with_fallback_text(
         return result
 
 
-async def avertex_call_with_fallback_json(
+async def agemini_call_with_fallback_json(
     *,
     project: str,
     region: str,
@@ -283,11 +283,11 @@ async def avertex_call_with_fallback_json(
     schema: dict,
     log_path: str,
     logger,
-    client_cls: type = VertexClient,
+    client_cls: type = GeminiClient,
 ) -> str:
-    """Async variant of vertex_call_with_fallback_json."""
+    """Async variant of gemini_call_with_fallback_json."""
     from ..json_schemas import vertex_response_schema
-    from .vertex_gateway import VertexGateway
+    from .gemini_gateway import GeminiGateway
 
     models_to_try = [primary_model] + [m for m in fallbacks if m and m != primary_model]
     tried: list[str] = []
@@ -298,7 +298,7 @@ async def avertex_call_with_fallback_json(
         logger.info(
             json.dumps(
                 {
-                    "event": "vertex_model_fallback",
+                    "event": "gemini_model_fallback",
                     "path": log_path,
                     "failedModel": failed_mid,
                     "next": next_model,
@@ -306,7 +306,7 @@ async def avertex_call_with_fallback_json(
             )
         )
 
-    gateway = VertexGateway(
+    gateway = GeminiGateway(
         project=project,
         region=region,
         primary_model=primary_model,

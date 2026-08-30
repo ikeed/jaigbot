@@ -6,7 +6,7 @@ from typing import Any
 
 
 @dataclass(frozen=True)
-class AimsVertexConfig:
+class AimsGeminiConfig:
     project_id: str
     region: str
     vertex_location: str
@@ -27,7 +27,7 @@ class AimsVertexConfig:
     client_cls: Any = None
 
     @classmethod
-    def from_mapping(cls, config: Mapping[str, Any]) -> AimsVertexConfig:
+    def from_mapping(cls, config: Mapping[str, Any]) -> AimsGeminiConfig:
         classifier_thinking_budget = config.get("classifier_thinking_budget")
         reply_max_tokens = config.get("reply_max_tokens")
         return cls(

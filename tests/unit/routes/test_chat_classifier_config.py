@@ -1,8 +1,8 @@
 """The classifier's model and thinking config must survive the trip to ClassifierService.
 
-`_vertex_config()` in app/main.py supplies classifier_model_id / classifier_thinking_level
+`_gemini_config()` in app/main.py supplies classifier_model_id / classifier_thinking_level
 / classifier_thinking_budget, but ChatOrchestrator dropped them when re-packing the
-config dict for AimsCoachingHandler. AimsVertexConfig.from_mapping then fell back to
+config dict for AimsCoachingHandler. AimsGeminiConfig.from_mapping then fell back to
 MODEL_ID with no thinking level, so classification silently ran on the main model.
 Nothing asserted on it, so the regression was invisible for a month.
 """

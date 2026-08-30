@@ -241,7 +241,7 @@ Common runtime flags:
 
 ## Vertex note
 
-The active model client is `app/vertex.py`, which uses the Google Gen AI SDK in
+The active model client is `app/gemini_client.py`, which uses the Google Gen AI SDK in
 Vertex AI mode with API version `v1`. Model availability and generation checks
 should be done through `/config`, `/modelcheck`, `/models`, or the scripts under
 `scripts/`.

@@ -8,7 +8,7 @@ from fastapi import HTTPException
 from app.models import ChatRequest, ReportRequest
 from app.services.chat_context import ChatContext
 from app.services.chat_orchestrator import ChatOrchestrator
-from app.vertex import VertexAIError
+from app.gemini_client import GeminiError
 
 
 def _orchestrator(**overrides):
@@ -22,7 +22,7 @@ def _orchestrator(**overrides):
         },
         "memory_config": {"enabled": True, "max_turns": 8, "ttl_seconds": 3600},
         "aims_config": {"enabled": True, "force_default": False},
-        "vertex_config": {
+        "gemini_config": {
             "project_id": "project",
             "region": "us-west4",
             "vertex_location": "us-west4",
@@ -208,18 +208,18 @@ async def test_handle_chat_unexpected_error_builds_500_response():
     assert _body(response)["error"]["requestId"] == "req-1"
 
 
-def test_vertex_error_responses_include_cookie_and_optional_upstream():
+def test_gemini_error_responses_include_cookie_and_optional_upstream():
     orchestrator = _orchestrator()
     orchestrator.session_service.apply_cookie = MagicMock()
 
-    not_found = orchestrator._handle_vertex_error(
+    not_found = orchestrator._handle_gemini_error(
         _request(**{"x-request-id": "req-404"}),
-        VertexAIError("missing model", status_code=404),
+        GeminiError("missing model", status_code=404),
         "sid",
     )
-    upstream = orchestrator._handle_vertex_error(
+    upstream = orchestrator._handle_gemini_error(
         _request(),
-        VertexAIError("upstream down", status_code=500),
+        GeminiError("upstream down", status_code=500),
         "sid",
     )
 
@@ -230,11 +230,11 @@ def test_vertex_error_responses_include_cookie_and_optional_upstream():
     assert orchestrator.session_service.apply_cookie.call_count == 2
 
 
-def test_vertex_error_cookie_failure_is_ignored():
+def test_gemini_error_cookie_failure_is_ignored():
     orchestrator = _orchestrator()
     orchestrator.session_service.apply_cookie = MagicMock(side_effect=RuntimeError("cookie failed"))
 
-    response = orchestrator._handle_vertex_error(_request(), VertexAIError("boom", status_code=500), "sid")
+    response = orchestrator._handle_gemini_error(_request(), GeminiError("boom", status_code=500), "sid")
 
     assert response.status_code == 502
     orchestrator.logger.debug.assert_called_once()

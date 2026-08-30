@@ -357,10 +357,10 @@ EXPECTED = [
 def setup_env(monkeypatch):
     """Wire LiveClassifyClient (real LLM) for classification,
     ReplyOnlyGateway (scripted) for patient replies."""
-    # Classification: LiveClassifyClient wraps real VertexClient, intercepts endgame
-    monkeypatch.setattr(m, "VertexClient", LiveClassifyClient)
+    # Classification: LiveClassifyClient wraps real GeminiClient, intercepts endgame
+    monkeypatch.setattr(m, "GeminiClient", LiveClassifyClient)
     # Reply generation: ReplyOnlyGateway returns scripted patient replies
-    monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", ReplyOnlyGateway)
+    monkeypatch.setattr("app.services.gemini_gateway.GeminiGateway", ReplyOnlyGateway)
     # Ensure coaching is enabled
     monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", True, raising=False)
     monkeypatch.setattr(m, "MEMORY_ENABLED", True, raising=False)

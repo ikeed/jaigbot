@@ -19,7 +19,7 @@ defaults to off.
   - **POST /session**, **/session/deregister**, **/report** → session initialization, duplicate-tab cleanup, and issue reporting/archive flow.
   - **GET  /healthz** → simple health check.
   - **GET  /config**, **/modelcheck**, **/diagnostics**, **/models** for configuration/diagnostics.
-- Backend code: `app/main.py`, `app/services/chat_orchestrator.py`, and `app/vertex.py`.
+- Backend code: `app/main.py`, `app/services/chat_orchestrator.py`, and `app/gemini_client.py`.
 - AIMS coaching architecture: `docs/aims/README.md`.
 - Run/setup docs: `docs/developer-setup.md` (step‑by‑step).
 - AIMS implementation map: `docs/aims/README.md`.

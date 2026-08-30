@@ -8,23 +8,23 @@ from app.services.classifier_service import ClassifierService
 
 
 @pytest.fixture
-def mock_vertex_client():
+def mock_gemini_client():
     client = MagicMock()
     client.generate_text_async = AsyncMock()
     return client
 
 @pytest.fixture
-def classifier_service(mock_vertex_client):
+def classifier_service(mock_gemini_client):
     service = ClassifierService(
         project_id="test-project",
         location="us-central1",
         model_id="gemini-pro",
-        client_cls=lambda **kwargs: mock_vertex_client
+        client_cls=lambda **kwargs: mock_gemini_client
     )
     return service
 
 @pytest.mark.asyncio
-async def test_classify_turn_success(classifier_service, mock_vertex_client):
+async def test_classify_turn_success(classifier_service, mock_gemini_client):
     # Mock successful JSON response from Gemini
     mock_response = {
         "is_small_talk": False,
@@ -38,7 +38,7 @@ async def test_classify_turn_success(classifier_service, mock_vertex_client):
         "safety_flags": [],
         "reasoning": "Test reasoning"
     }
-    mock_vertex_client.generate_text_async.return_value = json.dumps(mock_response)
+    mock_gemini_client.generate_text_async.return_value = json.dumps(mock_response)
 
     result = await classifier_service.classify_turn(clinician_message="I hear you're worried about side effects.",
                                                     person_last="I'm scared of the shots.", history=[],
@@ -57,7 +57,7 @@ async def test_classify_turn_success(classifier_service, mock_vertex_client):
 
 @pytest.mark.asyncio
 async def test_classify_turn_preserves_optional_semantic_contract_fields(
-    classifier_service, mock_vertex_client
+    classifier_service, mock_gemini_client
 ):
     mock_response = {
         "is_small_talk": False,
@@ -100,7 +100,7 @@ async def test_classify_turn_preserves_optional_semantic_contract_fields(
         "person_topic": "side_effects",
         "reasoning": "Optional semantic fields are present.",
     }
-    mock_vertex_client.generate_text_async.return_value = json.dumps(mock_response)
+    mock_gemini_client.generate_text_async.return_value = json.dumps(mock_response)
 
     result = await classifier_service.classify_turn(
         clinician_message="It sounds like you're worried about side effects.",
@@ -127,7 +127,7 @@ async def test_classify_turn_preserves_optional_semantic_contract_fields(
 
 @pytest.mark.asyncio
 async def test_classify_turn_ignores_malformed_optional_semantic_fields(
-    classifier_service, mock_vertex_client
+    classifier_service, mock_gemini_client
 ):
     mock_response = {
         "is_small_talk": False,
@@ -148,7 +148,7 @@ async def test_classify_turn_ignores_malformed_optional_semantic_fields(
         "safety_flags": [],
         "person_topic": "trust",
     }
-    mock_vertex_client.generate_text_async.return_value = json.dumps(mock_response)
+    mock_gemini_client.generate_text_async.return_value = json.dumps(mock_response)
 
     result = await classifier_service.classify_turn(
         clinician_message="What worries you most about vaccines?",
@@ -169,9 +169,9 @@ async def test_classify_turn_ignores_malformed_optional_semantic_fields(
 
 @pytest.mark.asyncio
 async def test_classify_turn_prompt_includes_recent_context_and_concern_lists(
-    classifier_service, mock_vertex_client
+    classifier_service, mock_gemini_client
 ):
-    mock_vertex_client.generate_text_async.return_value = json.dumps(
+    mock_gemini_client.generate_text_async.return_value = json.dumps(
         {
             "is_small_talk": False,
             "is_vaccine_relevant": True,
@@ -196,8 +196,8 @@ async def test_classify_turn_prompt_includes_recent_context_and_concern_lists(
         mirrored_concerns_list=["trust"],
     )
 
-    prompt = mock_vertex_client.generate_text_async.await_args.args[0]
-    system_instruction = mock_vertex_client.generate_text_async.await_args.kwargs["system_instruction"]
+    prompt = mock_gemini_client.generate_text_async.await_args.args[0]
+    system_instruction = mock_gemini_client.generate_text_async.await_args.kwargs["system_instruction"]
     assert "Doctor: We recommend the MMR vaccine today." in prompt
     assert "Assistant: I thought measles was basically gone." in prompt
     assert "Inquired Concerns: disease_risk, trust" in prompt
@@ -205,14 +205,14 @@ async def test_classify_turn_prompt_includes_recent_context_and_concern_lists(
     assert "Phase: InquireMirror" in prompt
     assert "Triple-Move" in system_instruction
     assert (
-        mock_vertex_client.generate_text_async.await_args.kwargs["response_mime_type"]
+        mock_gemini_client.generate_text_async.await_args.kwargs["response_mime_type"]
         == "application/json"
     )
-    assert mock_vertex_client.generate_text_async.await_args.kwargs["thinking_budget"] is None
-    assert mock_vertex_client.generate_text_async.await_args.kwargs["thinking_level"] == "minimal"
+    assert mock_gemini_client.generate_text_async.await_args.kwargs["thinking_budget"] is None
+    assert mock_gemini_client.generate_text_async.await_args.kwargs["thinking_level"] == "minimal"
 
 @pytest.mark.asyncio
-async def test_classify_turn_with_person_topic(classifier_service, mock_vertex_client):
+async def test_classify_turn_with_person_topic(classifier_service, mock_gemini_client):
     # Mock successful JSON response with person_topic
     mock_response = {
         "is_small_talk": False,
@@ -227,7 +227,7 @@ async def test_classify_turn_with_person_topic(classifier_service, mock_vertex_c
         "safety_flags": [],
         "reasoning": "Person mentioned side effects."
     }
-    mock_vertex_client.generate_text_async.return_value = json.dumps(mock_response)
+    mock_gemini_client.generate_text_async.return_value = json.dumps(mock_response)
 
     result = await classifier_service.classify_turn(clinician_message="I hear you're worried about side effects.",
                                                     person_last="I'm scared of the shots causing a fever.", history=[],
@@ -237,10 +237,10 @@ async def test_classify_turn_with_person_topic(classifier_service, mock_vertex_c
 
 @pytest.mark.asyncio
 async def test_classify_turn_returns_unavailable_when_llm_classification_fails_by_default(
-    classifier_service, mock_vertex_client
+    classifier_service, mock_gemini_client
 ):
     # Mock error from Gemini
-    mock_vertex_client.generate_text_async.side_effect = Exception("Gemini down")
+    mock_gemini_client.generate_text_async.side_effect = Exception("Gemini down")
 
     result = await classifier_service.classify_turn(clinician_message="I recommend the MMR today.", person_last="Okay.",
                                                     history=[], prior_announced=False, prior_phase="PreAnnounce",
@@ -253,15 +253,15 @@ async def test_classify_turn_returns_unavailable_when_llm_classification_fails_b
 
 
 @pytest.mark.asyncio
-async def test_classify_turn_can_enable_deterministic_fallback(mock_vertex_client):
+async def test_classify_turn_can_enable_deterministic_fallback(mock_gemini_client):
     service = ClassifierService(
         project_id="test-project",
         location="us-central1",
         model_id="gemini-pro",
-        client_cls=lambda **kwargs: mock_vertex_client,
+        client_cls=lambda **kwargs: mock_gemini_client,
         heuristic_fallback_enabled=True,
     )
-    mock_vertex_client.generate_text_async.side_effect = Exception("Gemini down")
+    mock_gemini_client.generate_text_async.side_effect = Exception("Gemini down")
 
     result = await service.classify_turn(
         clinician_message="I recommend the MMR today.",
@@ -277,15 +277,15 @@ async def test_classify_turn_can_enable_deterministic_fallback(mock_vertex_clien
 
 
 @pytest.mark.asyncio
-async def test_classify_turn_can_disable_deterministic_fallback(mock_vertex_client):
+async def test_classify_turn_can_disable_deterministic_fallback(mock_gemini_client):
     service = ClassifierService(
         project_id="test-project",
         location="us-central1",
         model_id="gemini-pro",
-        client_cls=lambda **kwargs: mock_vertex_client,
+        client_cls=lambda **kwargs: mock_gemini_client,
         heuristic_fallback_enabled=False,
     )
-    mock_vertex_client.generate_text_async.side_effect = Exception("Gemini down")
+    mock_gemini_client.generate_text_async.side_effect = Exception("Gemini down")
 
     with patch("app.aims_engine.evaluate_turn") as evaluate_turn:
         result = await service.classify_turn(
@@ -306,7 +306,7 @@ async def test_classify_turn_can_disable_deterministic_fallback(mock_vertex_clie
     assert result.reasoning == "classification unavailable"
 
 @pytest.mark.asyncio
-async def test_triple_move_detection(classifier_service, mock_vertex_client):
+async def test_triple_move_detection(classifier_service, mock_gemini_client):
     # Mock successful JSON response with multiple steps (Mirror+Secure+Inquire)
     mock_response = {
         "is_small_talk": False,
@@ -320,7 +320,7 @@ async def test_triple_move_detection(classifier_service, mock_vertex_client):
         "safety_flags": [],
         "reasoning": "Triple-move detected."
     }
-    mock_vertex_client.generate_text_async.return_value = json.dumps(mock_response)
+    mock_gemini_client.generate_text_async.return_value = json.dumps(mock_response)
 
     result = await classifier_service.classify_turn(
         clinician_message="I hear you're worried about side effects, and actually the data shows they are quite rare. What else is on your mind?",
@@ -335,9 +335,9 @@ async def test_triple_move_detection(classifier_service, mock_vertex_client):
 
 @pytest.mark.asyncio
 async def test_announced_and_inquire_steps_normalize_to_compound_before_announcement(
-    classifier_service, mock_vertex_client
+    classifier_service, mock_gemini_client
 ):
-    mock_vertex_client.generate_text_async.return_value = json.dumps(
+    mock_gemini_client.generate_text_async.return_value = json.dumps(
         {
             "is_small_talk": False,
             "is_vaccine_relevant": True,
@@ -361,9 +361,9 @@ async def test_announced_and_inquire_steps_normalize_to_compound_before_announce
 
 @pytest.mark.asyncio
 async def test_announced_and_inquire_steps_after_announcement_do_not_reannounce(
-    classifier_service, mock_vertex_client
+    classifier_service, mock_gemini_client
 ):
-    mock_vertex_client.generate_text_async.return_value = json.dumps(
+    mock_gemini_client.generate_text_async.return_value = json.dumps(
         {
             "is_small_talk": False,
             "is_vaccine_relevant": True,
@@ -388,9 +388,9 @@ async def test_announced_and_inquire_steps_after_announcement_do_not_reannounce(
 
 @pytest.mark.asyncio
 async def test_classify_turn_caps_tips_and_preserves_null_person_topic(
-    classifier_service, mock_vertex_client
+    classifier_service, mock_gemini_client
 ):
-    mock_vertex_client.generate_text_async.return_value = json.dumps(
+    mock_gemini_client.generate_text_async.return_value = json.dumps(
         {
             "is_small_talk": False,
             "is_vaccine_relevant": True,
@@ -458,8 +458,8 @@ def test_get_deterministic_fallback_does_not_duplicate_fallback_reason(classifie
 
 
 @pytest.mark.asyncio
-async def test_classify_turn_strips_json_fences(classifier_service, mock_vertex_client):
-    mock_vertex_client.generate_text_async.return_value = """```json
+async def test_classify_turn_strips_json_fences(classifier_service, mock_gemini_client):
+    mock_gemini_client.generate_text_async.return_value = """```json
 {"is_small_talk": false, "is_vaccine_relevant": true, "aims": {"step": "Inquire", "score": 2, "reasons": ["Asked about concerns"], "tips": ["Keep it open"]}, "safety_flags": [], "reasoning": "Open question."}
 ```"""
 
@@ -477,16 +477,16 @@ async def test_classify_turn_strips_json_fences(classifier_service, mock_vertex_
 
 
 @pytest.mark.asyncio
-async def test_classify_turn_reraises_actionable_vertex_status_errors(
-    classifier_service, mock_vertex_client
+async def test_classify_turn_reraises_actionable_gemini_status_errors(
+    classifier_service, mock_gemini_client
 ):
-    class VertexStatusError(Exception):
+    class GeminiStatusError(Exception):
         status_code = 403
 
-    err = VertexStatusError("permission denied")
-    mock_vertex_client.generate_text_async.side_effect = err
+    err = GeminiStatusError("permission denied")
+    mock_gemini_client.generate_text_async.side_effect = err
 
-    with pytest.raises(VertexStatusError):
+    with pytest.raises(GeminiStatusError):
         await classifier_service.classify_turn(
             clinician_message="I recommend the MMR today.",
             person_last="Okay.",
@@ -498,8 +498,8 @@ async def test_classify_turn_reraises_actionable_vertex_status_errors(
 
 
 @pytest.mark.asyncio
-async def test_detect_endgame_returns_parsed_fenced_json(classifier_service, mock_vertex_client):
-    mock_vertex_client.generate_text_async.return_value = """```json
+async def test_detect_endgame_returns_parsed_fenced_json(classifier_service, mock_gemini_client):
+    mock_gemini_client.generate_text_async.return_value = """```json
 {"is_endgame": true, "reason": "accepted_now", "confidence": 0.9}
 ```"""
 
@@ -517,7 +517,7 @@ async def test_detect_endgame_returns_parsed_fenced_json(classifier_service, moc
         "confidence": 0.9,
     }
 
-    prompt = mock_vertex_client.generate_text_async.await_args.args[0]
+    prompt = mock_gemini_client.generate_text_async.await_args.args[0]
     assert "Inquired Concerns" in prompt
     assert "Mirrored Concerns" in prompt
     assert "Secured Concerns" in prompt
@@ -526,9 +526,9 @@ async def test_detect_endgame_returns_parsed_fenced_json(classifier_service, moc
 
 @pytest.mark.asyncio
 async def test_detect_endgame_prompt_includes_transcript_and_concern_lists(
-    classifier_service, mock_vertex_client
+    classifier_service, mock_gemini_client
 ):
-    mock_vertex_client.generate_text_async.return_value = json.dumps(
+    mock_gemini_client.generate_text_async.return_value = json.dumps(
         {
             "is_endgame": False,
             "reason": "not_resolved",
@@ -545,7 +545,7 @@ async def test_detect_endgame_prompt_includes_transcript_and_concern_lists(
         secured_concerns=["trust"],
     )
 
-    prompt = mock_vertex_client.generate_text_async.await_args.args[0]
+    prompt = mock_gemini_client.generate_text_async.await_args.args[0]
     assert "Doctor: We can send you home with information." in prompt
     assert "Assistant: I'd like to read it at home." in prompt
     assert "Inquired Concerns" in prompt and "trust, side_effects" in prompt
@@ -555,8 +555,8 @@ async def test_detect_endgame_prompt_includes_transcript_and_concern_lists(
 
 
 @pytest.mark.asyncio
-async def test_detect_endgame_returns_false_on_error(classifier_service, mock_vertex_client):
-    mock_vertex_client.generate_text_async.side_effect = RuntimeError("model down")
+async def test_detect_endgame_returns_false_on_error(classifier_service, mock_gemini_client):
+    mock_gemini_client.generate_text_async.side_effect = RuntimeError("model down")
 
     result = await classifier_service.detect_endgame(
         history_text="Parent: Maybe.",

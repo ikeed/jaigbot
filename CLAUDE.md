@@ -61,7 +61,7 @@ docker run -p 8080:8080 -e PROJECT_ID=your-project -e REGION=us-central1 -e MODE
 
 ### Request flow
 `app/main.py` wires FastAPI routers (`app/routes/{chat,session,summary,system}.py`) to a `ChatOrchestrator`
-(`app/services/chat_orchestrator.py`), built per-request via DI with memory store, Vertex config, and AIMS
+(`app/services/chat_orchestrator.py`), built per-request via DI with memory store, Gemini config, and AIMS
 config pulled from `app/config.py::settings`. `ChatOrchestrator.handle_chat` validates the request, builds a
 `ChatContext` (session/memory/persona) via `ChatContextBuilder`, then routes to one of two handlers based on
 `AIMS_COACHING_ENABLED` and the request's `coach` flag:
@@ -120,10 +120,10 @@ using the Chainlit thread id as the backend `sessionId`.
 - Keep state/persistence changes backward-compatible with existing local memory and Redis data where practical.
 
 ### Model access
-`app/vertex.py` (`VertexClient`) wraps Gemini on Vertex AI; `app/services/vertex_gateway.py` and
-`app/services/vertex_helpers.py` add retry/fallback (`MODEL_FALLBACKS`) and continuation-on-max-tokens logic.
+`app/gemini_client.py` (`GeminiClient`) wraps Gemini on Vertex AI; `app/services/gemini_gateway.py` and
+`app/services/gemini_helpers.py` add retry/fallback (`MODEL_FALLBACKS`) and continuation-on-max-tokens logic.
 A best-effort model preflight check (`app/services/model_preflight.py`) runs at startup and is exposed via
-`app.state.model_check` / `GET /modelcheck`. When adding Vertex calls, verify against the installed SDK
+`app.state.model_check` / `GET /modelcheck`. When adding Gemini calls, verify against the installed SDK
 version pinned in `requirements.txt` rather than assuming API shape.
 
 ### Auth

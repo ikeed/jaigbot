@@ -107,7 +107,7 @@ If your Actions workflow pins a container URL, update it to: `<REGION>-docker.pk
 - Verify logs and `/healthz` (see `docs/health-checks.md`).
 
 ### 7) Verify Vertex access
-- From a developer machine (with ADC) or the Cloud Run runtime SA, confirm model listing/permissions. You can use `scripts/check_model_access.py` (update env) or `scripts/sanity_vertex.py`.
+- From a developer machine (with ADC) or the Cloud Run runtime SA, confirm model listing/permissions. You can use `scripts/check_model_access.py` (update env) or `scripts/sanity_gemini.py`.
 
 ---
 
@@ -117,7 +117,7 @@ You do not need to change runtime code to migrate. The following files reference
 
 Runtime code reading PROJECT_ID:
 - app/main.py (reads env PROJECT_ID/GCP_PROJECT_ID and uses it when calling Vertex)
-- app/services/vertex_gateway.py (gateway code that uses project/region/model via env or injected)
+- app/services/gemini_gateway.py (gateway code that uses project/region/model via env or injected)
 - chainlit_app.py (only surfaces warnings if PROJECT_ID missing from backend)
 
 Tests (monkeypatch PROJECT_ID for offline runs; no real GCP dependency):
@@ -135,7 +135,7 @@ Docs and scripts showing example defaults (replace with your project):
 - docs/api.md (mentions PROJECT_ID in configuration notes)
 - scripts/dev_run.sh (fallback default PROJECT_ID shown for convenience)
 - scripts/check_model_access.py (example export line)
-- scripts/sanity_vertex.py (example export line)
+- scripts/sanity_gemini.py (example export line)
 
 To locate references yourself, search terms used:
 - `PROJECT_ID`

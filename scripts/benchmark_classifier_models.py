@@ -16,7 +16,7 @@ from app.config import settings
 from app.services.classifier_service import ClassifierService
 from app.services.chat_helpers import recent_context
 from app.services.prompt_builders import AimsPromptBuilder
-from app.vertex import VertexClient
+from app.gemini_client import GeminiClient
 
 
 SCENARIOS: list[dict[str, Any]] = [
@@ -138,7 +138,7 @@ async def _run_once(
     timeout_s: float,
 ) -> dict[str, Any]:
     prompt, system_instruction = _scenario_prompt(scenario)
-    client = VertexClient(
+    client = GeminiClient(
         project=settings.PROJECT_ID,
         region=settings.VERTEX_LOCATION or settings.REGION,
         model_id=model_id,

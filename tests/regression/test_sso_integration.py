@@ -14,11 +14,11 @@ def test_chat_with_user_info(monkeypatch):
     monkeypatch.setattr(settings, "PROJECT_ID", "test-project")
     monkeypatch.setattr(settings, "REGION", "us-central1")
     
-    # Mock async Vertex call to avoid real API calls
-    async def mock_vertex(*args, **kwargs):
+    # Mock async Gemini call to avoid real API calls
+    async def mock_gemini(*args, **kwargs):
         return "Hello! I am a clinical assistant."
-    monkeypatch.setattr("app.services.vertex_helpers.avertex_call_with_fallback_text", mock_vertex)
-    monkeypatch.setattr("app.services.vertex_helpers.avertex_call_with_fallback_json", mock_vertex)
+    monkeypatch.setattr("app.services.gemini_helpers.agemini_call_with_fallback_text", mock_gemini)
+    monkeypatch.setattr("app.services.gemini_helpers.agemini_call_with_fallback_json", mock_gemini)
     
     # Capture logs to verify userInfo is present
     # We catch logs from ALL loggers that might use telemetry

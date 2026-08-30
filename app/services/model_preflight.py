@@ -8,7 +8,7 @@ module_logger = logging.getLogger(__name__)
 
 
 async def run_model_preflight(application: Any, *, settings: Any, logger: logging.Logger) -> None:
-    """Best-effort check whether the configured Vertex model is visible.
+    """Best-effort check whether the configured Gemini model is visible.
 
     Stores tri-state availability in app.state.model_check and never raises.
     """

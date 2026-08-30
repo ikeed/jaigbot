@@ -171,7 +171,7 @@ def test_config_modelcheck_and_diagnostics_use_injected_dependencies():
     assert diagnostics["environment"]["gcsObjectPrefix"] == "env=local"
 
 
-def test_models_success_uses_global_vertex_host(monkeypatch):
+def test_models_success_uses_global_gemini_host(monkeypatch):
     class FakeResponse:
         status_code = 200
 

@@ -14,7 +14,7 @@ from google.genai.errors import APIError
 # chainlit_app.py push .env into os.environ.
 MAX_TOKEN_FINISH_REASONS = frozenset({"MAX_TOKENS", "MAX_TOKEN", "MAX_OUTPUT_TOKENS"})
 
-# Gen AI clients, shared per (project, location). A VertexClient is constructed per LLM
+# Gen AI clients, shared per (project, location). A GeminiClient is constructed per LLM
 # call — two to four times per coaching turn — and each one used to build its own
 # genai.Client, which means its own google.auth.default() resolution and access-token
 # fetch, plus its own TLS setup. The model id is deliberately NOT part of the key: it is a
@@ -22,9 +22,9 @@ MAX_TOKEN_FINISH_REASONS = frozenset({"MAX_TOKENS", "MAX_TOKEN", "MAX_OUTPUT_TOK
 # model and the model-fallback loop costs nothing extra.
 #
 # The factory object is part of the key, and that detail is load-bearing. Tests
-# monkeypatch app.vertex.genai.Client with a fresh fake class per test; keying on
+# monkeypatch app.gemini_client.genai.Client with a fresh fake class per test; keying on
 # (project, location) alone hands one test's fake to the next test, which breaks 6 of the
-# 15 tests in tests/unit/test_vertex_unit.py. Keying on the factory makes cross-test bleed
+# 15 tests in tests/unit/test_gemini_client_unit.py. Keying on the factory makes cross-test bleed
 # impossible by construction, since monkeypatch installs a new class object each time.
 #
 # KNOWN TRADE-OFF, worth reading before debugging a mysterious stall: sharing a client
@@ -33,7 +33,7 @@ MAX_TOKEN_FINISH_REASONS = frozenset({"MAX_TOKENS", "MAX_TOKEN", "MAX_OUTPUT_TOK
 # ClientOSError) and retries once after `1 + random.randint(0, 9)` seconds
 # (google/genai/_api_client.py, non-streaming path). Building a fresh client per call made
 # that essentially unhittable because every request opened a new connection. The same
-# applies inside VertexGateway's model-fallback loop, which no longer gets a fresh
+# applies inside GeminiGateway's model-fallback loop, which no longer gets a fresh
 # transport per attempt. Measured turn latency still improved sharply (mean 19.1s -> 13.4s,
 # max 31.6s -> 14.8s over 9 live turns), so this is worth it — but a sporadic multi-second
 # stall under the AIMS_CLASSIFY_BUDGET_S budget would point here first.
@@ -54,7 +54,7 @@ def reset_genai_client_cache() -> None:
         _CLIENT_CACHE.clear()
 
 
-class VertexAIError(Exception):
+class GeminiError(Exception):
     def __init__(self, message: str, status_code: int | None = None):
         super().__init__(message)
         self.status_code = status_code
@@ -83,9 +83,9 @@ def get_usage_count(usage: Any, *names: str) -> int | None:
             return None
     return None
 
-class VertexClient:
+class GeminiClient:
     def __init__(self, project: str, region: str, model_id: str):
-        self.logger = logging.getLogger("app.vertex")
+        self.logger = logging.getLogger("app.gemini_client")
         self.project = project
         self.region = region
         self.model_id = model_id
@@ -94,7 +94,7 @@ class VertexClient:
     def _get_client(self) -> genai.Client:
         """Return a Gen AI client for this project/location, shared across instances.
 
-        The per-instance memo below only ever helped when the same VertexClient was
+        The per-instance memo below only ever helped when the same GeminiClient was
         reused, which never happens: callers build a fresh one per LLM call. The shared
         cache is what actually avoids re-resolving credentials and re-establishing TLS on
         every request.
@@ -103,7 +103,7 @@ class VertexClient:
             return self._client
 
         # Resolved at call time, never at import and never as a default argument, so that
-        # monkeypatching app.vertex.genai.Client is effective.
+        # monkeypatching app.gemini_client.genai.Client is effective.
         factory = genai.Client
         key = (self.project, self.region, factory)
 
@@ -365,7 +365,7 @@ class VertexClient:
             }))
 
             if not text:
-                raise VertexAIError(
+                raise GeminiError(
                     "No text candidates returned from model (possibly safety blocked)"
                 )
             if (
@@ -379,22 +379,22 @@ class VertexClient:
                     "candidatesTokens": meta.get("candidatesTokens"),
                     "thoughtsTokens": meta.get("thoughtsTokens"),
                 }))
-                raise VertexAIError(
+                raise GeminiError(
                     "Model stopped at max tokens before completing JSON response"
                 )
             return text
 
-        except VertexAIError:
+        except GeminiError:
             raise
         except APIError as e:
             self.logger.exception("Gemini API error (async)")
-            raise VertexAIError(
+            raise GeminiError(
                 f"Gemini API error: {e}",
                 status_code=extract_status_code(e),
             ) from e
         except Exception as e:
             self.logger.exception("Gen AI async unexpected error")
-            raise VertexAIError(str(e)) from e
+            raise GeminiError(str(e)) from e
 
     def generate_text(
         self,
@@ -418,7 +418,7 @@ class VertexClient:
         """
         # Imported here rather than at module scope: app.config builds Settings() on
         # import, whose PROJECT_ID validator calls google.auth.default(). Importing
-        # app.vertex must stay free of that network/credential side effect.
+        # app.gemini_client must stay free of that network/credential side effect.
         from app.config import settings
 
         auto_continue = settings.AUTO_CONTINUE_ON_MAX_TOKENS
@@ -515,7 +515,7 @@ class VertexClient:
                     "partsCount": meta_local.get("partsCount", 0),
                     "safety": meta_local.get("safety"),
                 }))
-                raise VertexAIError(
+                raise GeminiError(
                     f"No text in response (finishReason={meta_local.get('finishReason')}, "
                     f"thoughtLen={meta_local.get('thoughtLen', 0)}, "
                     f"parts={meta_local.get('partsCount', 0)})"
@@ -533,14 +533,14 @@ class VertexClient:
 
             return text, meta
 
-        except VertexAIError:
+        except GeminiError:
             raise
         except APIError as e:
             self.logger.exception("Gemini API error")
-            raise VertexAIError(
+            raise GeminiError(
                 f"Gemini API error: {e}",
                 status_code=extract_status_code(e),
             ) from e
         except Exception as e:
             self.logger.exception("Gen AI client unexpected error")
-            raise VertexAIError(str(e)) from e
+            raise GeminiError(str(e)) from e

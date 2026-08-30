@@ -86,7 +86,7 @@ jobs:
               ':(exclude)app/__init__.py' \
               ':(exclude)app/*/__init__.py' \
               ':(exclude)app/static/**' \
-              ':(exclude)app/vertex.py' \
+              ':(exclude)app/gemini_client.py' \
               ':(exclude)app/services/aims_dependencies.py' \
               ':(exclude)app/memory_store.py' || true
           )"

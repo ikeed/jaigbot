@@ -286,8 +286,8 @@ SESSION_ID = "georgina-transcript-test"
 
 @pytest.fixture(autouse=True)
 def setup_env(monkeypatch):
-    monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", TranscriptStub)
-    monkeypatch.setattr(m, "VertexClient", TranscriptStub)
+    monkeypatch.setattr("app.services.gemini_gateway.GeminiGateway", TranscriptStub)
+    monkeypatch.setattr(m, "GeminiClient", TranscriptStub)
     monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", True, raising=False)
     monkeypatch.setattr(m, "MEMORY_ENABLED", True, raising=False)
     monkeypatch.setattr(settings, "PROJECT_ID", "p", raising=False)

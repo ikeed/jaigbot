@@ -35,6 +35,7 @@ from app.constants import (
     SESSION_HISTORY,
     SESSION_SCENE,
 )
+from app.gemini_client import GeminiClient
 from app.message_catalog import message
 from app.models import ChatRequest
 from app.services.aims_dependencies import (
@@ -50,7 +51,7 @@ from app.services.aims_dependencies import (
 )
 from app.services.aims_endgame_service import AimsEndgameService
 from app.services.aims_feedback_service import AimsFeedbackService
-from app.services.aims_handler_config import AimsMemoryConfig, AimsVertexConfig
+from app.services.aims_handler_config import AimsGeminiConfig, AimsMemoryConfig
 from app.services.aims_metrics_service import AimsMetricsService
 from app.services.aims_state_service import AimsStateService
 from app.services.aims_turn_coordinator import AimsTurnCoordinator
@@ -65,13 +66,12 @@ from app.services.coach_post import (
     VaccineRelevanceGate,
 )
 from app.services.coaching_tip_sanitizer import sanitize_coaching_tips
-from app.services.patient_reply_service import PatientReplyService
-from app.services.summary_service import build_summary_analysis_bullets
-from app.services.vertex_helpers import (
-    avertex_call_with_fallback_json,
+from app.services.gemini_helpers import (
+    agemini_call_with_fallback_json,
     get_last_model_used,
 )
-from app.vertex import VertexClient
+from app.services.patient_reply_service import PatientReplyService
+from app.services.summary_service import build_summary_analysis_bullets
 
 
 class AimsCoachingHandler:
@@ -248,7 +248,7 @@ class AimsCoachingHandler:
         self,
         *,
         memory_store: Any,
-        vertex_config: dict[str, Any],
+        gemini_config: dict[str, Any],
         memory_config: dict[str, Any],
         logger: Any,
         classifier_service: ClassifierDependency | None = None,
@@ -262,21 +262,21 @@ class AimsCoachingHandler:
         turn_coordinator: AimsTurnCoordinatorDependency | None = None,
     ):
         self.memory_store = memory_store
-        self.vertex_config = AimsVertexConfig.from_mapping(vertex_config)
+        self.gemini_config = AimsGeminiConfig.from_mapping(gemini_config)
         self.memory_config = AimsMemoryConfig.from_mapping(memory_config)
         self.logger = logger
 
         # Extract frequently used config
-        self.project_id = self.vertex_config.project_id
-        self.region = self.vertex_config.region
-        self.vertex_location = self.vertex_config.vertex_location
-        self.model_id = self.vertex_config.model_id
-        self.model_fallbacks = self.vertex_config.model_fallbacks
-        self.classifier_model_id = self.vertex_config.classifier_model_id
-        self.classifier_thinking_level = self.vertex_config.classifier_thinking_level
-        self.classifier_thinking_budget = self.vertex_config.classifier_thinking_budget
-        self.temperature = self.vertex_config.temperature
-        self.max_tokens = self.vertex_config.max_tokens
+        self.project_id = self.gemini_config.project_id
+        self.region = self.gemini_config.region
+        self.vertex_location = self.gemini_config.vertex_location
+        self.model_id = self.gemini_config.model_id
+        self.model_fallbacks = self.gemini_config.model_fallbacks
+        self.classifier_model_id = self.gemini_config.classifier_model_id
+        self.classifier_thinking_level = self.gemini_config.classifier_thinking_level
+        self.classifier_thinking_budget = self.gemini_config.classifier_thinking_budget
+        self.temperature = self.gemini_config.temperature
+        self.max_tokens = self.gemini_config.max_tokens
 
         # Per-call tuning for latency/cost-sensitive JSON tasks. These arrive through the
         # injected config rather than being read from the environment here, so they are
@@ -284,19 +284,19 @@ class AimsCoachingHandler:
         # AIMS_ENDGAME_TEMPERATURE/AIMS_ENDGAME_MAX_TOKENS used to be read here and were
         # never consumed by anything — endgame detection runs through
         # ClassifierService.detect_endgame, which uses the classify values.
-        self.classify_temperature = self.vertex_config.classify_temperature
-        self.classify_max_tokens = self.vertex_config.classify_max_tokens
-        self.classify_budget_s = self.vertex_config.classify_budget_s
-        self.heuristic_fallback_enabled = self.vertex_config.heuristic_fallback_enabled
+        self.classify_temperature = self.gemini_config.classify_temperature
+        self.classify_max_tokens = self.gemini_config.classify_max_tokens
+        self.classify_budget_s = self.gemini_config.classify_budget_s
+        self.heuristic_fallback_enabled = self.gemini_config.heuristic_fallback_enabled
         # Unset means "track the main token budget, with a floor for a full patient turn".
         self.reply_max_tokens = (
-            self.vertex_config.reply_max_tokens
-            if self.vertex_config.reply_max_tokens is not None
+            self.gemini_config.reply_max_tokens
+            if self.gemini_config.reply_max_tokens is not None
             else max(self.max_tokens, 1536)
         )
 
-        # Allow tests to monkeypatch the client via app.main.VertexClient
-        self.client_cls = self.vertex_config.client_cls or VertexClient
+        # Allow tests to monkeypatch the client via app.main.GeminiClient
+        self.client_cls = self.gemini_config.client_cls or GeminiClient
 
         self.memory_enabled = self.memory_config.enabled
         self.memory_max_turns = self.memory_config.max_turns
@@ -315,7 +315,7 @@ class AimsCoachingHandler:
             thinking_budget=self.classifier_thinking_budget,
         )
         self.patient_reply_service = patient_reply_service or PatientReplyService(
-            model_json_caller=self._call_vertex_json,
+            model_json_caller=self._call_gemini_json,
             logger=self.logger,
             temperature=self.temperature,
             max_tokens=self.reply_max_tokens,
@@ -348,7 +348,7 @@ class AimsCoachingHandler:
                 settings=settings,
                 logger=self.logger,
                 app_state=self.summary_app_state,
-                vertex_client_cls=self.client_cls,
+                gemini_client_cls=self.client_cls,
             ),
         )
         self.telemetry = telemetry or AimsTurnTelemetry(
@@ -792,10 +792,10 @@ class AimsCoachingHandler:
         fb = [x for x in ([configured_primary] + cfg_fallbacks) if x]
         return flash, fb
 
-    async def _call_vertex_json(self, prompt: str, schema: dict, log_path: str, *, temperature: float | None = None, max_tokens: int | None = None) -> str:
-        """Call Vertex for JSON generation with fallbacks (native async)."""
+    async def _call_gemini_json(self, prompt: str, schema: dict, log_path: str, *, temperature: float | None = None, max_tokens: int | None = None) -> str:
+        """Call Gemini for JSON generation with fallbacks (native async)."""
         primary, fb = self._primary_for_json(log_path)
-        return await avertex_call_with_fallback_json(
+        return await agemini_call_with_fallback_json(
             project=self.project_id,
             region=self.vertex_location,
             primary_model=primary,

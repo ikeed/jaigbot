@@ -2,9 +2,9 @@
 Base infrastructure for live-LLM transcript replay integration tests.
 
 Provides:
-- ``ReplyOnlyGateway``: replaces VertexGateway to return scripted patient
+- ``ReplyOnlyGateway``: replaces GeminiGateway to return scripted patient
   replies while letting classification flow through the real LLM.
-- ``LiveClassifyClient``: wraps the real VertexClient but intercepts endgame
+- ``LiveClassifyClient``: wraps the real GeminiClient but intercepts endgame
   prompts (returns non-endgame) to prevent premature session termination.
 - ``TurnExpectation``: dataclass describing what the pipeline should produce
   for a given turn.
@@ -34,7 +34,7 @@ from typing import Optional
 from fastapi.testclient import TestClient
 
 import app.main as m
-from app.vertex import VertexClient
+from app.gemini_client import GeminiClient
 
 
 # ---------------------------------------------------------------------------
@@ -43,13 +43,13 @@ from app.vertex import VertexClient
 
 # noinspection PyUnusedLocal
 class ReplyOnlyGateway:
-    """Drop-in replacement for VertexGateway that scripts patient replies.
+    """Drop-in replacement for GeminiGateway that scripts patient replies.
 
     ``generate_text_json`` (used for patient reply generation) returns
     the next scripted reply from the list.  ``generate_text`` (used as a
     fallback path) is also intercepted.
 
-    This class is instantiated once per ``vertex_call_with_fallback_*``
+    This class is instantiated once per ``gemini_call_with_fallback_*``
     invocation, so we use class-level state to track the reply index.
     """
     _replies: list[str] = []
@@ -61,7 +61,7 @@ class ReplyOnlyGateway:
         cls._reply_idx = 0
 
     def __init__(self, **kwargs) -> None:
-        # Swallow all kwargs VertexGateway normally takes
+        # Swallow all kwargs GeminiGateway normally takes
         self.last_model_used = "scripted-reply"
 
     async def agenerate_text_json(self, *, prompt: str, **kwargs) -> str:
@@ -87,8 +87,8 @@ class ReplyOnlyGateway:
         return json.dumps({"patient_reply": self._replies[idx]})
 
 
-class LiveClassifyClient(VertexClient):
-    """VertexClient subclass that delegates to the real LLM for classification
+class LiveClassifyClient(GeminiClient):
+    """GeminiClient subclass that delegates to the real LLM for classification
     but optionally intercepts endgame detection prompts.
 
     By default, endgame calls are mocked to return ``is_endgame: false``.

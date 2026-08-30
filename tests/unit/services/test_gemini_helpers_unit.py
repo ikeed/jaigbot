@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from app.services import vertex_helpers as vh
+from app.services import gemini_helpers as vh
 
 
 class DummyLogger:
@@ -62,9 +62,9 @@ class FailingJsonGateway(FakeGateway):
 
 @pytest.fixture(autouse=True)
 def patch_gateway(monkeypatch):
-    # Patch VertexGateway used inside helpers to our fake
-    monkeypatch.setattr("app.services.vertex_helpers.VertexClient", object)
-    monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", FakeGateway)
+    # Patch GeminiGateway used inside helpers to our fake
+    monkeypatch.setattr("app.services.gemini_helpers.GeminiClient", object)
+    monkeypatch.setattr("app.services.gemini_gateway.GeminiGateway", FakeGateway)
     # also ensure json_schemas.vertex_response_schema exists
     class DummySchema:
         def __call__(self, s):
@@ -73,9 +73,9 @@ def patch_gateway(monkeypatch):
     yield
 
 
-def test_vertex_call_with_fallback_text_prefers_json_and_logs():
+def test_gemini_call_with_fallback_text_prefers_json_and_logs():
     logger = DummyLogger()
-    out = vh.vertex_call_with_fallback_text(
+    out = vh.gemini_call_with_fallback_text(
         project="p",
         region="r",
         primary_model="m1",
@@ -90,14 +90,14 @@ def test_vertex_call_with_fallback_text_prefers_json_and_logs():
     )
     assert out == "json-result"
     # one fallback log from FakeGateway invocation
-    assert any(rec.get("event") == "vertex_model_fallback" and rec.get("path") == "coach_reply" for rec in logger.records)
+    assert any(rec.get("event") == "gemini_model_fallback" and rec.get("path") == "coach_reply" for rec in logger.records)
 
 
-def test_vertex_call_with_fallback_text_falls_back_to_plain_text(monkeypatch):
+def test_gemini_call_with_fallback_text_falls_back_to_plain_text(monkeypatch):
     # Swap in failing json gateway to force plain text path
-    monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", FailingJsonGateway)
+    monkeypatch.setattr("app.services.gemini_gateway.GeminiGateway", FailingJsonGateway)
     logger = DummyLogger()
-    out = vh.vertex_call_with_fallback_text(
+    out = vh.gemini_call_with_fallback_text(
         project="p",
         region="r",
         primary_model="m1",
@@ -111,7 +111,7 @@ def test_vertex_call_with_fallback_text_falls_back_to_plain_text(monkeypatch):
         client_cls=object,
     )
     assert out == "text-result"
-    assert any(rec.get("event") == "vertex_model_fallback" for rec in logger.records)
+    assert any(rec.get("event") == "gemini_model_fallback" for rec in logger.records)
 
 
 def test_json_wrapper_is_sanitized_for_patient_reply(monkeypatch):
@@ -122,9 +122,9 @@ def test_json_wrapper_is_sanitized_for_patient_reply(monkeypatch):
             self.text_json_return = (
                 "Here is the JSON requested:\n\n```json\n{\n  \"patient_reply\": \"Hello there!\"\n}\n```\n"
             )
-    monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", WrappedGateway)
+    monkeypatch.setattr("app.services.gemini_gateway.GeminiGateway", WrappedGateway)
     logger = DummyLogger()
-    out = vh.vertex_call_with_fallback_text(
+    out = vh.gemini_call_with_fallback_text(
         project="p",
         region="r",
         primary_model="m1",
@@ -149,11 +149,11 @@ def test_json_wrapper_empty_block_falls_back(monkeypatch):
             self.text_return = "plain-result"
 
     # Patch the gateway to our empty-returning variant
-    monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", EmptyWrappedGateway)
+    monkeypatch.setattr("app.services.gemini_gateway.GeminiGateway", EmptyWrappedGateway)
 
     logger = DummyLogger()
     # Coaching path: should return the raw wrapper (handler will log invalid JSON and fallback)
-    out_coach = vh.vertex_call_with_fallback_text(
+    out_coach = vh.gemini_call_with_fallback_text(
         project="p",
         region="r",
         primary_model="m1",
@@ -170,7 +170,7 @@ def test_json_wrapper_empty_block_falls_back(monkeypatch):
     assert out_coach.startswith('Here is the JSON requested')
 
     # Legacy path: should fall back to plain text generation result
-    out_legacy = vh.vertex_call_with_fallback_text(
+    out_legacy = vh.gemini_call_with_fallback_text(
         project="p",
         region="r",
         primary_model="m1",
@@ -200,16 +200,16 @@ def test_patient_reply_extractor_requires_non_empty_string():
 
 
 @pytest.mark.asyncio
-async def test_async_vertex_call_with_fallback_text_compacts_patient_reply(monkeypatch):
+async def test_async_gemini_call_with_fallback_text_compacts_patient_reply(monkeypatch):
     class WrappedGateway(FakeGateway):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
             self.text_json_return = "```json\n{\"patient_reply\": \"Async hello\"}\n```"
 
-    monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", WrappedGateway)
+    monkeypatch.setattr("app.services.gemini_gateway.GeminiGateway", WrappedGateway)
     logger = DummyLogger()
 
-    out = await vh.avertex_call_with_fallback_text(
+    out = await vh.agemini_call_with_fallback_text(
         project="p",
         region="r",
         primary_model="m1",
@@ -227,15 +227,15 @@ async def test_async_vertex_call_with_fallback_text_compacts_patient_reply(monke
 
 
 @pytest.mark.asyncio
-async def test_async_vertex_call_falls_back_to_plain_text(monkeypatch):
+async def test_async_gemini_call_falls_back_to_plain_text(monkeypatch):
     class AsyncFailingJsonGateway(FakeGateway):
         async def agenerate_text_json(self, *, prompt, response_schema, system_instruction, log_fallback):
             raise RuntimeError("json path not supported")
 
-    monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", AsyncFailingJsonGateway)
+    monkeypatch.setattr("app.services.gemini_gateway.GeminiGateway", AsyncFailingJsonGateway)
     logger = DummyLogger()
 
-    out = await vh.avertex_call_with_fallback_text(
+    out = await vh.agemini_call_with_fallback_text(
         project="p",
         region="r",
         primary_model="m1",
@@ -253,16 +253,16 @@ async def test_async_vertex_call_falls_back_to_plain_text(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_async_vertex_call_with_fallback_json_compacts_generic_payload(monkeypatch):
+async def test_async_gemini_call_with_fallback_json_compacts_generic_payload(monkeypatch):
     class WrappedGateway(FakeGateway):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
             self.text_json_return = "```json\n{\"foo\": \"bar\"}\n```"
 
-    monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", WrappedGateway)
+    monkeypatch.setattr("app.services.gemini_gateway.GeminiGateway", WrappedGateway)
     logger = DummyLogger()
 
-    out = await vh.avertex_call_with_fallback_json(
+    out = await vh.agemini_call_with_fallback_json(
         project="p",
         region="r",
         primary_model="m1",
