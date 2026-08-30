@@ -1,9 +1,18 @@
+import os
 import sys
 import types
 import importlib
 from importlib.machinery import ModuleSpec
 from unittest.mock import MagicMock, AsyncMock, patch
 import pytest
+
+# chainlit_app.py checks os.environ directly (not app.config.settings) to decide
+# whether to define oauth_callback at all, so it has to be set before the
+# module-level `import chainlit_app` below -- CI happens to set these at the job
+# level (see quality.yml/tests.yml), but this file shouldn't depend on that
+# ambient config to be correct locally too.
+os.environ.setdefault("OAUTH_GOOGLE_CLIENT_ID", "test-client-id-for-ci")
+os.environ.setdefault("OAUTH_GOOGLE_CLIENT_SECRET", "test-client-secret-for-ci")
 
 # Mock chainlit before importing the app
 mock_cl = MagicMock()
