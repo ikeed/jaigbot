@@ -483,6 +483,81 @@ def test_structured_feedback_secure_before_mirror_uses_coded_state_feedback():
     assert state["secure_before_mirror_last_topic_hint"] == " about trust in the source or information concerns"
 
 
+def test_structured_feedback_secure_before_mirror_suppresses_secure_praise():
+    """Reproduces a real staging card: the classifier's own praise for this
+    turn's Secure content ("That worked well! You provided tailored risk
+    facts...") was rendered right next to the Important "you moved into
+    education before mirroring" correction, undermining it. The praise for
+    the very content being flagged as premature should be dropped."""
+    state = {
+        "phase": PHASE_INQUIRE_MIRROR,
+        "announced": True,
+        "is_undiscovered_concerns": False,
+        "parent_concerns": [
+            {
+                "topic": "trust",
+                "desc": "wants evidence addressed",
+                "is_mirrored": False,
+                "is_secured": False,
+            }
+        ],
+    }
+    payload = _structured_payload()  # includes a step=STEP_SECURE praise item
+
+    _service().apply_coaching_guidance(
+        payload,
+        STEP_SECURE,
+        state,
+        clinician_message="The evidence is strong.",
+        person_last="I need to trust the evidence.",
+    )
+
+    codes = _feedback_codes(payload)
+    assert "secure_before_mirror" in codes
+    assert "model_praise" not in codes
+
+
+def test_structured_feedback_secure_before_mirror_keeps_praise_for_other_steps():
+    """Only Secure-step praise is suppressed -- praise for a different step
+    (e.g. an Inquire question asked earlier in the same turn) is unrelated to
+    the "secured before mirroring" correction and must survive."""
+    state = {
+        "phase": PHASE_INQUIRE_MIRROR,
+        "announced": True,
+        "is_undiscovered_concerns": False,
+        "parent_concerns": [
+            {
+                "topic": "trust",
+                "desc": "wants evidence addressed",
+                "is_mirrored": False,
+                "is_secured": False,
+            }
+        ],
+    }
+    payload = _structured_payload()
+    payload["feedback_items"].append(
+        {
+            "step": STEP_INQUIRE,
+            "tone": "praise",
+            "code": "inquire_praise",
+            "text": "Great open question.",
+        }
+    )
+
+    _service().apply_coaching_guidance(
+        payload,
+        STEP_SECURE,
+        state,
+        clinician_message="The evidence is strong.",
+        person_last="I need to trust the evidence.",
+    )
+
+    codes = _feedback_codes(payload)
+    assert "secure_before_mirror" in codes
+    assert "model_praise" not in codes
+    assert "inquire_praise" in codes
+
+
 def test_structured_feedback_secure_before_mirror_still_fires_for_discovered_checklist_concern():
     """A discovered-but-unmirrored checklist concern must still trigger the
     'secure before mirror' penalty -- the concern-checklist feature's
