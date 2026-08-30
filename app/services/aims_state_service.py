@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import re
 from typing import Any
 
@@ -68,6 +69,14 @@ class AimsStateService:
         """Update AIMS state and coaching guidance. Mutates mem and cls_payload."""
         if mem is None:
             return
+
+        # mem.setdefault below inserts the state dict into mem immediately and
+        # every subsequent step mutates it in place, so an exception partway
+        # through would otherwise leave a half-updated state behind while the
+        # except block swallows the failure. Snapshot first so a failed turn's
+        # state update either fully lands or fully doesn't.
+        had_prior_state = KEY_AIMS_STATE in mem
+        prior_state = copy.deepcopy(mem.get(KEY_AIMS_STATE)) if had_prior_state else None
 
         try:
             seeded_concerns = self._seed_parent_concerns(mem)
@@ -141,6 +150,12 @@ class AimsStateService:
 
         except Exception as e:
             self._logger.exception("AIMS state update failed: %s", e)
+            # Restore the turn's starting state rather than leaving whatever
+            # partial mutation the failure interrupted (see snapshot above).
+            if had_prior_state:
+                mem[KEY_AIMS_STATE] = prior_state
+            else:
+                mem.pop(KEY_AIMS_STATE, None)
 
     @staticmethod
     def _seed_parent_concerns(mem: dict[str, Any] | None) -> list[dict[str, Any]]:
