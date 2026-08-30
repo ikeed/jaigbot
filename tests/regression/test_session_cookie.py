@@ -8,8 +8,8 @@ client = TestClient(app)
 def test_cookie_issued_and_memory_persists(monkeypatch):
     """
     First call should set a session cookie. Second call should include previous
-    history in the prompt that is sent to the Vertex client. We simulate the
-    Vertex client with a fake that records the prompt it was called with.
+    history in the prompt that is sent to the Gemini client. We simulate the
+    Gemini client with a fake that records the prompt it was called with.
     """
     from app.config import settings
 
@@ -23,7 +23,7 @@ def test_cookie_issued_and_memory_persists(monkeypatch):
 
     prompts = []
 
-    # Mock at the VertexGateway level since this uses legacy chat path
+    # Mock at the GeminiGateway level since this uses legacy chat path
     class RecordingGateway:
         def __init__(self, *args, **kwargs):
             pass
@@ -52,7 +52,7 @@ def test_cookie_issued_and_memory_persists(monkeypatch):
         def generate_text_json(self, prompt: str, *args, **kwargs):
             return self.generate_text(prompt, *args, **kwargs)
     
-    monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", RecordingGateway)
+    monkeypatch.setattr("app.services.gemini_gateway.GeminiGateway", RecordingGateway)
 
     # 1) First call without sessionId should set a cookie
     r1 = client.post("/chat", json={"message": "ping"})

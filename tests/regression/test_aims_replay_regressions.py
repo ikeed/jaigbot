@@ -90,7 +90,7 @@ def _handler(*, turn_results: list[AimsTurnResult], endgame_results: list[dict])
     endgame_classifier = _QueuedEndgameClassifier(endgame_results)
     handler = AimsCoachingHandler(
         memory_store=memory_store,
-        vertex_config={
+        gemini_config={
             "project_id": "proj",
             "region": "us-central1",
             "vertex_location": "us-central1",

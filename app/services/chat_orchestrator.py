@@ -21,12 +21,12 @@ from typing import Any
 from fastapi import BackgroundTasks, HTTPException, Request
 from fastapi.responses import JSONResponse
 
+from app.gemini_client import GeminiError
 from app.message_catalog import message
 from app.models import ChatRequest, ReportRequest
 from app.services.chat_context import ChatContext, ChatContextBuilder
 from app.services.session_service import CookieSettings, SessionService
 from app.services.storage_service import storage_service
-from app.vertex import VertexAIError
 
 
 class ChatOrchestrator:
@@ -39,7 +39,7 @@ class ChatOrchestrator:
         session_cookie_settings: dict[str, Any],
         memory_config: dict[str, Any],
         aims_config: dict[str, Any],
-        vertex_config: dict[str, Any],
+        gemini_config: dict[str, Any],
         debug_config: dict[str, Any],
         logger: Any,
     ):
@@ -57,15 +57,15 @@ class ChatOrchestrator:
 
         # Retained so keys this class does not model (classifier_model_id,
         # classifier_thinking_*) still reach AimsCoachingHandler.
-        self.vertex_config = dict(vertex_config)
-        self.project_id = vertex_config.get("project_id")
-        self.region = vertex_config.get("region", "us-central1")
-        self.vertex_location = vertex_config.get("vertex_location", "us-central1")
-        self.model_id = vertex_config.get("model_id")
-        self.model_fallbacks = vertex_config.get("model_fallbacks", [])
-        self.temperature = vertex_config.get("temperature", 0.0)
-        self.max_tokens = vertex_config.get("max_tokens", 1024)
-        self.client_cls = vertex_config.get("client_cls")
+        self.gemini_config = dict(gemini_config)
+        self.project_id = gemini_config.get("project_id")
+        self.region = gemini_config.get("region", "us-central1")
+        self.vertex_location = gemini_config.get("vertex_location", "us-central1")
+        self.model_id = gemini_config.get("model_id")
+        self.model_fallbacks = gemini_config.get("model_fallbacks", [])
+        self.temperature = gemini_config.get("temperature", 0.0)
+        self.max_tokens = gemini_config.get("max_tokens", 1024)
+        self.client_cls = gemini_config.get("client_cls")
         self.expose_upstream_error = debug_config.get("expose_upstream_error", False)
         self.log_response_preview_max = debug_config.get("log_response_preview_max", 100)
 
@@ -161,8 +161,8 @@ class ChatOrchestrator:
 
         handler = AimsCoachingHandler(
             memory_store=self.memory_store,
-            vertex_config={
-                **self.vertex_config,
+            gemini_config={
+                **self.gemini_config,
                 "project_id": self.project_id,
                 "region": self.region,
                 "vertex_location": self.vertex_location,
@@ -254,8 +254,8 @@ class ChatOrchestrator:
 
             return resp
 
-        except VertexAIError as e:
-            return self._handle_vertex_error(req, e, ctx.session_id)
+        except GeminiError as e:
+            return self._handle_gemini_error(req, e, ctx.session_id)
 
     async def _handle_legacy_path(
         self, req: Request, body: ChatRequest, ctx: ChatContext
@@ -265,7 +265,7 @@ class ChatOrchestrator:
 
         handler = LegacyChatHandler(
             memory_store=self.memory_store,
-            vertex_config={
+            gemini_config={
                 "project_id": self.project_id,
                 "region": self.region,
                 "vertex_location": self.vertex_location,
@@ -320,18 +320,18 @@ class ChatOrchestrator:
 
             return resp
 
-        except VertexAIError as e:
-            return self._handle_vertex_error(req, e, ctx.session_id)
+        except GeminiError as e:
+            return self._handle_gemini_error(req, e, ctx.session_id)
 
-    def _handle_vertex_error(
-        self, req: Request, e: VertexAIError, session_id: str
+    def _handle_gemini_error(
+        self, req: Request, e: GeminiError, session_id: str
     ) -> JSONResponse:
-        """Handle VertexAI-specific errors with appropriate status codes."""
+        """Handle Gemini-specific errors with appropriate status codes."""
         req_id = self._get_request_id(req)
 
         if getattr(e, "status_code", None) == 404:
             # Model not found
-            guidance = message("api_errors.vertex_model_not_found")
+            guidance = message("api_errors.gemini_model_not_found")
 
             payload = {
                 "error": {
@@ -351,7 +351,7 @@ class ChatOrchestrator:
             # Other upstream errors -> 502
             payload = {
                 "error": {
-                    "message": message("api_errors.vertex_upstream"),
+                    "message": message("api_errors.gemini_upstream"),
                     "code": 502,
                     "requestId": req_id
                 }
@@ -366,7 +366,7 @@ class ChatOrchestrator:
         try:
             self.session_service.apply_cookie(resp, session_id)
         except Exception as e:
-            self.logger.debug(f"Failed to apply session cookie (vertex error path): {e}")
+            self.logger.debug(f"Failed to apply session cookie (gemini error path): {e}")
             pass
 
         return resp

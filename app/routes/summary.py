@@ -15,7 +15,7 @@ def create_summary_router(
     settings: Any,
     logger: logging.Logger,
     get_memory_store: Callable[..., Any],
-    vertex_client_cls: Any,
+    gemini_client_cls: Any,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -35,7 +35,7 @@ def create_summary_router(
             settings=settings,
             logger=logger,
             app_state=request.app.state,
-            vertex_client_cls=vertex_client_cls,
+            gemini_client_cls=gemini_client_cls,
         )
 
     return router

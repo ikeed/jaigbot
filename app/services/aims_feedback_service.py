@@ -18,7 +18,7 @@ from app.constants import (
 from app.prompts.aims import build_fallback_feedback_prompt
 from app.services.aims_state_service import AimsStateService
 from app.services.coaching_tip_sanitizer import normalize_aims_feedback_terms
-from app.services.vertex_gateway import VertexGateway
+from app.services.gemini_gateway import GeminiGateway
 
 
 class AimsFeedbackService:
@@ -66,7 +66,7 @@ class AimsFeedbackService:
     ) -> None:
         self._logger = logger
         self._enabled = bool(project_id and model_id and client_cls)
-        self._gateway = VertexGateway(
+        self._gateway = GeminiGateway(
             project=project_id,
             region=region,
             primary_model=model_id or "",

@@ -313,7 +313,7 @@ class TestEnvironmentVariableValidation:
     def test_classifier_thinking_level_defaults_to_unset(self, monkeypatch):
         """No ThinkingConfig is sent unless explicitly configured.
 
-        app/vertex.py only builds a ThinkingConfig when thinking_level or
+        app/gemini_client.py only builds a ThinkingConfig when thinking_level or
         thinking_budget is set. Benchmarking rejected "minimal" as the default:
         faster, but it over-scores against the rubric. See app/config.py.
         """
@@ -363,9 +363,9 @@ class TestDeploymentIntegration:
         for key, value in deployment_vars.items():
             monkeypatch.setenv(key, value)
         
-        # Mock VertexClient to avoid real API calls
+        # Mock GeminiClient to avoid real API calls
         monkeypatch.setattr(
-            "app.vertex.VertexClient",
+            "app.gemini_client.GeminiClient",
             MagicMock(return_value=MagicMock())
         )
         

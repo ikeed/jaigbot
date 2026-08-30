@@ -37,8 +37,8 @@ Runtime shapes:
 - Session, history, or duplicate-tab behavior: `app/services/session_initializer.py`,
   `app/services/session_service.py`, `app/memory_store.py`, and
   `app/routes/session.py`.
-- Model and fallback behavior: `app/vertex.py`,
-  `app/services/vertex_gateway.py`, and `app/services/vertex_helpers.py`.
+- Model and fallback behavior: `app/gemini_client.py`,
+  `app/services/gemini_gateway.py`, and `app/services/gemini_helpers.py`.
 - Auth or SSO: `run_app.py`, `app/security/`, and `docs/sso-setup.md`.
 - Deployment or environment separation: `.github/workflows/`, `terraform/`,
   `docs/developer-setup.md`, and `docs/environments.md`.

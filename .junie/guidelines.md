@@ -7,7 +7,7 @@ Project overview
 - Primary docs: see README.md and docs/* for setup, health checks, architecture plan, and UI notes.
 
 Project structure (top-level)
-- app/ — FastAPI application code (e.g., app.main:app, Vertex client integration, persona support)
+- app/ — FastAPI application code (e.g., app.main:app, Gemini client integration, persona support)
 - chainlit_app.py — Chainlit chat UI that calls POST /chat
 - docs/ — Developer/setup docs (health checks, memory & persona, plan, etc.)
 - tests/ — Pytest suite (fast, offline-capable with monkeypatching)
@@ -38,7 +38,7 @@ How to run the Chainlit UI
 Running tests
 - Use pytest with coverage (configured in pytest.ini):
   - Command: pytest
-  - The suite mocks Vertex calls where needed; tests should run offline and quickly.
+  - The suite mocks Gemini calls where needed; tests should run offline and quickly.
 - Junie must run tests before submitting any change that touches Python code.
 - For docs-only changes (e.g., README/docs), running tests is optional but recommended.
 

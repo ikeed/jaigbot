@@ -10,7 +10,7 @@ def aims_mapping_mock():
 
 
 @pytest.fixture(autouse=True)
-def vertex_client_mock():
+def gemini_client_mock():
     yield None
 
 

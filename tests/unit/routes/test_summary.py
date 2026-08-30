@@ -76,13 +76,13 @@ def test_summary_with_analysis_monkeypatched_llm(monkeypatch):
     }
 
     # Monkeypatch the helper used inside /summary to return deterministic bullets
-    from app.services import vertex_helpers as vh
+    from app.services import gemini_helpers as vh
 
-    def fake_vertex_call_with_fallback_text(*args, **kwargs):
+    def fake_gemini_call_with_fallback_text(*args, **kwargs):
         # Return a small bullet list; it will be split into lines by the endpoint
         return "- Good use of inquiry\n- Consider mirroring once more"
 
-    monkeypatch.setattr(vh, "vertex_call_with_fallback_text", fake_vertex_call_with_fallback_text)
+    monkeypatch.setattr(vh, "gemini_call_with_fallback_text", fake_gemini_call_with_fallback_text)
 
     r = client.get("/summary", params={"sessionId": sess, "analysis": "true"})
     assert r.status_code == 200

@@ -25,7 +25,7 @@ async def build_summary(
     settings: Any,
     logger: logging.Logger,
     app_state: Any,
-    vertex_client_cls: Any,
+    gemini_client_cls: Any,
 ) -> dict:
     """Return the aggregated AIMS summary for a stored session."""
     base = _base_summary()
@@ -61,7 +61,7 @@ async def build_summary(
             settings=settings,
             logger=logger,
             app_state=app_state,
-            vertex_client_cls=vertex_client_cls,
+            gemini_client_cls=gemini_client_cls,
         )
     except Exception as exc:
         telemetry_log_event(logger, "summary_analysis_failed", sessionId=session_id, error=str(exc))
@@ -76,7 +76,7 @@ async def build_summary_analysis_bullets(
     settings: Any,
     logger: logging.Logger,
     app_state: Any,
-    vertex_client_cls: Any,
+    gemini_client_cls: Any,
 ) -> list[str]:
     """Return sanitized LLM analysis bullets for an in-memory AIMS session.
 
@@ -92,7 +92,7 @@ async def build_summary_analysis_bullets(
         settings=settings,
         logger=logger,
         app_state=app_state,
-        vertex_client_cls=vertex_client_cls,
+        gemini_client_cls=gemini_client_cls,
     )
 
 
@@ -132,7 +132,7 @@ async def _analysis_bullets(
     settings: Any,
     logger: logging.Logger,
     app_state: Any,
-    vertex_client_cls: Any,
+    gemini_client_cls: Any,
 ) -> list[str]:
     transcript = _build_transcript(mem)
     mapping = _load_mapping(app_state)
@@ -151,10 +151,10 @@ async def _analysis_bullets(
         transcript=transcript,
     )
 
-    from app.services import vertex_helpers
+    from app.services import gemini_helpers
 
     narrative = await asyncio.to_thread(
-        vertex_helpers.vertex_call_with_fallback_text,
+        gemini_helpers.gemini_call_with_fallback_text,
         project=settings.PROJECT_ID,
         region=settings.VERTEX_LOCATION,
         primary_model=settings.AIMS_CLASSIFIER_MODEL_ID,
@@ -165,7 +165,7 @@ async def _analysis_bullets(
         system_instruction=None,
         log_path="summary_analysis",
         logger=logger,
-        client_cls=vertex_client_cls,
+        client_cls=gemini_client_cls,
     )
     structured_bullets = _structured_analysis_bullets(narrative, per_counts)
     if structured_bullets is not None:
