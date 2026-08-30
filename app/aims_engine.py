@@ -16,7 +16,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from docs.aims import aims_mapping
 
@@ -90,24 +90,24 @@ _SECURE_AUTONOMY_CUES = [
 @dataclass
 class ClassificationResult:
     step: str
-    reasons: List[str]
+    reasons: list[str]
 
 
 @dataclass
 class ScoreResult:
     score: int
-    reasons: List[str]
+    reasons: list[str]
 
 
 @functools.lru_cache(maxsize=1)
-def load_mapping(path: Optional[str] = None) -> Dict[str, Any]:
+def load_mapping(path: str | None = None) -> dict[str, Any]:
     """Load the operational AIMS mapping from an override or bundled path."""
     mapping_path = Path(path) if path else aims_mapping
     with mapping_path.open("r", encoding="utf-8") as f:
         return json.load(f)
 
 
-def stem_match(text: str, stems: List[str]) -> bool:
+def stem_match(text: str, stems: list[str]) -> bool:
     t = text.strip().lower()
     for s in stems:
         s_norm = s.strip().lower()
@@ -118,19 +118,19 @@ def stem_match(text: str, stems: List[str]) -> bool:
     return False
 
 
-def starts_with_any(text: str, starters: List[str]) -> bool:
+def starts_with_any(text: str, starters: list[str]) -> bool:
     t = text.strip().lower()
     return any(t.startswith(s.strip().lower()) for s in starters if s.strip())
 
 
-def classify_step(clinician_last: str, mapping: Dict[str, Any]) -> ClassificationResult:
+def classify_step(clinician_last: str, mapping: dict[str, Any]) -> ClassificationResult:
     """Classify the clinician's last message into one AIMS step.
 
     Implements the decision rules and tie-breakers from mapping['meta'].
     """
     meta = (mapping or {}).get("meta", {})
     markers = meta.get("per_step_classification_markers", {})
-    reasons: List[str] = []
+    reasons: list[str] = []
     text = (clinician_last or "").strip()
     lt = text.lower()
 
@@ -155,10 +155,13 @@ def classify_step(clinician_last: str, mapping: Dict[str, Any]) -> Classificatio
     # Mirror match should EXCLUDE things that are clearly just Inquire markers
     inquire_stems_from_mapping = markers.get("Inquire", {}).get("linguistic", [])
     mirror_match = (starts_with_any(lt, mirror_stems) or stem_match(lt, (markers.get("Mirror", {}).get("linguistic", []))))
-    if mirror_match and not starts_with_any(lt, mirror_stems):
-        # if it only matched via linguistic markers, check if it's actually an Inquire marker
-        if stem_match(lt, inquire_stems_from_mapping):
-             mirror_match = False
+    if (
+        mirror_match
+        and not starts_with_any(lt, mirror_stems)
+        and stem_match(lt, inquire_stems_from_mapping)
+    ):
+        # it only matched via linguistic markers and is actually an Inquire marker
+        mirror_match = False
 
     # Strengthened Secure detection: autonomy + (option or safety) OR option + safety
     autonomy_cues = [
@@ -305,9 +308,7 @@ def introduces_new_info(lt: str) -> bool:
         return True
     if re.search(r"\b(data|evidence|study|studies|statistics|percent|%|risk)\b", lt):
         return True
-    if "the data shows" in lt or "that's not true" in lt:
-        return True
-    return False
+    return "the data shows" in lt or "that's not true" in lt
 
 
 def _closing_turn_signal_count(lt: str) -> int:
@@ -321,14 +322,14 @@ def _closing_turn_signal_count(lt: str) -> int:
     return categories
 
 
-def score_step(step: str, clinician_last: str, mapping: Dict[str, Any]) -> ScoreResult:
+def score_step(step: str, clinician_last: str, mapping: dict[str, Any]) -> ScoreResult:
     """Score 0–3 based on mapping heuristics per step.
 
     This is a lightweight heuristic implementation to support unit tests and
     provide deterministic scoring. It is not intended to be exhaustive.
     """
     lt = (clinician_last or "").strip().lower()
-    reasons: List[str] = []
+    reasons: list[str] = []
     score = 2  # start at 2 as 'decent', then adjust
 
     if step == "Mirror+Inquire":
@@ -385,7 +386,7 @@ def score_step(step: str, clinician_last: str, mapping: Dict[str, Any]) -> Score
     elif step == "Announce":
         # Expect recommendation + brief rationale; brevity rewarded
         has_reco = stem_match(lt, [
-            "i recommend", "it's time for", "due for", "today we will", 
+            "i recommend", "it's time for", "due for", "today we will",
             "my recommendation is", "today we usually", "at this visit",
             "Sophia is due", "Sophia is due for", "routine vaccines"
         ])
@@ -403,7 +404,7 @@ def score_step(step: str, clinician_last: str, mapping: Dict[str, Any]) -> Score
 
     elif step == "Secure":
         autonomy = stem_match(lt, [
-            "it's your decision", "i'm here to support", "it's your call", "up to you", 
+            "it's your decision", "i'm here to support", "it's your call", "up to you",
             "your choice", "informed and supported", "not rushed", "not pushed",
             "continue talking", "revisit any concerns"
         ])
@@ -449,7 +450,7 @@ def score_step(step: str, clinician_last: str, mapping: Dict[str, Any]) -> Score
     return ScoreResult(score=score, reasons=reasons)
 
 
-def evaluate_turn(clinician_last: str, mapping: Dict[str, Any]) -> Dict[str, Any]:
+def evaluate_turn(clinician_last: str, mapping: dict[str, Any]) -> dict[str, Any]:
     cls = classify_step(clinician_last, mapping)
     lt = (clinician_last or "").strip().lower()
 
@@ -462,7 +463,7 @@ def evaluate_turn(clinician_last: str, mapping: Dict[str, Any]) -> Dict[str, Any
     # Handle rapport/pleasantries (no AIMS step attempted)
     if cls.step not in AIMS_STEPS:
         # Provide neutral feedback and a gentle forward suggestion; keep score integer for type consistency
-        tips: List[str] = [
+        tips: list[str] = [
             "When you're ready, lead with a brief Announce specific to the vaccine and timing."
         ]
         return {

@@ -1,7 +1,7 @@
-from typing import Optional, Tuple, List, Dict, Any
-import logging
 import json
+import logging
 import threading
+from typing import Any
 
 from google import genai
 from google.genai import types
@@ -37,7 +37,7 @@ MAX_TOKEN_FINISH_REASONS = frozenset({"MAX_TOKENS", "MAX_TOKEN", "MAX_OUTPUT_TOK
 # transport per attempt. Measured turn latency still improved sharply (mean 19.1s -> 13.4s,
 # max 31.6s -> 14.8s over 9 live turns), so this is worth it — but a sporadic multi-second
 # stall under the AIMS_CLASSIFY_BUDGET_S budget would point here first.
-_CLIENT_CACHE: Dict[Tuple[Any, ...], Any] = {}
+_CLIENT_CACHE: dict[tuple[Any, ...], Any] = {}
 _CLIENT_CACHE_LOCK = threading.Lock()
 
 
@@ -55,12 +55,12 @@ def reset_genai_client_cache() -> None:
 
 
 class VertexAIError(Exception):
-    def __init__(self, message: str, status_code: Optional[int] = None):
+    def __init__(self, message: str, status_code: int | None = None):
         super().__init__(message)
         self.status_code = status_code
 
 
-def extract_status_code(e: APIError) -> Optional[int]:
+def extract_status_code(e: APIError) -> int | None:
     """Pull an integer HTTP status code from a google.genai.errors.APIError."""
     for attr in ("code", "status_code", "status"):
         raw = getattr(e, attr, None)
@@ -72,7 +72,7 @@ def extract_status_code(e: APIError) -> Optional[int]:
     return None
 
 
-def get_usage_count(usage: Any, *names: str) -> Optional[int]:
+def get_usage_count(usage: Any, *names: str) -> int | None:
     for name in names:
         value = getattr(usage, name, None) if usage else None
         if value is None:
@@ -89,7 +89,7 @@ class VertexClient:
         self.project = project
         self.region = region
         self.model_id = model_id
-        self._client: Optional[genai.Client] = None
+        self._client: genai.Client | None = None
 
     def _get_client(self) -> genai.Client:
         """Return a Gen AI client for this project/location, shared across instances.
@@ -124,7 +124,7 @@ class VertexClient:
         return client
 
     @staticmethod
-    def _sanitize_response_schema(schema: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    def _sanitize_response_schema(schema: dict[str, Any] | None) -> dict[str, Any] | None:
         """Return a copy of the schema with any $-prefixed meta-keys removed.
         Vertex AI responseSchema does not accept "$schema" or other $-draft keys.
         """
@@ -133,7 +133,7 @@ class VertexClient:
 
         def _clean(obj):
             if isinstance(obj, dict):
-                out: Dict[str, Any] = {}
+                out: dict[str, Any] = {}
                 for k, v in obj.items():
                     if isinstance(k, str) and k.startswith("$"):
                         continue
@@ -148,7 +148,7 @@ class VertexClient:
         return cleaned if isinstance(cleaned, dict) and len(cleaned) > 0 else None
 
     @staticmethod
-    def _normalize_thinking_level(value: Optional[str]) -> Optional[types.ThinkingLevel]:
+    def _normalize_thinking_level(value: str | None) -> types.ThinkingLevel | None:
         if not value:
             return None
         normalized = str(value).strip().upper()
@@ -204,9 +204,7 @@ class VertexClient:
 
         need_space = False
         if left_ch and right_ch and (not left_ch.isspace()) and (not right_ch.isspace()):
-            if left_ch in no_space_after:
-                need_space = False
-            elif right_ch in no_space_before:
+            if left_ch in no_space_after or right_ch in no_space_before:
                 need_space = False
             elif is_word(left_ch) and is_word(right_ch):
                 # word-to-word boundary → insert a single space
@@ -215,10 +213,7 @@ class VertexClient:
                 # sentence boundary without a space
                 need_space = True
 
-        if need_space:
-            joined = base_s + " " + right_tail
-        else:
-            joined = base_s + right_tail
+        joined = base_s + " " + right_tail if need_space else base_s + right_tail
 
         return joined.strip()
 
@@ -226,11 +221,11 @@ class VertexClient:
         self,
         temperature: float,
         max_tokens: int,
-        system_instruction: Optional[str],
-        response_mime_type: Optional[str],
-        response_schema: Optional[Dict[str, Any]],
-        thinking_budget: Optional[int] = None,
-        thinking_level: Optional[str] = None,
+        system_instruction: str | None,
+        response_mime_type: str | None,
+        response_schema: dict[str, Any] | None,
+        thinking_budget: int | None = None,
+        thinking_level: str | None = None,
     ) -> types.GenerateContentConfig:
         """Build a GenerateContentConfig for the Gen AI SDK."""
         _resp_mime = response_mime_type or "text/plain"
@@ -240,7 +235,7 @@ class VertexClient:
             else None
         )
 
-        config_kwargs: Dict[str, Any] = {
+        config_kwargs: dict[str, Any] = {
             "temperature": temperature,
             "max_output_tokens": max_tokens,
             "response_mime_type": _resp_mime,
@@ -261,7 +256,7 @@ class VertexClient:
         return types.GenerateContentConfig(**config_kwargs)
 
     @staticmethod
-    def _extract_response(response) -> Tuple[str, Dict[str, Any]]:
+    def _extract_response(response) -> tuple[str, dict[str, Any]]:
         """Extract text and metadata from a Gen AI SDK response.
 
         Filters out thinking parts (thought=True) so they don't contaminate
@@ -271,7 +266,7 @@ class VertexClient:
         thought_txt = ""
         parts_count = 0
         fr = None
-        safety_summary: List[Dict[str, Any]] = []
+        safety_summary: list[dict[str, Any]] = []
 
         candidates = getattr(response, "candidates", None) or []
         if candidates:
@@ -307,7 +302,7 @@ class VertexClient:
 
         # Usage metadata
         usage = getattr(response, "usage_metadata", None)
-        meta: Dict[str, Any] = {
+        meta: dict[str, Any] = {
             "finishReason": fr,
             "promptTokens": getattr(usage, "prompt_token_count", None) if usage else None,
             "candidatesTokens": getattr(usage, "candidates_token_count", None) if usage else None,
@@ -331,11 +326,11 @@ class VertexClient:
         prompt: str,
         temperature: float = 0.2,
         max_tokens: int = 1024,
-        system_instruction: Optional[str] = None,
-        response_mime_type: Optional[str] = None,
-        response_schema: Optional[Dict[str, Any]] = None,
-        thinking_budget: Optional[int] = None,
-        thinking_level: Optional[str] = None,
+        system_instruction: str | None = None,
+        response_mime_type: str | None = None,
+        response_schema: dict[str, Any] | None = None,
+        thinking_budget: int | None = None,
+        thinking_level: str | None = None,
     ) -> str:
         """Native async generation using the Gen AI SDK.
 
@@ -406,11 +401,11 @@ class VertexClient:
         prompt: str,
         temperature: float = 0.2,
         max_tokens: int = 1024,
-        system_instruction: Optional[str] = None,
-        response_mime_type: Optional[str] = None,
-        response_schema: Optional[Dict[str, Any]] = None,
-        thinking_budget: Optional[int] = None,
-        thinking_level: Optional[str] = None,
+        system_instruction: str | None = None,
+        response_mime_type: str | None = None,
+        response_schema: dict[str, Any] | None = None,
+        thinking_budget: int | None = None,
+        thinking_level: str | None = None,
     ) -> tuple[str, dict]:
         """Generate text and return both the text and useful metadata for logging.
 

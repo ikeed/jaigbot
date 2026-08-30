@@ -4,7 +4,7 @@ AIMS coaching path handler.
 This service handles the full coaching flow:
 1. Load supporting AIMS mapping data
 2. Perform LLM-based structured classification with model fallbacks
-3. Apply vaccine relevance gating 
+3. Apply vaccine relevance gating
 4. Update AIMS state and metrics
 5. Generate patient reply with safety checks
 6. Handle end-game detection and coach posts
@@ -16,24 +16,24 @@ from __future__ import annotations
 import time
 import uuid
 from types import SimpleNamespace
-from typing import Any, Dict, Optional
+from typing import Any
 
 from fastapi import Request
 
 from app.aims_mapping_loader import load_mapping
-from app.chat_roles import ROLE_USER, ROLE_ASSISTANT
+from app.chat_roles import ROLE_ASSISTANT, ROLE_USER
 from app.config import settings
 from app.constants import (
+    DEFAULT_MODEL_FLASH,
     KEY_AIMS_STATE,
-    KEY_FULL_HISTORY,
     KEY_COACH_POST,
+    KEY_FULL_HISTORY,
     KEY_GAME_OVER,
-    PHASE_PRE_ANNOUNCE,
-    SESSION_HISTORY,
     KEY_UPDATED,
+    PHASE_PRE_ANNOUNCE,
     SESSION_CHARACTER,
+    SESSION_HISTORY,
     SESSION_SCENE,
-    DEFAULT_MODEL_FLASH
 )
 from app.message_catalog import message
 from app.models import ChatRequest
@@ -61,22 +61,22 @@ from app.services.classifier_service import ClassifierService
 from app.services.clinician_identity import clinician_display_name_from_user_info
 from app.services.coach_feedback_history_service import CoachFeedbackHistoryService
 from app.services.coach_post import (
-    VaccineRelevanceGate,
     AimsPostProcessor,
+    VaccineRelevanceGate,
 )
 from app.services.coaching_tip_sanitizer import sanitize_coaching_tips
 from app.services.patient_reply_service import PatientReplyService
 from app.services.summary_service import build_summary_analysis_bullets
 from app.services.vertex_helpers import (
     avertex_call_with_fallback_json,
-    get_last_model_used
+    get_last_model_used,
 )
 from app.vertex import VertexClient
 
 
 class AimsCoachingHandler:
     """Handles the full AIMS coaching flow."""
-    
+
     _TOPICAL_CUES = AimsStateService.TOPICAL_CUES
 
     @staticmethod
@@ -265,7 +265,7 @@ class AimsCoachingHandler:
         self.vertex_config = AimsVertexConfig.from_mapping(vertex_config)
         self.memory_config = AimsMemoryConfig.from_mapping(memory_config)
         self.logger = logger
-        
+
         # Extract frequently used config
         self.project_id = self.vertex_config.project_id
         self.region = self.vertex_config.region
@@ -277,7 +277,7 @@ class AimsCoachingHandler:
         self.classifier_thinking_budget = self.vertex_config.classifier_thinking_budget
         self.temperature = self.vertex_config.temperature
         self.max_tokens = self.vertex_config.max_tokens
-        
+
         # Per-call tuning for latency/cost-sensitive JSON tasks. These arrive through the
         # injected config rather than being read from the environment here, so they are
         # typed, visible on /config, and overridable by tests without touching os.environ.
@@ -297,11 +297,11 @@ class AimsCoachingHandler:
 
         # Allow tests to monkeypatch the client via app.main.VertexClient
         self.client_cls = self.vertex_config.client_cls or VertexClient
-        
+
         self.memory_enabled = self.memory_config.enabled
         self.memory_max_turns = self.memory_config.max_turns
         self.summary_app_state = SimpleNamespace()
-        
+
         self.classifier_service = classifier_service or ClassifierService(
             project_id=self.project_id,
             location=self.vertex_location,
@@ -362,10 +362,10 @@ class AimsCoachingHandler:
             logger=self.logger,
             heuristic_fallback_enabled=self.heuristic_fallback_enabled,
         )
-    
+
     async def handle(
         self, req: Request, body: ChatRequest, ctx: ChatContext
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Handle the full AIMS coaching flow."""
         started = time.time()
 
@@ -385,7 +385,7 @@ class AimsCoachingHandler:
 
         # Load AIMS mapping (cached at app level)
         mapping = await self._load_aims_mapping()
-        
+
         # Step 1 & 2: Unified Classification (LLM structured output; legacy
         # heuristic fallback only when explicitly enabled)
         cls_start = time.time()
@@ -458,7 +458,7 @@ class AimsCoachingHandler:
             str(c.get("summary") or c.get("desc") or " ".join(c.get("evidence") or []))
             for c in parent_concerns
         ] if parent_concerns else []
-        
+
         cls_payload = VaccineRelevanceGate.gate(
             cls_payload=cls_payload,
             clinician_text=body.message,
@@ -472,7 +472,7 @@ class AimsCoachingHandler:
             ),
             allow_keyword_fallback=self.heuristic_fallback_enabled,
         )
-        
+
         # Only apply small-talk override when no AIMS step was detected.
         # If an AIMS step is present (e.g. from _apply_overrides Announce correction),
         # the LLM's small-talk flag must not clobber it.
@@ -482,7 +482,7 @@ class AimsCoachingHandler:
             cls_payload["reasons"] = (cls_payload.get("reasons") or []) + [
                 message("aims.small_talk_reason")
             ]
-            
+
         # Legacy AimsPostProcessor (score normalization, score capping)
         cls_payload = AimsPostProcessor.post_process(
             cls_payload,
@@ -492,7 +492,7 @@ class AimsCoachingHandler:
 
         # Populate current phase for UI transparency
         cls_payload["phase"] = aims_state.get("phase", PHASE_PRE_ANNOUNCE)
-        
+
         # Try to snapshot model used for classification (may be approximate if overwritten by parallel call)
         try:
             model_used_cls = get_last_model_used() or self.model_id
@@ -582,17 +582,17 @@ class AimsCoachingHandler:
         )
 
         self._strip_initial_reply_headers(reply_payload, ctx.person_last)
-        
+
         # Step 6: Update conversation history
         self._append_assistant_history(mem, reply_payload.get("patient_reply", ""))
-        
+
         # Step 7: Build session metrics
         try:
             session_obj = self.metrics_service.build_summary(mem)
         except Exception as e:
             self.logger.debug("AIMS metrics summary failed: %s", e)
             session_obj = {}
-        
+
         # Step 8: Check for end-game scenarios
         coach_post = await self.endgame_service.check(
             mem,
@@ -618,15 +618,15 @@ class AimsCoachingHandler:
         if coach_post and mem is not None:
             mem[KEY_COACH_POST] = coach_post
             mem[KEY_GAME_OVER] = True
-        
+
         # Single write-back of all accumulated mutations
         if mem is not None and self.memory_enabled and ctx.session_id:
             mem[KEY_UPDATED] = time.time()
             self.memory_store[ctx.session_id] = mem
-        
+
         # Calculate final latency
         latency_ms = int((time.time() - started) * 1000)
-        
+
         # Log successful completion
         self._emit_telemetry(
             "turn_ok",
@@ -636,7 +636,7 @@ class AimsCoachingHandler:
             step=cls_payload.get("step"),
             score=cls_payload.get("score"),
         )
-        
+
         # Return structured result
         # Report the actual model used (considering fallbacks) when available
         try:
@@ -680,13 +680,13 @@ class AimsCoachingHandler:
             "coaching": coaching_payload,
             "session": session_obj,
         }
-        
+
         if coach_post:
             result["coach_post"] = coach_post
-        
+
         return result
-    
-    async def _load_aims_mapping(self) -> Dict[str, Any]:
+
+    async def _load_aims_mapping(self) -> dict[str, Any]:
         """Load and cache AIMS mapping via lru_cache on load_mapping()."""
         try:
             return load_mapping()
@@ -703,7 +703,7 @@ class AimsCoachingHandler:
 
     def _strip_initial_reply_headers(
         self,
-        reply_payload: Dict[str, Any],
+        reply_payload: dict[str, Any],
         person_last: str,
     ) -> None:
         """Preserve validated reply text and strip legacy first-turn headers.
@@ -725,8 +725,8 @@ class AimsCoachingHandler:
             reply_payload["patient_reply"] = strip_appointment_headers(reply)
         except Exception as e:
             self.logger.warning("Failed to strip appointment headers: %s", e)
-    
-    def _load_mem(self, session_id: str) -> Optional[Dict[str, Any]]:
+
+    def _load_mem(self, session_id: str) -> dict[str, Any] | None:
         """Load session memory once. Returns None if memory is disabled."""
         if not (self.memory_enabled and session_id):
             return None
@@ -739,7 +739,7 @@ class AimsCoachingHandler:
         mem.setdefault(KEY_FULL_HISTORY, [])
         return mem
 
-    def _append_user_history(self, mem: Optional[Dict[str, Any]], user_message: str) -> None:
+    def _append_user_history(self, mem: dict[str, Any] | None, user_message: str) -> None:
         """Append a user message to history. Mutates mem in place."""
         if mem is None:
             return
@@ -753,7 +753,7 @@ class AimsCoachingHandler:
         except Exception as e:
             self.logger.debug(f"User history append failed: {e}")
 
-    def _append_assistant_history(self, mem: Optional[Dict[str, Any]], assistant_reply: str) -> None:
+    def _append_assistant_history(self, mem: dict[str, Any] | None, assistant_reply: str) -> None:
         """Append an assistant message to history. Mutates mem in place."""
         if mem is None:
             return
@@ -771,7 +771,7 @@ class AimsCoachingHandler:
 
         except Exception as e:
             self.logger.debug(f"Assistant history append failed: {e}")
-    
+
     def _primary_for_json(self, log_path: str) -> tuple[str, list[str]]:
         """Select primary and fallback models for JSON tasks based on call path.
         - coach_classify: configured main model primary, Flash fallback(s)

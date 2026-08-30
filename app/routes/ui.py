@@ -9,14 +9,14 @@ from fastapi.templating import Jinja2Templates
 from app.chainlit_thread_state import get_current_thread_id
 from app.config import settings
 from app.constants import (
-    TEMPLATE_LOGIN,
-    TEMPLATE_DUPLICATE,
-    ROUTE_ROOT,
-    ROUTE_DUPLICATE,
+    PATH_CHAT,
     ROUTE_CHAT_LOGIN,
     ROUTE_CHAT_LOGOUT,
+    ROUTE_DUPLICATE,
     ROUTE_OAUTH_CALLBACK,
-    PATH_CHAT
+    ROUTE_ROOT,
+    TEMPLATE_DUPLICATE,
+    TEMPLATE_LOGIN,
 )
 from app.message_catalog import message_map
 from app.security.auth import authenticated_user_identifier, clear_persistent_session_id

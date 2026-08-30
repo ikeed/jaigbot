@@ -6,31 +6,30 @@ load_and_sanitize_env()
 import json
 import logging
 import os
-from typing import Dict, Optional
 
 import chainlit as cl
 from fastapi import Request, Response
 
+from app.chainlit_memory_data_layer import MemoryDataLayer
 from app.config import settings
-from app.utils.env import is_valid_env_val
 from app.constants import (
     MSG_DUPLICATE_TAB,
-    MSG_LOGOUT,
-    MSG_REPORT_ISSUE,
-    MSG_NEW_CHAT,
     MSG_INTRO_CONTINUE,
-    PROVIDER_GOOGLE,
-    PROVIDER_FACEBOOK,
+    MSG_LOGOUT,
+    MSG_NEW_CHAT,
+    MSG_REPORT_ISSUE,
     PROVIDER_APPLE,
-    PROVIDER_GITHUB,
     PROVIDER_AZURE_AD,
+    PROVIDER_FACEBOOK,
+    PROVIDER_GITHUB,
+    PROVIDER_GOOGLE,
 )
 from app.security.auth import clear_persistent_session_id
-from app.chainlit_memory_data_layer import MemoryDataLayer
 from app.services.chainlit.backend_client import BackendClient
-from app.services.chainlit.ui_handler import UIHandler
-from app.services.chainlit.session_manager import SessionManager
 from app.services.chainlit.orchestrator import ChainlitOrchestrator
+from app.services.chainlit.session_manager import SessionManager
+from app.services.chainlit.ui_handler import UIHandler
+from app.utils.env import is_valid_env_val
 
 # Instantiate services
 backend_client = BackendClient()
@@ -67,7 +66,7 @@ async def start_chat():
     await orchestrator.handle_chat_start()
 
 @cl.on_chat_resume
-async def resume_chat(thread: Optional[Dict] = None):
+async def resume_chat(thread: dict | None = None):
     await orchestrator.handle_session_resume(thread)
 
 @cl.on_message
@@ -105,7 +104,7 @@ async def on_window_message(message: str):
     except (json.JSONDecodeError, TypeError):
         return
     msg_type = data.get("type")
-    
+
     if msg_type == MSG_REPORT_ISSUE:
         reason = (data.get("reason") or "").strip()
         if reason:
@@ -132,8 +131,9 @@ async def on_window_message(message: str):
         user_id = session_manager.get_user_identifier()
         # Mark intro seen persistently
         try:
-            from app.main import MEMORY_STORE
             import time
+
+            from app.main import MEMORY_STORE
             key = f"aims:{settings.APP_ENV}:intro_seen:{user_id.strip().lower()}" if user_id else None
             if key:
                 MEMORY_STORE[key] = {"seen": True, "updated": time.time()}
@@ -149,7 +149,7 @@ async def on_window_message(message: str):
 
 is_oauth_enabled = any(
     k.startswith("OAUTH_") and k.endswith("_CLIENT_ID") and is_valid_env_val(os.environ.get(k))
-    for k in os.environ.keys()
+    for k in os.environ
 )
 
 if is_oauth_enabled or is_valid_env_val(settings.CHAINLIT_AUTH_SECRET) or settings.ENABLE_PASSWORD_AUTH:
@@ -159,7 +159,7 @@ if is_oauth_enabled or is_valid_env_val(settings.CHAINLIT_AUTH_SECRET) or settin
 
     if should_enable_password:
         @cl.password_auth_callback
-        def auth_callback(username: str, password: str) -> Optional[cl.User]:
+        def auth_callback(username: str, password: str) -> cl.User | None:
             expected_user = os.getenv("AUTH_USERNAME", "admin")
             expected_pass = os.getenv("AUTH_PASSWORD")
             if not expected_pass:
@@ -181,7 +181,7 @@ if is_oauth_enabled or is_valid_env_val(settings.CHAINLIT_AUTH_SECRET) or settin
 
     if is_valid_env_val(os.environ.get("ENABLE_HEADER_AUTH")):
         @cl.header_auth_callback
-        def header_auth_callback(headers: Dict) -> Optional[cl.User]:
+        def header_auth_callback(headers: dict) -> cl.User | None:
             user_id = headers.get("x-user-id")
             user_name = headers.get("x-user-name")
             if user_id:
@@ -193,9 +193,9 @@ if is_oauth_enabled:
     def oauth_callback(
         provider_id: str,
         _token: str,
-        raw_user_data: Dict[str, str],
+        raw_user_data: dict[str, str],
         default_user: cl.User,
-    ) -> Optional[cl.User]:
+    ) -> cl.User | None:
         email = raw_user_data.get("email")
         name = raw_user_data.get("name")
         if provider_id == PROVIDER_GOOGLE:

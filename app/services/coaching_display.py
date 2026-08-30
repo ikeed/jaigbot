@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from collections import OrderedDict
-from collections.abc import MutableMapping, Mapping
+from collections.abc import Mapping, MutableMapping
 from typing import Any
 
 from app.message_catalog import message, message_list
@@ -209,11 +209,10 @@ def _collect_feedback_groups(
     fallback_step: str,
 ) -> tuple[int, bool]:
     displayed_items = _display_feedback_items(raw_items, text_key)
-    feedback_index = 0
     has_improvement = False
     used_praise_labels: set[str] = set()
 
-    for item in displayed_items:
+    for feedback_index, item in enumerate(displayed_items):
         feedback = str(item.get(text_key) or "").strip()
         tone = item.get("tone")
         label = step_feedback_label(tone, feedback_index, item, used_praise_labels)
@@ -223,7 +222,6 @@ def _collect_feedback_groups(
         _append_group_line(groups, group_label, _feedback_line(tone, label, feedback))
         if tone != "praise":
             has_improvement = True
-        feedback_index += 1
 
     return len(displayed_items), has_improvement
 

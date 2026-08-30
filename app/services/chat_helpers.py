@@ -1,15 +1,14 @@
-from typing import List, Optional
 
 from app.chat_roles import ROLE_ASSISTANT, get_ui_attributes
 from app.message_catalog import message, message_list
 
 
-def build_system_instruction(effective_character: Optional[str], effective_scene: Optional[str]) -> Optional[str]:
+def build_system_instruction(effective_character: str | None, effective_scene: str | None) -> str | None:
     """Build the system instruction string from character and scene.
 
     Mirrors the exact concatenation used in main.py to avoid behavior changes.
     """
-    sys_parts: List[str] = []
+    sys_parts: list[str] = []
     if effective_character:
         sys_parts.append(message("system_instruction.character", character=effective_character))
     if effective_scene:
@@ -25,7 +24,7 @@ def format_history(turns: list[dict], memory_max_turns: int) -> str:
 
     Keeps identical role labels and slicing logic as the inline helper.
     """
-    lines: List[str] = []
+    lines: list[str] = []
     for t in turns[-(memory_max_turns * 2) :]:  # user+assistant pairs
         role = t.get("role")
         author = get_ui_attributes(role)["author"]
@@ -40,7 +39,7 @@ def recent_context(turns: list[dict], n_turns: int) -> str:
     if not turns:
         return ""
     tail = turns[-n_turns:]
-    lines: List[str] = []
+    lines: list[str] = []
     for t in tail:
         role = t.get("role")
         content = (t.get("content") or "").strip()

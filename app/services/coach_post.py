@@ -2,21 +2,20 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Dict, List
 
 from app.message_catalog import message, message_list, message_map
 
 logger = logging.getLogger(__name__)
 
 
-def _persona_label(session_obj: Dict | None) -> str:
+def _persona_label(session_obj: dict | None) -> str:
     name = str((session_obj or {}).get("personaName") or "").strip()
     if name:
         return message("endgame.labels.persona_possessive", name=name)
     return message("endgame.labels.persona_possessive_default")
 
 
-def _patient_label(session_obj: Dict | None) -> str:
+def _patient_label(session_obj: dict | None) -> str:
     patient_name = str((session_obj or {}).get("patientName") or "").strip()
     if patient_name:
         return message("endgame.labels.patient_possessive", name=patient_name)
@@ -26,7 +25,7 @@ def _patient_label(session_obj: Dict | None) -> str:
 _CORE_AIMS_STEPS = ("Announce", "Inquire", "Mirror", "Secure")
 
 
-def _overall_score_pct(running_average: Dict) -> int | None:
+def _overall_score_pct(running_average: dict) -> int | None:
     """Mean of all four core AIMS steps, scaled to 0-100%.
 
     A step with no recorded turns (e.g. Mirror was never attempted) scores 0,
@@ -56,14 +55,14 @@ class VaccineRelevanceGate:
     @staticmethod
     def gate(
         *,
-        cls_payload: Dict,
+        cls_payload: dict,
         clinician_text: str,
         person_last: str,
-        parent_recent_concerns: List[str],
+        parent_recent_concerns: list[str],
         prior_announced: bool,
         semantic_is_vaccine_relevant: bool | None = None,
         allow_keyword_fallback: bool = False,
-    ) -> Dict:
+    ) -> dict:
         lt_msg = (clinician_text or "").strip().lower()
         pt_msg = (person_last or "").strip().lower()
         ctx_blob = ("\n".join(parent_recent_concerns) if parent_recent_concerns else "").lower()
@@ -98,7 +97,7 @@ class AimsPostProcessor:
     """
 
     @staticmethod
-    def normalize_score(cls_payload: Dict) -> Dict:
+    def normalize_score(cls_payload: dict) -> dict:
         if (
             cls_payload.get("step") in {"Announce", "Inquire", "Mirror", "Secure", "Announce+Inquire", "Mirror+Inquire", "Mirror+Secure", "Secure+Inquire", "Mirror+Secure+Inquire"}
             and int(cls_payload.get("score", 0)) < 1
@@ -109,11 +108,11 @@ class AimsPostProcessor:
 
     @staticmethod
     def post_process(
-        cls_payload: Dict,
+        cls_payload: dict,
         clinician_text: str,
         *,
         allow_text_softening: bool = False,
-    ) -> Dict:
+    ) -> dict:
         cls_payload = AimsPostProcessor.normalize_score(cls_payload)
         if cls_payload.get("feedback_items") or not allow_text_softening:
             return cls_payload
@@ -234,7 +233,7 @@ class EndGameDetector:
 
 
 
-def sanitize_endgame_bullets(lines: List[str]) -> List[str]:
+def sanitize_endgame_bullets(lines: list[str]) -> list[str]:
     """Clean LLM narrative lines for coach post rendering.
 
     - Removes JSON/code-like artifacts (braces, key: value, code fences)
@@ -243,7 +242,7 @@ def sanitize_endgame_bullets(lines: List[str]) -> List[str]:
     """
     import re
 
-    out: List[str] = []
+    out: list[str] = []
     seen: set[str] = set()
 
     for raw in lines or []:
@@ -295,7 +294,7 @@ def sanitize_endgame_bullets(lines: List[str]) -> List[str]:
 
 
 
-def endgame_title(session_obj: Dict | None, outcome: str = "") -> str:
+def endgame_title(session_obj: dict | None, outcome: str = "") -> str:
     """Return a score-calibrated title for the end-of-session card, with the
     Overall AIMS score folded into the same line instead of shown separately.
 
@@ -332,8 +331,8 @@ def endgame_title(session_obj: Dict | None, outcome: str = "") -> str:
 
 
 def build_endgame_bullets_fallback(
-    session_obj: Dict | None, *, include_overall_score: bool = True
-) -> List[str]:
+    session_obj: dict | None, *, include_overall_score: bool = True
+) -> list[str]:
     """Contextual, score-aware feedback bullets for the end-of-session Great Job card.
 
     Shows overall AIMS score percentage (unless include_overall_score=False - the
@@ -348,7 +347,7 @@ def build_endgame_bullets_fallback(
     patient_label = _patient_label(session_obj)
 
     catalog_messages = message_map("endgame.fallback_bullets")
-    step_messages: Dict[str, Dict[str, str]] = {
+    step_messages: dict[str, dict[str, str]] = {
         step: dict(value)
         for step, value in catalog_messages.items()
         if isinstance(value, dict)
@@ -375,7 +374,7 @@ def build_endgame_bullets_fallback(
         """Convert a 1-3 average to a 0-100 integer percentage."""
         return int(round((a / 3.0) * 100))
 
-    bullets: List[str] = []
+    bullets: list[str] = []
 
     # 1. Overall score across all four core AIMS steps (a step never attempted
     # scores 0, it isn't excluded - see _overall_score_pct).
@@ -391,7 +390,7 @@ def build_endgame_bullets_fallback(
         a = _avg(step_name)
         msgs = step_messages.get(step_name, {})
 
-        def _step_message(tier: str) -> str:
+        def _step_message(tier: str, *, msgs: dict = msgs) -> str:
             template = str(msgs.get(tier) or "")
             return template.format(
                 persona_label=persona_label,

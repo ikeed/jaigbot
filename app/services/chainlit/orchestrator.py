@@ -1,9 +1,6 @@
 import logging
 import uuid
-from typing import Any, Dict, List, Optional
-
-from chainlit.context import context as cl_context
-from chainlit.message import Message
+from typing import Any
 
 from app.chainlit_thread_state import set_current_thread_id
 from app.chat_roles import (
@@ -15,18 +12,21 @@ from app.chat_roles import (
 )
 from app.config import settings
 from app.constants import (
-    MSG_INTRO_REQUIRED,
     MSG_DUPLICATE_TAB,
+    MSG_INTRO_REQUIRED,
     MSG_PERSONA_NAME,
     MSG_SESSION_ENDED,
     MSG_THREAD_BOUND,
 )
-from app.message_catalog import message as catalog_message, message_list
+from app.message_catalog import message as catalog_message
+from app.message_catalog import message_list
 from app.persona import DEFAULT_CHARACTER, DEFAULT_SCENE
 from app.services.chainlit.backend_client import BackendClient
 from app.services.chainlit.session_manager import SessionManager
 from app.services.chainlit.ui_handler import UIHandler
 from app.services.coaching_display import coaching_summary_text
+from chainlit.context import context as cl_context
+from chainlit.message import Message
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +121,7 @@ class ChainlitOrchestrator:
             await self._report_error_silently(e, "handle_user_message")
             await self.ui.show_error(catalog_message("chainlit.generic_error", error=str(e)))
 
-    async def handle_session_resume(self, thread: Dict[str, Any]):
+    async def handle_session_resume(self, thread: dict[str, Any]):
         """Rehydrates session state from a resumed Chainlit thread."""
         try:
             user_id = self.session.get_user_identifier()
@@ -304,7 +304,7 @@ class ChainlitOrchestrator:
         await self._send_persona_name(persona_name)
         logger.info("Startup flow complete")
 
-    def _has_seen_intro_locally_or_persistently(self, user_id: Optional[str]) -> bool:
+    def _has_seen_intro_locally_or_persistently(self, user_id: str | None) -> bool:
         if self.session.local_intro_seen:
             return True
         if not user_id:
@@ -333,7 +333,7 @@ class ChainlitOrchestrator:
         return cid
 
     def _resolve_session_id(
-        self, thread_id: Optional[str], metadata_id: Optional[str] = None
+        self, thread_id: str | None, metadata_id: str | None = None
     ) -> str:
         current = self.session.session_id
         fixed = settings.FIXED_SESSION_ID or settings.SESSION_ID
@@ -346,14 +346,14 @@ class ChainlitOrchestrator:
             return thread_id
         return current or str(uuid.uuid4())
 
-    def _get_user_info(self) -> Optional[Dict[str, Any]]:
+    def _get_user_info(self) -> dict[str, Any] | None:
         user = self.session.user
         if not user:
             return None
         return {"identifier": user.identifier, "metadata": user.metadata}
 
     @staticmethod
-    def _get_thread_id() -> Optional[str]:
+    def _get_thread_id() -> str | None:
         return getattr(getattr(cl_context, "session", None), "thread_id", None)
 
     async def _bind_thread(self, session_id: str):
@@ -393,7 +393,7 @@ class ChainlitOrchestrator:
             logger.debug("Failed to canonicalize thread URL (non-fatal): %s", e)
 
     @staticmethod
-    def _recover_persona_from_history(history: List[Dict[str, Any]]) -> Optional[str]:
+    def _recover_persona_from_history(history: list[dict[str, Any]]) -> str | None:
         for msg in history:
             content = msg.get("content", "")
             if (msg.get("role") or ROLE_ASSISTANT).lower().strip() in {
@@ -407,7 +407,7 @@ class ChainlitOrchestrator:
         return None
 
     @staticmethod
-    def _recover_scenario_card(history: List[Dict[str, Any]]) -> Optional[str]:
+    def _recover_scenario_card(history: list[dict[str, Any]]) -> str | None:
         for msg in history:
             content = msg.get("content", "")
             if (msg.get("role") or ROLE_ASSISTANT).lower().strip() in {
@@ -418,7 +418,7 @@ class ChainlitOrchestrator:
         return None
 
     def _inject_scenario_into_scene(
-        self, history: List[Dict[str, Any]], default_card: str
+        self, history: list[dict[str, Any]], default_card: str
     ):
         scene = self.session.scene or ""
         if catalog_message("chainlit.scenario_details_marker") in scene:
@@ -428,7 +428,7 @@ class ChainlitOrchestrator:
         suffix = "\n\n" + catalog_message("chainlit.scenario_details_suffix", card=card)
         self.session.scene = scene + suffix
 
-    async def _process_backend_response(self, data: Dict[str, Any]):
+    async def _process_backend_response(self, data: dict[str, Any]):
         history = self.session.history
 
         # 1. Coaching

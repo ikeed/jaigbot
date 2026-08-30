@@ -6,9 +6,10 @@ import json
 import logging
 import random
 import time
+from collections.abc import Callable, Iterable
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Callable, Iterable
+from typing import Any
 
 from app.config import DEFAULT_CHARACTER, DEFAULT_SCENE, settings
 
@@ -135,7 +136,7 @@ def persona_counts_key(user_id: str) -> str:
 
 
 def persona_counted_key(user_id: str, session_id: str) -> str:
-    digest = hashlib.sha256(f"{user_id.strip().lower()}:{session_id}".encode("utf-8")).hexdigest()
+    digest = hashlib.sha256(f"{user_id.strip().lower()}:{session_id}".encode()).hexdigest()
     return f"persona_counted:{digest}"
 
 

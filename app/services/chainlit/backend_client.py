@@ -1,18 +1,18 @@
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import httpx
 
 from app.config import settings
 from app.constants import (
-    ENDPOINT_HISTORY,
-    ENDPOINT_SESSION,
-    ENDPOINT_DEREGISTER,
-    ENDPOINT_REPORT,
-    ENDPOINT_HEALTHZ,
     ENDPOINT_CONFIG,
+    ENDPOINT_DEREGISTER,
+    ENDPOINT_HEALTHZ,
+    ENDPOINT_HISTORY,
     ENDPOINT_MODELCHECK,
-    PATH_CHAT
+    ENDPOINT_REPORT,
+    ENDPOINT_SESSION,
+    PATH_CHAT,
 )
 
 logger = logging.getLogger(__name__)
@@ -29,12 +29,13 @@ class BackendClient:
         url = settings.BACKEND_URL
         if not url:
             import os
+
             from app.constants import ENV_BACKEND_URL
             url = os.getenv(ENV_BACKEND_URL) or f"http://localhost:8080{PATH_CHAT}"
-        
+
         return url[:-5] if url.endswith(PATH_CHAT) else url
 
-    async def fetch_history_with_state(self, session_id: str) -> Dict[str, Any]:
+    async def fetch_history_with_state(self, session_id: str) -> dict[str, Any]:
         """Like fetch_history, but also returns gameOver so callers that need to
         know whether a resumed session already ended don't need a second call."""
         try:
@@ -56,21 +57,21 @@ class BackendClient:
             pass
         return {"history": [], "gameOver": False}
 
-    async def fetch_history(self, session_id: str) -> List[Dict[str, Any]]:
+    async def fetch_history(self, session_id: str) -> list[dict[str, Any]]:
         state = await self.fetch_history_with_state(session_id)
         return state.get("history") or []
 
     async def initialize_session(
-        self, 
-        session_id: str, 
-        connection_id: str, 
-        persona_id: Optional[str], 
-        user_info: Optional[Dict[str, Any]],
+        self,
+        session_id: str,
+        connection_id: str,
+        persona_id: str | None,
+        user_info: dict[str, Any] | None,
         force: bool = False,
-        character: Optional[str] = None,
-        scene: Optional[str] = None,
-        initial_card: Optional[str] = None
-    ) -> Dict[str, Any]:
+        character: str | None = None,
+        scene: str | None = None,
+        initial_card: str | None = None
+    ) -> dict[str, Any]:
         payload = {
             "sessionId": session_id,
             "connectionId": connection_id,
@@ -94,14 +95,14 @@ class BackendClient:
             return resp.json()
 
     async def send_chat_message(
-        self, 
-        message: str, 
-        session_id: str, 
-        character: str, 
-        scene: str, 
-        user_info: Optional[Dict[str, Any]],
+        self,
+        message: str,
+        session_id: str,
+        character: str,
+        scene: str,
+        user_info: dict[str, Any] | None,
         coach_enabled: bool
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         # Increase timeout for chat calls
         chat_timeout = self.timeout if self.timeout != 15.0 else 120.0
         async with httpx.AsyncClient(timeout=chat_timeout) as client:
@@ -114,14 +115,14 @@ class BackendClient:
                 "coach": coach_enabled
             }
             resp = await client.post(
-                f"{self.base_url}{PATH_CHAT}", 
-                json=payload, 
+                f"{self.base_url}{PATH_CHAT}",
+                json=payload,
                 headers={"Content-Type": "application/json"}
             )
             resp.raise_for_status()
             return resp.json()
 
-    async def report_issue(self, session_id: str, reason: str, user_info: Optional[Dict[str, Any]]) -> None:
+    async def report_issue(self, session_id: str, reason: str, user_info: dict[str, Any] | None) -> None:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             payload = {
                 "sessionId": session_id,
@@ -153,13 +154,13 @@ class BackendClient:
                     pass
         return False
 
-    async def get_config(self) -> Dict[str, Any]:
+    async def get_config(self) -> dict[str, Any]:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             resp = await client.get(f"{self.base_url}{ENDPOINT_CONFIG}")
             resp.raise_for_status()
             return resp.json()
 
-    async def check_model(self) -> Dict[str, Any]:
+    async def check_model(self) -> dict[str, Any]:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             resp = await client.get(f"{self.base_url}{ENDPOINT_MODELCHECK}")
             resp.raise_for_status()

@@ -20,12 +20,37 @@ include = ["app*", "docs*"]
 dependencies = {file = ["requirements.txt"]}
 optional-dependencies.dev = {file = ["requirements-dev.txt"]}
 
+[tool.ruff]
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "SIM", "BLE", "PLC0415"]
+ignore = [
+    # Line-wrapping ~330 pre-existing long lines needs per-line judgment, not an
+    # autofix -- deferred to its own pass rather than scope-creeping this one.
+    "E501",
+    # FastAPI's `Depends(...)` / `Query(...)` idiom is a function call in a
+    # default argument by design.
+    "B008",
+    # ~150 pre-existing blind excepts; tightening them to specific exceptions is
+    # evaluation item #16, not this lint-rollout item.
+    "BLE001",
+    # ~140 pre-existing lazy imports (several deliberately avoid circular imports
+    # or defer heavy startup cost); auditing each is its own pass, not an autofix.
+    "PLC0415",
+]
+
 [tool.ruff.lint.per-file-ignores]
 # These entrypoints intentionally sanitize environment variables before importing
 # app modules that read settings at import time.
 "chainlit_app.py" = ["E402"]
 "run_app.py" = ["E402"]
 "scripts/benchmark_classifier_models.py" = ["E402"]
+# The expanded rule set above targets production code (app/, and the two
+# deployed entrypoints). tests/ and scripts/ are dev-only and stay on the
+# original baseline (E4, E7, E9, F) rather than being swept in the same pass.
+"tests/**" = ["W", "I", "UP", "B", "SIM"]
+"scripts/**" = ["W", "I", "UP", "B", "SIM"]
 
 [tool.mypy]
 implicit_optional = true

@@ -690,7 +690,7 @@ class AimsStateService:
         for item in items:
             if isinstance(item, dict) and item.get("code") == code:
                 return
-            if hasattr(item, "code") and getattr(item, "code") == code:
+            if hasattr(item, "code") and item.code == code:
                 return
         items.append(
             {

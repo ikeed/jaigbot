@@ -1,14 +1,14 @@
 import os
-from typing import List, Dict, Any
+from typing import Any
 
-from app.constants import OAUTH_PREFIX, OAUTH_CLIENT_ID_SUFFIX
+from app.constants import OAUTH_CLIENT_ID_SUFFIX, OAUTH_PREFIX
 from app.utils.env import is_valid_env_val
 
 
-def get_enabled_oauth_providers() -> List[Dict[str, Any]]:
+def get_enabled_oauth_providers() -> list[dict[str, Any]]:
     """Detect enabled OAuth providers from environment variables."""
     providers = []
-    
+
     # Well-known providers with specific colors
     well_known = [
         ("google", "Google", "#4285F4"),
@@ -28,7 +28,7 @@ def get_enabled_oauth_providers() -> List[Dict[str, Any]]:
             providers.append({"id": p_id, "name": name, "color": color})
 
     # Dynamic detection for any other OAUTH_*_CLIENT_ID
-    for k in os.environ.keys():
+    for k in os.environ:
         if k.startswith(OAUTH_PREFIX) and k.endswith(OAUTH_CLIENT_ID_SUFFIX):
             val = os.environ.get(k)
             if is_valid_env_val(val):
@@ -38,8 +38,8 @@ def get_enabled_oauth_providers() -> List[Dict[str, Any]]:
                 p_id = k[prefix_len:-suffix_len].lower().replace("_", "-")
                 if p_id not in [p["id"] for p in providers]:
                     providers.append({
-                        "id": p_id, 
-                        "name": p_id.capitalize(), 
+                        "id": p_id,
+                        "name": p_id.capitalize(),
                         "color": "#6c757d"
                     })
 

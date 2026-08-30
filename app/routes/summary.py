@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
-from app.services.summary_service import build_summary
 from app.constants import ENDPOINT_SUMMARY
+from app.services.summary_service import build_summary
 
 
 def create_summary_router(
@@ -21,8 +22,8 @@ def create_summary_router(
     @router.get(ENDPOINT_SUMMARY)
     async def summary(
         request: Request,
-        sessionId: Optional[str] = None,
-        analysis: Optional[bool] = False,
+        sessionId: str | None = None,
+        analysis: bool | None = False,
         memory_store=Depends(get_memory_store),
     ):
         """Return an aggregated AIMS summary for a session."""

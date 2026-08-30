@@ -11,14 +11,14 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Dict, Iterable, List, Mapping, Optional, Set
+from collections.abc import Iterable, Mapping
 
 from app.message_catalog import message, message_list, message_map
 
 logger = logging.getLogger(__name__)
 
 TopicalCues = Mapping[str, Iterable[str]]
-Concern = Dict[str, object]
+Concern = dict[str, object]
 
 
 def _as_text(value: object, default: str = "") -> str:
@@ -27,14 +27,14 @@ def _as_text(value: object, default: str = "") -> str:
     return default
 
 
-def topics_in(text: Optional[str], topical_cues: TopicalCues) -> Set[str]:
+def topics_in(text: str | None, topical_cues: TopicalCues) -> set[str]:
     """Detect topics present in `text` based on simple substring cues.
 
     - Case-insensitive matching.
     - Returns a set of topic keys whose cues were found.
     """
     lt = (text or "").lower()
-    found: Set[str] = set()
+    found: set[str] = set()
     for topic, cues in (topical_cues or {}).items():
         for cue in cues:
             if cue and cue.lower() in lt:
@@ -43,7 +43,7 @@ def topics_in(text: Optional[str], topical_cues: TopicalCues) -> Set[str]:
     return found
 
 
-def concern_topic(text: Optional[str], topical_cues: TopicalCues) -> Optional[str]:
+def concern_topic(text: str | None, topical_cues: TopicalCues) -> str | None:
     """Pick a single best-fit topic given text and cues.
 
     Strategy: choose the first topic whose cue appears; callers can pass
@@ -61,18 +61,18 @@ _CONCERN_LABELS = message_map("lexicon.concerns.labels")
 _CONCERN_TOPIC_ALIASES = message_map("lexicon.concerns.topic_aliases")
 
 
-def _topic_key(topic: Optional[str]) -> str:
+def _topic_key(topic: str | None) -> str:
     return re.sub(r"[^a-z0-9]+", "_", (topic or "").strip().lower()).strip("_")
 
 
-def _canonical_topic(topic: Optional[str]) -> str:
+def _canonical_topic(topic: str | None) -> str:
     key = _topic_key(topic)
     if not key:
         return "general"
     return _CONCERN_TOPIC_ALIASES.get(key, key)
 
 
-def _canonical_id(topic: Optional[str]) -> str:
+def _canonical_id(topic: str | None) -> str:
     normalized_topic = re.sub(r"[^a-z0-9]+", "-", _canonical_topic(topic)).strip("-")
     return normalized_topic or "general"
 
@@ -107,7 +107,7 @@ def _clean_evidence_snippet(text: str) -> str:
     return cleaned[:260]
 
 
-def _concern_label(topic: Optional[str], evidence: str) -> str:
+def _concern_label(topic: str | None, evidence: str) -> str:
     topic = _canonical_topic(topic)
     if topic in _CONCERN_LABELS:
         return _CONCERN_LABELS[topic]
@@ -250,7 +250,7 @@ def _normalize_existing_concern(concern: Concern) -> None:
     _sync_concern_status(concern)
 
 
-def _find_matching_concern(concerns: List[Concern], topic: Optional[str]) -> Concern | None:
+def _find_matching_concern(concerns: list[Concern], topic: str | None) -> Concern | None:
     cid = _canonical_id(topic)
     canonical_topic = _canonical_topic(topic)
     for concern in concerns or []:
@@ -315,7 +315,7 @@ def _looks_like_confirmation_restatement(text: str) -> bool:
     return bool(lt and any(lt.startswith(start) for start in _ACCEPTANCE_STARTS))
 
 
-def _new_concern(topic: object, evidence_items: list[str]) -> Optional[Concern]:
+def _new_concern(topic: object, evidence_items: list[str]) -> Concern | None:
     """Build a fresh concern dict for `topic`, or None if the topic isn't trackable."""
     canonical = _canonical_topic(_as_text(topic))
     if not canonical or canonical == "general":
@@ -495,7 +495,7 @@ def apply_concern_events(
     return handled
 
 
-def is_duplicate_concern(concerns: List[Concern], desc: str, topic: Optional[str]) -> bool:
+def is_duplicate_concern(concerns: list[Concern], desc: str, topic: str | None) -> bool:
     """Return True when a concern has the same canonical topic/meaning."""
     if _find_matching_concern(concerns, topic):
         return True
@@ -556,9 +556,7 @@ def _is_acceptance_message(text: str) -> bool:
     # acknowledgement, as in "Thank you. Can you tell me what is required?"
     if any(cue in lt for cue in _CONCERN_AFTER_ACCEPTANCE_CUES):
         return False
-    if "?" in lt and any(cue in lt for cue in message_list("lexicon.concerns.question_starts")):
-        return False
-    return True
+    return not ("?" in lt and any(cue in lt for cue in message_list("lexicon.concerns.question_starts")))
 
 
 def _is_confirmation_restatement_without_new_question(text: str) -> bool:
@@ -585,10 +583,10 @@ def _is_materials_or_followup_acceptance(text: str) -> bool:
 
 
 def maybe_add_person_concern(
-    state: dict, 
+    state: dict,
     person_text: str,
-    topical_cues: TopicalCues, 
-    llm_topic: Optional[str] = None
+    topical_cues: TopicalCues,
+    llm_topic: str | None = None
 ) -> None:
     """If `person_text` contains a topical mention, append a concern item if not duplicate.
 
@@ -609,7 +607,7 @@ def maybe_add_person_concern(
     # autonomy/trust barrier.
     if llm_topic in {"autonomy", "trust", "requirements"} and _is_materials_or_followup_acceptance(person_text):
         return
-    
+
     detected_topics = {_canonical_topic(topic) for topic in topics_in(person_text, topical_cues)}
     if llm_topic:
         detected_topics.add(_canonical_topic(llm_topic))
@@ -618,7 +616,7 @@ def maybe_add_person_concern(
     if not detected_topics:
         return
 
-    concerns: List[Concern] = state.setdefault("parent_concerns", [])  # type: ignore[assignment]
+    concerns: list[Concern] = state.setdefault("parent_concerns", [])  # type: ignore[assignment]
     evidence = _clean_evidence_snippet(person_text)
     for topic in sorted(detected_topics):
         existing = _find_matching_concern(concerns, topic)
@@ -652,7 +650,7 @@ def mark_mirrored_multi(
     clinician_text: str,
     person_text: str,
     topical_cues: TopicalCues,
-    llm_topic: Optional[str] = None,
+    llm_topic: str | None = None,
 ) -> None:
     """Mark concerns as mirrored based on clinician mirroring.
 
@@ -662,7 +660,7 @@ def mark_mirrored_multi(
     3) LLM-detected parent topic (semantic tiebreaker when keyword matching fails)
     4) First unmirrored concern (last-resort fallback)
     """
-    concerns: List[Concern] = state.get("parent_concerns") or []
+    concerns: list[Concern] = state.get("parent_concerns") or []
     if not concerns:
         return
 
@@ -723,10 +721,10 @@ def mark_mirrored_multi(
 
 
 def mark_secured_by_topic(
-    state: dict, 
-    clinician_text: str, 
+    state: dict,
+    clinician_text: str,
     topical_cues: TopicalCues,
-    llm_topic: Optional[str] = None
+    llm_topic: str | None = None
 ) -> None:
     """Mark mirrored concerns matching clinician topic(s) as secured.
 
@@ -735,10 +733,10 @@ def mark_secured_by_topic(
     back only when there is exactly one mirrored unresolved concern; if several
     concerns could match, leave them alone rather than guessing.
     """
-    concerns: List[Concern] = state.get("parent_concerns") or []
+    concerns: list[Concern] = state.get("parent_concerns") or []
     if not concerns:
         return
-    
+
     if llm_topic:
         semantic_topic = _canonical_topic(llm_topic)
         for c in concerns:

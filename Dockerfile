@@ -15,5 +15,11 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 # Copy application code into the container
 COPY . .
 
+# .git isn't copied into the image (see .dockerignore), so the deploy workflow
+# passes the commit SHA in at build time instead of it being read from git at
+# runtime -- see app/services/storage_service.py.
+ARG GIT_SHA=unknown
+ENV GIT_SHA=${GIT_SHA}
+
 # Run the unified app that includes both Backend and UI
 CMD ["python", "run_app.py"]
