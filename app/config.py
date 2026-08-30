@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     # shared resources such as Redis and GCS cannot cross-pollute environments.
     APP_ENV: str = ""
 
+    # Commit SHA baked in via the Dockerfile's GIT_SHA build arg (passed by the
+    # deploy workflow from GITHUB_SHA); .git isn't copied into the image, so
+    # this can't be read at runtime via `git rev-parse`.
+    GIT_SHA: str = "unknown"
+
     # GCP Configuration
     PROJECT_ID: str | None = None
     REGION: str = DEFAULT_REGION
@@ -56,13 +61,11 @@ class Settings(BaseSettings):
     LOG_REQUEST_BODY_MAX: int = 1024
     LOG_HEADERS: bool = False
     LOG_RESPONSE_PREVIEW_MAX: int = 512
-    SAFETY_LOG_CAP: int = 16384
     EXPOSE_UPSTREAM_ERROR: bool = False
 
     # AIMS Coaching configuration
     AIMS_COACHING_ENABLED: bool = True
     AIMS_COACHING_DEFAULT: bool = False
-    AIMS_CLASSIFIER_MODE: str = "hybrid"
     AIMS_CLASSIFIER_MODEL_ID: str = DEFAULT_CLASSIFIER_MODEL_ID
     # None sends no ThinkingConfig, leaving the model's own reasoning budget. This is what
     # production already runs, and a benchmark on 2026-08-29 says keep it.
@@ -134,14 +137,6 @@ class Settings(BaseSettings):
     PERSONA_INDEX: int | None = None
     CHARACTER_SYSTEM: str | None = None
     SCENE_OBJECTIVES: str | None = None
-
-    # Avatar configuration
-    PATIENT_AVATAR_PATH: str | None = None
-    PATIENT_AVATAR_URL: str | None = None
-    DOCTOR_AVATAR_PATH: str | None = None
-    DOCTOR_AVATAR_URL: str | None = None
-    COACH_AVATAR_PATH: str | None = None
-    COACH_AVATAR_URL: str | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",
