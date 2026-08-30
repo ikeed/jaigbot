@@ -88,6 +88,44 @@ def test_body_preview_redacts_character_scene_and_message_when_not_debug():
     }
 
 
+def test_body_preview_redacts_bodies_larger_than_the_cap():
+    """Regression: the cap must be applied AFTER parsing/redacting.
+
+    Truncating first corrupted the JSON for any body over the cap, so parsing
+    failed and the raw bytes were logged verbatim -- including the clinician's
+    message and the persona prompt. A real /chat payload is ~2KB against the
+    1024-byte default cap, so this leaked on every coaching turn.
+    """
+    settings = SimpleNamespace(LOG_REQUEST_BODY_MAX=1024, DEBUG_MODE=False)
+    raw = json.dumps({
+        "message": "SECRET_CLINICIAN_TEXT",
+        "sessionId": "abc-123",
+        "character": "PERSONA_PROMPT_SECRET " + ("persona detail " * 90),
+        "scene": "SCENE_SECRET " + ("scene detail " * 40),
+    }).encode()
+    assert len(raw) > settings.LOG_REQUEST_BODY_MAX, "payload must exceed the cap to exercise this"
+
+    rendered = json.dumps(http_handlers._body_preview_for_log(raw, settings=settings), default=str)
+
+    assert "SECRET_CLINICIAN_TEXT" not in rendered
+    assert "PERSONA_PROMPT_SECRET" not in rendered
+    assert "SCENE_SECRET" not in rendered
+    assert "abc-123" in rendered  # non-sensitive fields still useful for debugging
+
+
+def test_unparsable_body_is_withheld_unless_debug():
+    """Redaction is by field name, so a body that isn't a JSON object can't be
+    redacted -- it must be withheld rather than emitted raw."""
+    not_debug = SimpleNamespace(LOG_REQUEST_BODY_MAX=10_000, DEBUG_MODE=False)
+
+    assert http_handlers._body_preview_for_log(b"SECRET raw text", settings=not_debug) == (
+        "<unparsed body hidden>"
+    )
+    assert http_handlers._body_preview_for_log(b'["SECRET", "array"]', settings=not_debug) == (
+        "<unparsed body hidden>"
+    )
+
+
 def test_body_preview_handles_text_and_binary_decode_failure(monkeypatch):
     settings = SimpleNamespace(LOG_REQUEST_BODY_MAX=10_000, DEBUG_MODE=True)
 
