@@ -1,4 +1,6 @@
+import copy
 import logging
+from unittest.mock import MagicMock
 
 from app.constants import (
     KEY_AIMS_STATE,
@@ -106,6 +108,61 @@ def test_recompute_undiscovered_concerns_ignores_non_checklist_entries():
     AimsStateService._recompute_undiscovered_concerns(state)
 
     assert state["is_undiscovered_concerns"] is False
+
+
+def test_update_failure_restores_prior_state_instead_of_leaving_partial_mutation(monkeypatch):
+    """update() inserts the state dict into mem immediately (mem.setdefault)
+    and mutates it in place step by step, while its except block swallows
+    failures. Before the snapshot/restore, an exception partway through --
+    here, forced in apply_coaching_guidance, several steps in -- left
+    mem[KEY_AIMS_STATE] half-updated (e.g. the turn's phase transition never
+    applied) with no signal to the caller: a silently corrupted session."""
+    mem = _persona_mem([{"topic": "trust", "desc": "Wants evidence."}])
+    service = _service()
+
+    # Turn 1 succeeds and establishes a known-good state.
+    service.update(
+        mem,
+        _structured_payload(STEP_ANNOUNCE),
+        clinician_message="I recommend the vaccine today.",
+        person_last="",
+    )
+    state_before = copy.deepcopy(mem[KEY_AIMS_STATE])
+
+    # Turn 2 blows up partway through update() -- after concern events and
+    # recomputes have already mutated the state in place.
+    monkeypatch.setattr(
+        service,
+        "apply_coaching_guidance",
+        MagicMock(side_effect=RuntimeError("forced mid-update failure")),
+    )
+    service.update(
+        mem,
+        _structured_payload(STEP_SECURE),
+        clinician_message="Here is a handout, let's book a follow-up.",
+        person_last="I'm worried about the evidence.",
+    )
+
+    assert mem[KEY_AIMS_STATE] == state_before
+
+
+def test_update_failure_on_first_turn_leaves_no_state_behind(monkeypatch):
+    mem = _persona_mem([{"topic": "trust", "desc": "Wants evidence."}])
+    service = _service()
+    monkeypatch.setattr(
+        service,
+        "apply_coaching_guidance",
+        MagicMock(side_effect=RuntimeError("forced mid-update failure")),
+    )
+
+    service.update(
+        mem,
+        _structured_payload(STEP_ANNOUNCE),
+        clinician_message="I recommend the vaccine today.",
+        person_last="",
+    )
+
+    assert KEY_AIMS_STATE not in mem
 
 
 def test_update_seeds_checklist_and_starts_undiscovered_before_any_turn():
