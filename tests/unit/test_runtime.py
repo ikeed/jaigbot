@@ -39,8 +39,64 @@ def test_logging_config_writes_to_file_only_for_local_env():
     local_config = runtime.get_logging_config(SimpleNamespace(APP_ENV="local", LOG_LEVEL="DEBUG"))
     prod_config = runtime.get_logging_config(SimpleNamespace(APP_ENV="prod", LOG_LEVEL="INFO"))
 
-    assert local_config["filename"] == "./console.log"
-    assert "filename" not in prod_config
+    (local_handler,) = local_config["handlers"]
+    (prod_handler,) = prod_config["handlers"]
+    assert isinstance(local_handler, logging.FileHandler)
+    assert local_handler.baseFilename.endswith("console.log")
+    assert isinstance(prod_handler, logging.StreamHandler)
+    assert not isinstance(prod_handler, logging.FileHandler)
+    assert isinstance(local_handler.formatter, runtime.JsonFormatter)
+    assert isinstance(prod_handler.formatter, runtime.JsonFormatter)
+    assert local_config["level"] == logging.DEBUG
+    assert prod_config["level"] == logging.INFO
+
+
+def _format_record(msg: str, *, level=logging.INFO, exc_info=None) -> dict:
+    import json
+
+    record = logging.LogRecord(
+        name="app.test", level=level, pathname=__file__, lineno=1,
+        msg=msg, args=(), exc_info=exc_info,
+    )
+    return json.loads(runtime.JsonFormatter().format(record))
+
+
+def test_json_formatter_merges_dict_shaped_messages_top_level():
+    out = _format_record('{"event": "request_start", "path": "/chat"}')
+
+    assert out["event"] == "request_start"
+    assert out["path"] == "/chat"
+    assert "message" not in out
+    assert out["severity"] == "INFO"
+    assert out["logger"] == "app.test"
+    assert "timestamp" in out
+
+
+def test_json_formatter_puts_plain_strings_under_message():
+    out = _format_record("something plain happened", level=logging.WARNING)
+
+    assert out["message"] == "something plain happened"
+    assert out["severity"] == "WARNING"
+
+
+def test_json_formatter_message_cannot_clobber_base_fields():
+    out = _format_record('{"severity": "spoofed", "logger": "spoofed", "event": "x"}')
+
+    assert out["severity"] == "INFO"
+    assert out["logger"] == "app.test"
+    assert out["event"] == "x"
+
+
+def test_json_formatter_attaches_exc_info():
+    import sys
+
+    try:
+        raise ValueError("boom")
+    except ValueError:
+        out = _format_record('{"event": "request_error"}', level=logging.ERROR, exc_info=sys.exc_info())
+
+    assert out["event"] == "request_error"
+    assert "ValueError: boom" in out["exc_info"]
 
 
 def test_create_memory_store_uses_in_memory_when_redis_disabled(monkeypatch):

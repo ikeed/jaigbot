@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -25,22 +26,42 @@ def test_get_request_id_uses_uuid_when_state_unavailable(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_request_body_for_log_handles_json_text_binary_and_get():
+    debug_settings = SimpleNamespace(DEBUG_MODE=True)
+
     post_json = MagicMock(method="POST")
     post_json.body = AsyncMock(return_value=b'{"x": 1}')
-    assert await http_handlers._request_body_for_log(post_json) == {"x": 1}
+    assert await http_handlers._request_body_for_log(post_json, settings=debug_settings) == {"x": 1}
 
     post_text = MagicMock(method="POST")
     post_text.body = AsyncMock(return_value=b"not-json")
-    assert await http_handlers._request_body_for_log(post_text) == "not-json"
+    assert await http_handlers._request_body_for_log(post_text, settings=debug_settings) == "not-json"
 
     post_binary = MagicMock(method="POST")
     post_binary.body = AsyncMock(return_value=b"\xff")
-    assert await http_handlers._request_body_for_log(post_binary) == "\ufffd"
+    assert await http_handlers._request_body_for_log(post_binary, settings=debug_settings) == "\ufffd"
 
     get_request = MagicMock(method="GET")
     get_request.body = AsyncMock(return_value=b'{"ignored": true}')
-    assert await http_handlers._request_body_for_log(get_request) is None
+    assert await http_handlers._request_body_for_log(get_request, settings=debug_settings) is None
     get_request.body.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_request_body_for_log_redacts_sensitive_fields_when_not_debug():
+    """The validation-error log path must apply the same redaction as the
+    request-start preview -- previously it logged the full body (message,
+    character, scene) unredacted, violating CLAUDE.md's no-payload-logging rule
+    through a different door."""
+    request = MagicMock(method="POST")
+    request.body = AsyncMock(
+        return_value=b'{"message": "secret text", "character": "persona", "sessionId": "s1"}'
+    )
+
+    body = await http_handlers._request_body_for_log(
+        request, settings=SimpleNamespace(DEBUG_MODE=False)
+    )
+
+    assert body == {"message": "<hidden>", "character": "<hidden>", "sessionId": "s1"}
 
 
 @pytest.mark.asyncio
@@ -51,18 +72,19 @@ async def test_read_body_returns_empty_on_error():
     assert await http_handlers._read_body(request) == b""
 
 
-def test_body_preview_redacts_character_scene_when_not_debug():
+def test_body_preview_redacts_character_scene_and_message_when_not_debug():
     settings = SimpleNamespace(LOG_REQUEST_BODY_MAX=10_000, DEBUG_MODE=False)
 
     body = http_handlers._body_preview_for_log(
-        b'{"character": "secret", "scene": "private", "message": "hi"}',
+        b'{"character": "secret", "scene": "private", "message": "hi", "sessionId": "s1"}',
         settings=settings,
     )
 
     assert body == {
         "character": "<hidden>",
         "scene": "<hidden>",
-        "message": "hi",
+        "message": "<hidden>",
+        "sessionId": "s1",
     }
 
 
@@ -161,6 +183,12 @@ def _app_with_handlers(logger):
     async def validate(payload: _Payload):
         return payload.model_dump()
 
+    @app.post("/raw-double-read")
+    async def raw_double_read(request: http_handlers.Request):
+        first = await request.body()
+        second = await request.body()
+        return {"first": first.decode(), "second": second.decode()}
+
     @app.get("/boom")
     async def boom():
         raise RuntimeError("boom")
@@ -198,6 +226,75 @@ def test_installed_http_handlers_format_validation_and_unhandled_errors():
     assert boom.json()["error"]["requestId"] == "req-4"
 
 
+def test_unhandled_exception_is_logged_exactly_once_with_traceback():
+    """One structured error line per failure, traceback attached via exc_info --
+    not a logger.exception() line plus a separate JSON logger.error() line."""
+    logger = MagicMock()
+    client = TestClient(_app_with_handlers(logger), raise_server_exceptions=False)
+
+    client.get("/boom", headers={"x-request-id": "req-5"})
+
+    logger.exception.assert_not_called()
+    error_events = []
+    for call in logger.error.call_args_list:
+        if call.args and isinstance(call.args[0], str):
+            try:
+                error_events.append((json.loads(call.args[0]), call.kwargs))
+            except ValueError:
+                pass
+    unhandled = [
+        (payload, kwargs) for payload, kwargs in error_events
+        if payload.get("event") == "unhandled_exception"
+    ]
+    assert len(unhandled) == 1
+    payload, kwargs = unhandled[0]
+    assert payload["requestId"] == "req-5"
+    assert kwargs.get("exc_info") is not None
+
+
+def test_log_requests_body_read_does_not_starve_downstream_handlers():
+    """log_requests reads the full request body for logging before the route
+    runs. Starlette's BaseHTTPMiddleware replays a body cached via .body() to
+    the downstream app (_CachedRequest.wrapped_receive), which is what lets the
+    route still parse the body -- this used to be (redundantly) papered over by
+    monkeypatching the private request._receive, since removed. This test
+    guards the replay invariant itself: if the middleware's body read ever
+    starts consuming the stream in a way downstream can't recover from (e.g.
+    switching .body() to raw stream consumption), the route sees an empty body
+    and this fails."""
+    logger = MagicMock()
+    client = TestClient(_app_with_handlers(logger), raise_server_exceptions=False)
+
+    parsed = client.post("/validate", json={"message": "hello"})
+    assert parsed.status_code == 200
+    assert parsed.json() == {"message": "hello"}
+
+    double = client.post("/raw-double-read", content=b'{"message": "raw"}')
+    assert double.status_code == 200
+    assert double.json() == {"first": '{"message": "raw"}', "second": '{"message": "raw"}'}
+
+
+def test_validation_error_log_still_captures_request_body():
+    """on_validation_error re-reads the body for its structured log line after
+    the route already consumed it -- works because Starlette hands exception
+    handlers the same Request instance the route used, whose ._body is cached.
+    Pinned here so a refactor that breaks that sharing shows up as a test
+    failure, not as silently-empty bodies in validation logs."""
+    logger = MagicMock()
+    client = TestClient(_app_with_handlers(logger), raise_server_exceptions=False)
+
+    response = client.post("/validate", json={"wrong": "shape"})
+
+    assert response.status_code == 422
+    validation_logs = [
+        json.loads(call.args[0])
+        for call in logger.warning.call_args_list
+        if call.args and isinstance(call.args[0], str) and "request_validation_error" in call.args[0]
+    ]
+    assert validation_logs, "expected a request_validation_error log line"
+    assert validation_logs[0]["body"] == {"wrong": "shape"}
+
+
 @pytest.mark.asyncio
 async def test_request_body_for_log_returns_binary_marker_when_decode_fails():
     class UndecodableBytes(bytes):
@@ -207,7 +304,9 @@ async def test_request_body_for_log_returns_binary_marker_when_decode_fails():
     request = MagicMock(method="POST")
     request.body = AsyncMock(return_value=UndecodableBytes(b"\xff"))
 
-    assert await http_handlers._request_body_for_log(request) == "<binary>"
+    assert await http_handlers._request_body_for_log(
+        request, settings=SimpleNamespace(DEBUG_MODE=True)
+    ) == "<binary>"
 
 
 def test_log_request_end_falls_back_when_status_logger_fails():

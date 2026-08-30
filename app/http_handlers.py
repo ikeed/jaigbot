@@ -59,7 +59,7 @@ def install_http_handlers(app: FastAPI, *, settings: Any, logger: logging.Logger
     @app.exception_handler(RequestValidationError)
     async def on_validation_error(request: Request, exc: RequestValidationError):
         req_id = get_request_id(request)
-        body_logged = await _request_body_for_log(request)
+        body_logged = await _request_body_for_log(request, settings=settings)
 
         logger.warning(json.dumps({
             "event": "request_validation_error",
@@ -76,14 +76,15 @@ def install_http_handlers(app: FastAPI, *, settings: Any, logger: logging.Logger
     @app.exception_handler(Exception)
     async def on_unhandled_exception(request: Request, exc: Exception):
         req_id = get_request_id(request)
-        logger.exception("Unhandled application exception: %s", exc)
+        # One structured log line per error; exc_info carries the traceback
+        # instead of a second, separately-formatted logger.exception() line.
         logger.error(json.dumps({
             "event": "unhandled_exception",
             "error": str(exc),
             "requestId": req_id,
             "path": request.url.path,
             "method": request.method,
-        }))
+        }), exc_info=exc)
         return JSONResponse(
             status_code=500,
             content={"error": {"message": "Internal server error", "code": 500, "requestId": req_id}},
@@ -96,16 +97,11 @@ def install_http_handlers(app: FastAPI, *, settings: Any, logger: logging.Logger
         request.state.request_id = req_id
 
         start = time.time()
+        # Reading the body here is safe for downstream handlers: Starlette's
+        # BaseHTTPMiddleware wraps this request in a _CachedRequest whose
+        # wrapped_receive replays the cached body to the downstream app once
+        # .body() has been called in a dispatch function.
         body_bytes = await _read_body(request)
-
-        async def receive():
-            return {"type": "http.request", "body": body_bytes, "more_body": False}
-
-        try:
-            request._receive = receive  # type: ignore[attr-defined]
-        except Exception as e:
-            logger.debug("Failed to patch request._receive: %s", e)
-            pass
 
         client_host = request.client.host if request.client is not None else None
         logger.info(json.dumps({
@@ -123,13 +119,12 @@ def install_http_handlers(app: FastAPI, *, settings: Any, logger: logging.Logger
             response = await call_next(request)
         except Exception as exc:
             latency_ms = int((time.time() - start) * 1000)
-            logger.exception("Unhandled exception processing request: %s", exc)
             logger.error(json.dumps({
                 "event": "request_error",
                 "requestId": req_id,
                 "latencyMs": latency_ms,
                 "error": str(exc),
-            }))
+            }), exc_info=True)
             raise
 
         try:
@@ -142,13 +137,26 @@ def install_http_handlers(app: FastAPI, *, settings: Any, logger: logging.Logger
         return response
 
 
-async def _request_body_for_log(request: Request) -> Any:
+# Request-body fields hidden from logs unless DEBUG_MODE -- per CLAUDE.md,
+# never log persona prompts, scene text, or the clinician's actual message.
+_REDACTED_BODY_FIELDS = ("character", "scene", "message")
+
+
+def _redact_body_fields(body: Any, *, settings: Any) -> Any:
+    if not settings.DEBUG_MODE and isinstance(body, dict):
+        for field in _REDACTED_BODY_FIELDS:
+            if field in body:
+                body[field] = "<hidden>"
+    return body
+
+
+async def _request_body_for_log(request: Request, *, settings: Any) -> Any:
     body_logged = None
     if request.method in ("POST", "PUT", "PATCH"):
         raw = await _read_body(request)
         if raw:
             try:
-                body_logged = json.loads(raw.decode("utf-8"))
+                body_logged = _redact_body_fields(json.loads(raw.decode("utf-8")), settings=settings)
             except (json.JSONDecodeError, UnicodeDecodeError) as e:
                 module_logger.debug("Failed to decode request body as JSON: %s", e)
                 try:
@@ -172,13 +180,7 @@ def _body_preview_for_log(body_bytes: bytes, *, settings: Any) -> Any:
     if not body_preview:
         return None
     try:
-        body_logged = json.loads(body_preview.decode("utf-8"))
-        if not settings.DEBUG_MODE and isinstance(body_logged, dict):
-            if "character" in body_logged:
-                body_logged["character"] = "<hidden>"
-            if "scene" in body_logged:
-                body_logged["scene"] = "<hidden>"
-        return body_logged
+        return _redact_body_fields(json.loads(body_preview.decode("utf-8")), settings=settings)
     except (json.JSONDecodeError, UnicodeDecodeError) as e:
         module_logger.debug("Failed to decode body preview as JSON: %s", e)
         try:
