@@ -1,7 +1,7 @@
 """Configuration must have one mechanism: app.config.Settings.
 
 Behaviour knobs used to be read with ``os.getenv`` scattered through app/, which produced
-two problems. Values read at module import (app/vertex.py's continuation tuning) could not
+two problems. Values read at module import (app/gemini_client.py's continuation tuning) could not
 be monkeypatched by tests and disagreed with what /config reported, because under
 ``uvicorn app.main:app`` nothing pushes .env into os.environ — only run_app.py and
 chainlit_app.py call ``load_and_sanitize_env``. And values read inside request handlers
@@ -84,15 +84,15 @@ def test_allowlist_has_no_stale_entries():
         "MIN_CONTINUE_GROWTH",
     ],
 )
-def test_continuation_knobs_are_not_module_constants_in_vertex(field):
-    """app/vertex.py must not resurrect import-time copies of these.
+def test_continuation_knobs_are_not_module_constants_in_gemini_client(field):
+    """app/gemini_client.py must not resurrect import-time copies of these.
 
     They previously existed both as Settings fields (reported by /config) and as module
     constants read once at import (actually used), so the two could disagree.
     """
-    import app.vertex as vertex_module
+    import app.gemini_client as gemini_client_module
 
-    assert not hasattr(vertex_module, field), (
-        f"app.vertex.{field} is back as a module-level constant. It is a Settings field; "
+    assert not hasattr(gemini_client_module, field), (
+        f"app.gemini_client.{field} is back as a module-level constant. It is a Settings field; "
         "read settings inside the call so /config and behaviour cannot diverge."
     )

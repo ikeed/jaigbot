@@ -156,8 +156,8 @@ def _combined_coaching_text(data: dict) -> str:
 
 @pytest.fixture(autouse=True)
 def setup_env(monkeypatch):
-    monkeypatch.setattr(m, "VertexClient", LiveClassifyClient)
-    monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", ReplyOnlyGateway)
+    monkeypatch.setattr(m, "GeminiClient", LiveClassifyClient)
+    monkeypatch.setattr("app.services.gemini_gateway.GeminiGateway", ReplyOnlyGateway)
     monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", True, raising=False)
     monkeypatch.setattr(m, "MEMORY_ENABLED", True, raising=False)
 

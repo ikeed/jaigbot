@@ -1,8 +1,8 @@
-from app.vertex import VertexClient
+from app.gemini_client import GeminiClient
 
 
 def merge(base, add):
-    return VertexClient.merge_with_overlap(base, add)
+    return GeminiClient.merge_with_overlap(base, add)
 
 
 def test_merge_inserts_space_between_words():
@@ -61,7 +61,7 @@ def test_extract_response_includes_cached_content_tokens():
         ),
     )
 
-    text, meta = VertexClient._extract_response(response)
+    text, meta = GeminiClient._extract_response(response)
 
     assert text == "ok"
     assert meta["cachedContentTokens"] == 80

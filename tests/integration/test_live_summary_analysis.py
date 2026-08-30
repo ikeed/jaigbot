@@ -19,7 +19,7 @@ import pytest
 from app.config import settings
 from app.services.aims_endgame_service import AimsEndgameService
 from app.services.summary_service import build_summary_analysis_bullets
-from app.vertex import VertexClient
+from app.gemini_client import GeminiClient
 
 _logger = logging.getLogger("test")
 
@@ -34,7 +34,7 @@ async def _analyze(mem: dict) -> list[str]:
         settings=settings,
         logger=_logger,
         app_state=_app_state(),
-        vertex_client_cls=VertexClient,
+        gemini_client_cls=GeminiClient,
     )
 
 

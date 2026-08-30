@@ -14,7 +14,7 @@ import pytest
 from app.config import settings
 from app.services.patient_reply_service import PatientReplyService
 from app.services.persona_service import build_persona_session_fields, find_persona
-from app.services.vertex_helpers import avertex_call_with_fallback_json
+from app.services.gemini_helpers import agemini_call_with_fallback_json
 
 
 def _jasmine_fields() -> dict:
@@ -25,7 +25,7 @@ def _jasmine_fields() -> dict:
 
 def _service() -> PatientReplyService:
     async def caller(prompt: str, schema: dict, log_path: str, **kwargs) -> str:
-        return await avertex_call_with_fallback_json(
+        return await agemini_call_with_fallback_json(
             project=settings.PROJECT_ID,
             region=settings.VERTEX_LOCATION,
             primary_model=settings.MODEL_ID,

@@ -92,8 +92,8 @@ def _secure_state_with_resolved_trust() -> dict:
 
 @pytest.fixture(autouse=True)
 def setup_live_route_env(monkeypatch):
-    monkeypatch.setattr(m, "VertexClient", LiveClassifyClient)
-    monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", ReplyOnlyGateway)
+    monkeypatch.setattr(m, "GeminiClient", LiveClassifyClient)
+    monkeypatch.setattr("app.services.gemini_gateway.GeminiGateway", ReplyOnlyGateway)
     monkeypatch.setattr(
         "app.services.chat_orchestrator.storage_service.upload_session",
         lambda *args, **kwargs: False,

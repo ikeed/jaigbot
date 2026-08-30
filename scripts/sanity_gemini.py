@@ -7,7 +7,7 @@ Usage:
   export PROJECT_ID=your-project-id
   export REGION=us-west4
   export VERTEX_LOCATION=global
-  python scripts/sanity_vertex.py
+  python scripts/sanity_gemini.py
 
 Expected: prints a short greeting from the model. If it fails, the exception
 message will indicate whether auth/IAM/API/region/quota is the issue.

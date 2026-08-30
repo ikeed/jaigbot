@@ -9,7 +9,7 @@ from app.config import settings
 
 
 class GWStub:
-    """Stub for app.services.vertex_gateway.VertexGateway used inside main.chat().
+    """Stub for app.services.gemini_gateway.GeminiGateway used inside main.chat().
 
     Behavior is controlled via class attributes for simplicity in tests.
     """
@@ -83,10 +83,10 @@ class GWStub:
 
 @pytest.fixture(autouse=True)
 def reset_gw(monkeypatch):
-    # Patch the VertexGateway used inside main._vertex_call / _vertex_call_json
-    monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", GWStub)
-    # Patch VertexClient so ClassifierService (which uses client_cls directly) also uses the stub
-    monkeypatch.setattr(m, "VertexClient", GWStub)
+    # Patch the GeminiGateway used inside the gemini call helpers
+    monkeypatch.setattr("app.services.gemini_gateway.GeminiGateway", GWStub)
+    # Patch GeminiClient so ClassifierService (which uses client_cls directly) also uses the stub
+    monkeypatch.setattr(m, "GeminiClient", GWStub)
     # Sensible defaults for env flags
     monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", True, raising=False)
     monkeypatch.setattr(m, "MEMORY_ENABLED", True, raising=False)

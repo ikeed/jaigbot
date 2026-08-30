@@ -22,7 +22,7 @@ def _handler(
 ):
     return AimsCoachingHandler(
         memory_store={},
-        vertex_config={
+        gemini_config={
             "project_id": "proj",
             "region": "us-central1",
             "vertex_location": "us-central1",

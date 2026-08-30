@@ -17,11 +17,11 @@ from typing import Any
 from fastapi import Request
 
 from app.chat_roles import ROLE_ASSISTANT, ROLE_USER, get_ui_attributes
+from app.gemini_client import GeminiClient
 from app.message_catalog import message
 from app.models import ChatRequest
 from app.services.chat_context import ChatContext
 from app.services.security_guard import JailbreakGuard
-from app.vertex import VertexClient
 
 
 class LegacyChatHandler:
@@ -31,23 +31,23 @@ class LegacyChatHandler:
         self,
         *,
         memory_store: Any,
-        vertex_config: dict[str, Any],
+        gemini_config: dict[str, Any],
         memory_config: dict[str, Any],
         logger: Any,
     ):
         self.memory_store = memory_store
-        self.vertex_config = vertex_config
+        self.gemini_config = gemini_config
         self.memory_config = memory_config
         self.logger = logger
 
         # Extract frequently used config
-        self.project_id = vertex_config["project_id"]
-        self.vertex_location = vertex_config["vertex_location"]
-        self.model_id = vertex_config["model_id"]
-        self.model_fallbacks = vertex_config["model_fallbacks"]
-        self.temperature = vertex_config["temperature"]
-        self.max_tokens = vertex_config["max_tokens"]
-        self.client_cls = vertex_config.get("client_cls") or VertexClient
+        self.project_id = gemini_config["project_id"]
+        self.vertex_location = gemini_config["vertex_location"]
+        self.model_id = gemini_config["model_id"]
+        self.model_fallbacks = gemini_config["model_fallbacks"]
+        self.temperature = gemini_config["temperature"]
+        self.max_tokens = gemini_config["max_tokens"]
+        self.client_cls = gemini_config.get("client_cls") or GeminiClient
 
         self.memory_enabled = memory_config["enabled"]
         self.memory_max_turns = memory_config["max_turns"]
@@ -106,7 +106,7 @@ class LegacyChatHandler:
 
         # Determine which model actually produced the response (fallback-aware)
         try:
-            from app.services.vertex_helpers import get_last_model_used
+            from app.services.gemini_helpers import get_last_model_used
             model_used = get_last_model_used() or self.model_id
         except Exception as e:
             self.logger.debug(f"Failed to determine last model used: {e}")
@@ -140,12 +140,12 @@ class LegacyChatHandler:
         return "\n\n".join(parts)
 
     async def _generate_reply(self, prompt: str) -> str:
-        """Generate reply using Vertex AI with fallbacks."""
-        from app.services.vertex_helpers import avertex_call_with_fallback_text
-        from app.vertex import VertexAIError
+        """Generate reply using Gemini with fallbacks."""
+        from app.gemini_client import GeminiError
+        from app.services.gemini_helpers import agemini_call_with_fallback_text
 
         try:
-            raw_response = await avertex_call_with_fallback_text(
+            raw_response = await agemini_call_with_fallback_text(
                 project=self.project_id,
                 region=self.vertex_location,
                 primary_model=self.model_id,
@@ -161,8 +161,8 @@ class LegacyChatHandler:
 
             return (raw_response or "").strip() or message("legacy_chat.empty_reply")
 
-        except VertexAIError:
-            # Re-raise VertexAI errors so the orchestrator can handle them properly
+        except GeminiError:
+            # Re-raise Gemini errors so the orchestrator can handle them properly
             raise
         except Exception as e:
             self.logger.error("Legacy chat generation failed: %s", e)

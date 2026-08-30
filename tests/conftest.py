@@ -12,16 +12,16 @@ if PROJECT_ROOT not in sys.path:
 INTEGRATION_DIR = os.path.join(os.path.dirname(__file__), "integration")
 
 
-class LiveVertexCallInTestError(RuntimeError):
+class LiveGeminiCallInTestError(RuntimeError):
     """Raised when a test outside tests/integration/ tries to open a real Vertex client."""
 
 
 @pytest.fixture(autouse=True)
-def block_live_vertex_clients(request, monkeypatch):
+def block_live_gemini_clients(request, monkeypatch):
     """Fail loudly if a non-integration test constructs a real Gen AI client.
 
     The suite is supposed to be hermetic, but it was not: mocks were installed on some
-    module-level ``VertexClient`` names and not others, so any path that received the real
+    module-level ``GeminiClient`` names and not others, so any path that received the real
     class explicitly (app.main passes it as ``client_cls``) reached Vertex for real. That
     only ever surfaced for developers with Application Default Credentials configured —
     CI has none, so CI stayed green while the suite quietly spent tokens locally.
@@ -39,7 +39,7 @@ def block_live_vertex_clients(request, monkeypatch):
     message = (
         "A real google.genai.Client was constructed in a non-integration test.\n"
         "This would make a live Vertex AI call and spend tokens.\n"
-        "Patch the VertexClient binding the code under test actually uses — note that "
+        "Patch the GeminiClient binding the code under test actually uses — note that "
         "app/main.py passes its own imported class through as client_cls — or move the "
         "test to tests/integration/ and mark it @pytest.mark.live_llm."
     )
@@ -49,12 +49,12 @@ def block_live_vertex_clients(request, monkeypatch):
         # so raising alone can be swallowed and the test would still pass; the recorded
         # violation is re-raised at teardown where nothing can catch it.
         violations.append(f"project={kwargs.get('project')!r} location={kwargs.get('location')!r}")
-        raise LiveVertexCallInTestError(message)
+        raise LiveGeminiCallInTestError(message)
 
     monkeypatch.setattr("google.genai.Client", _blocked)
-    # app.vertex did `from google import genai`, so it resolves genai.Client at call time;
+    # app.gemini_client did `from google import genai`, so it resolves genai.Client at call time;
     # patching the attribute on that module object covers it. Guarded in case it changes.
-    monkeypatch.setattr("app.vertex.genai.Client", _blocked, raising=False)
+    monkeypatch.setattr("app.gemini_client.genai.Client", _blocked, raising=False)
 
     # Yielded so a test that trips the guard deliberately (see
     # tests/unit/test_dependency_integrity.py) can clear the record and avoid failing
@@ -62,7 +62,7 @@ def block_live_vertex_clients(request, monkeypatch):
     yield violations
 
     if violations:
-        raise LiveVertexCallInTestError(
+        raise LiveGeminiCallInTestError(
             f"{message}\n\nAttempted client constructions: {violations}"
         )
 
@@ -103,16 +103,16 @@ def aims_mapping_mock():
 
 
 @pytest.fixture(autouse=True)
-def vertex_client_mock(monkeypatch):
+def gemini_client_mock(monkeypatch):
     """
-    Function-scoped auto-use fixture that mocks VertexClient globally.
+    Function-scoped auto-use fixture that mocks GeminiClient globally.
     This ensures that ClassifierService and other LLM callers use a safe mock
     instead of making real REST calls (which fail with 403 in tests).
     """
     import json
 
     # noinspection PyUnusedLocal
-    class MockVertexClient:
+    class MockGeminiClient:
         def __init__(self, *args, **kwargs):
             self.project = kwargs.get("project")
             self.region = kwargs.get("region")
@@ -139,10 +139,10 @@ def vertex_client_mock(monkeypatch):
             # 2. Patient reply path in coaching flow
             if "parent persona" in (prompt or "").lower() or "patient_reply" in (prompt or "").lower():
                 # Avoid "ok" to prevent AimsCoachingHandler from overriding it with the long string
-                return json.dumps({"patient_reply": "Mock patient reply from VertexClient."})
+                return json.dumps({"patient_reply": "Mock patient reply from GeminiClient."})
 
             # 3. Default/Legacy fallback
-            return json.dumps({"patient_reply": "Mock reply from VertexClient."})
+            return json.dumps({"patient_reply": "Mock reply from GeminiClient."})
 
         @staticmethod
         def generate_text(*args, **kwargs):
@@ -160,33 +160,33 @@ def vertex_client_mock(monkeypatch):
         def generate_text_json(*args, **kwargs):
             return json.dumps({"patient_reply": "Mock JSON reply"})
 
-    # Rebinding app.vertex.VertexClient does not retroactively change names already
+    # Rebinding app.gemini_client.GeminiClient does not retroactively change names already
     # imported elsewhere, so each importing module needs its own patch.
     #
-    # app.main is the one that actually matters. _vertex_config() reads the module global
+    # app.main is the one that actually matters. _gemini_config() reads the module global
     # on every request and passes it as client_cls, which AimsCoachingHandler hands to
     # ClassifierService, and ClassifierService calls self.client_cls(...) in preference to
     # its own default. Missing app.main here is what let the suite reach live Vertex
     # whenever the developer had Application Default Credentials configured.
     #
-    # Note that the classifier_service and vertex_helpers entries below are belt-and-braces
-    # only: those modules bind VertexClient as a *default argument*, which captures the
+    # Note that the classifier_service and gemini_helpers entries below are belt-and-braces
+    # only: those modules bind GeminiClient as a *default argument*, which captures the
     # class object at import time, so monkeypatching the module attribute cannot reach it
     # (ClassifierService.__init__.__kwdefaults__["client_cls"] still points at the real
     # class afterwards). They are kept because the names are also read at runtime in some
-    # paths, but do not rely on them to make a test hermetic — block_live_vertex_clients
+    # paths, but do not rely on them to make a test hermetic — block_live_gemini_clients
     # above is the real backstop.
     for target in (
-        "app.vertex.VertexClient",
-        "app.main.VertexClient",
-        "app.services.classifier_service.VertexClient",
-        "app.services.vertex_helpers.VertexClient",
-        "app.services.aims_coaching_handler.VertexClient",
-        "app.services.legacy_chat_handler.VertexClient",
-        "app.services.vertex_gateway.DefaultVertexClient",
+        "app.gemini_client.GeminiClient",
+        "app.main.GeminiClient",
+        "app.services.classifier_service.GeminiClient",
+        "app.services.gemini_helpers.GeminiClient",
+        "app.services.aims_coaching_handler.GeminiClient",
+        "app.services.legacy_chat_handler.GeminiClient",
+        "app.services.gemini_gateway.DefaultGeminiClient",
     ):
-        monkeypatch.setattr(target, MockVertexClient)
-    return MockVertexClient
+        monkeypatch.setattr(target, MockGeminiClient)
+    return MockGeminiClient
 
 
 @pytest.fixture(autouse=True)

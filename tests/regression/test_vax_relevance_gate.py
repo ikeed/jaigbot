@@ -26,7 +26,7 @@ def local_aims_mapping_mock():
         yield mock_mapping
 
 
-class FakeVertexAimsJSON:
+class FakeGeminiAimsJSON:
     """
     Returns valid JSON for both classifier and patient-reply paths.
     - If prompt includes the classifier tag, emit a classification payload based on the clinician text.
@@ -112,7 +112,7 @@ def setup_env(monkeypatch):
     monkeypatch.setattr(settings, "REGION", "us-central1")
     monkeypatch.setattr(settings, "MODEL_ID", "gemini-3.6-flash")
     monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", True)
-    monkeypatch.setattr(m, "VertexClient", FakeVertexAimsJSON)
+    monkeypatch.setattr(m, "GeminiClient", FakeGeminiAimsJSON)
     
     # AIMS mapping mock is now handled globally by conftest.py
     

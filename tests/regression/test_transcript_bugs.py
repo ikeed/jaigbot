@@ -25,7 +25,7 @@ from app.services.coach_post import EndGameDetector
 def _handler_instance() -> AimsCoachingHandler:
     return AimsCoachingHandler(
         memory_store={},
-        vertex_config={
+        gemini_config={
             "project_id": "p", "region": "r", "vertex_location": "r",
             "model_id": "m", "model_fallbacks": [],
             "temperature": 0.0, "max_tokens": 256, "client_cls": None,

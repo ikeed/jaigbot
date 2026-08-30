@@ -1,16 +1,15 @@
 import contextlib
 from collections.abc import Callable
 
-from ..vertex import VertexClient as DefaultVertexClient
+from ..gemini_client import GeminiClient as DefaultGeminiClient
 
 
-class VertexGateway:
-    """Thin wrapper around VertexClient providing model-fallback and typed calls.
+class GeminiGateway:
+    """Thin wrapper around GeminiClient providing model-fallback and typed calls.
 
-    This abstraction improves testability and removes duplicated fallback loops.
-    It intentionally mirrors existing behavior from app.main._vertex_call and
-    _vertex_call_json, including return value normalization and logging event
-    shapes (delegated to caller).
+    This abstraction improves testability and removes duplicated fallback loops,
+    including return value normalization and logging event shapes (delegated to
+    caller).
     """
 
     def __init__(
@@ -30,14 +29,14 @@ class VertexGateway:
         self.fallbacks = [m for m in (fallbacks or []) if m and m != primary_model]
         self.temperature = temperature
         self.max_tokens = max_tokens
-        self.client_cls = client_cls or DefaultVertexClient
+        self.client_cls = client_cls or DefaultGeminiClient
 
     def _models_to_try(self) -> list[str]:
         return [self.primary_model] + self.fallbacks
 
     def _project(self) -> str:
         if not self.project:
-            raise RuntimeError("PROJECT_ID is required for Vertex model calls")
+            raise RuntimeError("PROJECT_ID is required for Gemini model calls")
         return self.project
 
     @staticmethod
@@ -84,7 +83,7 @@ class VertexGateway:
                 continue
         if last_err:
             raise last_err
-        raise RuntimeError("Vertex call failed with no models attempted")
+        raise RuntimeError("Gemini call failed with no models attempted")
 
     def generate_text_json(
         self,
@@ -118,7 +117,7 @@ class VertexGateway:
                 continue
         if last_err:
             raise last_err
-        raise RuntimeError("Vertex call failed with no models attempted")
+        raise RuntimeError("Gemini call failed with no models attempted")
 
     async def agenerate_text(
         self,
@@ -126,7 +125,7 @@ class VertexGateway:
         system_instruction: str | None = None,
         log_fallback: Callable | None = None,
     ) -> str:
-        """Async variant of generate_text using VertexClient.generate_text_async()."""
+        """Async variant of generate_text using GeminiClient.generate_text_async()."""
         last_err = None
         for mid in self._models_to_try():
             client = self.client_cls(project=self._project(), region=self.region, model_id=mid)
@@ -145,7 +144,7 @@ class VertexGateway:
                 continue
         if last_err:
             raise last_err
-        raise RuntimeError("Vertex call failed with no models attempted")
+        raise RuntimeError("Gemini call failed with no models attempted")
 
     async def agenerate_text_json(
         self,
@@ -154,7 +153,7 @@ class VertexGateway:
         system_instruction: str | None = None,
         log_fallback: Callable | None = None,
     ) -> str:
-        """Async variant of generate_text_json using VertexClient.generate_text_async()."""
+        """Async variant of generate_text_json using GeminiClient.generate_text_async()."""
         last_err = None
         for mid in self._models_to_try():
             client = self.client_cls(project=self._project(), region=self.region, model_id=mid)
@@ -175,4 +174,4 @@ class VertexGateway:
                 continue
         if last_err:
             raise last_err
-        raise RuntimeError("Vertex call failed with no models attempted")
+        raise RuntimeError("Gemini call failed with no models attempted")
