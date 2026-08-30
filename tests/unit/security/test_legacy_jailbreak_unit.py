@@ -27,7 +27,7 @@ def test_legacy_handler_jailbreak_early_return(monkeypatch):
 
     handler = LegacyChatHandler(
         memory_store={},
-        vertex_config={
+        gemini_config={
             "project_id": "proj",
             "vertex_location": "global",
             "model_id": "gemini-3.6-flash",

@@ -9,7 +9,7 @@ client = TestClient(app)
 def test_whole_conversation_multi_turns(monkeypatch):
     """
     Exercises a small multi‑turn conversation end‑to‑end using the /chat endpoint
-    with session persistence. We inject a fake Vertex client that:
+    with session persistence. We inject a fake Gemini client that:
       - records prompts sent for each turn
       - returns deterministic replies so we can assert history growth
     """
@@ -27,7 +27,7 @@ def test_whole_conversation_multi_turns(monkeypatch):
     replies = []
     counter = {"n": 0}  # shared across instances
 
-    # Mock at the VertexGateway level since this uses legacy chat path
+    # Mock at the GeminiGateway level since this uses legacy chat path
     class RecordingGateway:
         def __init__(self, *args, **kwargs):
             pass
@@ -63,7 +63,7 @@ def test_whole_conversation_multi_turns(monkeypatch):
         def generate_text_json(self, prompt: str, *args, **kwargs):
             return self.generate_text(prompt, *args, **kwargs)
     
-    monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", RecordingGateway)
+    monkeypatch.setattr("app.services.gemini_gateway.GeminiGateway", RecordingGateway)
 
     turns = [
         "hi there",

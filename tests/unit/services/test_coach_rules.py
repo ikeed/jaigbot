@@ -52,8 +52,8 @@ class GWStub:
 
 
 def setup_env(monkeypatch):
-    monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", GWStub)
-    monkeypatch.setattr(m, "VertexClient", GWStub)
+    monkeypatch.setattr("app.services.gemini_gateway.GeminiGateway", GWStub)
+    monkeypatch.setattr(m, "GeminiClient", GWStub)
     monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", True, raising=False)
     monkeypatch.setattr(m, "MEMORY_ENABLED", True, raising=False)
     monkeypatch.setattr(settings, "PROJECT_ID", "p", raising=False)

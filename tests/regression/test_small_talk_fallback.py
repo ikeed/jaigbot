@@ -28,7 +28,7 @@ def local_aims_mapping_mock():
         yield mock_mapping
 
 
-class FakeVertexInvalidJSON:
+class FakeGeminiInvalidJSON:
     def __init__(self, project: str, region: str, model_id: str):
         pass
 
@@ -52,7 +52,7 @@ def enable_coaching(monkeypatch):
     
     # AIMS mapping mock is now handled globally by conftest.py
     
-    # Mock at the VertexGateway level since this uses coaching path
+    # Mock at the GeminiGateway level since this uses coaching path
     class FakeGatewayInvalidJSON:
         def __init__(self, *args, **kwargs):
             pass
@@ -71,8 +71,8 @@ def enable_coaching(monkeypatch):
         def generate_text_json(*args, **kwargs):
             return "not-json"
     
-    monkeypatch.setattr("app.services.vertex_gateway.VertexGateway", FakeGatewayInvalidJSON)
-    monkeypatch.setattr(m, "VertexClient", FakeGatewayInvalidJSON)
+    monkeypatch.setattr("app.services.gemini_gateway.GeminiGateway", FakeGatewayInvalidJSON)
+    monkeypatch.setattr(m, "GeminiClient", FakeGatewayInvalidJSON)
     yield
 
 

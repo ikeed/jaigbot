@@ -43,14 +43,14 @@ def _run(coro):
 
 
 def _make_handler(memory_store, classifier_service=None):
-    vertex_config = {
+    gemini_config = {
         "project_id": "t", "region": "us-central1", "vertex_location": "us-central1",
         "model_id": "t", "model_fallbacks": [], "temperature": 0.0, "max_tokens": 256,
         "client_cls": None,
     }
     handler = AimsCoachingHandler(
         memory_store=memory_store,
-        vertex_config=vertex_config,
+        gemini_config=gemini_config,
         memory_config={"enabled": True, "max_turns": 10},
         logger=logging.getLogger("test"),
     )

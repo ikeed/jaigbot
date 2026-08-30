@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .constants import APP_TITLE, APP_VERSION
+from .gemini_client import GeminiClient
 from .http_handlers import get_request_id as _get_request_id
 from .http_handlers import install_http_handlers
 from .routes.chat import create_chat_router
@@ -15,7 +16,6 @@ from .routes.summary import create_summary_router
 from .routes.system import create_system_router
 from .runtime import create_memory_store, get_logging_config
 from .services.model_preflight import run_model_preflight
-from .vertex import VertexClient
 
 logging.basicConfig(**get_logging_config(settings))
 logger = logging.getLogger("app")
@@ -42,15 +42,15 @@ def get_model_check(request: Request) -> dict:
     return getattr(request.app.state, "model_check", {"available": "unknown"})
 
 
-def _vertex_client_factory(**kwargs: Any) -> Any:
-    """Construct a VertexClient, resolving the class at call time.
+def _gemini_client_factory(**kwargs: Any) -> Any:
+    """Construct a GeminiClient, resolving the class at call time.
 
     include_router() runs at import, so handing the class itself to a router factory
-    freezes the real VertexClient into that router's closure, where monkeypatching
-    app.main.VertexClient can never reach it. Callers only ever call this with keyword
-    arguments (see VertexGateway), so a factory is a transparent substitute.
+    freezes the real GeminiClient into that router's closure, where monkeypatching
+    app.main.GeminiClient can never reach it. Callers only ever call this with keyword
+    arguments (see GeminiGateway), so a factory is a transparent substitute.
     """
-    return VertexClient(**kwargs)
+    return GeminiClient(**kwargs)
 
 # Optional CORS
 if settings.ALLOWED_ORIGINS:
@@ -86,7 +86,7 @@ app.include_router(create_summary_router(
     settings=settings,
     logger=logger,
     get_memory_store=get_memory_store,
-    vertex_client_cls=_vertex_client_factory,
+    gemini_client_cls=_gemini_client_factory,
 ))
 app.include_router(create_session_router(
     settings=settings,
@@ -95,7 +95,7 @@ app.include_router(create_session_router(
 ))
 
 
-def _vertex_config() -> dict:
+def _gemini_config() -> dict:
     return {
         "project_id": settings.PROJECT_ID,
         "region": settings.REGION,
@@ -112,8 +112,8 @@ def _vertex_config() -> dict:
         "classify_budget_s": settings.AIMS_CLASSIFY_BUDGET_S,
         "reply_max_tokens": settings.AIMS_REPLY_MAX_TOKENS,
         "heuristic_fallback_enabled": settings.AIMS_HEURISTIC_FALLBACK_ENABLED,
-        # Pass client class from app.main so tests can monkeypatch m.VertexClient.
-        "client_cls": VertexClient,
+        # Pass client class from app.main so tests can monkeypatch m.GeminiClient.
+        "client_cls": GeminiClient,
     }
 
 
@@ -156,7 +156,7 @@ def _chat_orchestrator(memory_store=None):
         session_cookie_settings=_session_cookie_settings(),
         memory_config=_memory_config(),
         aims_config=_aims_config(),
-        vertex_config=_vertex_config(),
+        gemini_config=_gemini_config(),
         debug_config=_debug_config(),
         logger=logger,
     )

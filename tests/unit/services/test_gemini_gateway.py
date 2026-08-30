@@ -1,6 +1,6 @@
 import pytest
 
-from app.services.vertex_gateway import VertexGateway
+from app.services.gemini_gateway import GeminiGateway
 
 
 class FakeClient:
@@ -37,7 +37,7 @@ def test_generate_text_fallbacks_and_normalization():
         "primary": RuntimeError("boom"),
         "fallback": "tuple",  # return (text, meta)
     }
-    gw = VertexGateway(project="p", region="r", primary_model="primary", fallbacks=["fallback"], client_cls=FakeClient)
+    gw = GeminiGateway(project="p", region="r", primary_model="primary", fallbacks=["fallback"], client_cls=FakeClient)
 
     order = []
     def on_fb(mid):
@@ -57,7 +57,7 @@ def test_generate_text_json_uses_same_fallback_logic():
         "m1": RuntimeError("fail1"),
         "m2": "ok-json",
     }
-    gw = VertexGateway(project="p", region="r", primary_model="m1", fallbacks=["m2"], client_cls=FakeClient)
+    gw = GeminiGateway(project="p", region="r", primary_model="m1", fallbacks=["m2"], client_cls=FakeClient)
 
     order = []
     def on_fb(mid):
@@ -73,7 +73,7 @@ def test_all_fail_raises_last_error():
         "a": RuntimeError("A"),
         "b": RuntimeError("B"),
     }
-    gw = VertexGateway(project="p", region="r", primary_model="a", fallbacks=["b"], client_cls=FakeClient)
+    gw = GeminiGateway(project="p", region="r", primary_model="a", fallbacks=["b"], client_cls=FakeClient)
     with pytest.raises(RuntimeError) as ei:
         gw.generate_text(prompt="x")
     # Last error should be from the last attempted model (b)
@@ -102,7 +102,7 @@ async def test_agenerate_text_fallbacks_and_records_last_model():
         "primary": RuntimeError("rate limited"),
         "fallback": "fallback-ok",
     }
-    gateway = VertexGateway(
+    gateway = GeminiGateway(
         project="p",
         region="r",
         primary_model="primary",
@@ -131,7 +131,7 @@ async def test_agenerate_text_json_passes_json_options_and_raises_last_error():
         "m1": RuntimeError("503 overloaded"),
         "m2": RuntimeError("429 rate limited"),
     }
-    gateway = VertexGateway(
+    gateway = GeminiGateway(
         project="p",
         region="r",
         primary_model="m1",
@@ -156,7 +156,7 @@ def test_generate_text_fallback_callback_exception_does_not_interrupt_fallback()
         "primary": RuntimeError("503 overloaded"),
         "fallback": "fallback-ok",
     }
-    gateway = VertexGateway(
+    gateway = GeminiGateway(
         project="p",
         region="r",
         primary_model="primary",

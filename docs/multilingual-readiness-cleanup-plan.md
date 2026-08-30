@@ -115,7 +115,7 @@ current as of this document and should be rechecked before implementation.
 | Frontend persona/role scraping | `public/js/aimsbot/message-roles.js:25-39`, `public/js/aimsbot/message-roles.js:58-64`, `public/js/aimsbot/message-roles.js:76-123` |
 | Prompt contracts already asking for JSON | `app/prompts/classify_turn.txt:1-35`, `app/prompts/aims_system_instruction.txt:180-202`, `app/prompts/aims_patient_reply.txt:12-18`, `app/prompts/aims_fallback_feedback.txt:17-25` |
 | Existing JSON schema gap | `app/json_schemas.py:17-39` |
-| Mechanical JSON extraction to keep centralized | `app/services/vertex_helpers.py:27-78` |
+| Mechanical JSON extraction to keep centralized | `app/services/gemini_helpers.py:27-78` |
 
 ## Specific Problems Found
 

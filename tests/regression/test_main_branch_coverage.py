@@ -177,8 +177,8 @@ class TestMainBranches:
         assert r.status_code == 200
         # Should handle exception gracefully
 
-    @patch('app.services.vertex_helpers.vertex_call_with_fallback_text')
-    def test_summary_endpoint_with_analysis_success(self, mock_vertex_call, monkeypatch):
+    @patch('app.services.gemini_helpers.gemini_call_with_fallback_text')
+    def test_summary_endpoint_with_analysis_success(self, mock_gemini_call, monkeypatch):
         """Test summary endpoint with analysis=true and successful LLM call"""
         mock_memory = {
             "test-session": {
@@ -194,7 +194,7 @@ class TestMainBranches:
             }
         }
         
-        mock_vertex_call.return_value = "- Practice more open questions\n- Use better mirroring"
+        mock_gemini_call.return_value = "- Practice more open questions\n- Use better mirroring"
         
         monkeypatch.setattr("app.config.settings.MEMORY_ENABLED", True)
         monkeypatch.setattr("app.main.MEMORY_STORE", mock_memory)
@@ -225,9 +225,9 @@ class TestMainBranches:
             elif hasattr(app.state, 'aims_mapping'):
                 delattr(app.state, 'aims_mapping')
 
-    @patch('app.services.vertex_helpers.vertex_call_with_fallback_text')
-    def test_summary_endpoint_analysis_vertex_exception(self, mock_vertex_call, monkeypatch):
-        """Test summary endpoint handles Vertex call exceptions in analysis"""
+    @patch('app.services.gemini_helpers.gemini_call_with_fallback_text')
+    def test_summary_endpoint_analysis_gemini_exception(self, mock_gemini_call, monkeypatch):
+        """Test summary endpoint handles Gemini call exceptions in analysis"""
         mock_memory = {
             "test-session": {
                 "aims": {"perStepCounts": {"Announce": 1}, "totalTurns": 1},
@@ -235,7 +235,7 @@ class TestMainBranches:
             }
         }
         
-        mock_vertex_call.side_effect = Exception("Vertex error")
+        mock_gemini_call.side_effect = Exception("Gemini error")
         
         monkeypatch.setattr("app.config.settings.MEMORY_ENABLED", True)
         monkeypatch.setattr("app.main.MEMORY_STORE", mock_memory)

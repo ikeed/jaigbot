@@ -1,6 +1,6 @@
 import pytest
 
-from app.services.vertex_gateway import VertexGateway
+from app.services.gemini_gateway import GeminiGateway
 
 
 class TypeErrorClient:
@@ -14,13 +14,13 @@ class TypeErrorClient:
 
 
 def test_generate_text_typeerror_compatibility():
-    gw = VertexGateway(project="p", region="r", primary_model="m", fallbacks=[], client_cls=TypeErrorClient)
+    gw = GeminiGateway(project="p", region="r", primary_model="m", fallbacks=[], client_cls=TypeErrorClient)
     out = gw.generate_text(prompt="hi", system_instruction="ignored")
     assert out == "ok-m"
 
 
 def test_generate_text_json_typeerror_compatibility():
-    gw = VertexGateway(project="p", region="r", primary_model="m", fallbacks=[], client_cls=TypeErrorClient)
+    gw = GeminiGateway(project="p", region="r", primary_model="m", fallbacks=[], client_cls=TypeErrorClient)
     out = gw.generate_text_json(prompt="{}", response_schema={})
     assert out == "ok-m"
 
@@ -33,7 +33,7 @@ class AlwaysFailClient:
 
 
 def test_generate_text_json_raises_last_error():
-    gw = VertexGateway(project="p", region="r", primary_model="a", fallbacks=["b"], client_cls=AlwaysFailClient)
+    gw = GeminiGateway(project="p", region="r", primary_model="a", fallbacks=["b"], client_cls=AlwaysFailClient)
     with pytest.raises(RuntimeError) as ei:
         gw.generate_text_json(prompt="{}", response_schema={})
     # Last attempted should be 'b'

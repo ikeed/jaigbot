@@ -44,11 +44,11 @@ def test_chat_missing_project_id(monkeypatch):
 
 
 def test_chat_success_with_mock(monkeypatch):
-    # Mock the async vertex helper function used by legacy chat handler
-    from app.services import vertex_helpers
+    # Mock the async gemini helper function used by legacy chat handler
+    from app.services import gemini_helpers
 
     # Mock the async function that actually makes the API call
-    async def fake_vertex_call(*args, **kwargs):
+    async def fake_gemini_call(*args, **kwargs):
         prompt = kwargs.get('prompt', 'ping')
         return f"echo: {prompt}"
 
@@ -61,7 +61,7 @@ def test_chat_success_with_mock(monkeypatch):
     monkeypatch.setattr(settings, "AIMS_COACHING_ENABLED", False)
 
     # Mock the async function used by the handler
-    monkeypatch.setattr(vertex_helpers, "avertex_call_with_fallback_text", fake_vertex_call)
+    monkeypatch.setattr(gemini_helpers, "agemini_call_with_fallback_text", fake_gemini_call)
 
     r = client.post("/chat", json={"message": "ping"})
     assert r.status_code == 200
@@ -69,7 +69,7 @@ def test_chat_success_with_mock(monkeypatch):
     # The mock should echo back the full prompt which includes system instruction + user message
     assert data["reply"].startswith("echo: ")
     assert "ping" in data["reply"]  # User message should be in the prompt
-    # Model may be the configured MODEL_ID or a fallback; with mocked vertex
+    # Model may be the configured MODEL_ID or a fallback; with mocked gemini
     # calls the global _LAST_MODEL_USED may carry over from prior tests.
     assert isinstance(data["model"], str)
     assert isinstance(data["latencyMs"], int)

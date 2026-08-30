@@ -6,6 +6,7 @@ from typing import Any, TypeVar
 
 from pydantic import BaseModel
 
+from app.gemini_client import GeminiClient
 from app.message_catalog import message
 from app.models import (
     AimsObservations,
@@ -18,7 +19,6 @@ from app.models import (
 )
 from app.services.chat_helpers import recent_context as build_recent_context
 from app.services.prompt_builders import AimsPromptBuilder
-from app.vertex import VertexClient
 
 ParsedModel = TypeVar("ParsedModel", bound=BaseModel)
 
@@ -40,7 +40,7 @@ class ClassifierService:
         logger: logging.Logger | None = None,
         temperature: float = 0.0,
         max_tokens: int = 500,
-        client_cls: Any = VertexClient,
+        client_cls: Any = GeminiClient,
         heuristic_fallback_enabled: bool = False,
         thinking_level: str | None = "minimal",
         thinking_budget: int | None = None,

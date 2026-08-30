@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 from google.genai.errors import APIError
 
-from app.vertex import VertexAIError, VertexClient, extract_status_code, get_usage_count
+from app.gemini_client import GeminiError, GeminiClient, extract_status_code, get_usage_count
 
 
 def test_extract_status_code_handles_multiple_attr_names():
@@ -33,7 +33,7 @@ def test_sanitize_response_schema_removes_meta_keys_recursively():
         },
     }
 
-    sanitized = VertexClient._sanitize_response_schema(schema)
+    sanitized = GeminiClient._sanitize_response_schema(schema)
 
     assert sanitized == {
         "type": "object",
@@ -48,7 +48,7 @@ def test_sanitize_response_schema_removes_meta_keys_recursively():
 
 
 def test_sanitize_response_schema_returns_none_when_only_meta_keys_remain():
-    assert VertexClient._sanitize_response_schema({"$schema": "x"}) is None
+    assert GeminiClient._sanitize_response_schema({"$schema": "x"}) is None
 
 
 def test_extract_response_strips_thought_parts_and_reports_usage():
@@ -76,7 +76,7 @@ def test_extract_response_strips_thought_parts_and_reports_usage():
         ),
     )
 
-    text, meta = VertexClient._extract_response(response)
+    text, meta = GeminiClient._extract_response(response)
 
     assert text == "answer"
     assert meta["finishReason"] == "STOP"
@@ -97,9 +97,9 @@ def test_get_client_caches_instance(monkeypatch):
         def __init__(self, **kwargs):
             created.append(kwargs)
 
-    monkeypatch.setattr("app.vertex.genai.Client", FakeGenAIClient)
+    monkeypatch.setattr("app.gemini_client.genai.Client", FakeGenAIClient)
 
-    client = VertexClient(project="proj", region="us-central1", model_id="model")
+    client = GeminiClient(project="proj", region="us-central1", model_id="model")
 
     first = client._get_client()
     second = client._get_client()
@@ -112,9 +112,9 @@ def test_get_client_caches_instance(monkeypatch):
 
 
 def test_get_client_shared_across_instances_and_models(monkeypatch):
-    """Separate VertexClients for the same project/location share one Gen AI client.
+    """Separate GeminiClients for the same project/location share one Gen AI client.
 
-    This is the whole point of the cache: callers build a VertexClient per LLM call, and
+    This is the whole point of the cache: callers build a GeminiClient per LLM call, and
     the model id is a per-request argument rather than client state, so a single client
     serves the classifier, the patient reply and every model-fallback attempt.
     """
@@ -124,10 +124,10 @@ def test_get_client_shared_across_instances_and_models(monkeypatch):
         def __init__(self, **kwargs):
             created.append(kwargs)
 
-    monkeypatch.setattr("app.vertex.genai.Client", FakeGenAIClient)
+    monkeypatch.setattr("app.gemini_client.genai.Client", FakeGenAIClient)
 
-    a = VertexClient(project="proj", region="us-central1", model_id="model-a")
-    b = VertexClient(project="proj", region="us-central1", model_id="model-b")
+    a = GeminiClient(project="proj", region="us-central1", model_id="model-a")
+    b = GeminiClient(project="proj", region="us-central1", model_id="model-b")
 
     assert a._get_client() is b._get_client()
     assert len(created) == 1
@@ -140,10 +140,10 @@ def test_get_client_not_shared_across_locations(monkeypatch):
         def __init__(self, **kwargs):
             created.append(kwargs)
 
-    monkeypatch.setattr("app.vertex.genai.Client", FakeGenAIClient)
+    monkeypatch.setattr("app.gemini_client.genai.Client", FakeGenAIClient)
 
-    here = VertexClient(project="proj", region="us-central1", model_id="model")
-    there = VertexClient(project="proj", region="global", model_id="model")
+    here = GeminiClient(project="proj", region="us-central1", model_id="model")
+    there = GeminiClient(project="proj", region="global", model_id="model")
 
     assert here._get_client() is not there._get_client()
     assert len(created) == 2
@@ -153,7 +153,7 @@ def test_get_client_ignores_entry_from_a_different_factory(monkeypatch):
     """The regression guard for the naive cache key.
 
     Keyed on (project, location) alone, this cache would hand FactoryA's client to the
-    second VertexClient even though the factory has been re-patched — which is exactly how
+    second GeminiClient even though the factory has been re-patched — which is exactly how
     a per-test monkeypatched fake leaks into the next test. Written naively, this test
     fails; six others in this file fail with it.
     """
@@ -165,12 +165,12 @@ def test_get_client_ignores_entry_from_a_different_factory(monkeypatch):
         def __init__(self, **kwargs):
             pass
 
-    monkeypatch.setattr("app.vertex.genai.Client", FactoryA)
-    first = VertexClient(project="proj", region="us-central1", model_id="m")._get_client()
+    monkeypatch.setattr("app.gemini_client.genai.Client", FactoryA)
+    first = GeminiClient(project="proj", region="us-central1", model_id="m")._get_client()
     assert isinstance(first, FactoryA)
 
-    monkeypatch.setattr("app.vertex.genai.Client", FactoryB)
-    second = VertexClient(project="proj", region="us-central1", model_id="m")._get_client()
+    monkeypatch.setattr("app.gemini_client.genai.Client", FactoryB)
+    second = GeminiClient(project="proj", region="us-central1", model_id="m")._get_client()
     assert isinstance(second, FactoryB)
 
 
@@ -181,21 +181,21 @@ def test_reset_genai_client_cache_forces_reconstruction(monkeypatch):
         def __init__(self, **kwargs):
             created.append(kwargs)
 
-    monkeypatch.setattr("app.vertex.genai.Client", FakeGenAIClient)
+    monkeypatch.setattr("app.gemini_client.genai.Client", FakeGenAIClient)
 
-    VertexClient(project="proj", region="us-central1", model_id="m")._get_client()
+    GeminiClient(project="proj", region="us-central1", model_id="m")._get_client()
     assert len(created) == 1
 
-    from app.vertex import reset_genai_client_cache
+    from app.gemini_client import reset_genai_client_cache
 
     reset_genai_client_cache()
 
-    VertexClient(project="proj", region="us-central1", model_id="m")._get_client()
+    GeminiClient(project="proj", region="us-central1", model_id="m")._get_client()
     assert len(created) == 2
 
 
 def test_build_config_includes_json_schema_and_thinking_budget():
-    cfg = VertexClient(project="proj", region="us-central1", model_id="model")._build_config(
+    cfg = GeminiClient(project="proj", region="us-central1", model_id="model")._build_config(
         temperature=0.1,
         max_tokens=256,
         system_instruction="sys",
@@ -217,7 +217,7 @@ def test_build_config_includes_json_schema_and_thinking_budget():
 
 
 def test_build_config_prefers_thinking_level_over_budget():
-    cfg = VertexClient(project="proj", region="us-central1", model_id="model")._build_config(
+    cfg = GeminiClient(project="proj", region="us-central1", model_id="model")._build_config(
         temperature=0.1,
         max_tokens=256,
         system_instruction=None,
@@ -232,11 +232,11 @@ def test_build_config_prefers_thinking_level_over_budget():
 
 
 def test_merge_with_overlap_covers_no_space_before_and_no_progress():
-    assert VertexClient.merge_with_overlap("Hello(", "world)") == "Hello(world)"
-    assert VertexClient.merge_with_overlap("Already complete", "") == "Already complete"
+    assert GeminiClient.merge_with_overlap("Hello(", "world)") == "Hello(world)"
+    assert GeminiClient.merge_with_overlap("Already complete", "") == "Already complete"
 
 
-def test_generate_text_async_raises_vertex_error_when_empty(monkeypatch):
+def test_generate_text_async_raises_gemini_error_when_empty(monkeypatch):
     class FakeResponse:
         candidates = []
         usage_metadata = None
@@ -253,18 +253,18 @@ def test_generate_text_async_raises_vertex_error_when_empty(monkeypatch):
         def __init__(self, **kwargs):
             self.aio = FakeAio()
 
-    monkeypatch.setattr("app.vertex.genai.Client", FakeClient)
+    monkeypatch.setattr("app.gemini_client.genai.Client", FakeClient)
 
-    client = VertexClient(project="proj", region="us-central1", model_id="model")
+    client = GeminiClient(project="proj", region="us-central1", model_id="model")
 
     import asyncio
     import pytest
 
-    with pytest.raises(VertexAIError, match="No text candidates returned from model"):
+    with pytest.raises(GeminiError, match="No text candidates returned from model"):
         asyncio.run(client.generate_text_async(prompt="hello"))
 
 
-def test_generate_text_async_raises_vertex_error_for_json_max_tokens(monkeypatch):
+def test_generate_text_async_raises_gemini_error_for_json_max_tokens(monkeypatch):
     class FakePart:
         def __init__(self, text, thought=False):
             self.text = text
@@ -298,14 +298,14 @@ def test_generate_text_async_raises_vertex_error_for_json_max_tokens(monkeypatch
         def __init__(self, **kwargs):
             self.aio = FakeAio()
 
-    monkeypatch.setattr("app.vertex.genai.Client", FakeClient)
+    monkeypatch.setattr("app.gemini_client.genai.Client", FakeClient)
 
-    client = VertexClient(project="proj", region="us-central1", model_id="model")
+    client = GeminiClient(project="proj", region="us-central1", model_id="model")
 
     import asyncio
     import pytest
 
-    with pytest.raises(VertexAIError, match="max tokens"):
+    with pytest.raises(GeminiError, match="max tokens"):
         asyncio.run(
             client.generate_text_async(
                 prompt="hello",
@@ -357,9 +357,9 @@ def test_generate_text_autocontinues_and_merges(monkeypatch):
         def __init__(self, **kwargs):
             self.chats = FakeChats()
 
-    monkeypatch.setattr("app.vertex.genai.Client", FakeClient)
+    monkeypatch.setattr("app.gemini_client.genai.Client", FakeClient)
 
-    client = VertexClient(project="proj", region="us-central1", model_id="model")
+    client = GeminiClient(project="proj", region="us-central1", model_id="model")
     text, meta = client.generate_text(prompt="hello")
 
     assert text == "Hello world"
@@ -409,9 +409,9 @@ def test_generate_text_autocontinues_and_marks_no_progress_break(monkeypatch):
         def __init__(self, **kwargs):
             self.chats = FakeChats()
 
-    monkeypatch.setattr("app.vertex.genai.Client", FakeClient)
+    monkeypatch.setattr("app.gemini_client.genai.Client", FakeClient)
 
-    client = VertexClient(project="proj", region="us-central1", model_id="model")
+    client = GeminiClient(project="proj", region="us-central1", model_id="model")
     text, meta = client.generate_text(prompt="hello")
 
     assert text == "A B"
@@ -428,14 +428,14 @@ def test_generate_text_async_wraps_api_error(monkeypatch):
         def __init__(self, **kwargs):
             self.aio = SimpleNamespace(models=FakeAioModels())
 
-    monkeypatch.setattr("app.vertex.genai.Client", FakeClient)
+    monkeypatch.setattr("app.gemini_client.genai.Client", FakeClient)
 
-    client = VertexClient(project="proj", region="us-central1", model_id="model")
+    client = GeminiClient(project="proj", region="us-central1", model_id="model")
 
     import asyncio
     import pytest
 
-    with pytest.raises(VertexAIError, match="Gemini API error"):
+    with pytest.raises(GeminiError, match="Gemini API error"):
         asyncio.run(client.generate_text_async(prompt="hello"))
 
 
@@ -458,11 +458,11 @@ def test_generate_text_wraps_empty_response_and_api_error(monkeypatch):
         def __init__(self, **kwargs):
             self.chats = FakeChats()
 
-    monkeypatch.setattr("app.vertex.genai.Client", FakeClient)
+    monkeypatch.setattr("app.gemini_client.genai.Client", FakeClient)
 
-    client = VertexClient(project="proj", region="us-central1", model_id="model")
+    client = GeminiClient(project="proj", region="us-central1", model_id="model")
 
     import pytest
 
-    with pytest.raises(VertexAIError, match="No text in response"):
+    with pytest.raises(GeminiError, match="No text in response"):
         client.generate_text(prompt="hello")
