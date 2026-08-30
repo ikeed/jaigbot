@@ -251,6 +251,22 @@ def test_sanitize_endgame_bullets_handles_empty_quotes_duplicates_and_cap():
     assert not any("patient" in item for item in cleaned)
 
 
+def test_sanitize_endgame_bullets_drops_json_preamble_line():
+    # Real staging leak: "Here is the JSON requested:" rendered as a visible
+    # Final Summary bullet when the structured JSON parse failed and this
+    # line-split fallback ran without filtering it.
+    raw = [
+        "Good rapport overall.",
+        "Here is the JSON requested:",
+        "Here's the JSON requested:",
+        "Keep this one.",
+    ]
+
+    cleaned = sanitize_endgame_bullets(raw)
+
+    assert cleaned == ["Good rapport overall.", "Keep this one."]
+
+
 def test_endgame_title_score_tiers_and_deferred_fallback():
     """Title folds the Overall score into the same line; the bottom two tiers
     (keep_practicing, needs_work) use encouraging-but-not-celebratory language
