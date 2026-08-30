@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import hashlib
 import time
-from typing import Any, Dict, Optional
+from typing import Any
 
 from app.config import settings
 from app.constants import (
+    KEY_THREAD_ID,
+    KEY_UPDATED,
     PREFIX_CHAINLIT,
     PREFIX_CURRENT_THREAD,
     PREFIX_THREAD,
-    KEY_THREAD_ID,
-    KEY_UPDATED
 )
 
 LEGACY_CURRENT_THREAD_KEY_PREFIX = f"{PREFIX_CHAINLIT}:{PREFIX_CURRENT_THREAD}:"
@@ -48,7 +48,7 @@ def _thread_exists(store: Any, thread_id: str) -> bool:
     )
 
 
-def _thread_record(store: Any, thread_id: str) -> Optional[Dict[str, Any]]:
+def _thread_record(store: Any, thread_id: str) -> dict[str, Any] | None:
     for key in (f"{_thread_key_prefix()}{thread_id}", f"{LEGACY_THREAD_KEY_PREFIX}{thread_id}"):
         value = store.get(key)
         if isinstance(value, dict):
@@ -56,7 +56,7 @@ def _thread_record(store: Any, thread_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-def _thread_belongs_to_user(thread: Optional[Dict[str, Any]], user_identifier: str) -> bool:
+def _thread_belongs_to_user(thread: dict[str, Any] | None, user_identifier: str) -> bool:
     if not isinstance(thread, dict):
         return False
     owner = thread.get("userIdentifier")
@@ -65,7 +65,7 @@ def _thread_belongs_to_user(thread: Optional[Dict[str, Any]], user_identifier: s
     return owner.strip().lower() == user_identifier.strip().lower()
 
 
-def get_current_thread_id(user_identifier: Optional[str]) -> Optional[str]:
+def get_current_thread_id(user_identifier: str | None) -> str | None:
     if not user_identifier:
         return None
     store = _store()
@@ -87,7 +87,7 @@ def get_current_thread_id(user_identifier: Optional[str]) -> Optional[str]:
     return thread_id
 
 
-def set_current_thread_id(user_identifier: Optional[str], thread_id: Optional[str]) -> None:
+def set_current_thread_id(user_identifier: str | None, thread_id: str | None) -> None:
     if not user_identifier or not thread_id:
         return
     _store()[_key(user_identifier)] = {
@@ -96,7 +96,7 @@ def set_current_thread_id(user_identifier: Optional[str], thread_id: Optional[st
     }
 
 
-def clear_current_thread_id(user_identifier: Optional[str]) -> None:
+def clear_current_thread_id(user_identifier: str | None) -> None:
     if not user_identifier:
         return
     _store().pop(_key(user_identifier), None)

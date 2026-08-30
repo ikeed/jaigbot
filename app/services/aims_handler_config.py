@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -26,7 +27,7 @@ class AimsVertexConfig:
     client_cls: Any = None
 
     @classmethod
-    def from_mapping(cls, config: Mapping[str, Any]) -> "AimsVertexConfig":
+    def from_mapping(cls, config: Mapping[str, Any]) -> AimsVertexConfig:
         classifier_thinking_budget = config.get("classifier_thinking_budget")
         reply_max_tokens = config.get("reply_max_tokens")
         return cls(
@@ -61,7 +62,7 @@ class AimsMemoryConfig:
     max_turns: int
 
     @classmethod
-    def from_mapping(cls, config: Mapping[str, Any]) -> "AimsMemoryConfig":
+    def from_mapping(cls, config: Mapping[str, Any]) -> AimsMemoryConfig:
         return cls(
             enabled=bool(config["enabled"]),
             max_turns=int(config["max_turns"]),

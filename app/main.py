@@ -2,20 +2,20 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, Request, Depends
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
-from .http_handlers import get_request_id as _get_request_id, install_http_handlers
-from .vertex import VertexClient
-from .runtime import create_memory_store, get_logging_config
+from .constants import APP_TITLE, APP_VERSION
+from .http_handlers import get_request_id as _get_request_id
+from .http_handlers import install_http_handlers
 from .routes.chat import create_chat_router
 from .routes.session import create_session_router
 from .routes.summary import create_summary_router
 from .routes.system import create_system_router
+from .runtime import create_memory_store, get_logging_config
 from .services.model_preflight import run_model_preflight
-from .constants import APP_TITLE, APP_VERSION
-
+from .vertex import VertexClient
 
 logging.basicConfig(**get_logging_config(settings))
 logger = logging.getLogger("app")

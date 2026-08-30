@@ -1,9 +1,14 @@
-from app.services.chat_helpers import recent_context as _recent_context, extract_recent_concerns
 from app.prompts.aims import (
-    build_endgame_detector_prompt as _build_endgame,
-    get_classify_system_instruction as _get_classify_sysinstruction,
     build_classify_turn_prompt as _build_classify_turn,
 )
+from app.prompts.aims import (
+    build_endgame_detector_prompt as _build_endgame,
+)
+from app.prompts.aims import (
+    get_classify_system_instruction as _get_classify_sysinstruction,
+)
+from app.services.chat_helpers import extract_recent_concerns
+from app.services.chat_helpers import recent_context as _recent_context
 
 
 class AimsPromptBuilder:

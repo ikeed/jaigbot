@@ -3,7 +3,7 @@ Main chat orchestrator that delegates to coaching or legacy paths.
 
 This service coordinates the high-level flow:
 1. Input validation
-2. Chat context building 
+2. Chat context building
 3. Route to coaching or legacy handler
 4. Response formatting
 5. Memory persistence
@@ -14,25 +14,24 @@ Behavior-preserving refactoring of the massive app.main.chat() function.
 from __future__ import annotations
 
 import asyncio
-
 import json
 import time
-from typing import Any, Optional
+from typing import Any
 
-from fastapi import HTTPException, Request, BackgroundTasks
+from fastapi import BackgroundTasks, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from app.message_catalog import message
 from app.models import ChatRequest, ReportRequest
-from app.services.chat_context import ChatContextBuilder, ChatContext
-from app.services.session_service import SessionService, CookieSettings
+from app.services.chat_context import ChatContext, ChatContextBuilder
+from app.services.session_service import CookieSettings, SessionService
 from app.services.storage_service import storage_service
 from app.vertex import VertexAIError
 
 
 class ChatOrchestrator:
     """Main orchestrator for chat requests - delegates to coaching or legacy paths."""
-    
+
     def __init__(
         self,
         *,
@@ -44,18 +43,18 @@ class ChatOrchestrator:
         debug_config: dict[str, Any],
         logger: Any,
     ):
-        self.background_tasks: Optional[BackgroundTasks] = None
+        self.background_tasks: BackgroundTasks | None = None
         self.memory_store = memory_store
         self.logger = logger
-        
+
         # Extract config values for easier access with safe defaults
         self.memory_enabled = memory_config.get("enabled", True)
         self.memory_max_turns = memory_config.get("max_turns", 10)
         self.memory_ttl_seconds = memory_config.get("ttl_seconds", 3600)
-        
+
         self.aims_coaching_enabled = aims_config.get("enabled", False)
         self.force_coach_default = bool(aims_config.get("force_default", False))
-        
+
         # Retained so keys this class does not model (classifier_model_id,
         # classifier_thinking_*) still reach AimsCoachingHandler.
         self.vertex_config = dict(vertex_config)
@@ -69,13 +68,13 @@ class ChatOrchestrator:
         self.client_cls = vertex_config.get("client_cls")
         self.expose_upstream_error = debug_config.get("expose_upstream_error", False)
         self.log_response_preview_max = debug_config.get("log_response_preview_max", 100)
-        
+
         # Initialize session service
         self.session_service = SessionService(
             memory_store,
             cookie=CookieSettings(
                 name=session_cookie_settings["name"],
-                secure=session_cookie_settings["secure"], 
+                secure=session_cookie_settings["secure"],
                 samesite=session_cookie_settings["samesite"],
                 max_age=session_cookie_settings["max_age"],
             ),
@@ -83,7 +82,7 @@ class ChatOrchestrator:
             memory_max_turns=self.memory_max_turns,
             memory_ttl_seconds=self.memory_ttl_seconds,
         )
-        
+
         # Initialize context builder
         self.context_builder = ChatContextBuilder(
             session_service=self.session_service,
@@ -92,16 +91,16 @@ class ChatOrchestrator:
             memory_ttl_seconds=self.memory_ttl_seconds,
             do_prune_mod=29,
         )
-    
-    async def handle_chat(self, req: Request, body: ChatRequest, background_tasks: Optional[BackgroundTasks] = None) -> JSONResponse:
+
+    async def handle_chat(self, req: Request, body: ChatRequest, background_tasks: BackgroundTasks | None = None) -> JSONResponse:
         """Main entry point for chat requests."""
         # Optional: update background_tasks if passed
         self.background_tasks = background_tasks
-        
+
         try:
             # Early validation
             self._validate_request(body)
-            
+
             # Build chat context (session, memory, persona)
             ctx = self.context_builder.build(
                 req, body.sessionId, body.character, body.scene, body.userInfo
@@ -123,7 +122,7 @@ class ChatOrchestrator:
                 return await self._handle_coaching_path(req, body, ctx)
             else:
                 return await self._handle_legacy_path(req, body, ctx)
-                
+
         except HTTPException:
             # Re-raise HTTP exceptions as-is
             raise
@@ -135,7 +134,7 @@ class ChatOrchestrator:
                 500,
                 message("api_errors.internal_server_error"),
             )
-    
+
     def _validate_request(self, body: ChatRequest) -> None:
         """Validate the incoming request."""
         # Validate size limit 2 KiB
@@ -146,20 +145,20 @@ class ChatOrchestrator:
             raise HTTPException(
                 status_code=400,
                 detail={"error": {"message": message("api_errors.invalid_utf8"), "code": 400}}
-            )
-        
+            ) from e
+
         if len(encoded) > 2048:
             raise HTTPException(
                 status_code=400,
                 detail={"error": {"message": message("api_errors.message_too_large"), "code": 400}}
             )
-    
+
     async def _handle_coaching_path(
         self, req: Request, body: ChatRequest, ctx: ChatContext
     ) -> JSONResponse:
         """Handle requests with AIMS coaching enabled."""
         from app.services.aims_coaching_handler import AimsCoachingHandler
-        
+
         handler = AimsCoachingHandler(
             memory_store=self.memory_store,
             vertex_config={
@@ -179,10 +178,10 @@ class ChatOrchestrator:
             },
             logger=self.logger,
         )
-        
+
         try:
             result = await handler.handle(req, body, ctx)
-            
+
             # Build response with coaching data
             response_payload = {
                 "reply": result["reply"],
@@ -202,7 +201,7 @@ class ChatOrchestrator:
             except Exception as e:
                 self.logger.debug(f"Failed to set sessionId in response (non-fatal): {e}")
                 pass
-            
+
             # Add optional coach post for end-game scenarios
             game_over = bool(result.get("coach_post"))
             if game_over:
@@ -245,25 +244,25 @@ class ChatOrchestrator:
                     self.logger.warning(f"Failed to queue GCS archive for session {ctx.session_id}: {archive_err}")
 
             resp = JSONResponse(status_code=200, content=response_payload)
-            
+
             # Set session cookie
             try:
                 self.session_service.apply_cookie(resp, ctx.session_id)
             except Exception as e:
                 self.logger.debug(f"Failed to apply session cookie (non-fatal): {e}")
                 pass
-            
+
             return resp
-            
+
         except VertexAIError as e:
             return self._handle_vertex_error(req, e, ctx.session_id)
-    
+
     async def _handle_legacy_path(
         self, req: Request, body: ChatRequest, ctx: ChatContext
     ) -> JSONResponse:
         """Handle legacy (non-coaching) chat requests."""
         from app.services.legacy_chat_handler import LegacyChatHandler
-        
+
         handler = LegacyChatHandler(
             memory_store=self.memory_store,
             vertex_config={
@@ -282,10 +281,10 @@ class ChatOrchestrator:
             },
             logger=self.logger,
         )
-        
+
         try:
             result = await handler.handle(req, body, ctx)
-            
+
             # Build response
             response_payload = {
                 "reply": result["reply"],
@@ -303,37 +302,37 @@ class ChatOrchestrator:
             except Exception as e:
                 self.logger.debug(f"Failed to set sessionId in legacy response (non-fatal): {e}")
                 pass
-            
+
             # Add optional coaching/session if enabled and requested
             if result.get("coaching"):
                 response_payload["coaching"] = result["coaching"]
             if result.get("session"):
                 response_payload["session"] = result["session"]
-            
+
             resp = JSONResponse(status_code=200, content=response_payload)
-            
+
             # Set session cookie
             try:
                 self.session_service.apply_cookie(resp, ctx.session_id)
             except Exception as e:
                 self.logger.debug(f"Failed to apply session cookie in legacy path (non-fatal): {e}")
                 pass
-            
+
             return resp
-            
+
         except VertexAIError as e:
             return self._handle_vertex_error(req, e, ctx.session_id)
-    
+
     def _handle_vertex_error(
         self, req: Request, e: VertexAIError, session_id: str
     ) -> JSONResponse:
         """Handle VertexAI-specific errors with appropriate status codes."""
         req_id = self._get_request_id(req)
-        
+
         if getattr(e, "status_code", None) == 404:
             # Model not found
             guidance = message("api_errors.vertex_model_not_found")
-            
+
             payload = {
                 "error": {
                     "message": guidance,
@@ -343,10 +342,10 @@ class ChatOrchestrator:
                     "modelId": self.model_id,
                 }
             }
-            
+
             if self.expose_upstream_error:
                 payload["error"]["upstream"] = str(e)
-            
+
             resp = JSONResponse(status_code=404, content=payload)
         else:
             # Other upstream errors -> 502
@@ -357,27 +356,27 @@ class ChatOrchestrator:
                     "requestId": req_id
                 }
             }
-            
+
             if self.expose_upstream_error:
                 payload["error"]["upstream"] = str(e)
-            
+
             resp = JSONResponse(status_code=502, content=payload)
-        
+
         # Set session cookie
         try:
             self.session_service.apply_cookie(resp, session_id)
         except Exception as e:
             self.logger.debug(f"Failed to apply session cookie (vertex error path): {e}")
             pass
-        
+
         return resp
-    
+
     def _build_error_response(
         self, req: Request, e: Exception, status_code: int, message: str
     ) -> JSONResponse:
         """Build standardized error response."""
         req_id = self._get_request_id(req)
-        
+
         self.logger.exception("Unexpected error: %s", e)
         self.logger.error(json.dumps({
             "event": "chat",
@@ -385,7 +384,7 @@ class ChatOrchestrator:
             "requestId": req_id,
             "error": str(e),
         }))
-        
+
         return JSONResponse(
             status_code=status_code,
             content={
@@ -396,17 +395,17 @@ class ChatOrchestrator:
                 }
             }
         )
-    
-    async def handle_report(self, req: Request, body: ReportRequest, background_tasks: Optional[BackgroundTasks] = None) -> JSONResponse:
+
+    async def handle_report(self, req: Request, body: ReportRequest, background_tasks: BackgroundTasks | None = None) -> JSONResponse:
         """Handle issue reports by archiving session and clearing it."""
         self.background_tasks = background_tasks
         session_id = body.sessionId
         self.logger.info(f"Report received for session: {session_id}, reason: {body.reason}")
-        
+
         try:
             # Fetch existing memory
             mem = self.session_service.get_mem(session_id)
-            
+
             # Identify user_id
             user_info = body.userInfo or (mem.get("user_info") if mem else None)
             user_id = "anonymous"
@@ -421,7 +420,7 @@ class ChatOrchestrator:
                     storage_service.download_session, session_id, user_id
                 )
                 mem = downloaded or {}
-                
+
                 if not mem:
                     # No conversation history, but still archive the report itself
                     self.logger.info(f"No prior session data for {session_id}, creating report-only archive")
@@ -477,18 +476,18 @@ class ChatOrchestrator:
                 message("api_errors.report_internal_server_error"),
             )
 
-    def _get_request_id(self, request: Request) -> Optional[str]:
+    def _get_request_id(self, request: Request) -> str | None:
         """Extract request ID from headers or generate one."""
         h = request.headers.get("x-cloud-trace-context") or request.headers.get("x-request-id")
         if h:
             return h
-        
+
         try:
             return getattr(request.state, "request_id", None) or self._generate_uuid()
         except Exception as e:
             self.logger.debug(f"Error retrieving request ID: {e}")
             return self._generate_uuid()
-    
+
     @staticmethod
     def _generate_uuid() -> str:
         """Generate a UUID string."""

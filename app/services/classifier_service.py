@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, List, Optional, TypeVar
+from typing import Any, TypeVar
 
 from pydantic import BaseModel
 
@@ -37,7 +37,7 @@ class ClassifierService:
         project_id: str,
         location: str,
         model_id: str,
-        logger: Optional[logging.Logger] = None,
+        logger: logging.Logger | None = None,
         temperature: float = 0.0,
         max_tokens: int = 500,
         client_cls: Any = VertexClient,
@@ -56,12 +56,12 @@ class ClassifierService:
         self.thinking_level = thinking_level
         self.thinking_budget = thinking_budget
 
-    async def classify_turn(self, *, clinician_message: str, person_last: str, history: List[Dict[str, str]],
-                            prior_announced: bool, prior_phase: str, mapping: Dict[str, Any], context_turns: int = 3,
-                            inquired_concerns_list: List[str] = None, mirrored_concerns_list: List[str] = None,
+    async def classify_turn(self, *, clinician_message: str, person_last: str, history: list[dict[str, str]],
+                            prior_announced: bool, prior_phase: str, mapping: dict[str, Any], context_turns: int = 3,
+                            inquired_concerns_list: list[str] = None, mirrored_concerns_list: list[str] = None,
                             checklist_context: str | None = None) -> ClassifierResult:
         """Perform unified classification for a clinician turn."""
-        
+
         # 1. Build the prompt (split: static system instruction + lean per-turn prompt)
         # The system instruction contains the full AIMS rubric, scoring rules, and
         # reference data — identical across all requests (benefits from implicit caching).
@@ -83,15 +83,15 @@ class ClassifierService:
         try:
             raw_json = await self._call_gemini_json(prompt, system_instruction=system_instruction)
             data = json.loads(self._strip_json_fences(raw_json))
-            
+
             if not data:
                 raise ValueError("LLM returned empty or null data")
-            
+
             # Extract and normalize AIMS coaching
             aims_data = data.get("aims", {}) or {}
             steps = aims_data.get("steps") or []
             step = aims_data.get("step") # support both formats during transition
-            
+
             if not step and steps:
                 # Normalize steps array into single step string for legacy support
                 if len(steps) == 1:
@@ -172,7 +172,7 @@ class ClassifierService:
                 person_events=person_events,
                 resolution=resolution,
             )
-            
+
             # Clip tips to at most one as policy (parity with previous LLM path)
             if len(result.aims.tips) > 1:
                 result.aims.tips = result.aims.tips[:1]
@@ -185,7 +185,7 @@ class ClassifierService:
             status_code = getattr(e, "status_code", None)
             if status_code and status_code in {403, 404, 429}:
                 raise e
-                
+
             self.logger.error("Unified classification failed: %s", e)
             if not self.heuristic_fallback_enabled:
                 return self._get_classification_unavailable_result()
@@ -255,10 +255,7 @@ class ClassifierService:
         if s.startswith("```"):
             # Remove opening fence line
             first_newline = s.find("\n")
-            if first_newline != -1:
-                s = s[first_newline + 1:]
-            else:
-                s = s[3:]  # just "```" with no newline
+            s = s[first_newline + 1:] if first_newline != -1 else s[3:]  # or just "```" with no newline
             # Remove closing fence
             if s.rstrip().endswith("```"):
                 s = s.rstrip()[:-3].rstrip()
@@ -269,10 +266,10 @@ class ClassifierService:
         *,
         history_text: str,
         announced: bool,
-        inquired_concerns: List[str],
-        mirrored_concerns: List[str],
-        secured_concerns: List[str],
-    ) -> Dict[str, Any]:
+        inquired_concerns: list[str],
+        mirrored_concerns: list[str],
+        secured_concerns: list[str],
+    ) -> dict[str, Any]:
         """Call Gemini to detect whether the session reached a natural conclusion.
 
         AimsEndgameService.check() calls this after its hard guards pass. The
@@ -348,26 +345,26 @@ class ClassifierService:
     @staticmethod
     def _get_deterministic_fallback(
             clinician_message: str,
-        mapping: Dict[str, Any],
+        mapping: dict[str, Any],
     ) -> ClassifierResult:
         """Invoke the original deterministic engine as a fallback."""
         from app.aims_engine import evaluate_turn
-        
+
         fb = evaluate_turn(clinician_message, mapping)
-        
+
         # Map deterministic 'evaluate_turn' result to ClassifierResult
         reasons = fb.get("reasons", [])
         fallback_marker = message("aims.fallback_marker")
         if fallback_marker not in reasons:
             reasons.append(fallback_marker)
-            
+
         aims_coaching = Coaching(
             step=fb.get("step"),
             score=fb.get("score", 2),
             reasons=[str(reason).strip() for reason in reasons if str(reason or "").strip()],
             tips=[str(tip).strip() for tip in (fb.get("tips", []) or []) if str(tip or "").strip()],
         )
-        
+
         return ClassifierResult(
             is_small_talk=False, # Fallback doesn't explicitly detect this well
             is_vaccine_relevant=True,

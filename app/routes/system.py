@@ -3,21 +3,22 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
-from app.persona import DEFAULT_CHARACTER, DEFAULT_SCENE
 from app.constants import (
+    ENDPOINT_CONFIG,
+    ENDPOINT_DIAGNOSTICS,
     ENDPOINT_HEALTHZ,
     ENDPOINT_HISTORY,
-    ENDPOINT_CONFIG,
     ENDPOINT_MODELCHECK,
-    ENDPOINT_DIAGNOSTICS,
     ENDPOINT_MODELS,
     KEY_GAME_OVER,
 )
+from app.persona import DEFAULT_CHARACTER, DEFAULT_SCENE
 
 
 def create_system_router(
@@ -36,8 +37,8 @@ def create_system_router(
 
     @router.get(ENDPOINT_HISTORY)
     async def history(
-        sessionId: Optional[str] = None,
-        full: Optional[bool] = False,
+        sessionId: str | None = None,
+        full: bool | None = False,
         memory_store=Depends(get_memory_store),
     ):
         """Return conversation history for a session.

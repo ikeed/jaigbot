@@ -1,4 +1,5 @@
-from typing import List, Optional, Callable
+import contextlib
+from collections.abc import Callable
 
 from ..vertex import VertexClient as DefaultVertexClient
 
@@ -14,15 +15,15 @@ class VertexGateway:
 
     def __init__(
         self,
-        project: Optional[str],
+        project: str | None,
         region: str,
         primary_model: str,
-        fallbacks: Optional[List[str]] = None,
+        fallbacks: list[str] | None = None,
         temperature: float = 0.2,
         max_tokens: int = 2048,
         client_cls=None,
     ) -> None:
-        self.last_model_used: Optional[str] = None
+        self.last_model_used: str | None = None
         self.project = project
         self.region = region
         self.primary_model = primary_model
@@ -31,7 +32,7 @@ class VertexGateway:
         self.max_tokens = max_tokens
         self.client_cls = client_cls or DefaultVertexClient
 
-    def _models_to_try(self) -> List[str]:
+    def _models_to_try(self) -> list[str]:
         return [self.primary_model] + self.fallbacks
 
     def _project(self) -> str:
@@ -47,20 +48,18 @@ class VertexGateway:
         return str(result)
 
     @staticmethod
-    def _log_fallback(log_fallback: Optional[Callable], model_id: str) -> None:
+    def _log_fallback(log_fallback: Callable | None, model_id: str) -> None:
         if not log_fallback:
             return
         # noinspection PyBroadException
-        try:
+        with contextlib.suppress(Exception):
             log_fallback(model_id)
-        except Exception:
-            pass
 
     def generate_text(
         self,
         prompt: str,
-        system_instruction: Optional[str] = None,
-        log_fallback: Optional[Callable] = None,
+        system_instruction: str | None = None,
+        log_fallback: Callable | None = None,
     ) -> str:
         last_err = None
         for mid in self._models_to_try():
@@ -91,8 +90,8 @@ class VertexGateway:
         self,
         prompt: str,
         response_schema: dict,
-        system_instruction: Optional[str] = None,
-        log_fallback: Optional[Callable] = None,
+        system_instruction: str | None = None,
+        log_fallback: Callable | None = None,
     ) -> str:
         last_err = None
         for mid in self._models_to_try():
@@ -124,8 +123,8 @@ class VertexGateway:
     async def agenerate_text(
         self,
         prompt: str,
-        system_instruction: Optional[str] = None,
-        log_fallback: Optional[Callable] = None,
+        system_instruction: str | None = None,
+        log_fallback: Callable | None = None,
     ) -> str:
         """Async variant of generate_text using VertexClient.generate_text_async()."""
         last_err = None
@@ -152,8 +151,8 @@ class VertexGateway:
         self,
         prompt: str,
         response_schema: dict,
-        system_instruction: Optional[str] = None,
-        log_fallback: Optional[Callable] = None,
+        system_instruction: str | None = None,
+        log_fallback: Callable | None = None,
     ) -> str:
         """Async variant of generate_text_json using VertexClient.generate_text_async()."""
         last_err = None

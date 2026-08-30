@@ -3,7 +3,7 @@ Legacy chat handler for non-coaching requests.
 
 This service handles the traditional chat flow:
 1. Direct LLM generation with existing system prompt
-2. Generate response with safety checks  
+2. Generate response with safety checks
 3. Update conversation history
 4. Build basic response structure
 
@@ -12,11 +12,11 @@ Behavior-preserving extraction from the else/fallback path in app.main.chat().
 from __future__ import annotations
 
 import time
-from typing import Any, Dict
+from typing import Any
 
 from fastapi import Request
 
-from app.chat_roles import ROLE_USER, ROLE_ASSISTANT, get_ui_attributes
+from app.chat_roles import ROLE_ASSISTANT, ROLE_USER, get_ui_attributes
 from app.message_catalog import message
 from app.models import ChatRequest
 from app.services.chat_context import ChatContext
@@ -26,20 +26,20 @@ from app.vertex import VertexClient
 
 class LegacyChatHandler:
     """Handles the traditional non-coaching chat flow."""
-    
+
     def __init__(
         self,
         *,
         memory_store: Any,
         vertex_config: dict[str, Any],
-        memory_config: dict[str, Any], 
+        memory_config: dict[str, Any],
         logger: Any,
     ):
         self.memory_store = memory_store
         self.vertex_config = vertex_config
         self.memory_config = memory_config
         self.logger = logger
-        
+
         # Extract frequently used config
         self.project_id = vertex_config["project_id"]
         self.vertex_location = vertex_config["vertex_location"]
@@ -48,19 +48,19 @@ class LegacyChatHandler:
         self.temperature = vertex_config["temperature"]
         self.max_tokens = vertex_config["max_tokens"]
         self.client_cls = vertex_config.get("client_cls") or VertexClient
-        
+
         self.memory_enabled = memory_config["enabled"]
         self.memory_max_turns = memory_config["max_turns"]
-        
+
         # Initialize helper services
         self.jailbreak_guard = JailbreakGuard()
-    
+
     async def handle(
         self, _req: Request, body: ChatRequest, ctx: ChatContext
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Handle the traditional chat flow."""
         started = time.time()
-        
+
         # Check for jailbreak attempts early
         is_jb, jb_matches = self.jailbreak_guard.detect(body.message)
         if is_jb:
@@ -70,10 +70,10 @@ class LegacyChatHandler:
                 "latency_ms": int((time.time() - started) * 1000),
                 "jailbreak_detected": True,
             }
-        
+
         # Build complete prompt from history + current message
         full_prompt = self._build_full_prompt(ctx, body.message)
-        
+
         # Generate response with fallbacks
         reply_text = await self._generate_reply(full_prompt)
 
@@ -85,25 +85,25 @@ class LegacyChatHandler:
         except Exception as e:
             self.logger.debug(f"Failed to strip appointment headers: {e}")
             pass
-        
+
         # Update conversation history
         await self._update_conversation_history(ctx.session_id, body.message, reply_text)
-        
+
         # Calculate final latency
         latency_ms = int((time.time() - started) * 1000)
-        
+
         # Log successful completion
         from app.telemetry.events import log_event as telemetry_log_event
         telemetry_log_event(
             self.logger,
-            "legacy_turn", 
+            "legacy_turn",
             status="ok",
             latencyMs=latency_ms,
             modelId=self.model_id,
             sessionId=ctx.session_id,
             userInfo=ctx.user_info,
         )
-        
+
         # Determine which model actually produced the response (fallback-aware)
         try:
             from app.services.vertex_helpers import get_last_model_used
@@ -117,33 +117,33 @@ class LegacyChatHandler:
             "model": model_used,
             "latency_ms": latency_ms,
         }
-    
+
     @staticmethod
     def _build_full_prompt(ctx: ChatContext, current_message: str) -> str:
         """Build complete prompt from system + history + current message."""
         # Start with system instruction if available
         parts = []
-        
+
         if ctx.system_instruction:
             parts.append(ctx.system_instruction)
-        
+
         # Add conversation history
         if ctx.history_text:
             parts.append(ctx.history_text)
-        
+
         # Add current user message
         user_author = get_ui_attributes(ROLE_USER)["author"]
         asst_author = get_ui_attributes(ROLE_ASSISTANT)["author"]
         parts.append(f"{user_author}: {current_message}")
         parts.append(f"{asst_author}:")
-        
+
         return "\n\n".join(parts)
-    
+
     async def _generate_reply(self, prompt: str) -> str:
         """Generate reply using Vertex AI with fallbacks."""
-        from app.vertex import VertexAIError
         from app.services.vertex_helpers import avertex_call_with_fallback_text
-        
+        from app.vertex import VertexAIError
+
         try:
             raw_response = await avertex_call_with_fallback_text(
                 project=self.project_id,
@@ -158,23 +158,23 @@ class LegacyChatHandler:
                 logger=self.logger,
                 client_cls=self.client_cls,
             )
-            
+
             return (raw_response or "").strip() or message("legacy_chat.empty_reply")
-            
+
         except VertexAIError:
             # Re-raise VertexAI errors so the orchestrator can handle them properly
             raise
         except Exception as e:
             self.logger.error("Legacy chat generation failed: %s", e)
             return message("legacy_chat.generation_failed")
-    
+
     async def _update_conversation_history(
         self, session_id: str, user_message: str, assistant_reply: str
     ) -> None:
         """Update conversation history in memory."""
         if not (self.memory_enabled and session_id):
             return
-        
+
         try:
             now = time.time()
             mem = self.memory_store.get(session_id) or {
@@ -194,13 +194,13 @@ class LegacyChatHandler:
                 mem["full_history"] = full_history
             full_history.append({**user_entry, "time": now})
             full_history.append({**asst_entry, "time": now})
-            
+
             # Trim working history (coach-aware)
             from app.services.session_service import SessionService
             mem["history"] = SessionService.trim_history(mem["history"], self.memory_max_turns)
-            
+
             mem["updated"] = now
             self.memory_store[session_id] = mem
-            
+
         except Exception as e:
             self.logger.debug("Memory persistence failed for session %s: %s", session_id, e)

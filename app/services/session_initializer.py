@@ -162,19 +162,17 @@ def initialize_session(
             mem["character"] = character
         if scene and not mem.get("scene"):
             mem["scene"] = scene
-        if selected_persona and not mem.get("persona"):
-            if fields is not None:
-                mem["persona"] = fields["persona"]
+        if selected_persona and not mem.get("persona") and fields is not None:
+            mem["persona"] = fields["persona"]
         if body.userInfo and not mem.get("user_info"):
             mem["user_info"] = body.userInfo
 
-        if not mem.get("history") and character:
-            if not mem.get("full_history"):
-                card_content = initial_card or _scenario_card_from_character(character)
-                mem["history"].append({"role": ROLE_SYSTEM, "content": card_content})
-                mem["full_history"].append(
-                    {"role": ROLE_SYSTEM, "content": card_content, "time": now}
-                )
+        if not mem.get("history") and character and not mem.get("full_history"):
+            card_content = initial_card or _scenario_card_from_character(character)
+            mem["history"].append({"role": ROLE_SYSTEM, "content": card_content})
+            mem["full_history"].append(
+                {"role": ROLE_SYSTEM, "content": card_content, "time": now}
+            )
 
         mem.setdefault("full_history", [])
         mem.setdefault("session_started", now)

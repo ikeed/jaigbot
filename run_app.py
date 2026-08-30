@@ -25,6 +25,7 @@ from app.constants import (
     PATH_CHAT,
     PATH_PUBLIC,
 )
+
 # Import the existing backend app and modular components
 from app.main import app as backend_app
 from app.middleware import AuthRedirectMiddleware, JavaScriptRequiredMiddleware
@@ -50,7 +51,7 @@ if not os.getenv(ENV_CHAINLIT_URL):
 else:
     url = os.environ[ENV_CHAINLIT_URL]
     # In unified mode, Chainlit is mounted at /chat via mount_chainlit.
-    # We strip the /chat suffix from CHAINLIT_URL because Chainlit internally 
+    # We strip the /chat suffix from CHAINLIT_URL because Chainlit internally
     # appends the mount path to the base URL when generating redirect URIs.
     # Keeping it would result in double-prefixed URLs like /chat/chat/auth/...
     if url.endswith(PATH_CHAT):

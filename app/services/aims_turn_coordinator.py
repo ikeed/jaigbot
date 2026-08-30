@@ -88,7 +88,7 @@ class AimsTurnCoordinator:
                     task_cls,
                     timeout=self._classify_budget_s,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 self._logger.warning(
                     "Classification timed out after %s s, falling back",
                     self._classify_budget_s,

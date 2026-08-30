@@ -1,18 +1,20 @@
+from typing import Any
+
 import chainlit as cl
-from typing import Any, List, Dict, Optional
 from app.constants import (
-    SESSION_USER,
-    SESSION_ID,
-    SESSION_HISTORY,
-    SESSION_PERSONA_NAME,
-    SESSION_INTRO_SEEN,
     SESSION_CHARACTER,
-    SESSION_SCENE,
     SESSION_CONNECTION_ID,
+    SESSION_HISTORY,
+    SESSION_ID,
+    SESSION_INTRO_PENDING,
+    SESSION_INTRO_SEEN,
+    SESSION_PERSONA_NAME,
     SESSION_QUERY_PARAMS,
+    SESSION_SCENE,
     SESSION_SESSION_ENDED,
-    SESSION_INTRO_PENDING
+    SESSION_USER,
 )
+
 
 class SessionManager:
     """Typed wrapper around cl.user_session to avoid magic strings and centralize state management."""
@@ -22,60 +24,60 @@ class SessionManager:
         return cl.user_session.get(SESSION_USER)
 
     @property
-    def session_id(self) -> Optional[str]:
+    def session_id(self) -> str | None:
         return cl.user_session.get(SESSION_ID)
 
     @session_id.setter
-    def session_id(self, value: Optional[str]):
+    def session_id(self, value: str | None):
         cl.user_session.set(SESSION_ID, value)
 
     @property
-    def history(self) -> List[Dict[str, Any]]:
+    def history(self) -> list[dict[str, Any]]:
         return cl.user_session.get(SESSION_HISTORY) or []
 
     @history.setter
-    def history(self, value: List[Dict[str, Any]]):
+    def history(self, value: list[dict[str, Any]]):
         cl.user_session.set(SESSION_HISTORY, value)
 
     @property
-    def character(self) -> Optional[str]:
+    def character(self) -> str | None:
         return cl.user_session.get(SESSION_CHARACTER)
 
     @character.setter
-    def character(self, value: Optional[str]):
+    def character(self, value: str | None):
         cl.user_session.set(SESSION_CHARACTER, value)
 
     @property
-    def persona_name(self) -> Optional[str]:
+    def persona_name(self) -> str | None:
         value = cl.user_session.get(SESSION_PERSONA_NAME)
         return value if isinstance(value, str) and value.strip() else None
 
     @persona_name.setter
-    def persona_name(self, value: Optional[str]):
+    def persona_name(self, value: str | None):
         cl.user_session.set(SESSION_PERSONA_NAME, value)
 
     @property
-    def scene(self) -> Optional[str]:
+    def scene(self) -> str | None:
         return cl.user_session.get(SESSION_SCENE)
 
     @scene.setter
-    def scene(self, value: Optional[str]):
+    def scene(self, value: str | None):
         cl.user_session.set(SESSION_SCENE, value)
 
     @property
-    def connection_id(self) -> Optional[str]:
+    def connection_id(self) -> str | None:
         return cl.user_session.get(SESSION_CONNECTION_ID)
 
     @connection_id.setter
-    def connection_id(self, value: Optional[str]):
+    def connection_id(self, value: str | None):
         cl.user_session.set(SESSION_CONNECTION_ID, value)
 
     @property
-    def query_params(self) -> Dict[str, Any]:
+    def query_params(self) -> dict[str, Any]:
         return cl.user_session.get(SESSION_QUERY_PARAMS) or {}
 
     @query_params.setter
-    def query_params(self, value: Dict[str, Any]):
+    def query_params(self, value: dict[str, Any]):
         cl.user_session.set(SESSION_QUERY_PARAMS, value)
 
     @property
@@ -103,6 +105,6 @@ class SessionManager:
     def local_intro_seen(self, value: bool):
         cl.user_session.set(SESSION_INTRO_SEEN, value)
 
-    def get_user_identifier(self) -> Optional[str]:
+    def get_user_identifier(self) -> str | None:
         user = self.user
         return user.identifier if user else None

@@ -254,9 +254,7 @@ class AimsEndgameService:
                     # follow-up consent could never close in any environment where
                     # heuristic fallback is off (the deploy default).
                     combined_lower = combined_reply_text.lower()
-                    if any(cue in combined_lower for cue in EndGameDetector.PLAN_NEGATIVE_CUES):
-                        is_endgame = False
-                    elif not (
+                    if any(cue in combined_lower for cue in EndGameDetector.PLAN_NEGATIVE_CUES) or not (
                         literature_followup_closure
                         or self._could_be_literature_followup_closure(
                             self._latest_closure_exchange_text(history)

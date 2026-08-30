@@ -1,24 +1,28 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends
 from pydantic import BaseModel
 
-from app.services.session_initializer import deregister_session_connection, initialize_session
-from app.constants import ENDPOINT_SESSION, ENDPOINT_DEREGISTER
+from app.constants import ENDPOINT_DEREGISTER, ENDPOINT_SESSION
+from app.services.session_initializer import (
+    deregister_session_connection,
+    initialize_session,
+)
 
 
 class SessionInitRequest(BaseModel):
     sessionId: str
-    connectionId: Optional[str] = None
-    personaId: Optional[str] = None
-    character: Optional[str] = None
-    scene: Optional[str] = None
-    userInfo: Optional[dict] = None
-    initialCard: Optional[str] = None
-    force: Optional[bool] = False
+    connectionId: str | None = None
+    personaId: str | None = None
+    character: str | None = None
+    scene: str | None = None
+    userInfo: dict | None = None
+    initialCard: str | None = None
+    force: bool | None = False
 
 
 class SessionDeregisterRequest(BaseModel):

@@ -18,9 +18,9 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple
+from typing import Any
 
-from app.chat_roles import ROLE_USER, ROLE_ASSISTANT
+from app.chat_roles import ROLE_ASSISTANT, ROLE_USER
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,7 @@ class SessionService:
         self.memory_ttl_seconds = int(memory_ttl_seconds)
 
     # -------- Session ID handling --------
-    def ensure_session(self, request, body_session_id: Optional[str], user_info: Optional[dict] = None) -> Tuple[str, bool]:
+    def ensure_session(self, request, body_session_id: str | None, user_info: dict | None = None) -> tuple[str, bool]:
         """Resolve or create a session id.
         Order: body.sessionId -> cookie -> generate new.
         Returns (session_id, set_cookie_flag).
@@ -97,7 +97,7 @@ class SessionService:
             return {}
         return self._store.get(session_id) or {}
 
-    def update_persona_scene(self, session_id: str, character: Optional[str], scene: Optional[str]) -> dict:
+    def update_persona_scene(self, session_id: str, character: str | None, scene: str | None) -> dict:
         if not (self.memory_enabled and session_id):
             return {}
         now = time.time()
@@ -162,7 +162,7 @@ class SessionService:
                     # Archive to GCS before popping from store
                     user_info = mem.get("user_info")
                     user_id = user_info.get("identifier") if user_info else "anonymous"
-                    
+
                     # Only archive if it hasn't been explicitly exported yet (best-effort flag)
                     # We can use a flag in the session data to avoid double-archiving if desired,
                     # but GCS overwrite is also fine.
@@ -188,7 +188,7 @@ class SessionService:
                         storage_service.upload_session(sid, user_id, archive_data, finalize_persona_index=True)
                     except Exception as e:
                         logger.debug("Failed to archive session %s during prune: %s", sid, e)
-                        
+
                 self._store.pop(sid, None)
         except Exception as e:
             # best-effort only

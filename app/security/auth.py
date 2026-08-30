@@ -1,8 +1,10 @@
-import os
 import logging
+import os
 from pathlib import Path
+
+from chainlit.auth import decode_jwt, get_token_from_cookies
 from fastapi import Request
-from chainlit.auth import get_token_from_cookies, decode_jwt
+
 from app.chainlit_thread_state import clear_current_thread_id
 from app.constants import DIR_CHAINLIT, FILE_SESSION_ID
 
@@ -35,7 +37,7 @@ def clear_persistent_session_id(user_identifier: str | None = None) -> None:
             # Create a safe filename from the user identifier
             safe_name = "".join([c if c.isalnum() else "_" for c in user_identifier])
             filenames.insert(0, f"{FILE_SESSION_ID}_{safe_name}")
-        
+
         for filename in filenames:
             path = os.path.join(_get_chainlit_dir(), filename)
             if os.path.exists(path):
