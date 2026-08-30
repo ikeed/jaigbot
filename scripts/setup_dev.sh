@@ -9,6 +9,12 @@ VENV_DIR="${VENV_DIR:-.venv}"
 
 echo "[setup_dev] Repository: $REPO_ROOT"
 
+if ! command -v node >/dev/null 2>&1; then
+  echo "[setup_dev] WARNING: node not found on PATH." >&2
+  echo "[setup_dev]   tests/unit/frontend/ requires Node.js and will fail without it." >&2
+  echo "[setup_dev]   Install it, e.g.: brew install node@20" >&2
+fi
+
 if [[ ! -d "$VENV_DIR" ]]; then
   echo "[setup_dev] Creating virtual environment: $VENV_DIR"
   "$PYTHON_BIN" -m venv "$VENV_DIR"

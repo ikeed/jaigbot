@@ -1,3 +1,4 @@
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -20,6 +21,14 @@ def clean_app_state():
 
 
 def test_native_dialog_decorator() -> None:
+    if shutil.which("node") is None:
+        pytest.fail(
+            "Node.js is required to run tests/unit/frontend/ -- install it "
+            "(e.g. `brew install node@20`) and ensure `node` is on PATH. "
+            "See CLAUDE.md's Setup section.",
+            pytrace=False,
+        )
+
     repo_root = Path(__file__).resolve().parents[3]
     script = repo_root / "tests" / "unit" / "frontend" / "native_dialog_test.js"
 
