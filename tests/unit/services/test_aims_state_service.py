@@ -824,6 +824,19 @@ def test_closure_signals_both_can_be_set_from_the_same_turn():
     assert state["followup_confirmed"] is True
 
 
+def test_closure_signals_catches_print_out_phrasing():
+    # Reproduces a real staging conversation: "printout" (one word) was in the
+    # cue list but the clinician's natural phrasing "print out" (two words)
+    # was not, so literature_offered never flipped despite the ingredient
+    # sheet and vaccine schedule clearly being offered.
+    state = {}
+    AimsStateService._update_closure_signals(
+        state,
+        "I can print out the ingredient sheet and the official schedule for you.",
+    )
+    assert state["literature_offered"] is True
+
+
 # ---------------------------------------------------------------------------
 # Tests -- rewritten _add_closure_plan_tip (runs unconditionally now)
 # ---------------------------------------------------------------------------
