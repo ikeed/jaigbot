@@ -6,6 +6,7 @@ from app.constants import (
     KEY_AIMS_STATE,
     PHASE_INQUIRE_MIRROR,
     STEP_ANNOUNCE,
+    STEP_ANNOUNCE_INQUIRE,
     STEP_INQUIRE,
     STEP_MIRROR,
     STEP_MIRROR_SECURE,
@@ -384,6 +385,44 @@ def test_structured_feedback_secure_before_inquire_uses_coded_state_feedback():
     assert "secure_before_inquire" in _feedback_codes(payload)
     assert payload["tips"] == []
     assert payload["reasons"] == ["Model reason."]
+
+
+def test_secure_before_inquire_suppressed_once_an_inquire_was_already_credited():
+    """Reported from production: turn 1 was classified Announce+Inquire and praised
+    for it ("Beautifully handled! You invited her perspective with an open
+    question"), then turn 3 said "Ask one open concern question before offering
+    reassurance" -- telling the clinician to do the thing they were just
+    congratulated for. The "it has been a few turns since you inquired" case is
+    _apply_inquire_nudge's job, and it is turn-aware; this tip is only about
+    never having inquired at all."""
+    state = {
+        "phase": PHASE_INQUIRE_MIRROR,
+        "announced": True,
+        "is_undiscovered_concerns": True,
+        "has_inquired": True,
+        "parent_concerns": [],
+    }
+    payload = _structured_payload(STEP_SECURE)
+
+    _service().apply_coaching_guidance(
+        payload,
+        STEP_SECURE,
+        state,
+        clinician_message="Her immune system already handles far more than this every day.",
+        person_last="She is so tiny.",
+    )
+
+    assert "secure_before_inquire" not in _feedback_codes(payload)
+    # and the penalty that message justified must not be applied silently either
+    assert "secure_before_inquire" not in (state.get("recent_coaching") or [])
+
+
+def test_update_observational_state_marks_has_inquired_on_compound_step():
+    state: dict = {}
+    AimsStateService(logger=logging.getLogger("test")).update_observational_state(
+        state, STEP_ANNOUNCE_INQUIRE, [STEP_ANNOUNCE_INQUIRE]
+    )
+    assert state["has_inquired"] is True
 
 
 def test_structured_feedback_secure_before_inquire_fires_on_secure_plus_inquire_compound():
@@ -1008,6 +1047,38 @@ def test_closure_plan_tip_fires_offer_literature_when_neither_offered_and_all_mi
         "try offering some information to review, or scheduling a follow-up "
         "so they know when to bring questions back."
     ]
+
+
+def test_closure_plan_tip_not_offered_while_concerns_undiscovered():
+    """Reported from production: this wrap-up nudge fired on turn 3 of a live
+    conversation. The gate only required that the concerns surfaced SO FAR were
+    mirrored, which is satisfied as early as turn 2 -- so the clinician was told
+    to start closing while concerns were still undiscovered and nothing had been
+    secured. Telling someone to wrap up mid-conversation is actively bad coaching.
+    """
+    payload = _structured_payload(STEP_SECURE)
+    state = {
+        "is_undiscovered_concerns": True,
+        "parent_concerns": [
+            {"topic": "immune_load", "is_mirrored": True, "is_secured": False},
+        ],
+    }
+    AimsStateService._add_closure_plan_tip(payload, state, "irrelevant")
+    assert "offer_literature" not in _feedback_codes(payload)
+
+
+def test_closure_plan_tip_not_offered_until_concerns_are_secured():
+    """Everything discovered and mirrored is still not closure -- the concern has
+    to have been addressed too, per the spec: discovered, mirrored AND secured."""
+    payload = _structured_payload(STEP_SECURE)
+    state = {
+        "is_undiscovered_concerns": False,
+        "parent_concerns": [
+            {"topic": "immune_load", "is_mirrored": True, "is_secured": False},
+        ],
+    }
+    AimsStateService._add_closure_plan_tip(payload, state, "irrelevant")
+    assert "offer_literature" not in _feedback_codes(payload)
 
 
 def test_closure_plan_tip_offer_literature_bypasses_mirrored_gate_when_patient_unreceptive():
