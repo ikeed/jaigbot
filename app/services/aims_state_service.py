@@ -731,6 +731,15 @@ class AimsStateService:
         for concern in concerns:
             if concern.get("is_mirrored"):
                 continue
+            # A concern the patient has never raised cannot have been mirrored,
+            # so it is not a mirroring failure. Without this, a checklist entry
+            # that never came up made every Secure turn look like "you moved into
+            # education before mirroring the concern" -- naming a concern the
+            # clinician had no way to know about. The caller used to mask this by
+            # additionally requiring not is_undiscovered_concerns, which silenced
+            # the check for whole sessions instead of filtering the right entries.
+            if not concern.get("is_discovered"):
+                continue
             evidence = cls._evidence_set(concern)
             if evidence and evidence.issubset(mirrored_evidence):
                 continue

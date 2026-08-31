@@ -244,7 +244,7 @@ def _closure_ready_state() -> dict:
         "is_undiscovered_concerns": False,
         "patient_unreceptive_to_further_inquire": True,
         "parent_concerns": [
-            {"topic": "side_effects", "is_mirrored": True, "is_secured": True}
+            {"topic": "side_effects", "is_discovered": True, "is_mirrored": True, "is_secured": True}
         ],
     }
 
@@ -496,7 +496,7 @@ def test_structured_feedback_secure_before_mirror_fires_on_secure_plus_inquire_c
             {
                 "topic": "trust",
                 "desc": "wants evidence addressed",
-                "is_mirrored": False,
+                "is_discovered": True, "is_mirrored": False,
                 "is_secured": False,
             }
         ],
@@ -528,7 +528,7 @@ def test_structured_feedback_skips_secure_checks_on_mirror_plus_secure_compound(
             {
                 "topic": "trust",
                 "desc": "wants evidence addressed",
-                "is_mirrored": False,
+                "is_discovered": True, "is_mirrored": False,
                 "is_secured": False,
             }
         ],
@@ -557,7 +557,7 @@ def test_structured_feedback_skips_secure_checks_on_mirror_plus_secure_plus_inqu
             {
                 "topic": "trust",
                 "desc": "wants evidence addressed",
-                "is_mirrored": False,
+                "is_discovered": True, "is_mirrored": False,
                 "is_secured": False,
             }
         ],
@@ -586,7 +586,7 @@ def test_structured_feedback_secure_before_mirror_uses_coded_state_feedback():
             {
                 "topic": "trust",
                 "desc": "wants evidence addressed",
-                "is_mirrored": False,
+                "is_discovered": True, "is_mirrored": False,
                 "is_secured": False,
             }
         ],
@@ -628,7 +628,7 @@ def test_structured_feedback_secure_before_mirror_suppresses_secure_praise():
             {
                 "topic": "trust",
                 "desc": "wants evidence addressed",
-                "is_mirrored": False,
+                "is_discovered": True, "is_mirrored": False,
                 "is_secured": False,
             }
         ],
@@ -660,7 +660,7 @@ def test_structured_feedback_secure_before_mirror_keeps_praise_for_other_steps()
             {
                 "topic": "trust",
                 "desc": "wants evidence addressed",
-                "is_mirrored": False,
+                "is_discovered": True, "is_mirrored": False,
                 "is_secured": False,
             }
         ],
@@ -736,7 +736,7 @@ def test_model_generated_mirror_skip_feedback_is_replaced_not_duplicated():
             {
                 "topic": "trust",
                 "desc": "wants evidence addressed",
-                "is_mirrored": False,
+                "is_discovered": True, "is_mirrored": False,
                 "is_secured": False,
             }
         ],
@@ -783,7 +783,7 @@ def test_secure_before_mirror_total_accumulates_across_turns():
             {
                 "topic": "trust",
                 "desc": "wants evidence addressed",
-                "is_mirrored": False,
+                "is_discovered": True, "is_mirrored": False,
                 "is_secured": False,
             }
         ],
@@ -811,7 +811,7 @@ def test_structured_feedback_secure_before_mirror_escalates_on_repeat():
             {
                 "topic": "trust",
                 "desc": "wants evidence addressed",
-                "is_mirrored": False,
+                "is_discovered": True, "is_mirrored": False,
                 "is_secured": False,
             }
         ],
@@ -848,7 +848,7 @@ def test_structured_feedback_secure_before_mirror_escalates_to_pattern_level():
             {
                 "topic": "trust",
                 "desc": "wants evidence addressed",
-                "is_mirrored": False,
+                "is_discovered": True, "is_mirrored": False,
                 "is_secured": False,
             }
         ],
@@ -915,7 +915,7 @@ def test_structured_feedback_keeps_closure_plan_tip_out_of_legacy_tips():
             {
                 "topic": "trust",
                 "desc": "wants evidence addressed",
-                "is_mirrored": True,
+                "is_discovered": True, "is_mirrored": True,
                 "is_secured": False,
             }
         ],
@@ -1090,7 +1090,7 @@ def test_closure_plan_tip_not_offered_while_concerns_undiscovered():
     state = {
         "is_undiscovered_concerns": True,
         "parent_concerns": [
-            {"topic": "immune_load", "is_mirrored": True, "is_secured": False},
+            {"topic": "immune_load", "is_discovered": True, "is_mirrored": True, "is_secured": False},
         ],
     }
     AimsStateService._add_closure_plan_tip(payload, state, "irrelevant")
@@ -1104,7 +1104,7 @@ def test_closure_plan_tip_not_offered_until_concerns_are_secured():
     state = {
         "is_undiscovered_concerns": False,
         "parent_concerns": [
-            {"topic": "immune_load", "is_mirrored": True, "is_secured": False},
+            {"topic": "immune_load", "is_discovered": True, "is_mirrored": True, "is_secured": False},
         ],
     }
     AimsStateService._add_closure_plan_tip(payload, state, "irrelevant")
@@ -1125,7 +1125,7 @@ def test_closure_plan_tip_not_offered_on_unreceptive_alone():
     state = {
         "is_undiscovered_concerns": True,
         "parent_concerns": [
-            {"topic": "immune_load", "is_mirrored": False, "is_secured": False}
+            {"topic": "immune_load", "is_discovered": True, "is_mirrored": False, "is_secured": False}
         ],
         "patient_unreceptive_to_further_inquire": True,
     }
@@ -1149,7 +1149,7 @@ def test_closure_plan_tip_suppressed_by_unmirrored_concern_without_unreceptive_f
     payload = _structured_payload(STEP_SECURE)
     state = {
         "parent_concerns": [
-            {"topic": "immune_load", "is_mirrored": False, "is_secured": False}
+            {"topic": "immune_load", "is_discovered": True, "is_mirrored": False, "is_secured": False}
         ],
     }
     AimsStateService._add_closure_plan_tip(payload, state, "irrelevant")
