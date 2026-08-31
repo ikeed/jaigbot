@@ -10,7 +10,7 @@ def test_splash_recovery_module() -> None:
         pytest.fail(
             "Node.js is required to run tests/unit/frontend/ -- install it "
             "(e.g. `brew install node@20`) and ensure `node` is on PATH. "
-            "See CLAUDE.md's Setup section.",
+            "See the Prerequisites in docs/developer-setup.md.",
             pytrace=False,
         )
 

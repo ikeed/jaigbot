@@ -50,7 +50,7 @@ async def test_request_body_for_log_handles_json_text_binary_and_get():
 async def test_request_body_for_log_redacts_sensitive_fields_when_not_debug():
     """The validation-error log path must apply the same redaction as the
     request-start preview -- previously it logged the full body (message,
-    character, scene) unredacted, violating CLAUDE.md's no-payload-logging rule
+    character, scene) unredacted, violating the no-payload-logging rule in docs/developer-setup.md
     through a different door."""
     request = MagicMock(method="POST")
     request.body = AsyncMock(

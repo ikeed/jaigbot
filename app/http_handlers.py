@@ -137,7 +137,7 @@ def install_http_handlers(app: FastAPI, *, settings: Any, logger: logging.Logger
         return response
 
 
-# Request-body fields hidden from logs unless DEBUG_MODE -- per CLAUDE.md,
+# Request-body fields hidden from logs unless DEBUG_MODE -- per docs/developer-setup.md,
 # never log persona prompts, scene text, or the clinician's actual message.
 _REDACTED_BODY_FIELDS = ("character", "scene", "message")
 
