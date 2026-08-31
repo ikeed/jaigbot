@@ -494,6 +494,32 @@ class AimsStateService:
         return cues
 
     @classmethod
+    def _closure_plan_ready(cls, state: dict[str, Any], *, unreceptive: bool) -> bool:
+        """Is the conversation actually near closure?
+
+        Gates the "you haven't offered anything to take home" nudge, which tells
+        the clinician to start wrapping up. The bar is the full checklist:
+        every concern discovered, mirrored AND secured -- not merely that the
+        concerns surfaced so far happen to be mirrored, which is true as early
+        as turn 2 and produced a wrap-up nudge mid-conversation in production.
+
+        The one exception is an unreceptive patient: once they have stopped
+        offering anything new, nothing further can be discovered or mirrored, and
+        this nudge is precisely the guidance that situation needs.
+        """
+        if unreceptive:
+            return True
+        if state.get("is_undiscovered_concerns"):
+            return False
+        concerns = state.get("parent_concerns") or []
+        if not concerns:
+            return False
+        return all(
+            concern.get("is_mirrored") and concern.get("is_secured")
+            for concern in concerns
+        )
+
+    @classmethod
     def _add_closure_plan_tip(
         cls,
         cls_payload: dict[str, Any],
@@ -531,6 +557,15 @@ class AimsStateService:
             code = "closure_literature_without_followup"
             text = message("state_feedback.closure_literature_without_followup")
         elif not has_literature and not has_followup:
+            # The other two branches are safe on any Secure turn: the clinician has
+            # already signalled they are closing (offered literature / booked a
+            # follow-up), so completing the plan is apt guidance. THIS branch is
+            # different - it tells a clinician to start wrapping up, which is wrong
+            # unless the conversation is genuinely near closure. Reported from
+            # production: it fired on turn 3 while concerns were still undiscovered
+            # and nothing had been secured.
+            if not cls._closure_plan_ready(state, unreceptive=unreceptive):
+                return
             code = "offer_literature"
             text = message("state_feedback.offer_literature_tip")
         else:
