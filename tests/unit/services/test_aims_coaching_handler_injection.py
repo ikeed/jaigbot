@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from app.constants import KEY_AIMS_STATE, KEY_COACH_POST, KEY_GAME_OVER, SESSION_HISTORY
+from app.message_catalog import message
 from app.models import AimsObservations, ChatRequest, ClassifierResult, Coaching, FeedbackItem
 from app.services.aims_coaching_handler import AimsCoachingHandler
 from app.services.aims_turn_coordinator import AimsTurnResult
@@ -221,7 +222,10 @@ def test_append_endgame_blocked_tip_adds_important_feedback_item_when_turn_alrea
     assert len(items) == 2
     new_item = next(i for i in items if i["code"] == "endgame_undiscovered_concern")
     assert new_item["step"] == "Secure"
-    assert "anything else on your mind" in new_item["text"].lower()
+    # Compare against the catalogue entry rather than hardcoding the copy: this
+    # test is about the item being added with the right code and step, not about
+    # the wording, which is edited for tone independently of this behaviour.
+    assert new_item["text"] == message("endgame.undiscovered_concern_tip")
     # Legacy tips must not also be touched when the turn is already structured.
     assert cls_payload["tips"] == []
 
@@ -247,7 +251,7 @@ def test_append_endgame_blocked_tip_uses_legacy_tips_when_turn_has_no_structured
     AimsCoachingHandler._append_endgame_blocked_tip(cls_payload)
 
     assert cls_payload.get("feedback_items") is None
-    assert cls_payload["tips"][0].lower().startswith("this doesn't look fully resolved")
+    assert cls_payload["tips"][0] == message("endgame.undiscovered_concern_tip")
     assert "Existing tip." in cls_payload["tips"]
     assert cls_payload["reasons"] == ["Some existing reason."]
 
