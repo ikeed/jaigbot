@@ -237,6 +237,19 @@ def _structured_payload(step: str = STEP_SECURE) -> dict:
     }
 
 
+def _closure_ready_state() -> dict:
+    """State at genuine closure, per the specification: every concern
+    discovered, mirrored AND secured, AND the patient no longer receptive.
+    All four are required together - see AimsStateService._closure_plan_ready."""
+    return {
+        "is_undiscovered_concerns": False,
+        "patient_unreceptive_to_further_inquire": True,
+        "parent_concerns": [
+            {"topic": "side_effects", "is_mirrored": True, "is_secured": True}
+        ],
+    }
+
+
 def _feedback_codes(payload: dict) -> list[str]:
     return [item.get("code") for item in payload.get("feedback_items") or []]
 
@@ -1020,24 +1033,19 @@ def test_closure_plan_tip_runs_unconditionally_without_heuristic_fallback():
     the tip still fires."""
     service = AimsStateService(logger=logging.getLogger("test"), heuristic_fallback_enabled=False)
     payload = _structured_payload(STEP_SECURE)
-    state = {
-        "parent_concerns": [
-            {"topic": "side_effects", "is_mirrored": True, "is_secured": True}
-        ],
-    }
+    state = _closure_ready_state()
     service.apply_coaching_guidance(
         payload, STEP_SECURE, state, "That's completely your call.", "Thanks."
     )
     assert "offer_literature" in _feedback_codes(payload)
 
 
-def test_closure_plan_tip_fires_offer_literature_when_neither_offered_and_all_mirrored():
+def test_closure_plan_tip_fires_offer_literature_at_genuine_closure():
+    """The spec is conjunctive: every concern discovered, mirrored AND secured,
+    AND the patient no longer receptive. Only then is telling the clinician to
+    wrap up honest guidance."""
     payload = _structured_payload(STEP_SECURE)
-    state = {
-        "parent_concerns": [
-            {"topic": "side_effects", "is_mirrored": True, "is_secured": True}
-        ],
-    }
+    state = _closure_ready_state()
     AimsStateService._add_closure_plan_tip(payload, state, "irrelevant")
     codes = _feedback_codes(payload)
     assert "offer_literature" in codes
@@ -1081,20 +1089,36 @@ def test_closure_plan_tip_not_offered_until_concerns_are_secured():
     assert "offer_literature" not in _feedback_codes(payload)
 
 
-def test_closure_plan_tip_offer_literature_bypasses_mirrored_gate_when_patient_unreceptive():
-    """This is the fix the design pressure-test caught: without the bypass, the
-    mirrored-completeness gate would silently suppress the new nudge in exactly the
-    scenario it exists to help (the concern was never discovered, so it was never
-    mirrored either)."""
+def test_closure_plan_tip_not_offered_on_unreceptive_alone():
+    """An unreceptive patient is NOT sufficient on its own.
+
+    This test previously asserted the opposite -- that the flag bypassed the
+    completeness check entirely. That made the whole gate dead in practice:
+    patient_unreceptive_to_further_inquire is set after a single Inquire that
+    does not immediately surface a checklist topic, so it is true from turn 1 of
+    essentially every conversation, and the nudge fired mid-conversation
+    regardless of how little had been covered. The specification is conjunctive:
+    discovered AND mirrored AND secured AND unreceptive."""
     payload = _structured_payload(STEP_SECURE)
     state = {
+        "is_undiscovered_concerns": True,
         "parent_concerns": [
             {"topic": "immune_load", "is_mirrored": False, "is_secured": False}
         ],
         "patient_unreceptive_to_further_inquire": True,
     }
     AimsStateService._add_closure_plan_tip(payload, state, "irrelevant")
-    assert "offer_literature" in _feedback_codes(payload)
+    assert "offer_literature" not in _feedback_codes(payload)
+
+
+def test_closure_plan_tip_not_offered_when_complete_but_patient_still_receptive():
+    """The other half of the conjunction: everything covered, but the patient is
+    still engaging, so there is no reason to start winding the conversation up."""
+    payload = _structured_payload(STEP_SECURE)
+    state = _closure_ready_state()
+    state["patient_unreceptive_to_further_inquire"] = False
+    AimsStateService._add_closure_plan_tip(payload, state, "irrelevant")
+    assert "offer_literature" not in _feedback_codes(payload)
 
 
 def test_closure_plan_tip_suppressed_by_unmirrored_concern_without_unreceptive_flag():

@@ -516,26 +516,28 @@ class AimsStateService:
         """Is the conversation actually near closure?
 
         Gates the "you haven't offered anything to take home" nudge, which tells
-        the clinician to start wrapping up. The bar is the full checklist:
-        every concern discovered, mirrored AND secured -- not merely that the
-        concerns surfaced so far happen to be mirrored, which is true as early
-        as turn 2 and produced a wrap-up nudge mid-conversation in production.
+        the clinician to start wrapping up.
 
-        The one exception is an unreceptive patient: once they have stopped
-        offering anything new, nothing further can be discovered or mirrored, and
-        this nudge is precisely the guidance that situation needs.
+        Every condition must hold, per the specification: all concerns
+        discovered, mirrored AND secured, AND the patient is no longer
+        receptive. These are conjunctive. An earlier version treated
+        unreceptive as an alternative that short-circuited the rest, which made
+        the whole check dead: patient_unreceptive_to_further_inquire is set
+        after a single Inquire that does not immediately surface a checklist
+        topic, so it is true from turn 1 of essentially every conversation and
+        the nudge fired mid-conversation regardless.
         """
-        if unreceptive:
-            return True
         if state.get("is_undiscovered_concerns"):
             return False
         concerns = state.get("parent_concerns") or []
         if not concerns:
             return False
-        return all(
+        if not all(
             concern.get("is_mirrored") and concern.get("is_secured")
             for concern in concerns
-        )
+        ):
+            return False
+        return unreceptive
 
     @classmethod
     def _add_closure_plan_tip(
