@@ -1010,6 +1010,38 @@ def test_closure_plan_tip_fires_offer_literature_when_neither_offered_and_all_mi
     ]
 
 
+def test_closure_plan_tip_not_offered_while_concerns_undiscovered():
+    """Reported from production: this wrap-up nudge fired on turn 3 of a live
+    conversation. The gate only required that the concerns surfaced SO FAR were
+    mirrored, which is satisfied as early as turn 2 -- so the clinician was told
+    to start closing while concerns were still undiscovered and nothing had been
+    secured. Telling someone to wrap up mid-conversation is actively bad coaching.
+    """
+    payload = _structured_payload(STEP_SECURE)
+    state = {
+        "is_undiscovered_concerns": True,
+        "parent_concerns": [
+            {"topic": "immune_load", "is_mirrored": True, "is_secured": False},
+        ],
+    }
+    AimsStateService._add_closure_plan_tip(payload, state, "irrelevant")
+    assert "offer_literature" not in _feedback_codes(payload)
+
+
+def test_closure_plan_tip_not_offered_until_concerns_are_secured():
+    """Everything discovered and mirrored is still not closure -- the concern has
+    to have been addressed too, per the spec: discovered, mirrored AND secured."""
+    payload = _structured_payload(STEP_SECURE)
+    state = {
+        "is_undiscovered_concerns": False,
+        "parent_concerns": [
+            {"topic": "immune_load", "is_mirrored": True, "is_secured": False},
+        ],
+    }
+    AimsStateService._add_closure_plan_tip(payload, state, "irrelevant")
+    assert "offer_literature" not in _feedback_codes(payload)
+
+
 def test_closure_plan_tip_offer_literature_bypasses_mirrored_gate_when_patient_unreceptive():
     """This is the fix the design pressure-test caught: without the bypass, the
     mirrored-completeness gate would silently suppress the new nudge in exactly the

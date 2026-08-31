@@ -593,27 +593,13 @@ async def test_handle_prefers_state_feedback_item_without_rewriting_step_feedbac
         ctx=ctx,
     )
 
-    # The closure-plan tip now runs unconditionally (see AimsStateService._add_closure_plan_tip);
-    # this turn is Secure with no parent_concerns and no literature/follow-up ever
-    # mentioned, so it correctly nudges toward offering literature alongside the
-    # pre-existing secure_before_inquire_after_question item this test is really about.
     assert result["coaching"]["feedback_items"] == [
         {
             "step": "Secure",
             "tone": "improvement",
             "code": "secure_before_inquire_after_question",
             "text": "You asked an open question, then moved into reassurance before giving them space to answer.",
-        },
-        {
-            "step": "Secure",
-            "tone": "improvement",
-            "code": "offer_literature",
-            "text": (
-                "You haven't offered anything to take home or booked a follow-up yet; "
-                "try offering some information to review, or scheduling a follow-up "
-                "so they know when to bring questions back."
-            ),
-        },
+        }
     ]
     assert result["coaching"]["step_feedback"] == [
         {
