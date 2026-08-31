@@ -82,13 +82,13 @@ def test_endgame_fallback_secure_names_the_specific_concern_when_only_one_miss()
             "Secure": 2.9,
         },
         "secureBeforeMirrorCount": 1,
-        "secureBeforeMirrorTopicHint": " about side-effect concerns",
+        "secureBeforeMirrorTopicHint": " about side effects",
     }
 
     bullets = build_endgame_bullets_fallback(session_obj)
     secure = next(b for b in bullets if b.startswith("**Secure "))
 
-    assert "the concern about side-effect concerns" in secure
+    assert "the concern about side effects" in secure
     assert "1 time this session" not in secure
 
 

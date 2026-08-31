@@ -13,6 +13,7 @@ from app.constants import (
     STEP_SECURE,
     STEP_SECURE_INQUIRE,
 )
+from app.message_catalog import message_map
 from app.services.aims_state_service import AimsStateService
 
 
@@ -310,6 +311,56 @@ def test_inquire_nudge_compound_mirror_secure_turn_counts_toward_counter():
 
     assert state["secure_since_inquire_count"] == 2
     assert payload["tips"]
+
+
+def test_topic_hints_never_repeat_the_word_the_templates_already_supply():
+    """Templates render "the concern{topic_hint}", so a hint saying "concerns"
+    again produces "the concern about side-effect concerns"."""
+    templates = {
+        key: value
+        for key, value in message_map("state_feedback").items()
+        if isinstance(value, str) and "{topic_hint}" in value
+    }
+    assert templates, "expected topic_hint templates to exist"
+
+    for key, template in templates.items():
+        assert "concern{topic_hint}" in template, (
+            f"{key} places the hint somewhere other than after 'concern'; the "
+            "no-'concern'-in-hints rule below may no longer keep it readable"
+        )
+
+    for topic in message_map("state_feedback.topic_hints"):
+        hint = AimsStateService._user_facing_topic_hint(topic)
+        assert "concern" not in hint.lower(), f"{topic} hint repeats 'concern': {hint}"
+
+
+def test_inquire_nudge_does_not_fire_on_a_mirror_only_turn():
+    """The tip calls the clinician "reassuring" - never say that about a Mirror."""
+    state = _nudge_state(counter=2)
+    payload = _structured_payload(step=STEP_MIRROR)
+    payload["feedback_items"] = []
+
+    _service()._apply_inquire_nudge(payload, state, [STEP_MIRROR])
+
+    assert _feedback_codes(payload) == []
+    assert payload.get("tips") == []
+
+
+def test_inquire_nudge_mirror_only_turn_preserves_counter_for_the_next_secure():
+    """Gating is on rendering, not tracking: the elapsed Secures still count."""
+    service = _service()
+    state = _nudge_state(counter=2)
+
+    quiet = _structured_payload(step=STEP_MIRROR)
+    quiet["feedback_items"] = []
+    service._apply_inquire_nudge(quiet, state, [STEP_MIRROR])
+    assert state["secure_since_inquire_count"] == 2
+
+    loud = _structured_payload(step=STEP_SECURE)
+    loud["feedback_items"] = []
+    service._apply_inquire_nudge(loud, state, [STEP_SECURE])
+    assert state["secure_since_inquire_count"] == 3
+    assert loud["tips"]
 
 
 def test_inquire_nudge_resets_counter_on_any_turn_with_inquire():
@@ -611,7 +662,7 @@ def test_structured_feedback_secure_before_mirror_uses_coded_state_feedback():
     )
     assert state["recent_coaching"] == ["secure_before_mirror:trust"]
     assert state["secure_before_mirror_total"] == 1
-    assert state["secure_before_mirror_last_topic_hint"] == " about trust in the source or information concerns"
+    assert state["secure_before_mirror_last_topic_hint"] == " about trust in the source or the information"
 
 
 def test_structured_feedback_secure_before_mirror_suppresses_secure_praise():
@@ -829,7 +880,7 @@ def test_structured_feedback_secure_before_mirror_escalates_on_repeat():
 
     assert (
         _feedback_item(payload, "secure_before_mirror")["text"]
-        == "You're still educating without mirroring - the concern about trust in the source or information concerns "
+        == "You're still educating without mirroring - the concern about trust in the source or the information "
         "hasn't been mirrored yet"
     )
     assert state["recent_coaching"] == [
@@ -869,7 +920,7 @@ def test_structured_feedback_secure_before_mirror_escalates_to_pattern_level():
 
     assert (
         _feedback_item(payload, "secure_before_mirror")["text"]
-        == "You've had 3 Secure turns without mirroring about trust in the source or information concerns - "
+        == "You've had 3 Secure turns without mirroring the concern about trust in the source or the information - "
         "try pausing to mirror before more education"
     )
     assert payload["score"] == 2

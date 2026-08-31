@@ -52,22 +52,22 @@
     "secure_before_mirror_repeat_reason": "You're still educating without mirroring - the concern{topic_hint} hasn't been mirrored yet",
     "secure_before_mirror_repeat_tip": "Mirror the specific concern{topic_hint} before more education.",
     "secure_before_mirror_tip": "Before educating, briefly mirror the concern (e.g., 'It feels like a lot at once - did I get that right?').",
-    "secure_before_mirror_many_reason": "You've had {count} Secure turns without mirroring{topic_hint} - try pausing to mirror before more education",
+    "secure_before_mirror_many_reason": "You've had {count} Secure turns without mirroring the concern{topic_hint} - try pausing to mirror before more education",
     "secure_before_mirror_many_tip": "Pause and mirror: acknowledge the concern{topic_hint} before sharing more facts.",
     "inquire_nudge_tip": "You've been reassuring for a couple of turns now without asking a new open question - there may be more on their mind. Try asking what else they're thinking about.",
     "topic_hints": {
-      "autism": "autism concerns",
-      "immune_load": "immune load or spacing concerns",
-      "side_effects": "side-effect concerns",
-      "ingredients": "ingredient concerns",
-      "schedule_timing": "timing or schedule concerns",
+      "autism": "autism",
+      "immune_load": "immune load or spacing",
+      "side_effects": "side effects",
+      "ingredients": "the ingredients",
+      "schedule_timing": "timing or the schedule",
       "disease_risk": "whether the disease still feels like a real risk",
-      "effectiveness": "effectiveness or benefit concerns",
-      "trust": "trust in the source or information concerns",
+      "effectiveness": "effectiveness or benefit",
+      "trust": "trust in the source or the information",
       "evidence": "wanting to see the underlying data or methodology",
-      "autonomy": "choice or pressure concerns",
+      "autonomy": "choice or pressure",
       "requirements": "school or system requirements",
-      "age_appropriateness": "concerns about whether this is age-appropriate"
+      "age_appropriateness": "whether this is age-appropriate"
     }
   },
   "endgame": {

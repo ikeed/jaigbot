@@ -62,17 +62,17 @@ def test_persist_and_build_summary_carry_secure_before_mirror_count():
     mem = {
         KEY_AIMS_STATE: {
             "secure_before_mirror_total": 2,
-            "secure_before_mirror_last_topic_hint": " about side-effect concerns",
+            "secure_before_mirror_last_topic_hint": " about side effects",
         }
     }
 
     service.persist(mem, {"step": "Secure", "score": 1})
 
     assert mem[KEY_AIMS_METRICS]["secureBeforeMirrorCount"] == 2
-    assert mem[KEY_AIMS_METRICS]["secureBeforeMirrorTopicHint"] == " about side-effect concerns"
+    assert mem[KEY_AIMS_METRICS]["secureBeforeMirrorTopicHint"] == " about side effects"
     summary = service.build_summary(mem)
     assert summary["secureBeforeMirrorCount"] == 2
-    assert summary["secureBeforeMirrorTopicHint"] == " about side-effect concerns"
+    assert summary["secureBeforeMirrorTopicHint"] == " about side effects"
 
 
 def test_build_summary_defaults_secure_before_mirror_count_to_zero():
