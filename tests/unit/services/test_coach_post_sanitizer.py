@@ -251,6 +251,25 @@ def test_sanitize_endgame_bullets_handles_empty_quotes_duplicates_and_cap():
     assert not any("patient" in item for item in cleaned)
 
 
+def test_sanitize_endgame_bullets_drops_truncated_json_openers():
+    """Found in production: a Final Summary rendered a bullet reading `{"patient`.
+
+    The previous filters enumerated orderings (`patient{`, `"patient{`) and
+    relied on a complete `":` key-value pair, so a summary response truncated
+    mid-key had no `":` yet and passed every check. No legitimate coaching
+    bullet starts with a JSON structural character.
+    """
+    leaked = ['{"patient', '{"patient_reply": "x', '{"a', '[{"x', '["y']
+    assert sanitize_endgame_bullets(leaked) == []
+
+    kept = [
+        "Announce 100% - clear, non-pressuring recommendation.",
+        "Example: ask an open question before reassuring.",
+        "Secure 50% - you explained before mirroring the concern.",
+    ]
+    assert sanitize_endgame_bullets(kept) == kept
+
+
 def test_sanitize_endgame_bullets_drops_json_preamble_line():
     # Real staging leak: "Here is the JSON requested:" rendered as a visible
     # Final Summary bullet when the structured JSON parse failed and this
