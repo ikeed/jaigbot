@@ -165,9 +165,17 @@ class TestMetricsExpansionAnnounceInquire:
 
 class TestSecuringBeforeInquiringCoaching:
 
-    def test_secure_before_inquire_coaching(self):
-        """When step is Secure and is_undiscovered_concerns is True,
-        coaching should say 'Securing before inquiring'."""
+    def test_plain_secure_is_not_accused_of_securing_before_inquiring(self):
+        """The standalone "Securing before inquiring" accusation was removed.
+
+        You do not inquire ABOUT a concern - you inquire to discover concerns at
+        all. So a concern being secured is already discovered, whether the
+        clinician inquired or the patient volunteered it; both set is_discovered.
+        The old rule instead keyed on "any checklist concern still undiscovered",
+        which told clinicians they had not inquired on turns where they had.
+
+        The distinct "you asked, then reassured without leaving room to answer"
+        feedback is unaffected - see the sibling test below."""
         state = {
             "announced": True,
             "phase": "PreAnnounce",
@@ -189,9 +197,12 @@ class TestSecuringBeforeInquiringCoaching:
             character=None,
         )
 
-        assert any("reassurance before asking" in r.lower() or "open question first" in r.lower() for r in cls_payload["reasons"])
-        assert cls_payload["score"] <= 2
-        assert any("open question" in t.lower() or "thoughts" in t.lower() for t in cls_payload["tips"])
+        assert not any(
+            "reassurance before asking" in r.lower() or "open question first" in r.lower()
+            for r in cls_payload["reasons"]
+        )
+        assert cls_payload["score"] == 3, "score must not be capped for a removed rule"
+        assert cls_payload["tips"] == []
 
     def test_secure_open_question_then_reassurance_gets_pause_feedback(self):
         """If the turn already opened with inquiry, feedback should not say to ask first."""

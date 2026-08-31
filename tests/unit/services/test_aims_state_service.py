@@ -6,7 +6,6 @@ from app.constants import (
     KEY_AIMS_STATE,
     PHASE_INQUIRE_MIRROR,
     STEP_ANNOUNCE,
-    STEP_ANNOUNCE_INQUIRE,
     STEP_INQUIRE,
     STEP_MIRROR,
     STEP_MIRROR_SECURE,
@@ -377,7 +376,13 @@ def test_inquire_nudge_stays_flat_with_same_text_on_repeat_qualifying_turns():
     assert payload2["tips"][0] == first_text
 
 
-def test_structured_feedback_secure_before_inquire_uses_coded_state_feedback():
+def test_plain_secure_no_longer_accuses_the_clinician_of_not_inquiring():
+    """"Secure before Inquire" was removed as a standalone accusation because it
+    is incoherent: you do not inquire ABOUT a concern, you inquire to discover
+    concerns at all. A concern being secured is therefore already discovered --
+    the clinician inquired, or the patient volunteered it, and both set
+    is_discovered. This test previously asserted the accusation fired, and the
+    score was capped for it."""
     state = {
         "phase": PHASE_INQUIRE_MIRROR,
         "announced": True,
@@ -394,58 +399,21 @@ def test_structured_feedback_secure_before_inquire_uses_coded_state_feedback():
         person_last="I am uncertain.",
     )
 
-    assert payload["score"] == 2
-    assert "secure_before_inquire" in _feedback_codes(payload)
-    assert payload["tips"] == []
-    assert payload["reasons"] == ["Model reason."]
-
-
-def test_secure_before_inquire_suppressed_once_an_inquire_was_already_credited():
-    """Reported from production: turn 1 was classified Announce+Inquire and praised
-    for it ("Beautifully handled! You invited her perspective with an open
-    question"), then turn 3 said "Ask one open concern question before offering
-    reassurance" -- telling the clinician to do the thing they were just
-    congratulated for. The "it has been a few turns since you inquired" case is
-    _apply_inquire_nudge's job, and it is turn-aware; this tip is only about
-    never having inquired at all."""
-    state = {
-        "phase": PHASE_INQUIRE_MIRROR,
-        "announced": True,
-        "is_undiscovered_concerns": True,
-        "has_inquired": True,
-        "parent_concerns": [],
-    }
-    payload = _structured_payload(STEP_SECURE)
-
-    _service().apply_coaching_guidance(
-        payload,
-        STEP_SECURE,
-        state,
-        clinician_message="Her immune system already handles far more than this every day.",
-        person_last="She is so tiny.",
-    )
-
     assert "secure_before_inquire" not in _feedback_codes(payload)
-    # and the penalty that message justified must not be applied silently either
-    assert "secure_before_inquire" not in (state.get("recent_coaching") or [])
+    assert payload["score"] == 3, "the score must not be capped for a removed rule"
 
 
-def test_update_observational_state_marks_has_inquired_on_compound_step():
-    state: dict = {}
-    AimsStateService(logger=logging.getLogger("test")).update_observational_state(
-        state, STEP_ANNOUNCE_INQUIRE, [STEP_ANNOUNCE_INQUIRE]
-    )
-    assert state["has_inquired"] is True
 
+def test_secure_plus_inquire_compound_is_not_accused_of_securing_before_inquiring():
+    """Successor to 8ea895c's compound-step regression test.
 
-def test_structured_feedback_secure_before_inquire_fires_on_secure_plus_inquire_compound():
-    """Regression test for a confirmed pre-existing bug (found via live staging
-    testing): apply_coaching_guidance used step_current == STEP_SECURE (exact string
-    match), which silently skipped the whole secure_before_inquire/secure_before_mirror
-    check for any compound step that includes Secure but isn't the bare string --
-    even though component_steps was already computed for exactly this purpose.
-    Secure+Inquire has no mirror this turn, so the check must apply exactly like
-    plain Secure."""
+    That commit's concern was real - an exact-string check on STEP_SECURE meant
+    compound steps skipped these checks entirely - and it is still covered for
+    secure_before_mirror by the sibling test below. But the secure_before_inquire
+    half asserted the accusation fired on a turn containing an Inquire, and that
+    accusation has since been removed as incoherent: a concern being secured is
+    already discovered, so the clinician either inquired or the patient
+    volunteered it."""
     state = {
         "phase": PHASE_INQUIRE_MIRROR,
         "announced": True,
@@ -462,7 +430,7 @@ def test_structured_feedback_secure_before_inquire_fires_on_secure_plus_inquire_
         person_last="I am uncertain.",
     )
 
-    assert "secure_before_inquire" in _feedback_codes(payload)
+    assert "secure_before_inquire" not in _feedback_codes(payload)
 
 
 def test_structured_feedback_secure_before_mirror_fires_on_secure_plus_inquire_compound():
