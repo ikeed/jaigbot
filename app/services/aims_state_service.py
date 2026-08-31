@@ -275,8 +275,10 @@ class AimsStateService:
         overall behavior, not a specific concern). Increments on any turn with
         STEP_SECURE present, resets to 0 on any turn with STEP_INQUIRE present
         (both including compounds), left unchanged on a turn with neither.
-        Fires the same flat text every qualifying turn - no escalation tiers,
-        unlike secure_before_mirror.
+        The tip itself only ever renders on a turn containing STEP_SECURE, so
+        it cannot describe a Mirror-only turn as "reassuring". Fires the same
+        flat text every qualifying turn - no escalation tiers, unlike
+        secure_before_mirror.
         """
         counter = int(state.get("secure_since_inquire_count", 0) or 0)
         if STEP_INQUIRE in steps:
@@ -284,6 +286,13 @@ class AimsStateService:
         elif STEP_SECURE in steps:
             counter += 1
         state["secure_since_inquire_count"] = counter
+
+        # Only surface the nudge on a turn that actually included Secure. The
+        # counter survives turns with neither step, so without this the tip can
+        # land on a Mirror-only turn and tell the clinician they have "been
+        # reassuring" when this turn was a mirror.
+        if STEP_SECURE not in steps:
+            return
 
         if counter < 2 or not state.get("is_undiscovered_concerns"):
             return
