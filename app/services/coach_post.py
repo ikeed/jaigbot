@@ -266,7 +266,13 @@ def sanitize_endgame_bullets(lines: list[str]) -> list[str]:
             continue
         if '":' in s or "':" in s:
             continue
-        # Drop stray JSON fragments like patient{ or "patient{
+        # Drop stray JSON fragments. Enumerating orderings ("patient{",
+        # '"patient{') misses truncated openers: a summary response cut off at
+        # '{"patient' has no '":' pair yet, so it slipped past every other
+        # filter and rendered as a Final Summary bullet in production. No
+        # legitimate coaching bullet begins with a JSON structural character.
+        if s.startswith("{") or re.match(r'^\[\s*["\'{]', s):
+            continue
         if sl.startswith("patient{") or sl.startswith('"patient{'):
             continue
         if sl.startswith("patient_reply"):
