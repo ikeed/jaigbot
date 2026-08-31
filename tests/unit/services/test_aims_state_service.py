@@ -6,6 +6,7 @@ from app.constants import (
     KEY_AIMS_STATE,
     PHASE_INQUIRE_MIRROR,
     STEP_ANNOUNCE,
+    STEP_ANNOUNCE_INQUIRE,
     STEP_INQUIRE,
     STEP_MIRROR,
     STEP_MIRROR_SECURE,
@@ -384,6 +385,44 @@ def test_structured_feedback_secure_before_inquire_uses_coded_state_feedback():
     assert "secure_before_inquire" in _feedback_codes(payload)
     assert payload["tips"] == []
     assert payload["reasons"] == ["Model reason."]
+
+
+def test_secure_before_inquire_suppressed_once_an_inquire_was_already_credited():
+    """Reported from production: turn 1 was classified Announce+Inquire and praised
+    for it ("Beautifully handled! You invited her perspective with an open
+    question"), then turn 3 said "Ask one open concern question before offering
+    reassurance" -- telling the clinician to do the thing they were just
+    congratulated for. The "it has been a few turns since you inquired" case is
+    _apply_inquire_nudge's job, and it is turn-aware; this tip is only about
+    never having inquired at all."""
+    state = {
+        "phase": PHASE_INQUIRE_MIRROR,
+        "announced": True,
+        "is_undiscovered_concerns": True,
+        "has_inquired": True,
+        "parent_concerns": [],
+    }
+    payload = _structured_payload(STEP_SECURE)
+
+    _service().apply_coaching_guidance(
+        payload,
+        STEP_SECURE,
+        state,
+        clinician_message="Her immune system already handles far more than this every day.",
+        person_last="She is so tiny.",
+    )
+
+    assert "secure_before_inquire" not in _feedback_codes(payload)
+    # and the penalty that message justified must not be applied silently either
+    assert "secure_before_inquire" not in (state.get("recent_coaching") or [])
+
+
+def test_update_observational_state_marks_has_inquired_on_compound_step():
+    state: dict = {}
+    AimsStateService(logger=logging.getLogger("test")).update_observational_state(
+        state, STEP_ANNOUNCE_INQUIRE, [STEP_ANNOUNCE_INQUIRE]
+    )
+    assert state["has_inquired"] is True
 
 
 def test_structured_feedback_secure_before_inquire_fires_on_secure_plus_inquire_compound():
