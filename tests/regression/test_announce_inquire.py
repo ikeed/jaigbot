@@ -165,9 +165,17 @@ class TestMetricsExpansionAnnounceInquire:
 
 class TestSecuringBeforeInquiringCoaching:
 
-    def test_secure_before_inquire_coaching(self):
-        """When step is Secure and is_undiscovered_concerns is True,
-        coaching should say 'Securing before inquiring'."""
+    def test_plain_secure_is_not_accused_of_securing_before_inquiring(self):
+        """The standalone "Securing before inquiring" accusation was removed.
+
+        You do not inquire ABOUT a concern - you inquire to discover concerns at
+        all. So a concern being secured is already discovered, whether the
+        clinician inquired or the patient volunteered it; both set is_discovered.
+        The old rule instead keyed on "any checklist concern still undiscovered",
+        which told clinicians they had not inquired on turns where they had.
+
+        The distinct "you asked, then reassured without leaving room to answer"
+        feedback is unaffected - see the sibling test below."""
         state = {
             "announced": True,
             "phase": "PreAnnounce",
@@ -189,12 +197,22 @@ class TestSecuringBeforeInquiringCoaching:
             character=None,
         )
 
-        assert any("reassurance before asking" in r.lower() or "open question first" in r.lower() for r in cls_payload["reasons"])
-        assert cls_payload["score"] <= 2
-        assert any("open question" in t.lower() or "thoughts" in t.lower() for t in cls_payload["tips"])
+        assert not any(
+            "reassurance before asking" in r.lower() or "open question first" in r.lower()
+            for r in cls_payload["reasons"]
+        )
+        assert cls_payload["score"] == 3, "score must not be capped for a removed rule"
+        assert cls_payload["tips"] == []
 
-    def test_secure_open_question_then_reassurance_gets_pause_feedback(self):
-        """If the turn already opened with inquiry, feedback should not say to ask first."""
+    def test_asking_then_reassuring_is_not_reported_as_an_inquiry_fault(self):
+        """Asking and then reassuring in one turn is a failure to MIRROR.
+
+        AIMS runs Announce -> Inquire -> Mirror -> Secure, so an Inquire+Secure
+        turn has skipped Mirror. That is what secure_before_mirror reports, and it
+        needs a discovered-but-unmirrored concern to point at. This fixture has
+        none (parent_concerns is empty, nothing has surfaced yet), so no fault is
+        reported at all -- rather than the old "you didn't leave room for the
+        answer" framing, which described the wrong error."""
         state = {
             "announced": True,
             "phase": "PreAnnounce",
@@ -220,10 +238,10 @@ class TestSecuringBeforeInquiringCoaching:
         )
 
         feedback = " ".join(cls_payload["reasons"] + cls_payload["tips"]).lower()
-        assert "you asked an open question" in feedback
+        assert "you asked an open question" not in feedback
+        assert "pause before offering reassurance" not in feedback
         assert "before asking" not in feedback
-        assert "open question first" not in feedback
-        assert "pause before offering reassurance" in feedback
+        assert cls_payload["score"] == 3, "score must not be capped for a removed rule"
 
     def test_secure_after_inquire_no_coaching_about_inquiring(self):
         """When is_undiscovered_concerns is False and concerns are mirrored,

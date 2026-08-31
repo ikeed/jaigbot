@@ -21,7 +21,6 @@ from app.constants import (
 )
 from app.message_catalog import message, message_list, message_map
 from app.services.aims_metrics_service import AimsMetricsService
-from app.services.coaching_tip_sanitizer import opens_with_open_concern_question
 from app.services.conversation_service import (
     apply_concern_events,
     mark_mirrored_multi,
@@ -423,70 +422,25 @@ class AimsStateService:
         *,
         prefer_structured_feedback: bool = False,
     ) -> None:
-        is_undiscovered_concerns = state.get("is_undiscovered_concerns", True)
-        if is_undiscovered_concerns:
-            opened_with_concern_question = self._observed_open_concern_question(cls_payload)
-            if (
-                opened_with_concern_question is None
-                and self._heuristic_fallback_enabled
-            ):
-                opened_with_concern_question = opens_with_open_concern_question(clinician_message)
-            # This whole branch is premised on the clinician securing before ever
-            # inquiring - its message, its score cap and its recent_coaching tag
-            # all encode that. Once the classifier has credited an Inquire (this
-            # turn or an earlier one) the premise is false, and telling them to
-            # "ask one open concern question" reads as though the Inquire never
-            # happened. Reported from production: it fired on turn 3 of a session
-            # whose turn 1 was classified Announce+Inquire and praised as such.
-            # The separate "you have been reassuring for a couple of turns"
-            # nudge (_apply_inquire_nudge) owns the it-has-been-a-while case.
-            # Deliberately the sticky prior-turn flag only, NOT the current turn's
-            # steps: 8ea895c's regression test establishes that a Secure+Inquire
-            # turn ("Here is some reassuring information. What else is on your
-            # mind?") is still the mistake, because the reassurance came first.
-            already_inquired = bool(state.get("has_inquired"))
-            # Skipped as a unit: suppressing only the message would leave the
-            # score silently capped and recent_coaching tagged for a mistake the
-            # clinician did not make.
-            if not (already_inquired and not opened_with_concern_question):
-                if prefer_structured_feedback:
-                    code = (
-                        "secure_before_inquire_after_question"
-                        if opened_with_concern_question
-                        else "secure_before_inquire"
-                    )
-                    text_key = (
-                        "state_feedback.secure_before_inquire_after_question"
-                        if opened_with_concern_question
-                        else "state_feedback.secure_before_inquire"
-                    )
-                    self._append_feedback_item(
-                        cls_payload,
-                        step=STEP_SECURE,
-                        code=code,
-                        text=message(text_key),
-                    )
-                else:
-                    if opened_with_concern_question:
-                        reason = message("state_feedback.secure_before_inquire_after_question")
-                        tip = message("state_feedback.secure_before_inquire_after_question_tip")
-                    else:
-                        reason = message("state_feedback.secure_before_inquire_reason")
-                        tip = message("state_feedback.secure_before_inquire_tip")
-                    cls_payload["reasons"] = [reason] + (cls_payload.get("reasons") or [])
-                    cls_payload.setdefault("tips", []).append(tip)
-                try:
-                    cls_payload["score"] = min(2, int(cls_payload.get("score", 2)))
-                except Exception as e:
-                    self._logger.debug("Score normalization failed (secure before inquire): %s", e)
-                    cls_payload["score"] = 2
-                recent = state.get("recent_coaching") or []
-                recent.append("secure_before_inquire")
-                state["recent_coaching"] = recent[-3:]
-
+        # Securing before inquiring is not a thing this can detect, and asking a
+        # question then reassuring in the same turn is not "you didn't wait for the
+        # answer" -- it is a failure to Mirror. AIMS runs Announce -> Inquire ->
+        # Mirror -> Secure, so an Inquire+Secure turn has skipped Mirror, and
+        # secure_before_mirror below is the feedback that says so. Both
+        # secure_before_inquire variants have therefore been removed rather than
+        # rephrased; neither described the actual error.
+        #
+        # The mirror check is deliberately NOT gated on is_undiscovered_concerns.
+        # _has_material_unmirrored_concern is already per-concern - it asks whether
+        # a DISCOVERED concern is still unmirrored - so whether some other concern
+        # remains undiscovered elsewhere in the checklist has no bearing on it.
+        # That extra condition suppressed the mirror-skip penalty for whole
+        # sessions; docs/aims/concern-checklist-plan.md records a live case where
+        # neither of Ethan's concerns was ever mirrored and the "Important:"-tier
+        # penalty could never fire because of it.
         needs_mirror = self._has_material_unmirrored_concern(state)
 
-        if needs_mirror and not is_undiscovered_concerns:
+        if needs_mirror:
             state["secure_before_mirror_total"] = int(state.get("secure_before_mirror_total", 0)) + 1
             unmirrored_topics = self._unmirrored_topics_requiring_feedback(state)
             state["secure_before_mirror_last_topic_hint"] = self._user_facing_topic_hint(
@@ -516,26 +470,28 @@ class AimsStateService:
         """Is the conversation actually near closure?
 
         Gates the "you haven't offered anything to take home" nudge, which tells
-        the clinician to start wrapping up. The bar is the full checklist:
-        every concern discovered, mirrored AND secured -- not merely that the
-        concerns surfaced so far happen to be mirrored, which is true as early
-        as turn 2 and produced a wrap-up nudge mid-conversation in production.
+        the clinician to start wrapping up.
 
-        The one exception is an unreceptive patient: once they have stopped
-        offering anything new, nothing further can be discovered or mirrored, and
-        this nudge is precisely the guidance that situation needs.
+        Every condition must hold, per the specification: all concerns
+        discovered, mirrored AND secured, AND the patient is no longer
+        receptive. These are conjunctive. An earlier version treated
+        unreceptive as an alternative that short-circuited the rest, which made
+        the whole check dead: patient_unreceptive_to_further_inquire is set
+        after a single Inquire that does not immediately surface a checklist
+        topic, so it is true from turn 1 of essentially every conversation and
+        the nudge fired mid-conversation regardless.
         """
-        if unreceptive:
-            return True
         if state.get("is_undiscovered_concerns"):
             return False
         concerns = state.get("parent_concerns") or []
         if not concerns:
             return False
-        return all(
+        if not all(
             concern.get("is_mirrored") and concern.get("is_secured")
             for concern in concerns
-        )
+        ):
+            return False
+        return unreceptive
 
     @classmethod
     def _add_closure_plan_tip(
@@ -735,16 +691,6 @@ class AimsStateService:
     def _has_structured_feedback(cls_payload: dict[str, Any]) -> bool:
         return bool(cls_payload.get("feedback_items") or cls_payload.get("step_feedback"))
 
-    @staticmethod
-    def _observed_open_concern_question(cls_payload: dict[str, Any]) -> bool | None:
-        observations = cls_payload.get("observations")
-        model_dump = getattr(observations, "model_dump", None)
-        if callable(model_dump):
-            observations = model_dump()
-        if not isinstance(observations, dict):
-            return None
-        value = observations.get("open_concern_question_present")
-        return value if isinstance(value, bool) else None
 
     @staticmethod
     def _append_feedback_item(
@@ -860,13 +806,6 @@ class AimsStateService:
             # Inquire-classified turn that doesn't happen to elicit any checklist
             # item must not be treated as having discovered one.
             state["phase"] = PHASE_INQUIRE_MIRROR
-            # Sticky: distinguishes "has never inquired" from "inquired, but not
-            # recently". _apply_secure_guidance must not tell a clinician to ask
-            # an open question when the classifier already credited them with one
-            # (including compounds such as Announce+Inquire). The "it has been a
-            # few turns since you last inquired" case belongs to
-            # _apply_inquire_nudge, which is turn-aware and resets on every Inquire.
-            state["has_inquired"] = True
         elif step_current == STEP_MIRROR_SECURE:
             concerns = state.get("parent_concerns") or []
             all_mirrored = all(concern.get("is_mirrored") for concern in concerns) if concerns else True

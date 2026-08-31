@@ -6,7 +6,6 @@ from app.constants import (
     KEY_AIMS_STATE,
     PHASE_INQUIRE_MIRROR,
     STEP_ANNOUNCE,
-    STEP_ANNOUNCE_INQUIRE,
     STEP_INQUIRE,
     STEP_MIRROR,
     STEP_MIRROR_SECURE,
@@ -237,6 +236,19 @@ def _structured_payload(step: str = STEP_SECURE) -> dict:
     }
 
 
+def _closure_ready_state() -> dict:
+    """State at genuine closure, per the specification: every concern
+    discovered, mirrored AND secured, AND the patient no longer receptive.
+    All four are required together - see AimsStateService._closure_plan_ready."""
+    return {
+        "is_undiscovered_concerns": False,
+        "patient_unreceptive_to_further_inquire": True,
+        "parent_concerns": [
+            {"topic": "side_effects", "is_mirrored": True, "is_secured": True}
+        ],
+    }
+
+
 def _feedback_codes(payload: dict) -> list[str]:
     return [item.get("code") for item in payload.get("feedback_items") or []]
 
@@ -364,7 +376,13 @@ def test_inquire_nudge_stays_flat_with_same_text_on_repeat_qualifying_turns():
     assert payload2["tips"][0] == first_text
 
 
-def test_structured_feedback_secure_before_inquire_uses_coded_state_feedback():
+def test_plain_secure_no_longer_accuses_the_clinician_of_not_inquiring():
+    """"Secure before Inquire" was removed as a standalone accusation because it
+    is incoherent: you do not inquire ABOUT a concern, you inquire to discover
+    concerns at all. A concern being secured is therefore already discovered --
+    the clinician inquired, or the patient volunteered it, and both set
+    is_discovered. This test previously asserted the accusation fired, and the
+    score was capped for it."""
     state = {
         "phase": PHASE_INQUIRE_MIRROR,
         "announced": True,
@@ -381,58 +399,75 @@ def test_structured_feedback_secure_before_inquire_uses_coded_state_feedback():
         person_last="I am uncertain.",
     )
 
-    assert payload["score"] == 2
-    assert "secure_before_inquire" in _feedback_codes(payload)
-    assert payload["tips"] == []
-    assert payload["reasons"] == ["Model reason."]
+    assert "secure_before_inquire" not in _feedback_codes(payload)
+    assert payload["score"] == 3, "the score must not be capped for a removed rule"
 
 
-def test_secure_before_inquire_suppressed_once_an_inquire_was_already_credited():
-    """Reported from production: turn 1 was classified Announce+Inquire and praised
-    for it ("Beautifully handled! You invited her perspective with an open
-    question"), then turn 3 said "Ask one open concern question before offering
-    reassurance" -- telling the clinician to do the thing they were just
-    congratulated for. The "it has been a few turns since you inquired" case is
-    _apply_inquire_nudge's job, and it is turn-aware; this tip is only about
-    never having inquired at all."""
+
+def test_inquire_plus_secure_is_reported_as_a_failure_to_mirror():
+    """AIMS runs Announce -> Inquire -> Mirror -> Secure, so asking and reassuring
+    in one turn has skipped Mirror. That is the actual error, and
+    secure_before_mirror is what reports it.
+
+    Note is_undiscovered_concerns is True here: other checklist concerns are still
+    unfound, which used to suppress this entirely. The mirror check is per-concern
+    -- it asks whether a DISCOVERED concern is still unmirrored -- so what remains
+    undiscovered elsewhere is irrelevant. docs/aims/concern-checklist-plan.md
+    records a live session where that gate silenced the mirror-skip penalty for
+    the whole conversation."""
+    payload = _structured_payload(STEP_SECURE_INQUIRE)
     state = {
         "phase": PHASE_INQUIRE_MIRROR,
         "announced": True,
         "is_undiscovered_concerns": True,
-        "has_inquired": True,
-        "parent_concerns": [],
+        "parent_concerns": [
+            {"topic": "immune_load", "is_discovered": True, "is_mirrored": False,
+             "is_secured": False, "from_checklist": True},
+        ],
     }
-    payload = _structured_payload(STEP_SECURE)
 
     _service().apply_coaching_guidance(
-        payload,
-        STEP_SECURE,
-        state,
-        clinician_message="Her immune system already handles far more than this every day.",
-        person_last="She is so tiny.",
+        payload, STEP_SECURE_INQUIRE, state,
+        "It is safe and effective. What else is on your mind?", "she is so small",
     )
 
+    assert "secure_before_mirror" in _feedback_codes(payload)
     assert "secure_before_inquire" not in _feedback_codes(payload)
-    # and the penalty that message justified must not be applied silently either
-    assert "secure_before_inquire" not in (state.get("recent_coaching") or [])
 
 
-def test_update_observational_state_marks_has_inquired_on_compound_step():
-    state: dict = {}
-    AimsStateService(logger=logging.getLogger("test")).update_observational_state(
-        state, STEP_ANNOUNCE_INQUIRE, [STEP_ANNOUNCE_INQUIRE]
+def test_no_mirror_fault_when_the_concern_was_mirrored_first():
+    """The sibling negative: same compound turn, but the concern was mirrored
+    before being secured, which is correct AIMS order."""
+    payload = _structured_payload(STEP_SECURE_INQUIRE)
+    state = {
+        "phase": PHASE_INQUIRE_MIRROR,
+        "announced": True,
+        "is_undiscovered_concerns": True,
+        "parent_concerns": [
+            {"topic": "immune_load", "is_discovered": True, "is_mirrored": True,
+             "is_secured": False, "from_checklist": True},
+        ],
+    }
+
+    _service().apply_coaching_guidance(
+        payload, STEP_SECURE_INQUIRE, state,
+        "It is safe and effective. What else is on your mind?", "she is so small",
     )
-    assert state["has_inquired"] is True
+
+    assert "secure_before_mirror" not in _feedback_codes(payload)
+    assert payload["score"] == 3
 
 
-def test_structured_feedback_secure_before_inquire_fires_on_secure_plus_inquire_compound():
-    """Regression test for a confirmed pre-existing bug (found via live staging
-    testing): apply_coaching_guidance used step_current == STEP_SECURE (exact string
-    match), which silently skipped the whole secure_before_inquire/secure_before_mirror
-    check for any compound step that includes Secure but isn't the bare string --
-    even though component_steps was already computed for exactly this purpose.
-    Secure+Inquire has no mirror this turn, so the check must apply exactly like
-    plain Secure."""
+def test_secure_plus_inquire_compound_is_not_accused_of_securing_before_inquiring():
+    """Successor to 8ea895c's compound-step regression test.
+
+    That commit's concern was real - an exact-string check on STEP_SECURE meant
+    compound steps skipped these checks entirely - and it is still covered for
+    secure_before_mirror by the sibling test below. But the secure_before_inquire
+    half asserted the accusation fired on a turn containing an Inquire, and that
+    accusation has since been removed as incoherent: a concern being secured is
+    already discovered, so the clinician either inquired or the patient
+    volunteered it."""
     state = {
         "phase": PHASE_INQUIRE_MIRROR,
         "announced": True,
@@ -449,7 +484,7 @@ def test_structured_feedback_secure_before_inquire_fires_on_secure_plus_inquire_
         person_last="I am uncertain.",
     )
 
-    assert "secure_before_inquire" in _feedback_codes(payload)
+    assert "secure_before_inquire" not in _feedback_codes(payload)
 
 
 def test_structured_feedback_secure_before_mirror_fires_on_secure_plus_inquire_compound():
@@ -1020,24 +1055,19 @@ def test_closure_plan_tip_runs_unconditionally_without_heuristic_fallback():
     the tip still fires."""
     service = AimsStateService(logger=logging.getLogger("test"), heuristic_fallback_enabled=False)
     payload = _structured_payload(STEP_SECURE)
-    state = {
-        "parent_concerns": [
-            {"topic": "side_effects", "is_mirrored": True, "is_secured": True}
-        ],
-    }
+    state = _closure_ready_state()
     service.apply_coaching_guidance(
         payload, STEP_SECURE, state, "That's completely your call.", "Thanks."
     )
     assert "offer_literature" in _feedback_codes(payload)
 
 
-def test_closure_plan_tip_fires_offer_literature_when_neither_offered_and_all_mirrored():
+def test_closure_plan_tip_fires_offer_literature_at_genuine_closure():
+    """The spec is conjunctive: every concern discovered, mirrored AND secured,
+    AND the patient no longer receptive. Only then is telling the clinician to
+    wrap up honest guidance."""
     payload = _structured_payload(STEP_SECURE)
-    state = {
-        "parent_concerns": [
-            {"topic": "side_effects", "is_mirrored": True, "is_secured": True}
-        ],
-    }
+    state = _closure_ready_state()
     AimsStateService._add_closure_plan_tip(payload, state, "irrelevant")
     codes = _feedback_codes(payload)
     assert "offer_literature" in codes
@@ -1081,20 +1111,36 @@ def test_closure_plan_tip_not_offered_until_concerns_are_secured():
     assert "offer_literature" not in _feedback_codes(payload)
 
 
-def test_closure_plan_tip_offer_literature_bypasses_mirrored_gate_when_patient_unreceptive():
-    """This is the fix the design pressure-test caught: without the bypass, the
-    mirrored-completeness gate would silently suppress the new nudge in exactly the
-    scenario it exists to help (the concern was never discovered, so it was never
-    mirrored either)."""
+def test_closure_plan_tip_not_offered_on_unreceptive_alone():
+    """An unreceptive patient is NOT sufficient on its own.
+
+    This test previously asserted the opposite -- that the flag bypassed the
+    completeness check entirely. That made the whole gate dead in practice:
+    patient_unreceptive_to_further_inquire is set after a single Inquire that
+    does not immediately surface a checklist topic, so it is true from turn 1 of
+    essentially every conversation, and the nudge fired mid-conversation
+    regardless of how little had been covered. The specification is conjunctive:
+    discovered AND mirrored AND secured AND unreceptive."""
     payload = _structured_payload(STEP_SECURE)
     state = {
+        "is_undiscovered_concerns": True,
         "parent_concerns": [
             {"topic": "immune_load", "is_mirrored": False, "is_secured": False}
         ],
         "patient_unreceptive_to_further_inquire": True,
     }
     AimsStateService._add_closure_plan_tip(payload, state, "irrelevant")
-    assert "offer_literature" in _feedback_codes(payload)
+    assert "offer_literature" not in _feedback_codes(payload)
+
+
+def test_closure_plan_tip_not_offered_when_complete_but_patient_still_receptive():
+    """The other half of the conjunction: everything covered, but the patient is
+    still engaging, so there is no reason to start winding the conversation up."""
+    payload = _structured_payload(STEP_SECURE)
+    state = _closure_ready_state()
+    state["patient_unreceptive_to_further_inquire"] = False
+    AimsStateService._add_closure_plan_tip(payload, state, "irrelevant")
+    assert "offer_literature" not in _feedback_codes(payload)
 
 
 def test_closure_plan_tip_suppressed_by_unmirrored_concern_without_unreceptive_flag():
