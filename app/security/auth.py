@@ -28,9 +28,18 @@ def authenticated_user_identifier(request: Request) -> str | None:
         return None
     return user.identifier if user else None
 
-def clear_persistent_session_id(user_identifier: str | None = None) -> None:
-    """Clear session identifier from memory store and local disk cache."""
-    clear_current_thread_id(user_identifier)
+def clear_persistent_session_id(
+    user_identifier: str | None = None, *, clear_thread_pointer: bool = True
+) -> None:
+    """Clear session identifier from memory store and local disk cache.
+
+    clear_thread_pointer=False preserves the user's current-thread pointer so
+    the next login can resume an unfinished conversation (the orchestrator's
+    chat-start recovery decides finished-vs-unfinished). Logout passes False;
+    the New Scenario flow keeps the default and clears everything.
+    """
+    if clear_thread_pointer:
+        clear_current_thread_id(user_identifier)
     try:
         filenames = [FILE_SESSION_ID]
         if user_identifier:

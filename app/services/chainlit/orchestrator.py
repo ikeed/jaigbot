@@ -2,7 +2,7 @@ import logging
 import uuid
 from typing import Any
 
-from app.chainlit_thread_state import set_current_thread_id
+from app.chainlit_thread_state import get_current_thread_record, set_current_thread_id
 from app.chat_roles import (
     ROLE_ASSISTANT,
     ROLE_COACH,
@@ -62,6 +62,28 @@ class ChainlitOrchestrator:
                     len(self.session.history),
                 )
                 return
+
+            # A fresh Chainlit socket (empty user session, new thread id) does
+            # not mean the user wanted a fresh scenario: after a logout/login
+            # or a redeploy gap, their persisted current thread may hold an
+            # unfinished conversation. Resume it instead of starting over; a
+            # finished session (gameOver) falls through to a new scenario.
+            # Deliberate fresh starts are unaffected - the New Scenario flow
+            # clears the pointer via ?aims_new=1 before this runs.
+            recovered = get_current_thread_record(user_id)
+            if (
+                recovered
+                and recovered.get("id") != self._get_thread_id()
+                and not await self._persisted_thread_finished(recovered)
+            ):
+                logger.info(
+                    "Recovering persisted current thread %s for user %s",
+                    recovered.get("id"),
+                    user_id,
+                )
+                await self.handle_session_resume(recovered)
+                return
+
             await self._start_scenario_flow()
         except Exception as e:
             await self._report_error_silently(e, "handle_chat_start")
@@ -120,6 +142,27 @@ class ChainlitOrchestrator:
         except Exception as e:
             await self._report_error_silently(e, "handle_user_message")
             await self.ui.show_error(catalog_message("chainlit.generic_error", error=str(e)))
+
+    async def _persisted_thread_finished(self, thread: dict[str, Any]) -> bool:
+        """True only when the persisted thread's backend session is known to
+        have reached endgame. Unknown (backend unreachable, session expired
+        across a redeploy) counts as unfinished: resuming shows the thread's
+        own history either way, while wrongly starting fresh discards it.
+        """
+        metadata = (thread or {}).get("metadata") or {}
+        session_id = metadata.get("session_id") or (thread or {}).get("id")
+        if not session_id:
+            return False
+        try:
+            state = await self.backend.fetch_history_with_state(str(session_id))
+            return (state or {}).get("gameOver") is True
+        except Exception as e:
+            logger.debug(
+                "Could not determine finished state for %s (treating as unfinished): %s",
+                session_id,
+                e,
+            )
+            return False
 
     async def handle_session_resume(self, thread: dict[str, Any]):
         """Rehydrates session state from a resumed Chainlit thread."""
@@ -284,6 +327,7 @@ class ChainlitOrchestrator:
         user_card = session_data.get("initialCard")
 
         await self._send_persona_name(persona_name)
+        await self._name_thread(persona_name)
 
         if not self.session.history:
             self.session.history = history if history else []
@@ -380,6 +424,26 @@ class ChainlitOrchestrator:
         except Exception as e:
             logger.debug(f"Failed to bind thread (non-fatal): {e}")
             pass
+
+    async def _name_thread(self, persona_name: str | None):
+        """Name the sidebar thread after the scenario's persona.
+
+        Without this, a thread only gets a name once the user sends their first
+        message, so scenario threads that were opened but not yet typed into
+        pile up in the sidebar as "Untitled Conversation".
+        """
+        thread_id = self._get_thread_id()
+        name = (persona_name or "").strip() if isinstance(persona_name, str) else ""
+        if not thread_id or not name:
+            return
+        try:
+            from chainlit.data import get_data_layer
+
+            dl = get_data_layer()
+            if dl:
+                await dl.update_thread(thread_id=thread_id, name=name)
+        except Exception as e:
+            logger.debug("Failed to name thread (non-fatal): %s", e)
 
     async def _canonicalize_thread_url(self):
         thread_id = self._get_thread_id()

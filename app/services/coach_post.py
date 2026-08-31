@@ -275,6 +275,12 @@ def sanitize_endgame_bullets(lines: list[str]) -> list[str]:
             continue
         if sl.startswith("patient{") or sl.startswith('"patient{'):
             continue
+        # Drop a fragment that opens a quote and never closes it (e.g. '"patient'
+        # from a JSON tail truncated before its brace ever arrived - seen in
+        # production as a Final Summary bullet). A legitimate bullet that begins
+        # with a quotation mark carries its closing quote somewhere in the line.
+        if s[0] in "\"'" and s[0] not in s[1:]:
+            continue
         if sl.startswith("patient_reply"):
             continue
         # Drop a leading "here is/here's the json..." preamble line the model
@@ -306,11 +312,11 @@ def endgame_title(session_obj: dict | None, outcome: str = "") -> str:
 
     Overall score (mean of all four core AIMS step averages, scaled to
     0-100% - a step never attempted scores 0, see _overall_score_pct):
-      >= 85%  -> "🏆 Excellent job — N% overall"
-      >= 70%  -> "🎉 Great job — N% overall"
-      >= 55%  -> "👏 Good job — N% overall"
-      >= 35%  -> "💪 Keep practicing — N% overall"    (encouraging, not celebratory)
-      <  35%  -> "📋 Needs work — N% overall"          (encouraging, not celebratory)
+      >= 90%  -> "🏆 Excellent job — N% overall"
+      >= 80%  -> "🎉 Great job — N% overall"
+      >= 65%  -> "👏 Good job — N% overall"
+      >= 40%  -> "💪 Keep practicing — N% overall"    (encouraging, not celebratory)
+      <  40%  -> "📋 Needs work — N% overall"          (encouraging, not celebratory)
     Falls back to a plain "Great job!" (no score) when no score data is available.
     """
     if outcome == "deferred":
@@ -320,13 +326,13 @@ def endgame_title(session_obj: dict | None, outcome: str = "") -> str:
         overall = _overall_score_pct(ra)
         if overall is None:
             return message("endgame.titles.no_data")
-        if overall >= 85:
+        if overall >= 90:
             tier = "excellent"
-        elif overall >= 70:
+        elif overall >= 80:
             tier = "great"
-        elif overall >= 55:
+        elif overall >= 65:
             tier = "good"
-        elif overall >= 35:
+        elif overall >= 40:
             tier = "keep_practicing"
         else:
             tier = "needs_work"
@@ -431,7 +437,17 @@ def build_endgame_bullets_fallback(
         elif a >= _HIGH:
             bullets.append(f"**{step_name} {_pct(a)}%** - {_step_message('high')}")
         elif a >= _MID:
-            bullets.append(f"**{step_name} {_pct(a)}%** - {_step_message('mid')}")
+            # The generic Announce "mid" line coaches "follow immediately with an
+            # open question" - contradictory advice when the announce turn was
+            # itself classified Announce+Inquire (the question WAS asked).
+            tier = "mid"
+            if (
+                step_name == "Announce"
+                and int(counts.get("Announce+Inquire", 0) or 0) >= 1
+                and "mid_with_inquire" in msgs
+            ):
+                tier = "mid_with_inquire"
+            bullets.append(f"**{step_name} {_pct(a)}%** - {_step_message(tier)}")
         else:
             bullets.append(f"**{step_name} {_pct(a)}%** - {_step_message('low')}")
 

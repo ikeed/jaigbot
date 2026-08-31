@@ -98,6 +98,7 @@
       "Announce": {
         "high": "clear, non-pressuring recommendation - well done.",
         "mid": "the recommendation was present; try making it more concise and following immediately with an open question.",
+        "mid_with_inquire": "the recommendation came with an open question - nicely structured; tighten the wording so the rationale stays brief.",
         "low": "lead with a brief presumptive recommendation, then invite input (e.g., \"{patient_label} due for the recommended vaccine today - what are your thoughts?\").",
         "absent": "introduce vaccines with a clear, non-pushy recommendation before asking for concerns."
       },
@@ -134,7 +135,7 @@
       "secure:",
       "outcome:"
     ],
-    "generic_summary_subject_pattern": "^(?:the\\s+)?(?:person|parent)\\b"
+    "generic_summary_subject_pattern": "^(?:the\\s+)?(?:person|parent|patient)\\b"
   },
   "patient_reply": {
     "fallbacks": {
