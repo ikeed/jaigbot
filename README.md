@@ -24,7 +24,6 @@ defaults to off.
 - Run/setup docs: `docs/developer-setup.md` (step‑by‑step).
 - AIMS implementation map: `docs/aims/README.md`.
 - SSO Setup Guide: `docs/sso-setup.md` (step-by-step for Google, Facebook, Apple).
-- Note: `app/static/index.html` is deprecated and no longer served; the backend does not mount a static UI.
 
 ## Running locally
 
@@ -58,18 +57,17 @@ Manual setup is also fine:
    export AIMS_CLASSIFIER_MODEL_ID=gemini-3.6-flash
    ```
 
-### PyCharm Run Configurations
-The repo tracks one shared PyCharm configuration:
-
-- **AIMSBot (Unified)**: Runs `run_app.py`, which includes the FastAPI backend, the custom SSO landing page, and the Chainlit UI in a single process. This is the recommended local development configuration.
-
-The shared config sets `MEMORY_PERSIST_PATH=.chainlit/session_memory.json` so IDE reruns preserve both backend conversation state and Chainlit thread state. Other `.idea` files remain ignored because they are usually machine-specific.
+### PyCharm
+Create a run configuration for `run_app.py` (FastAPI backend + SSO landing page + Chainlit UI
+in one process — the recommended local development mode) with
+`MEMORY_PERSIST_PATH=.chainlit/session_memory.json` in its environment so IDE reruns preserve
+both backend conversation state and Chainlit thread state.
 
 ### SSO Authentication
 AIMSBot supports SSO via Chainlit's built-in OAuth or a custom FastAPI-based landing page.
 
 **Enforcement:**
-By default, the application now enforces a login screen if it detects any authentication configuration. This ensures the app is always in "private" mode when intended.
+The application enforces a login screen if it detects any authentication configuration. This ensures the app is always in "private" mode when intended.
 
 **Crucial Note on Configuration:**
 For SSO to be detected, you **MUST** provide the `OAUTH_*_CLIENT_ID` environment variables.
@@ -94,10 +92,10 @@ export OAUTH_APPLE_CLIENT_SECRET=your-client-secret
 ```
 
 #### Other Providers
-Support is also included for OKTA, Auth0, Cognito, GitLab, Descope, and Keycloak. Set `OAUTH_<PROVIDER>_CLIENT_ID` and `OAUTH_<PROVIDER>_CLIENT_SECRET`.
+GitHub, Microsoft (Azure AD), Okta, Auth0, and Keycloak are also supported as first-class providers. Set `OAUTH_<PROVIDER>_CLIENT_ID` and `OAUTH_<PROVIDER>_CLIENT_SECRET`; any other provider exposing the standard variables is picked up generically.
 
 ### Running the App with a Custom Login Page
-If you want a custom SSO login page *before* the Chainlit UI (as requested), use the new FastAPI entry point:
+For a custom SSO login page *before* the Chainlit UI, use the FastAPI entry point:
 
 1. Install additional dependencies: `pip install uvicorn`
 2. Run the integrated app:
@@ -122,7 +120,7 @@ If you want a custom SSO login page *before* the Chainlit UI (as requested), use
 
 ## Chainlit UI
 
-A lightweight Chainlit chat interface replaces the old static index.html. It forwards messages to the existing POST /chat endpoint.
+A lightweight Chainlit chat interface forwards messages to the POST /chat endpoint.
 
 - Local run:
   ```bash
@@ -130,22 +128,6 @@ A lightweight Chainlit chat interface replaces the old static index.html. It for
   BACKEND_URL=http://localhost:8080/chat chainlit run chainlit_app.py
   ```
 - Details (session persistence, timeouts, model/transport options, auto‑continue): see docs/chainlit-ui.md
-
-## CLI conversation (no UI)
-If you just want to verify the service and have a quick conversation without a browser, use the helper script:
-
-```bash
-# In one terminal, start the backend (or use the PyCharm Compound run config):
-./scripts/dev_run.sh
-# In another terminal, run a chat loop against POST /chat:
-python scripts/converse_cli.py --session-id localtest --coach
-```
-
-Environment overrides:
-- BACKEND_URL (default http://localhost:8080/chat)
-- SESSION_ID or FIXED_SESSION_ID (to persist memory)
-
-This script prints the model, latency, reply text, and includes coaching/session sections if the server returns them.
 
 ## Cloud Run health checks
 During deploys Cloud Run may show two different but valid URLs. Probe paths
@@ -171,7 +153,5 @@ The backend supports session-keyed memory with optional persona/scene, using in-
 - Environment separation: docs/environments.md
 - Release and rollback: docs/release-and-rollback.md
 - Memory and persona: docs/memory-and-persona.md
-- MCP empowerment/readiness: docs/mcp-empowerment.md
-- Standing orders (minimize manual work via efficient tool use): docs/standing-orders.md
 - AIMS protocol summary (Source of Truth): docs/aims/AIMS_Approach_Summary.md
 - AIMS protocol mapping (reference): docs/aims/aims_mapping.json (source paper: fpubh-11-1120326.pdf)

@@ -44,8 +44,8 @@ if ! python -c "import uvicorn" >/dev/null 2>&1; then
 fi
 
 # 3) Export defaults only if not already set in the environment
-# Prefer PROJECT_ID, then GCP_PROJECT_ID, then hardcoded default
-export PROJECT_ID="${PROJECT_ID:-${GCP_PROJECT_ID:-warm-actor-253703}}"
+# Prefer PROJECT_ID, then GCP_PROJECT_ID; app-level detection handles the rest
+export PROJECT_ID="${PROJECT_ID:-${GCP_PROJECT_ID:-}}"
 export REGION="${REGION:-${GCP_REGION:-us-west4}}"
 export VERTEX_LOCATION="${VERTEX_LOCATION:-global}"
 export MODEL_ID="${MODEL_ID:-gemini-3.6-flash}"

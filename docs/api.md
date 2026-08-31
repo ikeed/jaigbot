@@ -114,6 +114,12 @@ Errors:
 - `502`: upstream Vertex AI error
 - `500`: unexpected server error
 
+Error responses use a structured body:
+
+```json
+{"detail": {"error": {"message": "<human-readable reason>", "code": 500}}}
+```
+
 Behavioral notes:
 
 - Persona and scene are composed into the model system instruction.
@@ -239,9 +245,14 @@ Common runtime flags:
 - `CHAINLIT_AUTH_SECRET`
 - `BACKEND_URL`
 
-## Vertex note
+## Model access
 
 The active model client is `app/gemini_client.py`, which uses the Google Gen AI SDK in
-Vertex AI mode with API version `v1`. Model availability and generation checks
-should be done through `/config`, `/modelcheck`, `/models`, or the scripts under
-`scripts/`.
+Vertex AI mode with API version `v1`. `app/services/gemini_gateway.py` and
+`app/services/gemini_helpers.py` wrap it with retry/fallback across the models listed in
+`MODEL_FALLBACKS` and continuation-on-max-tokens handling.
+
+A best-effort model preflight (`app/services/model_preflight.py`) runs at startup and stores
+its result on `app.state.model_check`; `GET /modelcheck` reports it. Model availability and
+generation checks should be done through `/config`, `/modelcheck`, `/models`, or the scripts
+under `scripts/`.

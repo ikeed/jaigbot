@@ -22,7 +22,7 @@ What it does NOT create:
 - You authenticated locally: `gcloud auth application-default login` and/or `gcloud auth login`
 
 ## Variables (with defaults)
-- project_id (default: warm-actor-253703)
+- project_id (required; no default)
 - region (default: us-west4)
 - service_name (default: aimsbot)
 - gar_repo (default: cr-demo)
@@ -38,7 +38,7 @@ What it does NOT create:
 Override via `-var` flags or a tfvars file.
 
 Example terraform.tfvars:
-project_id        = "warm-actor-253703"
+project_id        = "your-project-id"
 region            = "us-west4"
 service_name      = "aimsbot"
 gar_repo          = "cr-demo"
@@ -274,7 +274,7 @@ Recommended additional roles for apply (as documented above):
 
 How to grant (replace PROJECT and SA_EMAIL):
 ```bash
-PROJECT=warm-actor-253703
+PROJECT=your-project-id
 SA_EMAIL="cr-deployer@${PROJECT}.iam.gserviceaccount.com"  # or your user email
 
 # Read-only roles sufficient for 'terraform plan'
@@ -314,7 +314,7 @@ Why this happens
 Quick fixes
 1) Prefer the admin role when viewer is rejected
 ```bash
-PROJECT=warm-actor-253703
+PROJECT=your-project-id
 PRINCIPAL="serviceAccount:cr-deployer@${PROJECT}.iam.gserviceaccount.com"   # or your user email
 
 gcloud projects add-iam-policy-binding "$PROJECT" \
@@ -324,7 +324,7 @@ gcloud projects add-iam-policy-binding "$PROJECT" \
 
 2) If you must stay read-only, try adding Viewer with no conditions (some conditions aren’t supported for this role)
 ```bash
-PROJECT=warm-actor-253703
+PROJECT=your-project-id
 PRINCIPAL="serviceAccount:cr-deployer@${PROJECT}.iam.gserviceaccount.com"
 
 gcloud projects add-iam-policy-binding "$PROJECT" \
@@ -335,7 +335,7 @@ This lets Terraform read IAM policies. Combine with either roles/serviceusage.se
 
 3) Manually enable required services (if you avoid serviceusage roles entirely)
 ```bash
-PROJECT=warm-actor-253703
+PROJECT=your-project-id
 APIS=(
   aiplatform.googleapis.com
   run.googleapis.com
@@ -373,7 +373,7 @@ Why this happens
 Quick fixes
 1) Add the correct prefix to the member string
 ```bash
-PROJECT=warm-actor-253703
+PROJECT=your-project-id
 # Example for a human user:
 PRINCIPAL="user:craig.burnett@gmail.com"
 ROLE="roles/serviceusage.serviceUsageAdmin"
@@ -385,7 +385,7 @@ gcloud projects add-iam-policy-binding "$PROJECT" \
 
 2) Prefer a service account if user principals are disallowed by org policy
 ```bash
-PROJECT=warm-actor-253703
+PROJECT=your-project-id
 SA_EMAIL="cr-deployer@${PROJECT}.iam.gserviceaccount.com"  # or another SA you control
 ROLE="roles/serviceusage.serviceUsageAdmin"
 
@@ -396,7 +396,7 @@ gcloud projects add-iam-policy-binding "$PROJECT" \
 
 3) Minimum roles for Terraform planning (recap)
 ```bash
-PROJECT=warm-actor-253703
+PROJECT=your-project-id
 SA_EMAIL="cr-deployer@${PROJECT}.iam.gserviceaccount.com"
 
 gcloud projects add-iam-policy-binding "$PROJECT" \

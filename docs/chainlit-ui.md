@@ -6,6 +6,17 @@ This guide covers running the Chainlit chat interface locally or as a separate s
 - Chainlit provides a lightweight ChatGPT‑like UI that forwards messages to the existing FastAPI POST /chat endpoint.
 - The backend does not serve a UI by default; run Chainlit alongside the API during local development or deploy it separately.
 
+## Code map
+
+| Concern | Module |
+|---------|--------|
+| Chainlit entry point | `chainlit_app.py` |
+| Startup and session wiring | `app/services/chainlit/orchestrator.py` |
+| Message/avatar rendering | `app/services/chainlit/ui_handler.py` |
+| Backend calls — hits the FastAPI `/chat` endpoint over HTTP even when running in the same process under `run_app.py` | `app/services/chainlit/backend_client.py` |
+| Chainlit data layer backed by the app memory store | `app/chainlit_memory_data_layer.py` |
+| Per-user current-thread pointer | `app/chainlit_thread_state.py` |
+
 ## Prerequisites
 - FastAPI backend running (see README Quickstart or docs/developer-setup.md).
 - Python dependencies: `chainlit` and `httpx`.

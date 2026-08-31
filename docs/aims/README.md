@@ -19,9 +19,25 @@ This directory contains the AIMS communication protocol as implemented in AIMSBo
   `.env.example` or any workflow, so on LLM timeout or failure the turn currently returns a
   neutral "classification unavailable" result rather than consulting this file.
 
-- **implementation-plan.md** — Historical implementation notes (may be outdated).
+- Reference source: `fpubh-11-1120326.pdf` (Frontiers in Public Health article, this directory)
 
-- Reference source: `../../fpubh-11-1120326.pdf` (Frontiers in Public Health article)
+## Request flow
+
+`app/main.py` wires the FastAPI routers (`app/routes/{chat,session,summary,system}.py`) to a
+`ChatOrchestrator` (`app/services/chat_orchestrator.py`), built per-request via dependency
+injection with the memory store, Gemini config, and AIMS config pulled from
+`app/config.py::settings`. `ChatOrchestrator.handle_chat` validates the request, builds a
+`ChatContext` (session/memory/persona) via `ChatContextBuilder`, then routes to one of two
+handlers based on `AIMS_COACHING_ENABLED` and the request's `coach` flag:
+
+- **Coaching path** — `app/services/aims_coaching_handler.py` (`AimsCoachingHandler`), the
+  subject of this directory.
+- **Legacy path** — `app/services/legacy_chat_handler.py`: no AIMS classification or scoring,
+  plain patient reply.
+
+Both paths return a response the orchestrator formats into the API's JSON shape (see
+`docs/api.md`), including backward-compatible field aliases (`text`/`reply`,
+`modelId`/`model`) that must not be dropped without checking client usage.
 
 ## Runtime Service Map
 
@@ -31,7 +47,7 @@ with the smallest owner for the behavior you are changing:
 | Area | Runtime owner |
 |------|---------------|
 | Turn orchestration and API response assembly | `app/services/aims_coaching_handler.py` |
-| Parallel classifier + patient-reply calls and deterministic classification fallback | `app/services/aims_turn_coordinator.py` |
+| Parallel classifier + patient-reply calls, classification-unavailable result, flag-gated heuristic fallback | `app/services/aims_turn_coordinator.py` |
 | LLM AIMS classification and endgame LLM call | `app/services/classifier_service.py` |
 | Roleplayed patient reply generation, JSON validation, jailbreak handling | `app/services/patient_reply_service.py` |
 | LLM refinement of fallback coaching text only | `app/services/aims_feedback_service.py` |

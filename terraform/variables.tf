@@ -1,7 +1,6 @@
 variable "project_id" {
   type        = string
-  description = "GCP project ID"
-  default     = "warm-actor-253703"
+  description = "GCP project ID (no default; supply via -var or terraform.tfvars)"
 }
 
 variable "region" {

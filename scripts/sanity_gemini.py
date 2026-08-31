@@ -4,7 +4,7 @@ Quick standalone sanity test for Vertex AI from your local environment.
 
 Usage:
   source .venv/bin/activate  # optional but recommended
-  export PROJECT_ID=warm-actor-253703
+  export PROJECT_ID=your-project-id
   export REGION=us-west4
   export VERTEX_LOCATION=global
   python scripts/sanity_gemini.py

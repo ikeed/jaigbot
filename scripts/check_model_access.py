@@ -9,7 +9,7 @@ What it does:
 
 Usage:
   source .venv/bin/activate
-  export PROJECT_ID=warm-actor-253703
+  export PROJECT_ID=your-project-id
   export REGION=us-west4
   export VERTEX_LOCATION=global
   # optional overrides
