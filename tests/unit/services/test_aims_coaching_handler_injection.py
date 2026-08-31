@@ -593,14 +593,12 @@ async def test_handle_prefers_state_feedback_item_without_rewriting_step_feedbac
         ctx=ctx,
     )
 
-    assert result["coaching"]["feedback_items"] == [
-        {
-            "step": "Secure",
-            "tone": "improvement",
-            "code": "secure_before_inquire_after_question",
-            "text": "You asked an open question, then moved into reassurance before giving them space to answer.",
-        }
-    ]
+    # No state-generated feedback item for this turn any more: both
+    # secure_before_inquire variants were removed (an Inquire+Secure turn is a
+    # failure to Mirror, which secure_before_mirror reports, and this turn has no
+    # discovered-unmirrored concern). The point this test still guards is that the
+    # model's own step_feedback survives untouched either way.
+    assert result["coaching"].get("feedback_items", []) == []
     assert result["coaching"]["step_feedback"] == [
         {
             "step": "Secure",

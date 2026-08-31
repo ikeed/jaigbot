@@ -544,6 +544,10 @@ def test_secure_closure_with_neither_literature_nor_followup_gets_offer_literatu
             }
         ],
     )
+    # Genuine closure requires all four conditions together (discovered,
+    # mirrored, secured, patient no longer receptive) -- see
+    # AimsStateService._closure_plan_ready. _make_state already covers discovery.
+    state["patient_unreceptive_to_further_inquire"] = True
     cls = {"step": "Secure", "score": 3, "reasons": [], "tips": []}
 
     h.apply_coaching_guidance(
