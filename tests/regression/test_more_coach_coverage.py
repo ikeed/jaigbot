@@ -100,7 +100,7 @@ def test_secure_before_mirror_adds_reason_tip_and_caps_score(monkeypatch):
             "is_undiscovered_concerns": False,
             "pending_concerns": True,
             "parent_concerns": [
-                {"desc": "side effects", "topic": "side_effects", "is_mirrored": False, "is_secured": False}
+                {"desc": "side effects", "topic": "side_effects", "is_discovered": True, "is_mirrored": False, "is_secured": False}
             ],
         },
     }

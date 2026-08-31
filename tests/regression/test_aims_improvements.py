@@ -67,12 +67,18 @@ def test_multisentence_rapport_q_is_smalltalk(aims_mapping):
 
 
 def _make_state(phase="Secure", concerns=None):
+    # Concerns passed here model ones the patient has already raised - every
+    # caller pairs them with a person_last that voices the concern. is_discovered
+    # defaults to True accordingly, since a concern that was never raised cannot
+    # be a mirroring failure (see
+    # AimsStateService._unmirrored_topics_requiring_feedback).
+    prepared = [{"is_discovered": True, **c} for c in (concerns or [])]
     return {
         "announced": True,
         "phase": phase,
         "is_undiscovered_concerns": False,
         "pending_concerns": True,
-        "parent_concerns": concerns or [],
+        "parent_concerns": prepared,
     }
 
 
