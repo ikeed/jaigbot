@@ -5,7 +5,7 @@ You may see two different hostnames for the same Cloud Run service during or aft
 ## Cloud Run URL patterns
 - New canonical URL (shown by `gcloud run deploy`):
   - https://<service>-<project-number>.<region>.run.app
-  - Example: https://aimsbot-000000000000.us-west4.run.app
+  - Example: https://aimsbot-<project-number>.us-west4.run.app
 - Legacy URL (often shown by `gcloud run services describe` and in various UIs):
   - https://<service>-<hash>-<region-short>.a.run.app
   - Example: https://aimsbot-chur7bpwsq-uc.a.run.app

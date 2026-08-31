@@ -139,7 +139,7 @@ Docs and scripts showing example defaults (replace with your project):
 
 To locate references yourself, search terms used:
 - `PROJECT_ID`
-- A specific sample id used in docs: `your-project-id`
+- Any project-specific sample ids used in docs
 
 ---
 

@@ -22,7 +22,7 @@ What it does NOT create:
 - You authenticated locally: `gcloud auth application-default login` and/or `gcloud auth login`
 
 ## Variables (with defaults)
-- project_id (default: your-project-id)
+- project_id (required; no default)
 - region (default: us-west4)
 - service_name (default: aimsbot)
 - gar_repo (default: cr-demo)

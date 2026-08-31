@@ -69,6 +69,13 @@ Behavior and diagnostics:
 - Redis keys are JSON blobs under the environment prefix; TTL is applied on write. The default TTL is 15 days (`1296000` seconds), overrideable with `MEMORY_TTL_SECONDS`.
 - GET `/config` and `/diagnostics` show `memoryBackend`/`backend` and `storeSize`.
 
+## Session archives (GCS)
+
+`app/services/storage_service.py` provides optional GCS archive/report storage. An archive
+is written as a `BackgroundTasks` job when a session reaches endgame (a `coach_post` is
+present) or when `POST /report` is called; there is no periodic sync. Object paths are
+namespaced by `APP_ENV` (see `docs/environments.md`).
+
 ## Persona (character) and scene
 You can set a character sketch (persona) and optional scene objectives to steer the assistant.
 

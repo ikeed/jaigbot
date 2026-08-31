@@ -11,12 +11,16 @@ terraform/terraform.tfstate.*
 terraform/crash.log
 
 # IDE configs
-/.idea/*
-!/.idea/runConfigurations/
-/.idea/runConfigurations/*
-!/.idea/runConfigurations/AIMSBot__Unified_.xml
-!/.idea/runConfigurations/PyTests__No_Integration_.xml
+/.idea/
 /.vscode/
+
+# AI-assistant local files (kept out of the repo)
+/CLAUDE.md
+/AGENTS.md
+/.junie/
+/.aiignore
+/skills/
+/.claude/
 
 # Coverage & test cache
 /.coverage
@@ -35,7 +39,11 @@ __pycache__/
 console.log
 
 # Large media
-/docs/aims_videos/
+/app/modules/aims/docs/aims_videos/
+
+# Local artifacts that must never be committed
+/session_transcript.json
+/copilot_review.txt
 /tests/.chainlit/translations/
 /tests/.chainlit/config.toml
 /coverage.xml
