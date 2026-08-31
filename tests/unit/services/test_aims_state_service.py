@@ -404,6 +404,60 @@ def test_plain_secure_no_longer_accuses_the_clinician_of_not_inquiring():
 
 
 
+def test_inquire_plus_secure_is_reported_as_a_failure_to_mirror():
+    """AIMS runs Announce -> Inquire -> Mirror -> Secure, so asking and reassuring
+    in one turn has skipped Mirror. That is the actual error, and
+    secure_before_mirror is what reports it.
+
+    Note is_undiscovered_concerns is True here: other checklist concerns are still
+    unfound, which used to suppress this entirely. The mirror check is per-concern
+    -- it asks whether a DISCOVERED concern is still unmirrored -- so what remains
+    undiscovered elsewhere is irrelevant. docs/aims/concern-checklist-plan.md
+    records a live session where that gate silenced the mirror-skip penalty for
+    the whole conversation."""
+    payload = _structured_payload(STEP_SECURE_INQUIRE)
+    state = {
+        "phase": PHASE_INQUIRE_MIRROR,
+        "announced": True,
+        "is_undiscovered_concerns": True,
+        "parent_concerns": [
+            {"topic": "immune_load", "is_discovered": True, "is_mirrored": False,
+             "is_secured": False, "from_checklist": True},
+        ],
+    }
+
+    _service().apply_coaching_guidance(
+        payload, STEP_SECURE_INQUIRE, state,
+        "It is safe and effective. What else is on your mind?", "she is so small",
+    )
+
+    assert "secure_before_mirror" in _feedback_codes(payload)
+    assert "secure_before_inquire" not in _feedback_codes(payload)
+
+
+def test_no_mirror_fault_when_the_concern_was_mirrored_first():
+    """The sibling negative: same compound turn, but the concern was mirrored
+    before being secured, which is correct AIMS order."""
+    payload = _structured_payload(STEP_SECURE_INQUIRE)
+    state = {
+        "phase": PHASE_INQUIRE_MIRROR,
+        "announced": True,
+        "is_undiscovered_concerns": True,
+        "parent_concerns": [
+            {"topic": "immune_load", "is_discovered": True, "is_mirrored": True,
+             "is_secured": False, "from_checklist": True},
+        ],
+    }
+
+    _service().apply_coaching_guidance(
+        payload, STEP_SECURE_INQUIRE, state,
+        "It is safe and effective. What else is on your mind?", "she is so small",
+    )
+
+    assert "secure_before_mirror" not in _feedback_codes(payload)
+    assert payload["score"] == 3
+
+
 def test_secure_plus_inquire_compound_is_not_accused_of_securing_before_inquiring():
     """Successor to 8ea895c's compound-step regression test.
 

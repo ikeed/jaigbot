@@ -204,8 +204,15 @@ class TestSecuringBeforeInquiringCoaching:
         assert cls_payload["score"] == 3, "score must not be capped for a removed rule"
         assert cls_payload["tips"] == []
 
-    def test_secure_open_question_then_reassurance_gets_pause_feedback(self):
-        """If the turn already opened with inquiry, feedback should not say to ask first."""
+    def test_asking_then_reassuring_is_not_reported_as_an_inquiry_fault(self):
+        """Asking and then reassuring in one turn is a failure to MIRROR.
+
+        AIMS runs Announce -> Inquire -> Mirror -> Secure, so an Inquire+Secure
+        turn has skipped Mirror. That is what secure_before_mirror reports, and it
+        needs a discovered-but-unmirrored concern to point at. This fixture has
+        none (parent_concerns is empty, nothing has surfaced yet), so no fault is
+        reported at all -- rather than the old "you didn't leave room for the
+        answer" framing, which described the wrong error."""
         state = {
             "announced": True,
             "phase": "PreAnnounce",
@@ -231,10 +238,10 @@ class TestSecuringBeforeInquiringCoaching:
         )
 
         feedback = " ".join(cls_payload["reasons"] + cls_payload["tips"]).lower()
-        assert "you asked an open question" in feedback
+        assert "you asked an open question" not in feedback
+        assert "pause before offering reassurance" not in feedback
         assert "before asking" not in feedback
-        assert "open question first" not in feedback
-        assert "pause before offering reassurance" in feedback
+        assert cls_payload["score"] == 3, "score must not be capped for a removed rule"
 
     def test_secure_after_inquire_no_coaching_about_inquiring(self):
         """When is_undiscovered_concerns is False and concerns are mirrored,

@@ -21,7 +21,6 @@ from app.constants import (
 )
 from app.message_catalog import message, message_list, message_map
 from app.services.aims_metrics_service import AimsMetricsService
-from app.services.coaching_tip_sanitizer import opens_with_open_concern_question
 from app.services.conversation_service import (
     apply_concern_events,
     mark_mirrored_multi,
@@ -423,53 +422,25 @@ class AimsStateService:
         *,
         prefer_structured_feedback: bool = False,
     ) -> None:
-        # "Secure before Inquire" as a standalone accusation has been removed: it is
-        # incoherent. You do not inquire ABOUT a concern - you inquire to discover
-        # concerns at all. So if a concern is being secured it is by definition
-        # already discovered, either because the clinician inquired or because the
-        # patient volunteered it, and both set is_discovered. The old check instead
-        # keyed on "does any checklist concern remain undiscovered anywhere", which
-        # told clinicians they had not inquired on turns where they demonstrably had.
+        # Securing before inquiring is not a thing this can detect, and asking a
+        # question then reassuring in the same turn is not "you didn't wait for the
+        # answer" -- it is a failure to Mirror. AIMS runs Announce -> Inquire ->
+        # Mirror -> Secure, so an Inquire+Secure turn has skipped Mirror, and
+        # secure_before_mirror below is the feedback that says so. Both
+        # secure_before_inquire variants have therefore been removed rather than
+        # rephrased; neither described the actual error.
         #
-        # What survives is the genuinely different complaint: asking an open concern
-        # question and then reassuring without leaving room for the answer. That one
-        # is about the handling of a question actually asked this turn, not about
-        # whether inquiry ever happened.
-        is_undiscovered_concerns = state.get("is_undiscovered_concerns", True)
-        if is_undiscovered_concerns:
-            opened_with_concern_question = self._observed_open_concern_question(cls_payload)
-            if (
-                opened_with_concern_question is None
-                and self._heuristic_fallback_enabled
-            ):
-                opened_with_concern_question = opens_with_open_concern_question(clinician_message)
-            if opened_with_concern_question:
-                if prefer_structured_feedback:
-                    self._append_feedback_item(
-                        cls_payload,
-                        step=STEP_SECURE,
-                        code="secure_before_inquire_after_question",
-                        text=message("state_feedback.secure_before_inquire_after_question"),
-                    )
-                else:
-                    cls_payload["reasons"] = [
-                        message("state_feedback.secure_before_inquire_after_question")
-                    ] + (cls_payload.get("reasons") or [])
-                    cls_payload.setdefault("tips", []).append(
-                        message("state_feedback.secure_before_inquire_after_question_tip")
-                    )
-                try:
-                    cls_payload["score"] = min(2, int(cls_payload.get("score", 2)))
-                except Exception as e:
-                    self._logger.debug("Score normalization failed (reassured over question): %s", e)
-                    cls_payload["score"] = 2
-                recent = state.get("recent_coaching") or []
-                recent.append("secure_before_inquire_after_question")
-                state["recent_coaching"] = recent[-3:]
-
+        # The mirror check is deliberately NOT gated on is_undiscovered_concerns.
+        # _has_material_unmirrored_concern is already per-concern - it asks whether
+        # a DISCOVERED concern is still unmirrored - so whether some other concern
+        # remains undiscovered elsewhere in the checklist has no bearing on it.
+        # That extra condition suppressed the mirror-skip penalty for whole
+        # sessions; docs/aims/concern-checklist-plan.md records a live case where
+        # neither of Ethan's concerns was ever mirrored and the "Important:"-tier
+        # penalty could never fire because of it.
         needs_mirror = self._has_material_unmirrored_concern(state)
 
-        if needs_mirror and not is_undiscovered_concerns:
+        if needs_mirror:
             state["secure_before_mirror_total"] = int(state.get("secure_before_mirror_total", 0)) + 1
             unmirrored_topics = self._unmirrored_topics_requiring_feedback(state)
             state["secure_before_mirror_last_topic_hint"] = self._user_facing_topic_hint(
@@ -720,16 +691,6 @@ class AimsStateService:
     def _has_structured_feedback(cls_payload: dict[str, Any]) -> bool:
         return bool(cls_payload.get("feedback_items") or cls_payload.get("step_feedback"))
 
-    @staticmethod
-    def _observed_open_concern_question(cls_payload: dict[str, Any]) -> bool | None:
-        observations = cls_payload.get("observations")
-        model_dump = getattr(observations, "model_dump", None)
-        if callable(model_dump):
-            observations = model_dump()
-        if not isinstance(observations, dict):
-            return None
-        value = observations.get("open_concern_question_present")
-        return value if isinstance(value, bool) else None
 
     @staticmethod
     def _append_feedback_item(
