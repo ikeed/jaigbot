@@ -87,7 +87,7 @@
       "needs_work": "\ud83d\udccb Needs work \u2014 {pct}% overall"
     },
     "overall_score": "**Overall AIMS score:** {pct}%",
-    "undiscovered_concern_tip": "This doesn't look fully resolved yet -- there's still something on their mind that hasn't come up. Before wrapping up, try a sweep-up question like \"is there anything else on your mind?\"",
+    "undiscovered_concern_tip": "Inquire once more before closing, to be sure nothing else has come up.",
     "fallback_bullets": {
       "default": [
         "**Announce:** lead with a short, non-pushy recommendation and invite input.",
