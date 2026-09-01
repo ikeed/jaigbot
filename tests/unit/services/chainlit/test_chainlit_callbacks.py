@@ -140,7 +140,9 @@ async def test_on_logout(monkeypatch):
 
     with patch("chainlit_app.clear_persistent_session_id") as mock_clear:
         await chainlit_app.on_logout(mock_request, mock_response)
-        mock_clear.assert_called_once_with("test-user")
+        # Logout must NOT clear the current-thread pointer: an unfinished
+        # conversation resumes on the next login (chat-start recovery).
+        mock_clear.assert_called_once_with("test-user", clear_thread_pointer=False)
 
     mock_cl.send_window_message.assert_called_with("on_logout")
 

@@ -123,14 +123,6 @@ async def test_handle_chat_start_noops_when_reconnect_has_existing_history(
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    reason=(
-        "Redeploy/new-thread recovery is not implemented yet: an empty Chainlit "
-        "user_session with a fresh thread id still starts a fresh scenario even "
-        "when the user has a persisted current thread."
-    ),
-    strict=True,
-)
 async def test_handle_chat_start_recovers_persisted_thread_after_redeploy_gap(
     orchestrator, mock_services, monkeypatch
 ):
@@ -160,6 +152,40 @@ async def test_handle_chat_start_recovers_persisted_thread_after_redeploy_gap(
     resumed_thread = orchestrator.handle_session_resume.await_args.args[0]
     assert resumed_thread["id"] == "old-thread"
     assert resumed_thread["metadata"]["session_id"] == "old-session"
+
+
+@pytest.mark.asyncio
+async def test_handle_chat_start_starts_fresh_when_persisted_thread_is_finished(
+    orchestrator, mock_services, monkeypatch
+):
+    """A persisted thread whose backend session already reached endgame must
+    NOT be resumed - a finished conversation yields a fresh scenario."""
+    user_id = "user@example.com"
+    store = {
+        "chainlit:local:thread:done-thread": {
+            "id": "done-thread",
+            "userIdentifier": user_id,
+            "metadata": {"session_id": "done-session"},
+        }
+    }
+    monkeypatch.setattr("app.main.MEMORY_STORE", store)
+    chainlit_thread_state.set_current_thread_id(user_id, "done-thread")
+
+    mock_services["session"].get_user_identifier.return_value = user_id
+    mock_services["session"].session_id = None
+    mock_services["session"].history = []
+    mock_services["backend"].fetch_history_with_state = AsyncMock(
+        return_value={"history": [], "gameOver": True}
+    )
+    orchestrator._has_seen_intro_locally_or_persistently = MagicMock(return_value=True)
+    orchestrator._get_thread_id = MagicMock(return_value="fresh-thread")
+    orchestrator._start_scenario_flow = AsyncMock()
+    orchestrator.handle_session_resume = AsyncMock()
+
+    await orchestrator.handle_chat_start()
+
+    orchestrator.handle_session_resume.assert_not_awaited()
+    orchestrator._start_scenario_flow.assert_awaited_once()
 
 
 @pytest.mark.asyncio

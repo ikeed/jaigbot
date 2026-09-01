@@ -230,6 +230,21 @@ def test_append_endgame_blocked_tip_adds_important_feedback_item_when_turn_alrea
     assert cls_payload["tips"] == []
 
 
+def test_append_endgame_blocked_tip_skipped_on_inquire_turns():
+    """Telling the clinician to "Inquire once more" on a turn that itself
+    contained an Inquire is redundant - the endgame block still holds, but the
+    tip must not render on that turn."""
+    for step in ("Inquire", "Announce+Inquire", "Secure+Inquire", "Mirror+Secure+Inquire"):
+        cls_payload = {"step": step, "tips": [], "feedback_items": [
+            {"step": step, "tone": "praise", "code": "other", "text": "x"}
+        ]}
+        AimsCoachingHandler._append_endgame_blocked_tip(cls_payload)
+        assert not any(
+            i["code"] == "endgame_undiscovered_concern" for i in cls_payload["feedback_items"]
+        ), step
+        assert cls_payload["tips"] == []
+
+
 def test_append_endgame_blocked_tip_is_idempotent():
     """Calling it twice (e.g. a defensive re-check) must not duplicate the tip."""
     cls_payload = {

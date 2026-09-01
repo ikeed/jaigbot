@@ -173,7 +173,9 @@ if is_oauth_enabled or is_valid_env_val(settings.CHAINLIT_AUTH_SECRET) or settin
         logger.debug(f"Logout request: {request.url}")
         user_id = session_manager.get_user_identifier()
         if user_id:
-            clear_persistent_session_id(user_id)
+            # Keep the current-thread pointer: an unfinished conversation
+            # should survive logout/login (chat-start recovery resumes it).
+            clear_persistent_session_id(user_id, clear_thread_pointer=False)
         session_manager.session_id = None
         session_manager.history = []
         await cl.send_window_message(MSG_LOGOUT)

@@ -93,6 +93,8 @@ async def unified_logout(request: Request):
     clear_auth_cookie(request, response)
 
     if user_id:
-        clear_persistent_session_id(user_id)
+        # Preserve the current-thread pointer so login can resume an
+        # unfinished conversation (see orchestrator chat-start recovery).
+        clear_persistent_session_id(user_id, clear_thread_pointer=False)
 
     return response

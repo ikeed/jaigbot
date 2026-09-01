@@ -215,6 +215,11 @@ class AimsCoachingHandler:
         optional feedback_items field (a normal, non-error occurrence, not
         just the dormant heuristic-fallback path).
         """
+        # Telling the clinician to "Inquire once more" on a turn that itself
+        # contained an Inquire is redundant advice - they are already doing it.
+        # The block still holds (endgame stays closed); only the tip is skipped.
+        if "Inquire" in str(cls_payload.get("step") or ""):
+            return
         text = message("endgame.undiscovered_concern_tip")
         has_structured_feedback = bool(
             cls_payload.get("feedback_items") or cls_payload.get("step_feedback")

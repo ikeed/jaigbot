@@ -87,6 +87,19 @@ def get_current_thread_id(user_identifier: str | None) -> str | None:
     return thread_id
 
 
+def get_current_thread_record(user_identifier: str | None) -> dict[str, Any] | None:
+    """Return the persisted current thread's full record for this user, or None.
+
+    Same validation as get_current_thread_id (thread must exist and belong to
+    the user); returns the stored thread dict so callers can resume it without
+    a second lookup.
+    """
+    thread_id = get_current_thread_id(user_identifier)
+    if not thread_id:
+        return None
+    return _thread_record(_store(), thread_id)
+
+
 def set_current_thread_id(user_identifier: str | None, thread_id: str | None) -> None:
     if not user_identifier or not thread_id:
         return

@@ -88,4 +88,6 @@ async def test_unified_logout_clears_cookie_and_persistent_session(monkeypatch):
     assert response.status_code == 303
     assert response.headers["location"] == ROUTE_ROOT
     clear_auth_cookie.assert_called_once()
-    clear_persistent_session_id.assert_called_once_with("doctor@example.com")
+    clear_persistent_session_id.assert_called_once_with(
+        "doctor@example.com", clear_thread_pointer=False
+    )

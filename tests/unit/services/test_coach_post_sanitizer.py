@@ -270,6 +270,24 @@ def test_sanitize_endgame_bullets_drops_truncated_json_openers():
     assert sanitize_endgame_bullets(kept) == kept
 
 
+def test_sanitize_endgame_bullets_drops_unclosed_leading_quote_fragments():
+    """Found in staging: a Final Summary rendered a bullet reading `"patient`.
+
+    This variant has no brace at all - the JSON tail was truncated after the
+    opening quote of a key - so the structural-character checks never fired.
+    A line that opens a quote and never closes it is a fragment; a legitimate
+    bullet that begins with a quotation mark carries its closing quote.
+    """
+    leaked = ['"patient', "'patient", '"coaching_reason']
+    assert sanitize_endgame_bullets(leaked) == []
+
+    kept = [
+        '"It sounds like a lot at once" was a strong mirror.',
+        "Secure 83% - education was well-tailored to the stated concerns.",
+    ]
+    assert sanitize_endgame_bullets(kept) == kept
+
+
 def test_sanitize_endgame_bullets_drops_json_preamble_line():
     # Real staging leak: "Here is the JSON requested:" rendered as a visible
     # Final Summary bullet when the structured JSON parse failed and this
@@ -296,9 +314,9 @@ def test_endgame_title_score_tiers_and_deferred_fallback():
     assert endgame_title(None, outcome="deferred") == "Session Complete"
     assert endgame_title({}) == "🎉 Great job!"
     assert endgame_title(_uniform(3.0)) == "🏆 Excellent job — 100% overall"
-    assert endgame_title(_uniform(2.1)) == "🎉 Great job — 70% overall"
-    assert endgame_title(_uniform(1.7)) == "👏 Good job — 57% overall"
-    assert endgame_title(_uniform(1.2)) == "💪 Keep practicing — 40% overall"
+    assert endgame_title(_uniform(2.5)) == "🎉 Great job — 83% overall"
+    assert endgame_title(_uniform(2.1)) == "👏 Good job — 70% overall"
+    assert endgame_title(_uniform(1.35)) == "💪 Keep practicing — 45% overall"
     assert endgame_title(_uniform(0.5)) == "📋 Needs work — 17% overall"
 
 
@@ -306,6 +324,30 @@ def test_endgame_title_penalizes_core_steps_that_were_never_attempted():
     """Skipping a core step entirely (e.g. Mirror never happened) must cost at
     least as much as doing it badly - it must not be excluded from the average."""
     assert endgame_title({"runningAverage": {"Announce": 3.0}}) == "📋 Needs work — 25% overall"
+
+
+def test_announce_mid_narrative_does_not_contradict_compound_credit():
+    """A mid-band Announce narrative told the clinician to "follow immediately
+    with an open question" even when their announce turn was itself classified
+    Announce+Inquire - advice contradicting the praise shown on that turn.
+    With the compound present, the alternate line is used; without it, the
+    original coaching stands."""
+    base = {
+        "runningAverage": {"Announce": 2.0, "Inquire": 2.8, "Mirror": 2.8, "Secure": 2.8},
+        "perStepCounts": {"Announce": 1, "Inquire": 2, "Mirror": 2, "Secure": 2},
+    }
+    with_compound = {**base, "perStepCounts": {**base["perStepCounts"], "Announce+Inquire": 1}}
+
+    plain = next(b for b in build_endgame_bullets_fallback(base) if b.startswith("**Announce"))
+    compound = next(
+        b for b in build_endgame_bullets_fallback(with_compound) if b.startswith("**Announce")
+    )
+    # Both lines state the rubric (SS2.1: presumptive rec + rationale + dialogue
+    # invite) rather than diagnosing an unmeasured cause; with the compound
+    # present the invite is proven, so only the remaining element is named.
+    assert "an invitation to share their thoughts" in plain
+    assert "invitation to share" not in compound
+    assert "came with an open question" in compound
 
 
 def test_build_endgame_bullets_fallback_handles_absent_low_mid_high_and_invalid_input():
