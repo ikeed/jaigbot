@@ -342,9 +342,12 @@ def test_announce_mid_narrative_does_not_contradict_compound_credit():
     compound = next(
         b for b in build_endgame_bullets_fallback(with_compound) if b.startswith("**Announce")
     )
-    assert "following immediately with an open question" in plain
-    assert "following immediately with an open question" not in compound
-    assert "open question" in compound  # acknowledges the pairing instead
+    # Both lines state the rubric (SS2.1: presumptive rec + rationale + dialogue
+    # invite) rather than diagnosing an unmeasured cause; with the compound
+    # present the invite is proven, so only the remaining element is named.
+    assert "an invitation to share their thoughts" in plain
+    assert "invitation to share" not in compound
+    assert "came with an open question" in compound
 
 
 def test_build_endgame_bullets_fallback_handles_absent_low_mid_high_and_invalid_input():
