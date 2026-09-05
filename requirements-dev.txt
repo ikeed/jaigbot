@@ -4,12 +4,12 @@
 #   pip install ".[dev]"            # equivalent; pulls requirements.txt via the base deps
 #
 # Linter/type-checker versions are pinned to match .github/workflows/quality.yml.
-pytest>=9.0.3
+pytest>=9.1.1
 pytest-cov>=7.1.0
 pytest-asyncio>=1.4.0
 respx>=0.23.1
 types-jsonschema>=4.26.0.20260518
 
-ruff==0.15.15
-mypy==1.18.2
+ruff==0.16.5
+mypy==2.3.1
 bandit==1.9.4

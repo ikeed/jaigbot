@@ -39,10 +39,10 @@ jobs:
       WORKLOAD_SA: ${{ secrets.WORKLOAD_SA }}
       GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
     steps:
-      - uses: actions/checkout@v6.0.3
+      - uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v6.2.0
+        uses: actions/setup-python@v7
         with:
           python-version: '3.13'
 
